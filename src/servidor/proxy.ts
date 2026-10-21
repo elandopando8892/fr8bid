@@ -87,7 +87,9 @@ export function sinSecretos(x: any): any {
 }
 
 function filtrarProtegidos(body: any): any {
-  if (body && Array.isArray(body.events)) return { ...body, events: body.events.filter((e: any) => !esProtegido(e?.id)) };
+  for (const k of ["rows", "events"]) {
+    if (body && Array.isArray(body[k])) return { ...body, [k]: body[k].filter((e: any) => !esProtegido(e?.id)) };
+  }
   if (body?.event && esProtegido(body.event.id)) return null;
   return body;
 }

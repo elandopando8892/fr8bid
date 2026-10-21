@@ -211,7 +211,8 @@ export function detalle(
 }
 
 export function resumenes(crudo: Fila, hoy: string = hoyMexico()): ResumenEvento[] {
-  return (crudo.events || [])
+  // rateware-api devuelve `rows`; sin `lanes_preview`, solo `lane_count`.
+  return (crudo.rows || crudo.events || [])
     .filter((e: Fila) => !esProtegido(e.id))
     .map((e: Fila) => ({
       id: e.id,

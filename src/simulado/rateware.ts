@@ -155,7 +155,7 @@ export class RatewareSimulado {
           bid_count: this.laneVendors.filter((lv) => lv.rfx_event_id === e.id && lv.bid_rate !== null).length,
           lanes_preview: this.lanes.filter((l) => l.rfx_event_id === e.id).map((l) => `${l.origin_city} → ${l.destination_city} · ${l.equipment}`)
         }));
-        return ok({ events });
+        return ok({ rows: events });
       }
       case "list_rfx_detail": {
         const event = this.evento(u, body.event_id || body.id);

@@ -406,6 +406,19 @@ describe("proxy de /api", () => {
     expect((await manejar("rateware-api", { action: "list_rfx_events" }, "Bearer x", op)).status).toBe(200);
   });
 
+  it("contra Rateware real, la lista llega en `rows` y HDships no pasa del proxy", async () => {
+    const [hd] = EVENTOS_PROTEGIDOS;
+    const op = {
+      enviar: async () => ({ status: 200, body: { rows: [{ id: hd, name: "HDships" }, { id: "e1", rfx_id: "RFx-1", name: "PRUEBA CONTROLADA X", lane_count: 1 }] }, headers: {} }),
+      permitirEscrituras: false,
+      real: true
+    };
+    const r = await manejar("rateware-api", { action: "list_rfx_events" }, "Bearer x", op);
+    expect(r.body.rows.map((e: { id: string }) => e.id)).toEqual(["e1"]);
+    const api = new MesaApi(async (servicio, body) => manejar(servicio, body, "Bearer x", op), () => "2026-10-21");
+    expect((await api.eventos()).map((e) => [e.id, e.prueba])).toEqual([["e1", true]]);
+  });
+
   it("sin respuesta de Rateware: 504 incierta, sin reintento automático", async () => {
     sim.fallas.sinResponder.add("list_rfx_events");
     const antes = sim.llamadas.length;
