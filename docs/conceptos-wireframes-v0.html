@@ -1,0 +1,718 @@
+<title>Bid Room Fr8Bid · Conceptos</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: documento de una columna (máx. 1180px); wireframes en marcos de producto con scroll horizontal propio.
+   Paleta de marca: transcripción de bidware-contexto/marksman-brand-tokens.css. Los marcos de wireframe usan
+   siempre los tokens de marca en claro (son la pantalla del producto); el documento alrededor sigue el tema. */
+:root {
+  /* Marca MARKSMAN (fijos, no cambian con el tema) */
+  --ink: #1e1e1e; --orange: #ea5e27; --grey: #484848; --cloud: #efefef;
+  --accent: #c54714; --orange-light: #fff0e9; --canvas: #f4f4f2; --panel: #fff;
+  --subtle: #f8f8f6; --line: #e5e5e0; --muted: #73746d; --muted2: #999a94;
+  --green: #287258; --green-light: #edf5ef; --blue: #4c6387; --blue-light: #eff3f8;
+  --red: #a74343; --red-light: #faeeee; --white: #ffffff;
+  --radius: 12px; --shadow: 0 4px 22px #1e1e1e0a;
+  --font: 'New Black Typeface', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  --mono: 'Lenia Mono', 'SFMono-Regular', Consolas, monospace;
+
+  /* Documento (cambian con el tema) */
+  --bg: #f4f4f2; --fg: #1e1e1e; --surface: #ffffff; --rule: #e5e5e0; --soft: #73746d;
+  --hi: #c54714; --hi-bg: #fff0e9; --ok: #287258; --ok-bg: #edf5ef; --bad: #a74343; --bad-bg: #faeeee;
+  --info: #4c6387; --info-bg: #eff3f8;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161615; --fg: #ecece7; --surface: #1f1f1d; --rule: #34342f; --soft: #a3a49c;
+    --hi: #f07a48; --hi-bg: #33221a; --ok: #7cc3a5; --ok-bg: #1b2a23; --bad: #e39a9a; --bad-bg: #321f1f;
+    --info: #9fb3d4; --info-bg: #1d2431; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161615; --fg: #ecece7; --surface: #1f1f1d; --rule: #34342f; --soft: #a3a49c;
+  --hi: #f07a48; --hi-bg: #33221a; --ok: #7cc3a5; --ok-bg: #1b2a23; --bad: #e39a9a; --bad-bg: #321f1f;
+  --info: #9fb3d4; --info-bg: #1d2431; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 40px 80px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3, h4 { text-wrap: balance; line-height: 1.2; margin: 0; }
+h1 { font-size: clamp(28px, 4vw, 40px); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: 18px; font-weight: 600; }
+h4 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--soft); }
+p { margin: 0; max-width: 72ch; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--hi); }
+.lede { font-size: 17px; color: var(--soft); max-width: 70ch; }
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.stack-lg { display: flex; flex-direction: column; gap: 28px; }
+section.block { border-top: 1px solid var(--rule); padding-top: 36px; margin-top: 44px; display: flex; flex-direction: column; gap: 22px; }
+.toc { display: flex; flex-wrap: wrap; gap: 8px; }
+.toc a { color: var(--fg); text-decoration: none; border: 1px solid var(--rule); background: var(--surface); padding: 6px 12px; border-radius: 999px; font-size: 13px; }
+.toc a:hover { border-color: var(--hi); color: var(--hi); }
+.fixed { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.fixed div { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; font-size: 14px; min-width: 0; }
+.fixed b { display: block; font-size: 12px; font-family: var(--mono); color: var(--hi); letter-spacing: 0.04em; }
+.doc-table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); }
+table.doc { font-size: 14px !important; border-collapse: collapse; width: 100%; min-width: 780px; font-size: 14px; }
+table.doc th, table.doc td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+table.doc th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--soft); font-weight: 600; background: var(--bg); }
+table.doc tr:last-child td { border-bottom: 0; }
+table.doc td:first-child { font-weight: 600; white-space: nowrap; }
+.rec { color: var(--ok); font-weight: 600; }
+.concept-head { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; align-items: baseline; }
+.letter { font-size: 44px; font-weight: 700; color: var(--hi); line-height: 1; grid-row: span 2; }
+.flow { counter-reset: f; list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.flow li { counter-increment: f; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px 10px 40px; position: relative; font-size: 14px; min-width: 0; }
+.flow li::before { content: counter(f); position: absolute; left: 12px; top: 10px; font-family: var(--mono); font-size: 13px; color: var(--hi); font-weight: 600; }
+.cols2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.note { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; font-size: 14px; min-width: 0; }
+.note ul { margin: 6px 0 0; padding-left: 18px; }
+.note li + li { margin-top: 4px; }
+.pro b { color: var(--ok); } .con b { color: var(--bad); }
+.caption { font-size: 13px; color: var(--soft); }
+.frames { display: flex; flex-direction: column; gap: 18px; }
+.frame-scroll { overflow-x: auto; padding-bottom: 6px; }
+.frame-row { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+.frame-label { font-family: var(--mono); font-size: 12px; color: var(--soft); margin-bottom: 8px; letter-spacing: 0.04em; }
+code, .mono { font-family: var(--mono); font-size: 0.92em; }
+.callout { border-left: 3px solid var(--hi); background: var(--hi-bg); padding: 14px 16px; border-radius: 0 10px 10px 0; }
+.callout.ok { border-color: var(--ok); background: var(--ok-bg); }
+
+/* ===== Marcos de wireframe: siempre tokens de marca en claro ===== */
+.wf { font-family: var(--font); color: var(--ink); font-size: 12px; line-height: 1.4; }
+.wf * { box-sizing: border-box; }
+.wf table, table.doc { font-size: inherit; color: inherit; }
+.num { white-space: nowrap; }
+.t td .mono-s { white-space: nowrap; }
+.dk { width: 1148px; display: grid; grid-template-columns: 168px 1fr; background: var(--canvas); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+.side { background: var(--ink); color: var(--cloud); padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; min-height: 620px; }
+.brand { font-weight: 700; letter-spacing: 0.08em; font-size: 13px; color: var(--white); padding: 2px 8px 14px; }
+.brand span { color: var(--orange); }
+.nav { padding: 7px 8px; border-radius: 8px; color: var(--muted2); display: flex; justify-content: space-between; }
+.nav.on { background: #ffffff14; color: var(--white); box-shadow: inset 3px 0 0 var(--orange); }
+.nav .n { font-family: var(--mono); font-size: 11px; background: var(--orange); color: var(--white); border-radius: 999px; padding: 0 6px; }
+.side .who { margin-top: auto; border-top: 1px solid #ffffff1f; padding: 10px 8px 0; color: var(--muted2); font-size: 11px; }
+.side .who b { color: var(--white); display: block; font-size: 12px; }
+.main { display: flex; flex-direction: column; min-width: 0; }
+.top { background: var(--panel); border-bottom: 1px solid var(--line); padding: 12px 18px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.crumb { color: var(--muted); font-size: 11px; }
+.ttl { font-size: 15px; font-weight: 700; }
+.sp { flex: 1; }
+.body { padding: 16px 18px; display: flex; gap: 14px; align-items: flex-start; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.card h5 { margin: 0; font-size: 12px; font-weight: 700; }
+.card .sub { color: var(--muted); font-size: 11px; }
+.pill { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 600; white-space: nowrap; border: 1px solid transparent; }
+.p-ok { background: var(--green-light); color: var(--green); }
+.p-warn { background: var(--orange-light); color: var(--accent); }
+.p-bad { background: var(--red-light); color: var(--red); }
+.p-info { background: var(--blue-light); color: var(--blue); }
+.p-mute { background: var(--subtle); color: var(--muted); border-color: var(--line); }
+.p-test { background: var(--ink); color: var(--orange); letter-spacing: 0.05em; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 8px; padding: 8px 12px; font-weight: 600; font-size: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); white-space: nowrap; }
+.btn.pri { background: var(--orange); border-color: var(--orange); color: var(--white); }
+.btn.dis { background: var(--subtle); color: var(--muted2); border-color: var(--line); }
+.btn.full { width: 100%; }
+.mono-s { font-family: var(--mono); font-size: 11px; }
+.muted { color: var(--muted); }
+.t { width: 100%; border-collapse: collapse; }
+.t th { padding-left: 6px !important; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.t td { padding: 7px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.t tr.sel td { background: var(--orange-light); }
+.t tr.blk td { color: var(--muted); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; }
+.rail { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.rail li { display: grid; grid-template-columns: 18px 1fr; gap: 8px; padding: 5px 6px; border-radius: 6px; align-items: start; }
+.rail li small { display: block; color: var(--muted); font-size: 10px; }
+.dot { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--muted2); display: grid; place-items: center; font-size: 9px; font-weight: 700; color: var(--white); margin-top: 1px; }
+.done .dot { background: var(--green); border-color: var(--green); }
+.now { background: var(--orange-light); }
+.now .dot { background: var(--orange); border-color: var(--orange); }
+.lock-step .dot { border-style: dashed; }
+.guard { display: grid; grid-template-columns: 16px 1fr; gap: 6px; font-size: 11px; }
+.g-ok { color: var(--green); font-weight: 700; } .g-no { color: var(--red); font-weight: 700; } .g-warn { color: var(--accent); font-weight: 700; }
+.field { border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; background: var(--subtle); color: var(--muted); font-size: 11px; }
+.check { display: grid; grid-template-columns: 14px 1fr; gap: 6px; font-size: 11px; align-items: start; }
+.box { width: 13px; height: 13px; border: 1.5px solid var(--grey); border-radius: 3px; margin-top: 1px; }
+.box.on { background: var(--orange); border-color: var(--orange); }
+.hist { border-left: 2px solid var(--line); margin-left: 4px; padding-left: 10px; display: flex; flex-direction: column; gap: 4px; font-size: 11px; }
+.mail { border: 1px solid var(--line); border-radius: 8px; background: var(--subtle); padding: 10px; font-size: 11px; display: flex; flex-direction: column; gap: 4px; }
+.states { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.st { border-radius: 8px; padding: 8px; font-size: 10px; border: 1px dashed var(--line); }
+.st b { display: block; font-size: 11px; }
+.machine { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 10px; }
+.machine .arrow { color: var(--muted2); }
+.inbox-item { display: grid; grid-template-columns: 6px 1fr auto; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px 10px 0; overflow: hidden; }
+.inbox-item .bar { background: var(--orange); border-radius: 0 3px 3px 0; }
+.inbox-item.wait .bar { background: var(--blue); }
+.inbox-item.risk .bar { background: var(--red); }
+.inbox-item.on { border-color: var(--orange); box-shadow: 0 0 0 2px var(--orange-light); }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); background: var(--panel); padding: 0 18px; }
+.tabs span { padding: 9px 12px; color: var(--muted); font-weight: 600; }
+.tabs span.on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--orange); }
+
+/* Móvil */
+.mb { width: 340px; flex: none; background: var(--canvas); border: 8px solid var(--ink); border-radius: 30px; overflow: hidden; display: flex; flex-direction: column; min-height: 680px; box-shadow: var(--shadow); }
+.mb .bar-top { background: var(--panel); border-bottom: 1px solid var(--line); padding: 12px 14px 10px; display: flex; flex-direction: column; gap: 4px; }
+.mb .scroll { padding: 12px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.mb .dock { background: var(--panel); border-top: 1px solid var(--line); padding: 10px 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.stepper { display: grid; grid-template-columns: repeat(11, 1fr); gap: 3px; }
+.stepper i { height: 4px; border-radius: 2px; background: var(--line); }
+.stepper i.d { background: var(--green); } .stepper i.n { background: var(--orange); }
+.offer { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.offer.sel { border-color: var(--orange); box-shadow: 0 0 0 2px var(--orange-light); }
+.offer .row { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; font-size: 10px; color: var(--muted); }
+.kv b { display: block; color: var(--ink); font-size: 11px; }
+.sheet { background: var(--panel); border-radius: 16px 16px 0 0; border-top: 1px solid var(--line); box-shadow: 0 -8px 24px #1e1e1e14; padding: 12px 14px 16px; display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+.grab { width: 36px; height: 4px; border-radius: 2px; background: var(--line); align-self: center; }
+.arch { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; align-items: stretch; }
+.arch .node { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 12px 14px; font-size: 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.arch .node h4 { color: var(--hi); }
+.arch .node ul { margin: 0; padding-left: 18px; }
+.flow-line { font-family: var(--mono); font-size: 13px; color: var(--soft); overflow-x: auto; white-space: nowrap; padding: 10px 0; }
+@media (prefers-reduced-motion: no-preference) { .toc a { transition: border-color .15s, color .15s; } }
+</style>
+
+<div class="wrap">
+  <header class="stack">
+    <div class="eyebrow">Fr8Bid · Bid Room de MARKSMAN · primer entregable, parte 3</div>
+    <h1>Tres conceptos de producto para el Bid Room</h1>
+    <p class="lede">Flujo de usuario, wireframes desktop y mobile con la marca MARKSMAN, arquitectura ligera y una recomendación. Todos los conceptos recorren la misma rebanada: el evento simulado «PRUEBA CONTROLADA» de una ruta, desde la necesidad hasta el recibo en Rateware, el aviso y la vista en Loads. Eliges uno antes de programar.</p>
+    <p class="caption">20 oct 2026 · Base: <span class="mono">docs/recorrido-rfx-v0.md</span> (recorrido, modelo, reglas I1–I12) y <span class="mono">docs/contratos-rateware-loads-v0.md</span> (D1 = opción a). Los importes, carriers y folios de los wireframes son datos de ejemplo del evento simulado, sin valor comercial.</p>
+    <nav class="toc" aria-label="Secciones">
+      <a href="#fijo">Lo que ya está decidido</a>
+      <a href="#comparacion">Comparación</a>
+      <a href="#a">A · Mesa del evento</a>
+      <a href="#b">B · Bandeja de decisiones</a>
+      <a href="#c">C · Workbench de Bidware</a>
+      <a href="#arquitectura">Arquitectura</a>
+      <a href="#recomendacion">Recomendación</a>
+    </nav>
+  </header>
+
+  <!-- ================= FIJO ================= -->
+  <section class="block" id="fijo">
+    <h2>Lo que ya está decidido y moldea cualquier pantalla</h2>
+    <p>Estas reglas no cambian entre conceptos. Cada wireframe las hace visibles en el lugar donde se aplican.</p>
+    <div class="fixed">
+      <div><b>D1 · opción (a)</b>El evento vive en las tablas RFx de <span class="mono">rateware-prod</span>. Fr8Bid no tiene base propia en el MVP; opera vía <span class="mono">rateware-api</span> y <span class="mono">rfx-bid-api</span>.</div>
+      <div><b>Solo el Administrador decide</b>Adjudicar, cerrar a ofertas, entregar a Rateware y aprobar avisos. El Operador prepara; Consulta solo lee. La interfaz oculta lo que el rol no permite.</div>
+      <div><b>Cerrar antes de adjudicar</b>Mitigación de C2: con el evento cerrado la liga del carrier responde 409, así el importe adjudicado no cambia sin otra decisión.</div>
+      <div><b>D3 / I8 · aviso tras recibo</b>El aviso al carrier y la vista en Loads se desbloquean solo con el recibo de Rateware.</div>
+      <div><b>D4 · vigencia ausente</b>Se puede adjudicar, pero pide confirmación explícita del Administrador.</div>
+      <div><b>I6 · Rateware no aprueba sola</b>La tarifa llega en <span class="mono">pending_review</span>. Fr8Bid solo enlaza a Revisión, nunca aprueba.</div>
+      <div><b>I12 · HDships protegido</b>Fr8Bid filtra el evento por id: no se lista, no se abre, no se toca.</div>
+      <div><b>D5 · evento simulado</b>Etiqueta «PRUEBA CONTROLADA» visible en todo el recorrido. Cada escritura en producción pide tu aprobación por acción.</div>
+    </div>
+  </section>
+
+  <!-- ================= COMPARACIÓN ================= -->
+  <section class="block" id="comparacion">
+    <h2>Los tres conceptos de un vistazo</h2>
+    <div class="doc-table-wrap">
+      <table class="doc">
+        <thead><tr><th></th><th>A · Mesa del evento</th><th>B · Bandeja de decisiones</th><th>C · Workbench de Bidware</th></tr></thead>
+        <tbody>
+          <tr><td>Idea</td><td>Un evento, una página. El recorrido de 11 pasos es la navegación y siempre dice cuál es el siguiente paso y quién lo da.</td><td>La página de inicio es la lista de lo que solo un humano puede decidir o aprobar, entre todos los eventos. Cada pendiente abre una tarjeta de decisión.</td><td>El código existente compite: el workbench del evento por etapas Build · Launch · Operate · Close dentro de una app con más de 20 rutas.</td></tr>
+          <tr><td>Pensado para</td><td>Administrador que lleva pocos eventos a fondo. La rebanada del MVP es exactamente esto.</td><td>Administrador orquestador con muchos eventos y un equipo que prepara; decide desde el teléfono.</td><td>Equipo que ya usa Bidware a diario y quiere todo en un sitio.</td></tr>
+          <tr><td>Pantallas de la rebanada</td><td>3 propias (inicio, mesa del evento, liga del carrier); la mesa cambia de contenido según el paso.</td><td>3 propias (bandeja, tarjeta de decisión, liga) más una vista de evento de consulta.</td><td>Las existentes; habría que ajustar Close para recibo, aviso y Loads.</td></tr>
+          <tr><td>Datos que pide</td><td>Un evento a la vez: <span class="mono">list_rfx_detail</span>, historial de oferta, recibo, Cola. Encaja con (a) sin nada nuevo.</td><td>Agregar pendientes de todos los eventos y de la Cola: varias llamadas por carga o una tabla propia de pendientes. Lo segundo empuja hacia (b) antes de tiempo.</td><td>Lo mismo que Bidware hoy.</td></tr>
+          <tr><td>Lo hace bien</td><td>Hace imposible saltarse el orden: los candados están en la pantalla del paso. Trazabilidad legible de punta a punta.</td><td>Nada espera a que alguien recuerde entrar a un evento. Excelente en móvil.</td><td>Ya existe, ya está en producción en bidware.heymarksman.com y cubre CRM, plantillas y QuoteDesk.</td></tr>
+          <tr><td>Riesgo</td><td>Con muchos eventos simultáneos falta una vista transversal (se resuelve agregando la bandeja de B después).</td><td>Decidir desde una tarjeta sin ver el evento completo invita a adjudicar con poco contexto. Más costo antes de la primera adjudicación.</td><td>Hereda el alcance completo y el checkout local desfasado (35 modificados, 229 sin seguimiento). El recorrido queda repartido en etapas y módulos.</td></tr>
+          <tr><td>Costo relativo de la rebanada</td><td class="rec">Bajo</td><td>Medio</td><td>Bajo al inicio, alto de mantener</td></tr>
+          <tr><td>Recomendación</td><td class="rec">Elegido para el MVP</td><td>Su bandeja se suma a A cuando haya varios eventos vivos</td><td>Se usa como referencia de contratos y de la liga del carrier</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= CONCEPTO A ================= -->
+  <section class="block" id="a">
+    <div class="concept-head">
+      <div class="letter">A</div>
+      <h2>Mesa del evento</h2>
+      <p class="lede">El recorrido es la interfaz. A la izquierda, los 11 pasos con su estado real; al centro, el trabajo del paso actual; a la derecha, los candados que el servidor va a comprobar, a la vista antes de pulsar.</p>
+    </div>
+
+    <h3>Flujo del Administrador en la rebanada</h3>
+    <ol class="flow">
+      <li>En <b>Eventos</b> ve cada evento con su siguiente paso y a quién le toca.</li>
+      <li>El Operador ya creó el evento, eligió carriers y preparó las invitaciones; el Administrador aprueba el texto exacto en la mesa (paso 4).</li>
+      <li>Las ofertas llegan por la liga del carrier y aparecen en el comparativo con su historial de versiones.</li>
+      <li>Cierra a ofertas (paso 7). El comparativo queda fijo.</li>
+      <li>Elige primario; los candados confirman vigencia, rubros y rol. Si no hay vigencia, la confirma.</li>
+      <li>Revisa la entrega preparada y la confirma: un <span class="mono">operation_id</span>, recibo y tarifa en <span class="mono">pending_review</span>.</li>
+      <li>Con el recibo, se desbloquea el aviso: aprueba el texto exacto y se envía por Gmail.</li>
+      <li>La mesa muestra que el carrier ya ve «adjudicado» en Loads (con L1) y cierra la cadena de trazabilidad.</li>
+    </ol>
+
+    <div class="frames">
+      <div>
+        <div class="frame-label">A1 · DESKTOP · INICIO: EVENTOS Y SIGUIENTE PASO</div>
+        <div class="frame-scroll">
+          <div class="wf dk" role="img" aria-label="Wireframe A1: lista de eventos con siguiente paso">
+            <aside class="side">
+              <div class="brand">MARKS<span>MAN</span> · Bid Room</div>
+              <div class="nav on">Eventos</div>
+              <div class="nav">Carriers</div>
+              <div class="nav">Shippers</div>
+              <div class="who"><b>sales@</b>Administrador</div>
+            </aside>
+            <div class="main">
+              <div class="top"><div><div class="crumb">Bid Room</div><div class="ttl">Eventos</div></div><div class="sp"></div><span class="btn">Registrar necesidad</span><span class="btn pri">Nuevo evento</span></div>
+              <div class="body" style="flex-direction:column;align-items:stretch">
+                <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="pill p-warn">Te toca: 1</span><span class="pill p-info">Del equipo: 1</span><span class="pill p-mute">Esperando carriers: 1</span><span class="pill p-mute">Entregados: 0</span></div>
+                <div class="card" style="padding:0">
+                  <table class="t">
+                    <thead><tr><th>Folio</th><th>Evento</th><th>Rutas</th><th>Ofertas</th><th>Paso</th><th>Siguiente paso</th><th>Quién</th><th>Plazo</th></tr></thead>
+                    <tbody>
+                      <tr class="sel"><td class="mono-s">RFX-0001-PRBA</td><td><span class="pill p-test">PRUEBA CONTROLADA</span> Monterrey → Dallas · Dry Van</td><td class="num">1</td><td class="num">3 de 3</td><td class="mono-s">8/11</td><td><b>Adjudicar ruta 1</b></td><td><span class="pill p-warn">Tú</span></td><td class="muted">Cerrado 20 oct 18:00</td></tr>
+                      <tr><td class="mono-s">RFX-0002-PRBB</td><td><span class="pill p-test">PRUEBA CONTROLADA</span> Saltillo → Laredo TX · Dry Van</td><td class="num">1</td><td class="num">0 de 2</td><td class="mono-s">4/11</td><td>Aprobar 2 invitaciones</td><td><span class="pill p-info">Operador las preparó</span></td><td class="muted">24 oct 18:00</td></tr>
+                      <tr><td class="mono-s">RFX-0003-PRBC</td><td><span class="pill p-test">PRUEBA CONTROLADA</span> Querétaro → Houston · Reefer</td><td class="num">1</td><td class="num">1 de 3</td><td class="mono-s">5/11</td><td>Esperar ofertas</td><td><span class="pill p-mute">Carriers</span></td><td class="muted">23 oct 12:00</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="muted" style="font-size:11px">Eventos protegidos ocultos: 1 (HDships · regla I12). Se muestran solo eventos de tu organización.</div>
+                <div>
+                  <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Estados de la lista · un error nunca se lee como cero registros</div>
+                  <div class="states">
+                    <div class="st" style="color:var(--muted)"><b>Sin eventos</b>Aún no hay eventos. Registra una necesidad para empezar.</div>
+                    <div class="st" style="background:var(--red-light);color:var(--red);border-color:var(--red)"><b>Error</b>Rateware no respondió. Reintentar. Los datos de abajo no son cero.</div>
+                    <div class="st" style="background:var(--blue-light);color:var(--blue);border-color:var(--blue)"><b>Sin permiso</b>Tu cuenta no tiene rol en esta organización.</div>
+                    <div class="st" style="background:var(--orange-light);color:var(--accent);border-color:var(--accent)"><b>Desactualizado</b>Última lectura hace 12 min. Actualizar.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="frame-label">A2 · DESKTOP · MESA DEL EVENTO EN EL PASO 8: COMPARAR Y ADJUDICAR</div>
+        <div class="frame-scroll">
+          <div class="wf dk" role="img" aria-label="Wireframe A2: mesa del evento con comparativo y candados de adjudicación">
+            <aside class="side">
+              <div class="brand">MARKS<span>MAN</span> · Bid Room</div>
+              <div class="nav on">Eventos</div>
+              <div class="nav">Carriers</div>
+              <div class="nav">Shippers</div>
+              <div class="who"><b>sales@</b>Administrador</div>
+            </aside>
+            <div class="main">
+              <div class="top">
+                <div><div class="crumb">Eventos / RFX-0001-PRBA</div><div class="ttl">Monterrey → Dallas · Dry Van · 1 ruta</div></div>
+                <span class="pill p-test">PRUEBA CONTROLADA</span><span class="pill p-info">Cerrado a ofertas</span>
+                <div class="sp"></div><span class="crumb">Objetivo <b class="num">1 700 USD</b> · 4/sem</span>
+              </div>
+              <div class="body">
+                <div class="card" style="width:186px;flex:none">
+                  <h5>Recorrido</h5>
+                  <ol class="rail">
+                    <li class="done"><span class="dot">✓</span><span>Necesidad<small>Manual · 17 oct</small></span></li>
+                    <li class="done"><span class="dot">✓</span><span>Evento<small>1 ruta · plazo 20 oct 18:00</small></span></li>
+                    <li class="done"><span class="dot">✓</span><span>Carriers<small>3 preseleccionados</small></span></li>
+                    <li class="done"><span class="dot">✓</span><span>Invitación<small>3 avisos aceptados por Gmail</small></span></li>
+                    <li class="done"><span class="dot">✓</span><span>Ofertas<small>3 de 3 respondieron</small></span></li>
+                    <li class="done"><span class="dot">✓</span><span>Comparar</span></li>
+                    <li class="done"><span class="dot">✓</span><span>Cierre a ofertas<small>20 oct 18:00 · plazo</small></span></li>
+                    <li class="now"><span class="dot">8</span><span><b>Adjudicar</b><small>Te toca · Administrador</small></span></li>
+                    <li class="lock-step"><span class="dot"></span><span>Entregar a Rateware<small>Requiere adjudicación</small></span></li>
+                    <li class="lock-step"><span class="dot"></span><span>Avisar al carrier<small>Requiere recibo</small></span></li>
+                    <li class="lock-step"><span class="dot"></span><span>Visible en Loads<small>Requiere recibo</small></span></li>
+                  </ol>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;gap:12px;min-width:0">
+                  <div class="card" style="padding:0">
+                    <div style="padding:10px 12px 0;display:flex;justify-content:space-between"><h5>Ruta 1 · ofertas vigentes</h5><span class="muted">Ordenado por all-in</span></div>
+                    <table class="t">
+                      <thead><tr><th>Carrier</th><th>All-in</th><th>Cap./sem</th><th>Tránsito</th><th>Vigencia</th><th>Rubros</th><th>Versión</th></tr></thead>
+                      <tbody>
+                        <tr class="sel"><td><b>Carrier Prueba B</b></td><td class="num">1 690 USD<div class="muted" style="font-weight:400;font-family:var(--font)">fee_plus</div></td><td class="num">4</td><td>2 d</td><td>31 oct</td><td><span class="pill p-ok">6/6</span></td><td class="mono-s">v1</td></tr>
+                        <tr><td><b>Carrier Prueba A</b></td><td class="num">1 750 USD<div class="muted" style="font-weight:400;font-family:var(--font)">fee_plus</div></td><td class="num">5</td><td>2 d</td><td><span class="pill p-warn">Sin vigencia</span></td><td><span class="pill p-warn">5/6</span></td><td class="mono-s">v2 <span class="muted">antes 1 800</span></td></tr>
+                        <tr class="blk"><td><b>Carrier Prueba C</b></td><td class="num">1 820 USD<div class="muted" style="font-weight:400;font-family:var(--font)">cost_plus</div></td><td class="num">3</td><td>3 d</td><td>15 nov</td><td><span class="pill p-bad">No puedo</span></td><td class="mono-s">v1</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="card">
+                    <h5>Historial de la oferta · Carrier Prueba A</h5>
+                    <div class="hist">
+                      <div><span class="mono-s">v1</span> · <b class="num">1 800 USD</b> · portal del carrier · 18 oct 11:02</div>
+                      <div><span class="mono-s">v2</span> · <b class="num">1 750 USD</b> · portal del carrier · 19 oct 16:20 · nota: «ajuste por volumen»</div>
+                    </div>
+                    <div class="sub">Carrier Prueba C: «no puedo» en requisitos de carrier. Cada cambio muestra fuente, actor y momento. Una versión posterior a la adjudicación se marcaría como «hay una versión más reciente».</div>
+                  </div>
+                </div>
+                <div class="card" style="width:236px;flex:none">
+                  <h5>Adjudicar primario</h5>
+                  <div><b>Carrier Prueba B</b> · <span class="num">1 690 USD</span> · v1</div>
+                  <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.05em">Candados</div>
+                  <div class="guard"><span class="g-ok">✓</span>Evento cerrado a ofertas</div>
+                  <div class="guard"><span class="g-ok">✓</span>Vigente hasta 31 oct</div>
+                  <div class="guard"><span class="g-ok">✓</span>Ningún rubro «no puedo»</div>
+                  <div class="guard"><span class="g-ok">✓</span>Carrier no bloqueado en CRM</div>
+                  <div class="guard"><span class="g-ok">✓</span>Tu rol: Administrador</div>
+                  <div class="field">Motivo (obligatorio): mejor all-in con 6 de 6 rubros</div>
+                  <span class="btn pri full">Adjudicar como primario</span>
+                  <div class="sub">No se envía nada al carrier. El aviso se desbloquea cuando Rateware entregue el recibo.</div>
+                  <div style="border-top:1px solid var(--line);padding-top:8px" class="sub"><b style="color:var(--accent)">Si eliges Carrier Prueba A:</b></div>
+                  <div class="check"><span class="box"></span><span>Confirmo adjudicar una oferta sin vigencia declarada (D4)</span></div>
+                  <div class="sub">Carrier Prueba C no se puede elegir: tiene un rubro «no puedo».</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="frame-label">A3 · DESKTOP · MESA DEL EVENTO EN LOS PASOS 9 A 11: ENTREGA, AVISO Y LOADS</div>
+        <div class="frame-scroll">
+          <div class="wf dk" role="img" aria-label="Wireframe A3: entrega a Rateware con recibo, aviso y Loads">
+            <aside class="side">
+              <div class="brand">MARKS<span>MAN</span> · Bid Room</div>
+              <div class="nav on">Eventos</div>
+              <div class="nav">Carriers</div>
+              <div class="nav">Shippers</div>
+              <div class="who"><b>sales@</b>Administrador</div>
+            </aside>
+            <div class="main">
+              <div class="top">
+                <div><div class="crumb">Eventos / RFX-0001-PRBA</div><div class="ttl">Monterrey → Dallas · Dry Van · 1 ruta</div></div>
+                <span class="pill p-test">PRUEBA CONTROLADA</span><span class="pill p-ok">Entregado</span><div class="sp"></div><span class="btn">Ver trazabilidad</span>
+              </div>
+              <div class="body">
+                <div class="card" style="flex:1">
+                  <div style="display:flex;justify-content:space-between"><h5>9 · Entrega a Rateware</h5><span class="pill p-ok">Confirmada</span></div>
+                  <div class="machine"><span class="pill p-mute">preparada</span><span class="arrow">→</span><span class="pill p-mute">enviada</span><span class="arrow">→</span><span class="pill p-ok">confirmada</span><span class="muted">· otras salidas: rechazada, incierta</span></div>
+                  <table class="t">
+                    <tbody>
+                      <tr><td class="muted">Ruta 1</td><td>Carrier Prueba B · primario · <b class="num">1 690 USD</b> · fee_plus</td></tr>
+                      <tr><td class="muted">Operación</td><td><span class="mono-s">op 7f3c…a41e</span> · se reutiliza en cada reintento</td></tr>
+                      <tr><td class="muted">Recibo</td><td>20 oct 19:04 · 1 fila insertada · <span class="pill p-warn">pending_review</span></td></tr>
+                      <tr><td class="muted">Rateware</td><td><u>Abrir en Revisión</u> · la tarifa no se aprueba desde aquí</td></tr>
+                    </tbody>
+                  </table>
+                  <div class="sub">Antes de confirmar: «Esto escribe en rateware-prod. Evento simulado: requiere la aprobación del propietario para esta acción.»</div>
+                  <div class="sub">Si la respuesta se pierde: estado <b>incierta</b>, un solo botón «Reintentar con la misma operación». Nunca reintento automático.</div>
+                </div>
+                <div class="card" style="flex:1">
+                  <div style="display:flex;justify-content:space-between"><h5>10 · Aviso de adjudicación</h5><span class="pill p-warn">Por aprobar</span></div>
+                  <div class="mail">
+                    <div><span class="muted">Para:</span> sales@heymarksman.com <span class="pill p-test">buzón de prueba</span></div>
+                    <div><span class="muted">Canal:</span> Gmail · sales@heymarksman.com</div>
+                    <div><span class="muted">Asunto:</span> [PRUEBA CONTROLADA] Adjudicación RFX-0001-PRBA · Monterrey → Dallas</div>
+                    <div style="border-top:1px solid var(--line);padding-top:6px">Carrier Prueba B: le confirmamos la adjudicación como primario de la ruta Monterrey → Dallas, Dry Van, a 1 690 USD all-in, arranque estimado 3 nov. Prueba controlada, sin valor comercial.</div>
+                  </div>
+                  <span class="btn pri full">Aprobar este texto exacto y enviar</span>
+                  <div class="sub">Editar el texto invalida la aprobación. Gmail llega hasta «aceptado»; un rebote se muestra aquí.</div>
+                </div>
+                <div class="card" style="width:230px;flex:none">
+                  <div style="display:flex;justify-content:space-between"><h5>11 · Loads</h5><span class="pill p-mute">Tras recibo</span></div>
+                  <div>Carrier Prueba B verá «adjudicado» en su libro de Loads.</div>
+                  <div class="sub">Requiere L1 en Loads: mostrar «adjudicado» solo con <span class="mono-s">rateware_closeout_at</span>.</div>
+                  <div style="border-top:1px solid var(--line);padding-top:8px"><h5>Cadena</h5></div>
+                  <div class="hist">
+                    <div>necesidad → evento → ruta 1</div>
+                    <div>oferta v1 B · 1 690</div>
+                    <div>adjudicación · motivo · tú</div>
+                    <div>entrega op 7f3c… · recibo</div>
+                    <div>aviso · texto aprobado</div>
+                    <div>Loads · visible</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="frame-label">A2 Y A3 · MOBILE</div>
+        <div class="frame-row">
+          <div class="wf mb" role="img" aria-label="Wireframe móvil: comparar y adjudicar">
+            <div class="bar-top">
+              <div class="crumb">‹ Eventos · RFX-0001-PRBA</div>
+              <div class="ttl" style="font-size:14px">Monterrey → Dallas</div>
+              <div style="display:flex;gap:6px"><span class="pill p-test">PRUEBA CONTROLADA</span><span class="pill p-info">Cerrado</span></div>
+              <div class="stepper" aria-hidden="true"><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="n"></i><i></i><i></i><i></i></div>
+              <div class="crumb">Paso 8 de 11 · <b style="color:var(--ink)">Adjudicar</b> · te toca</div>
+            </div>
+            <div class="scroll">
+              <div class="muted" style="font-size:11px">Objetivo 1 700 USD · 3 ofertas</div>
+              <div class="offer sel">
+                <div class="row"><b>Carrier Prueba B</b><span class="num" style="font-size:15px">1 690 USD</span></div>
+                <div class="kv"><span>Tránsito<b>2 d</b></span><span>Cap./sem<b>4</b></span><span>Vigencia<b>31 oct</b></span></div>
+                <span class="pill p-ok" style="align-self:flex-start">6 de 6 de acuerdo</span>
+              </div>
+              <div class="offer">
+                <div class="row"><b>Carrier Prueba A</b><span class="num" style="font-size:15px">1 750 USD</span></div>
+                <div class="kv"><span>Tránsito<b>2 d</b></span><span>Cap./sem<b>5</b></span><span>Vigencia<b style="color:var(--accent)">Sin vigencia</b></span></div>
+                <div class="muted" style="font-size:10px">v2 · antes 1 800 · 19 oct 16:20 · Ver historial</div>
+              </div>
+              <div class="offer" style="opacity:.7">
+                <div class="row"><b>Carrier Prueba C</b><span class="num" style="font-size:15px">1 820 USD</span></div>
+                <span class="pill p-bad" style="align-self:flex-start">No puedo: requisitos de carrier</span>
+              </div>
+            </div>
+            <div class="dock">
+              <div class="guard"><span class="g-ok">✓</span>5 candados en verde</div>
+              <div class="field">Motivo: mejor all-in con 6 de 6 rubros</div>
+              <span class="btn pri full">Adjudicar a Carrier Prueba B</span>
+            </div>
+          </div>
+
+          <div class="wf mb" role="img" aria-label="Wireframe móvil: recibo y aviso">
+            <div class="bar-top">
+              <div class="crumb">‹ Eventos · RFX-0001-PRBA</div>
+              <div class="ttl" style="font-size:14px">Monterrey → Dallas</div>
+              <div style="display:flex;gap:6px"><span class="pill p-test">PRUEBA CONTROLADA</span><span class="pill p-ok">Entregado</span></div>
+              <div class="stepper" aria-hidden="true"><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="n"></i><i></i></div>
+              <div class="crumb">Paso 10 de 11 · <b style="color:var(--ink)">Avisar al carrier</b></div>
+            </div>
+            <div class="scroll">
+              <div class="offer">
+                <div class="row"><b>Recibo de Rateware</b><span class="pill p-ok">Confirmada</span></div>
+                <div class="muted" style="font-size:11px">20 oct 19:04 · 1 fila · pending_review · op 7f3c…a41e</div>
+                <div style="font-size:11px"><u>Abrir en Revisión de Rateware</u></div>
+              </div>
+              <div class="offer">
+                <div class="row"><b>Aviso por Gmail</b><span class="pill p-warn">Por aprobar</span></div>
+                <div class="mail">
+                  <div><span class="muted">Para:</span> sales@heymarksman.com</div>
+                  <div><b>[PRUEBA CONTROLADA] Adjudicación RFX-0001-PRBA</b></div>
+                  <div>Carrier Prueba B: le confirmamos la adjudicación como primario… 1 690 USD all-in…</div>
+                  <div><u>Ver texto completo</u></div>
+                </div>
+              </div>
+              <div class="offer">
+                <div class="row"><b>Loads</b><span class="pill p-mute">Tras recibo · L1</span></div>
+              </div>
+            </div>
+            <div class="dock">
+              <div class="sub muted" style="font-size:10px">Editar el texto invalida la aprobación.</div>
+              <span class="btn pri full">Aprobar texto exacto y enviar</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cols2">
+      <div class="note pro"><b>A favor</b><ul><li>La rebanada del MVP es un evento de una ruta: una pantalla la cubre entera.</li><li>Los candados I3, I4, I8 y D4 se ven antes de pulsar, no como error después.</li><li>Las pruebas del recorrido (§9 de la especificación) se escriben sobre una función pura que calcula el estado de los 11 pasos.</li></ul></div>
+      <div class="note con"><b>En contra</b><ul><li>Con muchos eventos vivos, el Administrador tiene que entrar a cada uno; la lista de inicio solo lo mitiga.</li><li>La mesa cambia de contenido por paso; hay que cuidar que no se vuelva un formulario largo.</li></ul></div>
+    </div>
+    <div class="note"><b>Arquitectura de A.</b> SPA en Vercel con tres rutas (<span class="mono">/eventos</span>, <span class="mono">/eventos/:id</span>, <span class="mono">/bid/:token</span>) y funciones <span class="mono">/api</span> de Vercel que llaman a <span class="mono">rateware-api</span> y <span class="mono">rfx-bid-api</span> con el token del usuario. El estado de los 11 pasos es una función pura <span class="mono">recorrido(detalle, recibos, avisos)</span> sin base propia. Lecturas: un evento a la vez.</div>
+  </section>
+
+  <!-- ================= CONCEPTO B ================= -->
+  <section class="block" id="b">
+    <div class="concept-head">
+      <div class="letter">B</div>
+      <h2>Bandeja de decisiones</h2>
+      <p class="lede">El inicio es una bandeja con lo que solo un humano puede decidir, de todos los eventos: aprobar invitaciones, adjudicar, confirmar entregas, aprobar avisos, conciliar lo incierto. El equipo prepara, el Administrador despacha. El evento completo existe, pero como consulta.</p>
+    </div>
+
+    <h3>Flujo del Administrador en la rebanada</h3>
+    <ol class="flow">
+      <li>Abre la bandeja: cada pendiente dice evento, decisión, contexto mínimo y antigüedad.</li>
+      <li>«Aprobar 3 invitaciones»: revisa el texto y aprueba el lote.</li>
+      <li>Cuando el evento cierra, aparece «Adjudicar ruta 1» con el comparativo compacto.</li>
+      <li>Adjudica desde la tarjeta; aparece «Confirmar entrega a Rateware».</li>
+      <li>Confirma; con el recibo aparece «Aprobar aviso de adjudicación».</li>
+      <li>Aprueba; la bandeja queda vacía para ese evento y lo marca entregado.</li>
+    </ol>
+
+    <div class="frames">
+      <div>
+        <div class="frame-label">B1 · DESKTOP · BANDEJA Y TARJETA DE DECISIÓN</div>
+        <div class="frame-scroll">
+          <div class="wf dk" role="img" aria-label="Wireframe B1: bandeja de decisiones con tarjeta abierta">
+            <aside class="side">
+              <div class="brand">MARKS<span>MAN</span> · Bid Room</div>
+              <div class="nav on">Pendientes <span class="n">4</span></div>
+              <div class="nav">Eventos</div>
+              <div class="nav">Carriers</div>
+              <div class="who"><b>sales@</b>Administrador</div>
+            </aside>
+            <div class="main">
+              <div class="top"><div><div class="crumb">Bid Room</div><div class="ttl">Pendientes</div></div><div class="sp"></div><span class="pill p-warn">Solo tú: 4</span><span class="pill p-info">El equipo prepara: 2</span></div>
+              <div class="body">
+                <div style="flex:1;display:flex;flex-direction:column;gap:8px;min-width:0">
+                  <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.05em">Solo tú puedes decidir</div>
+                  <div class="inbox-item on"><span class="bar"></span><div><b>Adjudicar ruta 1</b> · RFX-0001-PRBA <span class="pill p-test">PRUEBA</span><div class="muted">Monterrey → Dallas · 3 ofertas · mejor 1 690 USD · objetivo 1 700</div></div><span class="muted">hace 1 h</span></div>
+                  <div class="inbox-item"><span class="bar"></span><div><b>Aprobar 2 invitaciones</b> · RFX-0002-PRBB <span class="pill p-test">PRUEBA</span><div class="muted">Preparadas por el Operador · Gmail · plazo 24 oct</div></div><span class="muted">hace 3 h</span></div>
+                  <div class="inbox-item risk"><span class="bar"></span><div><b>Conciliar entrega incierta</b> · RFX-0004-PRBD <span class="pill p-test">PRUEBA</span><div class="muted">Sin respuesta de Rateware · bloquea otra entrega del evento</div></div><span class="muted">hace 20 min</span></div>
+                  <div class="inbox-item"><span class="bar"></span><div><b>Aprobar aviso de adjudicación</b> · RFX-0005-PRBE <span class="pill p-test">PRUEBA</span><div class="muted">Recibo confirmado · Carrier Prueba D</div></div><span class="muted">hace 5 min</span></div>
+                  <div class="muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-top:6px">El equipo prepara</div>
+                  <div class="inbox-item wait"><span class="bar"></span><div><b>Elegir carriers</b> · RFX-0006-PRBF<div class="muted">Operador · necesidad registrada ayer</div></div><span class="muted">Operador</span></div>
+                </div>
+                <div class="card" style="width:400px;flex:none">
+                  <div style="display:flex;justify-content:space-between"><h5>Adjudicar ruta 1 · RFX-0001-PRBA</h5><span class="pill p-info">Cerrado a ofertas</span></div>
+                  <div class="muted">Monterrey → Dallas · Dry Van · 4/sem · objetivo 1 700 USD</div>
+                  <table class="t">
+                    <thead><tr><th></th><th>Carrier</th><th>All-in</th><th>Vig.</th><th>Rubros</th></tr></thead>
+                    <tbody>
+                      <tr class="sel"><td><span class="box on"></span></td><td>Prueba B</td><td class="num">1 690</td><td>31 oct</td><td><span class="pill p-ok">6/6</span></td></tr>
+                      <tr><td><span class="box"></span></td><td>Prueba A <span class="muted">v2</span></td><td class="num">1 750</td><td><span class="pill p-warn">—</span></td><td><span class="pill p-warn">5/6</span></td></tr>
+                      <tr class="blk"><td></td><td>Prueba C</td><td class="num">1 820</td><td>15 nov</td><td><span class="pill p-bad">No puedo</span></td></tr>
+                    </tbody>
+                  </table>
+                  <div class="guard"><span class="g-ok">✓</span>Candados en verde para Prueba B</div>
+                  <div class="field">Motivo (obligatorio)</div>
+                  <div style="display:flex;gap:8px"><span class="btn pri" style="flex:1">Adjudicar a Prueba B</span><span class="btn">Abrir evento</span></div>
+                  <div class="sub">Al adjudicar, esta tarjeta se cambia por «Confirmar entrega a Rateware».</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="frame-label">B · MOBILE · BANDEJA Y HOJA DE DECISIÓN</div>
+        <div class="frame-row">
+          <div class="wf mb" role="img" aria-label="Wireframe móvil: bandeja de pendientes">
+            <div class="bar-top"><div class="ttl" style="font-size:16px">Pendientes</div><div style="display:flex;gap:6px"><span class="pill p-warn">Solo tú: 4</span><span class="pill p-info">Equipo: 2</span></div></div>
+            <div class="scroll">
+              <div class="inbox-item on"><span class="bar"></span><div><b>Adjudicar ruta 1</b><div class="muted">RFX-0001-PRBA · 3 ofertas · mejor 1 690</div></div><span class="muted">1 h</span></div>
+              <div class="inbox-item risk"><span class="bar"></span><div><b>Conciliar entrega incierta</b><div class="muted">RFX-0004-PRBD</div></div><span class="muted">20 m</span></div>
+              <div class="inbox-item"><span class="bar"></span><div><b>Aprobar 2 invitaciones</b><div class="muted">RFX-0002-PRBB</div></div><span class="muted">3 h</span></div>
+              <div class="inbox-item"><span class="bar"></span><div><b>Aprobar aviso</b><div class="muted">RFX-0005-PRBE</div></div><span class="muted">5 m</span></div>
+            </div>
+            <div class="dock" style="flex-direction:row;justify-content:space-around"><b>Pendientes</b><span class="muted">Eventos</span><span class="muted">Carriers</span></div>
+          </div>
+          <div class="wf mb" role="img" aria-label="Wireframe móvil: hoja de decisión para adjudicar">
+            <div class="bar-top"><div class="crumb">Pendientes</div><div class="ttl" style="font-size:14px;color:var(--muted)">Adjudicar ruta 1</div></div>
+            <div class="scroll" style="opacity:.35"><div class="inbox-item"><span class="bar"></span><div><b>…</b></div><span></span></div></div>
+            <div class="sheet">
+              <div class="grab"></div>
+              <div style="display:flex;justify-content:space-between"><b>Adjudicar ruta 1</b><span class="pill p-test">PRUEBA</span></div>
+              <div class="muted" style="font-size:11px">Monterrey → Dallas · objetivo 1 700 USD</div>
+              <div class="offer sel"><div class="row"><b>Prueba B</b><span class="num">1 690 USD</span></div><div class="muted" style="font-size:10px">2 d · 4/sem · vig. 31 oct · 6/6</div></div>
+              <div class="offer"><div class="row"><b>Prueba A</b><span class="num">1 750 USD</span></div><div class="muted" style="font-size:10px">v2 · sin vigencia · 5/6</div></div>
+              <div class="field">Motivo</div>
+              <span class="btn pri full">Adjudicar a Prueba B</span>
+              <span class="btn full">Abrir evento completo</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cols2">
+      <div class="note pro"><b>A favor</b><ul><li>Encaja con el rol de orquestador: el equipo prepara y el Administrador solo despacha decisiones.</li><li>La mejor experiencia móvil de los tres.</li><li>Lo incierto (entregas, avisos) nunca se pierde: vive en la bandeja hasta conciliarse.</li></ul></div>
+      <div class="note con"><b>En contra</b><ul><li>Agregar pendientes de todos los eventos y de la Cola pide muchas lecturas o una tabla propia; para la primera adjudicación es trabajo que no se usa.</li><li>Adjudicar desde una tarjeta compacta oculta el historial; hay que forzar «Abrir evento» para decisiones con versiones.</li><li>Con un solo evento simulado, la bandeja tiene una fila y no demuestra su valor.</li></ul></div>
+    </div>
+    <div class="note"><b>Arquitectura de B.</b> Igual que A más un agregador de pendientes. Sin base propia, una función <span class="mono">/api/pendientes</span> recorre <span class="mono">list_rfx_events</span>, el detalle de cada evento activo, recibos y <span class="mono">list_outreach_messages</span> en cada carga. Con volumen, pide una tabla propia en un Supabase de Fr8Bid, que es adelantar la opción (b).</div>
+  </section>
+
+  <!-- ================= CONCEPTO C ================= -->
+  <section class="block" id="c">
+    <div class="concept-head">
+      <div class="letter">C</div>
+      <h2>Workbench por etapas (Bidware actual)</h2>
+      <p class="lede">El código existente entra como un proveedor más. Bidware (origin/main 6690b145, en bidware.heymarksman.com) ya opera el evento en un workbench con etapas Build · Launch · Operate · Close, dentro de una app con más de 20 rutas: QuoteDesk, plantillas, Carrier Fit, CRM, tarifas, integraciones. Se adoptaría como base y se ajustaría Close.</p>
+    </div>
+
+    <h3>Flujo del Administrador en la rebanada</h3>
+    <ol class="flow">
+      <li>Entra a RFx, abre el evento.</li>
+      <li>Build: rutas y rubros. Launch: Carrier Fit, plantillas y Cola para invitar.</li>
+      <li>Operate: sigue ofertas y chat.</li>
+      <li>Close: adjudica por ruta y pulsa la entrega a Rateware.</li>
+      <li>Va a la Cola (otra ruta) a aprobar el aviso de adjudicación.</li>
+      <li>Para saber si el carrier lo ve en Loads, tiene que abrir Loads aparte.</li>
+    </ol>
+
+    <div class="frames">
+      <div>
+        <div class="frame-label">C1 · DESKTOP · WORKBENCH EN LA ETAPA CLOSE (ESQUEMA DE LO EXISTENTE, NO CAPTURA)</div>
+        <div class="frame-scroll">
+          <div class="wf dk" role="img" aria-label="Wireframe C1: workbench por etapas con navegación amplia">
+            <aside class="side">
+              <div class="brand">MARKS<span>MAN</span> · Bidware</div>
+              <div class="nav">Dashboard</div><div class="nav">Shipper intake</div><div class="nav">QuoteDesk</div>
+              <div class="nav on">RFx / Bid Room</div><div class="nav">Carrier list templates</div><div class="nav">Carrier fit</div>
+              <div class="nav">Carrier CRM</div><div class="nav">Plantillas</div><div class="nav">Cola</div><div class="nav">Tarifas</div>
+              <div class="nav">Tarifario</div><div class="nav">Archivos</div><div class="nav">Shippers</div><div class="nav">Integraciones</div>
+              <div class="who"><b>sales@</b>Administrador</div>
+            </aside>
+            <div class="main">
+              <div class="top"><div><div class="crumb">RFx / RFX-0001-PRBA</div><div class="ttl">PRUEBA CONTROLADA · Monterrey → Dallas</div></div><div class="sp"></div><span class="btn">Chat</span></div>
+              <div class="tabs"><span>Build</span><span>Launch</span><span>Operate</span><span class="on">Close</span></div>
+              <div class="body">
+                <div class="card" style="flex:1;padding:0">
+                  <table class="t">
+                    <thead><tr><th>Ruta</th><th>Carrier</th><th>Oferta</th><th>Rubros</th><th>Rol</th><th></th></tr></thead>
+                    <tbody>
+                      <tr><td>1 MTY→DAL</td><td>Carrier Prueba B</td><td class="num">1 690</td><td>6/6</td><td><span class="pill p-ok">primary</span></td><td class="muted">Quitar</td></tr>
+                      <tr><td></td><td>Carrier Prueba A</td><td class="num">1 750</td><td>5/6</td><td>—</td><td class="muted">Backup</td></tr>
+                      <tr><td></td><td>Carrier Prueba C</td><td class="num">1 820</td><td>no puedo</td><td>—</td><td class="muted"></td></tr>
+                    </tbody>
+                  </table>
+                  <div style="padding:10px 12px;display:flex;gap:8px;align-items:center;border-top:1px solid var(--line)"><span class="btn pri">Cerrar hacia Rateware</span><span class="btn">Generar avisos</span><span class="muted">El aviso se aprueba en Cola · Loads no aparece aquí</span></div>
+                </div>
+                <div class="card" style="width:240px;flex:none"><h5>Lo que habría que agregar</h5><div class="sub">Candados visibles antes de adjudicar · confirmación de vigencia ausente (D4) · recibo y estado incierta · aviso bloqueado hasta recibo dentro del evento · estado de Loads · filtro HDships</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="frame-label">C · MOBILE</div>
+        <div class="frame-row">
+          <div class="wf mb" role="img" aria-label="Wireframe móvil del workbench">
+            <div class="bar-top"><div style="display:flex;justify-content:space-between"><b>☰ Bidware</b><span class="muted">RFx</span></div><div class="ttl" style="font-size:13px">PRUEBA CONTROLADA · MTY→DAL</div></div>
+            <div class="tabs" style="padding:0 8px;overflow:hidden"><span>Build</span><span>Launch</span><span>Operate</span><span class="on">Close</span></div>
+            <div class="scroll">
+              <div class="card" style="padding:0;overflow-x:auto"><table class="t" style="min-width:420px"><thead><tr><th>Ruta</th><th>Carrier</th><th>Oferta</th><th>Rubros</th><th>Rol</th></tr></thead><tbody><tr><td>1</td><td>Prueba B</td><td class="num">1 690</td><td>6/6</td><td>primary</td></tr><tr><td></td><td>Prueba A</td><td class="num">1 750</td><td>5/6</td><td>—</td></tr></tbody></table></div>
+              <div class="muted" style="font-size:11px">La tabla de Close se desplaza en horizontal; 14 módulos detrás del menú.</div>
+            </div>
+            <div class="dock"><span class="btn pri full">Cerrar hacia Rateware</span></div>
+          </div>
+          <div class="note" style="flex:1;min-width:260px;align-self:stretch">
+            <b>Qué se verificó y qué no.</b> El esquema sale del README de Bidware (rutas, módulos, etapas y pantallas numeradas del Figma) y de los contratos que usa. No abrí la app en producción ni el checkout local, que está desfasado frente a origin/main. Las etiquetas exactas de botones pueden diferir.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cols2">
+      <div class="note pro"><b>A favor</b><ul><li>Existe y corre en producción sobre los mismos contratos de la opción (a).</li><li>La liga del carrier (<span class="mono">/bid/:token</span>) ya resuelve oferta, rubros, declinar y retirar.</li><li>Tiene un arnés de pruebas con Playwright y funciones simuladas que se puede copiar.</li></ul></div>
+      <div class="note con"><b>En contra</b><ul><li>El recorrido queda repartido entre etapas y módulos: el aviso se aprueba en otra ruta y Loads no aparece.</li><li>Adoptarlo como base trae 20+ rutas a mantener, contra el mandato de empezar por la rebanada más delgada.</li><li>Base local desfasada (35 modificados, 229 sin seguimiento): habría que partir de origin/main sin poder verificarlo desde aquí.</li></ul></div>
+    </div>
+    <div class="note"><b>Arquitectura de C.</b> React 18 + Vite + TypeScript ya desplegado en Vercel, sin backend propio, llamando directo desde el navegador a las Edge Functions (por eso su dominio está en el secret de CORS de Rateware). Adoptarlo significa clonar <span class="mono">elandopando8892/bidware</span> como base de Fr8Bid.</div>
+  </section>
+
+  <!-- ================= ARQUITECTURA ================= -->
+  <section class="block" id="arquitectura">
+    <h2>Arquitectura ligera común (A o B)</h2>
+    <p>Supabase + Vercel, una sola base de código, sin base de datos propia mientras rija la opción (a). Nada de lo siguiente necesita servicios de pago nuevos.</p>
+    <div class="flow-line">Navegador (Administrador / Operador) → Fr8Bid en Vercel: UI + /api → rateware-api · rfx-bid-api (Supabase rateware-prod) → Revisión (pending_review) · Cola Gmail sales@ · Loads lee get_invitation</div>
+    <div class="arch">
+      <div class="node"><h4>Interfaz</h4><ul><li>React + Vite + TypeScript, como Bidware, para reusar conocimiento y tipos.</li><li>Tokens de <span class="mono">marksman-brand-tokens.css</span> tal cual; tipografía de marca con fallback declarado.</li><li>Los cuatro estados de vista (vacío, error, sin permiso, desactualizado) siempre distintos.</li></ul></div>
+      <div class="node"><h4>Funciones /api en Vercel</h4><ul><li>Reenvían cada llamada a <span class="mono">rateware-api</span> con el token de Supabase Auth del usuario; el rol lo sigue aplicando Rateware.</li><li>Servidor a servidor: no hace falta agregar el dominio de Fr8Bid a <span class="mono">RATEWARE_CORS_ORIGINS</span>, que es un secret de Rateware.</li><li>Generan y guardan el <span class="mono">operation_id</span> de cada entrega antes del primer intento.</li><li>Filtran HDships por id en todas las respuestas.</li></ul></div>
+      <div class="node"><h4>Lógica del recorrido</h4><ul><li><span class="mono">recorrido()</span>: función pura que calcula los 11 pasos, candados y siguiente responsable.</li><li>Pruebas del recorrido (§9) contra respuestas simuladas de Rateware; CI en GitHub Actions; despliegue desde main.</li></ul></div>
+      <div class="node"><h4>Carrier y Loads</h4><ul><li><span class="mono">/bid/:token</span> propia y mínima sobre <span class="mono">rfx-bid-api</span> (o reusar la de Bidware).</li><li>Loads sigue leyendo las mismas filas; L1 decide cuándo muestra «adjudicado».</li><li>Con la opción (b) más adelante, entra un Supabase de Fr8Bid y los contratos C1 y C4.</li></ul></div>
+    </div>
+  </section>
+
+  <!-- ================= RECOMENDACIÓN ================= -->
+  <section class="block" id="recomendacion">
+    <h2>Recomendación: concepto A, Mesa del evento</h2>
+    <div class="callout ok stack">
+      <p><b>Por qué A.</b> El primer hito es una adjudicación de punta a punta de un evento de una ruta. A es la forma más directa de esa rebanada: una pantalla que recorre los 11 pasos, con los candados de las reglas I3, I4, I8 y D4 a la vista donde se aplican, y que se construye sobre los contratos que ya existen sin base propia.</p>
+      <p><b>Qué tomo de los otros.</b> De B, la bandeja de pendientes como página de inicio en cuanto haya varios eventos vivos; el modelo de A ya calcula «siguiente paso y quién», así que la bandeja es una vista más de lo mismo. De C, la liga del carrier y el arnés de pruebas como referencia, no como base.</p>
+    </div>
+    <h3>Qué falta antes de programar</h3>
+    <div class="cols2">
+      <div class="note"><b>De ti</b><ul><li>Elegir concepto (A, B o C).</li><li>Más adelante, por separado: L1 en Loads antes del primer recorrido si quieres que el carrier vea la adjudicación solo tras el recibo.</li></ul></div>
+      <div class="note"><b>De mí, al empezar a construir</b><ul><li><span class="mono">git init</span> en <span class="mono">D:\andre\repos\fr8bid</span> con este documento y los dos anteriores como primer commit.</li><li>Confirmar el handoff contra Rateware main <span class="mono">b11991f8</span> (requiere checkout reciente o permiso para leer GitHub).</li><li>Construir la rebanada de A con Rateware simulado y las pruebas del recorrido; ninguna escritura en producción sin tu aprobación por acción.</li></ul></div>
+    </div>
+  </section>
+</div>
