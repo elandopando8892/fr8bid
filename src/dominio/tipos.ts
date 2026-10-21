@@ -1,0 +1,136 @@
+// Modelo normalizado que usa la Mesa del evento. Con la opción (a) de D1 la
+// verdad vive en las tablas RFx de rateware-prod; estos tipos son la forma en
+// que Fr8Bid lee esa verdad, no una base propia.
+
+export type Rol = "admin" | "operator" | "viewer";
+
+export type EstadoEvento = "borrador" | "abierto" | "cerrado" | "adjudicado" | "archivado";
+
+export type EstadoParticipacion =
+  | "preseleccionada"
+  | "invitada"
+  | "vista"
+  | "respondio"
+  | "declino"
+  | "excluida";
+
+export type RubroEstado = "de_acuerdo" | "excepcion" | "no_puedo" | "no_aplica" | "sin_respuesta";
+
+export type ModeloComercial = "fee_plus" | "cost_plus" | "sell_share" | "brokerage";
+
+export interface OfertaVersion {
+  numero: number;
+  tarifaAllIn: number;
+  moneda: string;
+  modeloComercial: ModeloComercial | string;
+  carrierSharePct: number | null;
+  margenPct: number | null;
+  capacidadSemanal: number | null;
+  transitoDias: number | null;
+  vigenteHasta: string | null; // AAAA-MM-DD
+  esFinal: boolean;
+  fuente: "portal_carrier" | "captura_equipo" | "importacion";
+  actor: string;
+  nota: string | null;
+  creadaEn: string;
+  huella: string;
+}
+
+export interface Participacion {
+  id: string; // rfx_lane_vendors.id
+  carrierId: string;
+  carrier: string;
+  correo: string | null;
+  carrierBloqueado: boolean;
+  estado: EstadoParticipacion;
+  rubros: Record<string, RubroEstado>;
+  // Historial completo si la fuente lo da; con Rateware real hoy solo llega la vigente.
+  versiones: OfertaVersion[];
+  rol: "primario" | "respaldo" | null;
+  motivo: string | null;
+  // Versión que el Administrador adjudicó (número y huella en el momento de decidir).
+  adjudicada: { numero: number; huella: string; por: string; en: string } | null;
+  // rateware_closeout_at: la entrega con recibo cubrió esta participación.
+  entregadaEn: string | null;
+}
+
+export interface Ruta {
+  id: string;
+  numero: number;
+  origen: string;
+  destino: string;
+  equipo: string;
+  volumenSemanal: number | null;
+  objetivo: number | null;
+  moneda: string;
+  desiertaMotivo: string | null;
+  participaciones: Participacion[];
+}
+
+export type TipoAviso = "invitacion" | "adjudicacion";
+export type EstadoAviso = "borrador" | "aprobado" | "aceptado" | "rebotado" | "fallido" | "incierto";
+
+export interface Aviso {
+  id: string;
+  tipo: TipoAviso;
+  participacionId: string;
+  canal: "gmail";
+  destinatario: string;
+  asunto: string;
+  cuerpo: string;
+  huella: string;
+  version: number;
+  estado: EstadoAviso;
+  aprobadoPor: string | null;
+  aprobadoHuella: string | null;
+  reciboProveedor: string | null; // id de mensaje de Gmail
+}
+
+export interface Recibo {
+  operationId: string;
+  insertados: number;
+  enlazados: number;
+  enRevision: number;
+  conservadosAprobados: number;
+  stagingIds: string[];
+  estadoDestino: "pending_review";
+  momento: string;
+}
+
+export interface Evento {
+  id: string;
+  folio: string;
+  nombre: string;
+  shipper: string;
+  estado: EstadoEvento;
+  plazo: string | null;
+  prueba: boolean; // «PRUEBA CONTROLADA» (D5)
+}
+
+export interface Detalle {
+  evento: Evento;
+  rutas: Ruta[];
+  avisos: Aviso[];
+  recibo: Recibo | null;
+}
+
+export type EstadoEntrega = "sin_preparar" | "preparada" | "enviada" | "confirmada" | "rechazada" | "incierta";
+
+export interface EntregaLocal {
+  estado: EstadoEntrega;
+  operationId: string | null;
+  error: string | null;
+}
+
+export interface ResumenEvento {
+  id: string;
+  folio: string;
+  nombre: string;
+  shipper: string;
+  estado: EstadoEvento;
+  plazo: string | null;
+  prueba: boolean;
+  rutas: string[];
+  ofertas: number;
+  participaciones: number;
+}

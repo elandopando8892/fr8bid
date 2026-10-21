@@ -1,0 +1,69 @@
+/*
+ * MARKSMAN design tokens.
+ *
+ * Transcribed from the validated mock (MARKSMAN_Growth_Mock_v01.html) so the
+ * SaaS app and the mock stay one visual system. The core palette matches the
+ * MARKSMAN Brand Manual as quoted in Rateware's AGENTS.md: Charcoal Grey
+ * #1e1e1e, Electric Orange #ea5e27, Industrial Grey #484848, Cloud Grey #efefef.
+ *
+ * TYPEFACE FALLBACK - DECLARED, NOT SILENT.
+ * The brand manual names New Black Typeface (primary) and Lenia Mono (data).
+ * Neither font file is present in this repository, so both stacks fall back to
+ * system faces. AGENTS.md forbids substituting fonts silently: the fallback is
+ * recorded in docs/REGISTRO_DISENO.md and needs product/design sign-off before
+ * any brand-conformance evidence is claimed. Do not delete the brand family
+ * names from these stacks - they are what makes the fallback visible.
+ */
+:root {
+  /* Core palette */
+  --ink: #1e1e1e;          /* Charcoal Grey */
+  --orange: #ea5e27;       /* Electric Orange */
+  --grey: #484848;         /* Industrial Grey */
+  --cloud: #efefef;        /* Cloud Grey */
+
+  /* Working surfaces */
+  --accent: #c54714;
+  --orange-light: #fff0e9;
+  --canvas: #f4f4f2;
+  --panel: #fff;
+  --subtle: #f8f8f6;
+  --line: #e5e5e0;
+  --muted: #73746d;
+  --muted2: #999a94;
+
+  /* Semantic roles. Never the only carrier of meaning: pair with text or icon. */
+  --green: #287258;
+  --green-light: #edf5ef;
+  --blue: #4c6387;
+  --blue-light: #eff3f8;
+  --red: #a74343;
+  --red-light: #faeeee;
+
+  --radius: 12px;
+  --sidebar: 222px;
+  --shadow: 0 4px 22px #1e1e1e05;
+
+  --font: 'New Black Typeface', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  --mono: 'Lenia Mono', 'SFMono-Regular', Consolas, monospace;
+}
+
+/*
+ * View states. Corte A's acceptance criterion is that an API error never reads
+ * as zero records, so error, unauthorized, stale and empty must be visually
+ * distinct - not four variations of a blank panel.
+ */
+:root {
+  --state-empty: var(--muted);
+  --state-error: var(--red);
+  --state-error-bg: var(--red-light);
+  --state-unauthorized: var(--blue);
+  --state-unauthorized-bg: var(--blue-light);
+  --state-stale: var(--accent);
+  --state-stale-bg: var(--orange-light);
+}
+
+/* Focus ring from the mock. Keep the 3px ring and the offset. */
+:where(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid #ea5e2770;
+  outline-offset: 3px;
+}
