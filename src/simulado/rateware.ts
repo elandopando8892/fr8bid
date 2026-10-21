@@ -350,8 +350,10 @@ export class RatewareSimulado {
         return ok({ row: { ...event } });
       }
       case "update_rfx_bid": {
-        // Captura del equipo cuando la oferta llega por otro canal.
-        const lv = this.laneVendor(u, body.rfx_lane_vendor_id);
+        // Captura del equipo cuando la oferta llega por otro canal. rateware-api
+        // pide `invitation_id` (el id de rfx_lane_vendors).
+        if (!body.invitation_id) throw new Falla(400, "RFx invitation id is required.", "BAD_REQUEST");
+        const lv = this.laneVendor(u, body.invitation_id);
         const e = this.events.find((x) => x.id === lv.rfx_event_id)!;
         if (e.status === "awarded") throw new Falla(409, "El evento ya se entregó.", "RFX_CLOSED");
         this.registrarOferta(lv, body, "team_capture", u.email);
