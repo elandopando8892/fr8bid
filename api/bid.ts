@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { enviarAEdgeFunctions, manejar } from "../src/servidor/proxy";
+import { enviarAEdgeFunctions, manejar } from "../src/servidor/proxy.js";
 
 // POST /api/bid → rfx-bid-api de rateware-prod. La liga del carrier (token) es la credencial.
 export default async function handler(req: VercelRequest, res: VercelResponse) {

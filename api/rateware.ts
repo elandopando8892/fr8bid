@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { enviarAEdgeFunctions, manejar } from "../src/servidor/proxy";
+import { enviarAEdgeFunctions, manejar } from "../src/servidor/proxy.js";
 
 // POST /api/rateware → rateware-api de rateware-prod con el token del usuario.
 export default async function handler(req: VercelRequest, res: VercelResponse) {

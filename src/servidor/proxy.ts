@@ -8,10 +8,10 @@
 // - tokens de liga fuera de las respuestas;
 // - sin respuesta = 504 «incierta», nunca reintento automático.
 
-import { detalle } from "../cliente/mapear";
-import { UUID_RATEWARE } from "../dominio/operacion";
-import { esProtegido } from "../dominio/protegidos";
-import { candadosAdjudicacion, hoyMexico, puedeAdjudicar } from "../dominio/recorrido";
+import { detalle } from "../cliente/mapear.js";
+import { UUID_RATEWARE } from "../dominio/operacion.js";
+import { esProtegido } from "../dominio/protegidos.js";
+import { candadosAdjudicacion, hoyMexico, puedeAdjudicar } from "../dominio/recorrido.js";
 
 export type Servicio = "rateware-api" | "rfx-bid-api";
 

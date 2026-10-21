@@ -2,7 +2,7 @@
 // el siguiente paso con su responsable. La Mesa del evento solo pinta lo que
 // esta función decide; las pruebas del §9 se escriben contra ella.
 
-import type { Aviso, Detalle, EntregaLocal, OfertaVersion, Participacion, Rol, Ruta } from "./tipos";
+import type { Aviso, Detalle, EntregaLocal, OfertaVersion, Participacion, Rol, Ruta } from "./tipos.js";
 
 export type EstadoPaso = "hecho" | "actual" | "bloqueado" | "pendiente";
 export type Quien = "Administrador" | "Operador" | "Carriers" | "Sistema" | "Nadie";

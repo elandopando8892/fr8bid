@@ -7,8 +7,8 @@
 // UUID_PATTERN con versión 1–5 y variante 8–b; cualquier otro lo reemplaza por
 // uno aleatorio y se pierde la idempotencia. Por eso se marca como versión 5.
 
-import { sha256 } from "./huella";
-import type { Detalle } from "./tipos";
+import { sha256 } from "./huella.js";
+import type { Detalle } from "./tipos.js";
 
 export const UUID_RATEWARE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

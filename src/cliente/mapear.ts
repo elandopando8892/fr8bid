@@ -3,9 +3,9 @@
 // submit_bid en rfx-bid-api b11991f8. Campos marcados «sin verificar» se leyeron
 // del código, no de una respuesta real.
 
-import { huellaAviso, huellaOferta } from "../dominio/huella";
-import { esProtegido } from "../dominio/protegidos";
-import { hoyMexico } from "../dominio/recorrido";
+import { huellaAviso, huellaOferta } from "../dominio/huella.js";
+import { esProtegido } from "../dominio/protegidos.js";
+import { hoyMexico } from "../dominio/recorrido.js";
 import type {
   Aviso,
   Detalle,
@@ -18,7 +18,7 @@ import type {
   ResumenEvento,
   RubroEstado,
   Ruta
-} from "../dominio/tipos";
+} from "../dominio/tipos.js";
 
 type Fila = Record<string, any>;
 
