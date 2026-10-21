@@ -24,7 +24,7 @@ export interface Respuesta {
 export type Enviar = (servicio: Servicio, body: Record<string, unknown>, autorizacion: string | null) => Promise<Respuesta>;
 
 export const LECTURAS: Record<Servicio, Set<string>> = {
-  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_outreach_messages"]),
+  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages"]),
   "rfx-bid-api": new Set(["get_invitation"])
 };
 
@@ -47,7 +47,34 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
   "rfx-bid-api": new Set(["submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
 
-const CLAVES_SECRETAS = /^(invitation_token|token|invitation_token_ciphertext|invitation_token_digest|token_digest)$/i;
+// rateware-api (b11991f8) devuelve invitation_token ya descifrado en
+// list_rfx_detail y bid_link en la metadata de los avisos; las variantes
+// _encrypted/_hash las quita Rateware, pero aquí se quitan otra vez por si acaso.
+// Acciones cuya forma en Fr8Bid solo está probada contra el simulado. Contra
+// Rateware real se hacen en las pantallas de Rateware (Bid Room y Cola) hasta
+// alinear cada una con su handler: la preparación del evento, la Cola de avisos
+// y la liga del carrier (las invitaciones reales apuntan al portal de Rateware).
+export const SOLO_SIMULADO: Record<Servicio, Set<string>> = {
+  "rateware-api": new Set([
+    "create_rfx_event",
+    "import_rfx_lanes",
+    "shortlist_rfx_lane_vendors",
+    "update_rfx_bid",
+    "generate_outreach_drafts",
+    "update_outreach_message",
+    "mark_outreach_messages",
+    "send_outreach_messages"
+  ]),
+  "rfx-bid-api": new Set(["get_invitation", "submit_bid", "save_segment_confirmations", "decline_invitation"])
+};
+
+// update_rfx_event con status «closed» en rateware-api exige todas las rutas
+// decididas y ejecuta closeoutAwardedRfxToRateware sin el operation_id de
+// Fr8Bid, además de generar avisos. La entrega solo sale por
+// closeout_awarded_rfx_to_rateware; el cierre a ofertas es mover due_date.
+const ESTADOS_DE_CIERRE = new Set(["closed", "awarded", "archived"]);
+
+const CLAVES_SECRETAS = /^(token|token_digest|token_hash|bid_link|invitation_token(_encrypted|_hash|_ciphertext|_digest)?)$/i;
 
 export function sinSecretos(x: any): any {
   if (Array.isArray(x)) return x.map(sinSecretos);
@@ -68,6 +95,9 @@ function filtrarProtegidos(body: any): any {
 export interface OpcionesProxy {
   enviar: Enviar;
   permitirEscrituras: boolean;
+  // true cuando el destino es rateware-prod (funciones /api de Vercel).
+  real?: boolean;
+  hoy?: () => string;
   timeoutMs?: number;
 }
 
@@ -92,6 +122,18 @@ export async function manejar(
 
   for (const clave of ["event_id", "rfx_event_id", "id"]) {
     if (esProtegido(body?.[clave])) return error(404, "NOT_FOUND", "No encontrado.");
+  }
+
+  if (op.real && SOLO_SIMULADO[servicio].has(action)) {
+    return error(501, "PASO_EN_RATEWARE", "Este paso todavía se hace en Rateware (Bid Room o Cola). Fr8Bid solo lo ejecuta en modo simulado.", { action });
+  }
+
+  if (action === "update_rfx_event") {
+    const patch = body?.patch && typeof body.patch === "object" ? (body.patch as Record<string, unknown>) : null;
+    if (!patch) return error(400, "FALTA_PATCH", "update_rfx_event necesita patch.");
+    if (ESTADOS_DE_CIERRE.has(String(patch.status ?? "").toLowerCase())) {
+      return error(409, "CIERRE_POR_ENTREGA", "Cerrar el evento en Rateware es la entrega: usa «Entregar a Rateware», que lleva su operation_id.");
+    }
   }
 
   if (esEscritura && !op.permitirEscrituras) {
@@ -128,13 +170,21 @@ async function guardaAdjudicacion(body: Record<string, unknown>, autorizacion: s
   if (!body.event_id) return error(400, "FALTA_EVENTO", "Adjudicar necesita event_id para comprobar los candados.");
   if (!String(body.award_reason || "").trim()) return error(400, "MOTIVO", "El motivo es obligatorio.");
   let lectura: Respuesta;
+  let rubros: Respuesta;
   try {
-    lectura = await conLimite(op.enviar("rateware-api", { action: "list_rfx_detail", event_id: body.event_id }, autorizacion), op.timeoutMs ?? 25000);
+    [lectura, rubros] = await conLimite(
+      Promise.all([
+        op.enviar("rateware-api", { action: "list_rfx_detail", event_id: body.event_id }, autorizacion),
+        op.enviar("rateware-api", { action: "list_rfx_segment_confirmations", event_id: body.event_id }, autorizacion)
+      ]),
+      op.timeoutMs ?? 25000
+    );
   } catch {
     return error(504, "SIN_RESPUESTA", "No se pudieron comprobar los candados. No se adjudicó nada.");
   }
   if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
-  const d = detalle(lectura.body);
+  if (rubros.status !== 200) return { ...rubros, body: sinSecretos(rubros.body) };
+  const d = detalle(lectura.body, [], null, { hoy: op.hoy?.() ?? hoyMexico(), rubros: rubros.body?.rows || [] });
   for (const ruta of d.rutas) {
     const p = ruta.participaciones.find((x) => x.id === body.rfx_lane_vendor_id);
     if (!p) continue;

@@ -6,14 +6,15 @@ import { ErrorApi } from "../cliente/api";
 import { aCarga, dinero, EstadoVista, fecha, Prueba, type Carga } from "./comun";
 import { useSesion } from "./sesion";
 
-const RUBROS = ["modelo_logistico", "criterios_operacion", "reglas_negocio", "especificaciones", "requisitos_carrier", "otras_notas"];
+// rubric_key de rfx-bid-api (SEGMENT_CONFIRMATION_RUBRICS).
+const RUBROS = ["logistics_model", "operation_criteria", "business_rules", "service_specifications", "carrier_requirements", "other_notes"];
 const NOMBRE_RUBRO: Record<string, string> = {
-  modelo_logistico: "Modelo logístico",
-  criterios_operacion: "Criterios de operación",
-  reglas_negocio: "Reglas de negocio",
-  especificaciones: "Especificaciones",
-  requisitos_carrier: "Requisitos de carrier",
-  otras_notas: "Otras notas"
+  logistics_model: "Modelo logístico",
+  operation_criteria: "Criterios de operación",
+  business_rules: "Reglas de negocio",
+  service_specifications: "Especificaciones",
+  carrier_requirements: "Requisitos de carrier",
+  other_notes: "Otras notas"
 };
 
 export function LigaCarrier({ token }: { token: string }) {
@@ -28,7 +29,7 @@ export function LigaCarrier({ token }: { token: string }) {
       (datos) => {
         setCarga({ tipo: "ok", datos, leidoEn: Date.now() });
         const r: Record<string, string> = {};
-        for (const c of datos.invitation?.segment_confirmations || []) r[c.segment_key] = c.status;
+        for (const c of datos.segment_confirmations || []) r[c.rubric_key] = c.answer === "pending" ? "" : c.answer;
         setRubros(r);
       },
       (e) => setCarga(aCarga(e))
@@ -122,7 +123,7 @@ export function LigaCarrier({ token }: { token: string }) {
                 <option value="">Sin respuesta</option>
                 <option value="agree">De acuerdo</option>
                 <option value="exception">Con excepción</option>
-                <option value="cannot">No puedo</option>
+                <option value="disagree">No puedo</option>
                 <option value="not_applicable">No aplica</option>
               </select>
             </label>
@@ -131,7 +132,13 @@ export function LigaCarrier({ token }: { token: string }) {
             className="btn-secundario"
             onClick={() =>
               hacer(
-                () => api.responderRubros(token, Object.entries(rubros).filter(([, v]) => v).map(([segment_key, status]) => ({ segment_key, status }))),
+                () =>
+                  api.responderRubros(
+                    token,
+                    Object.entries(rubros)
+                      .filter(([, v]) => v)
+                      .map(([rubric_key, answer]) => ({ segment_key: carga.datos.lane?.rfx_segment_key || "general", rubric_key, answer }))
+                  ),
                 "Rubros guardados."
               )
             }

@@ -19,7 +19,7 @@ import {
   type Contexto
 } from "../src/dominio/recorrido";
 import type { Detalle, EntregaLocal, Participacion } from "../src/dominio/tipos";
-import { ESCRITURAS, manejar } from "../src/servidor/proxy";
+import { ESCRITURAS, manejar, sinSecretos, SOLO_SIMULADO } from "../src/servidor/proxy";
 import { crearSimulado, sembrarDemo } from "../src/simulado/semilla";
 import type { RatewareSimulado } from "../src/simulado/rateware";
 
@@ -44,8 +44,8 @@ async function preparar() {
   relojDeTicks(sim);
   eventId = demo.eventId;
   ids = demo.participaciones;
-  admin = new MesaApi(transporteSimulado(sim, () => "admin"));
-  operador = new MesaApi(transporteSimulado(sim, () => "operador"));
+  admin = new MesaApi(transporteSimulado(sim, () => "admin"), () => sim.hoy());
+  operador = new MesaApi(transporteSimulado(sim, () => "operador"), () => sim.hoy());
 }
 
 const part = (d: Detalle, id: string) => d.rutas.flatMap((r) => r.participaciones).find((p) => p.id === id) as Participacion;
@@ -74,10 +74,11 @@ describe("§9 recorrido de la rebanada", () => {
 
   it("1 · necesidad → evento → ruta → dos carriers invitados con aviso aprobado", async () => {
     const { sim: s, carriers } = crearSimulado();
-    const op = new MesaApi(transporteSimulado(s, () => "operador"));
-    const adm = new MesaApi(transporteSimulado(s, () => "admin"));
-    const { event } = await op.crearEvento({ name: "PRUEBA CONTROLADA · Monterrey → Dallas", customer: "Shipper de Prueba", due_date: "2026-10-31" });
-    const { lanes } = await op.importarRutas(event.id, [{ origin_city: "Monterrey", destination_city: "Dallas", equipment: "Dry Van", target_rate: 1700 }]);
+    relojDeTicks(s);
+    const op = new MesaApi(transporteSimulado(s, () => "operador"), () => s.hoy());
+    const adm = new MesaApi(transporteSimulado(s, () => "admin"), () => s.hoy());
+    const { row: event } = await op.crearEvento({ name: "PRUEBA CONTROLADA · Monterrey → Dallas", customer: "Shipper de Prueba", due_date: "2026-10-31" });
+    const { rows: lanes } = await op.importarRutas(event.id, [{ origin_city: "Monterrey", destination_city: "Dallas", equipment: "Dry Van", target_rate: 1700 }]);
     await op.preseleccionar(lanes[0].id, [carriers.A.id, carriers.B.id]);
     await op.publicar(event.id);
     await op.prepararInvitaciones(event.id);
@@ -196,7 +197,7 @@ describe("§9 recorrido de la rebanada", () => {
     expect(r.entrega.estado).toBe("rechazada");
     expect(r.entrega.error).toMatch(/cambió/);
     expect(sim.staging.filter((s) => s.kind === "rfx_award")).toHaveLength(0);
-    expect(sim.events.find((e) => e.id === eventId)!.status).toBe("closed");
+    expect(sim.events.find((e) => e.id === eventId)!.status).toBe("open");
     expect(sim.recibos).toHaveLength(0);
   });
 
@@ -306,10 +307,10 @@ describe("§9 recorrido de la rebanada", () => {
     await admin.enviarAvisos([avisoDe(d, ids.B, "adjudicacion")!]);
     const filas = sim.bitacora.slice(inicio).map((f) => `${f.accion}:${f.de_estado}→${f.a_estado}`);
     expect(filas).toEqual([
-      "rfx.event.status:open→closed",
+      "rfx.event.due_date:2026-10-31→2026-10-20",
       "rfx.award:null→primary",
       "rate_staging.insert:null→pending_review",
-      "rfx.award.closeout:closed→awarded",
+      "rfx.award.closeout:open→awarded",
       "outreach.draft:null→draft",
       "outreach.approve:draft→approved",
       "outreach.send:approved→sent"
@@ -347,6 +348,60 @@ describe("proxy de /api", () => {
     expect((await manejar("rateware-api", { action: "closeout_awarded_rfx_to_rateware", event_id: eventId, operation_id: "abc" }, "Bearer sim:admin", op)).status).toBe(400);
     expect((await manejar("rateware-api", { action: "closeout_awarded_rfx_to_rateware", event_id: eventId, operation_id: "00000000-0000-8000-8000-000000000001" }, "Bearer sim:admin", op)).status).toBe(400);
     expect((await manejar("rateware-api", { action: "bulk_update_staging", status: "approved" }, "Bearer sim:admin", op)).body.code).toBe("ACCION_NO_PERMITIDA");
+  });
+
+  it("quita ligas privadas y sus variantes cifradas de cualquier respuesta", () => {
+    const limpio = sinSecretos({
+      invitations: [{ id: "lv1", invitation_token: "t", invitation_token_encrypted: "c", invitation_token_hash: "h", bid_rate: 1800 }],
+      messages: [{ id: "m1", metadata: { bid_link: "https://bid/t", channel: "email" } }]
+    });
+    expect(JSON.stringify(limpio)).not.toMatch(/invitation_token|bid_link/);
+    expect(limpio.invitations[0].bid_rate).toBe(1800);
+    expect(limpio.messages[0].metadata.channel).toBe("email");
+  });
+
+  it("cerrar a ofertas mueve el plazo: la liga responde 409 y Rateware sigue «open» hasta la entrega", async () => {
+    await admin.cerrarAOfertas(eventId);
+    expect(sim.events.find((e) => e.id === eventId)!.status).toBe("open");
+    expect((await admin.detalle(eventId)).evento.estado).toBe("cerrado");
+    const r = await manejar("rfx-bid-api", { action: "submit_bid", token: sim.tokenDe(ids.A), bid_rate: 1500, currency: "USD" }, null, {
+      enviar: (s, b, a) => sim.llamar(s, b, a),
+      permitirEscrituras: true
+    });
+    expect(r.status).toBe(409);
+  });
+
+  it("nunca manda status «closed»: en Rateware eso es la entrega sin operation_id", async () => {
+    let llamado = false;
+    const op = {
+      enviar: async () => {
+        llamado = true;
+        return { status: 200, body: {}, headers: {} };
+      },
+      permitirEscrituras: true
+    };
+    for (const status of ["closed", "awarded", "archived"]) {
+      const r = await manejar("rateware-api", { action: "update_rfx_event", event_id: eventId, patch: { status } }, "Bearer sim:admin", op);
+      expect(r.body.code).toBe("CIERRE_POR_ENTREGA");
+    }
+    expect((await manejar("rateware-api", { action: "update_rfx_event", event_id: eventId, status: "open" }, "Bearer sim:admin", op)).body.code).toBe("FALTA_PATCH");
+    expect(llamado).toBe(false);
+  });
+
+  it("contra Rateware real, los pasos aún no alineados se rechazan sin llamar", async () => {
+    let llamadas = 0;
+    const op = {
+      enviar: async () => {
+        llamadas++;
+        return { status: 200, body: { events: [] }, headers: {} };
+      },
+      permitirEscrituras: true,
+      real: true
+    };
+    for (const action of SOLO_SIMULADO["rateware-api"]) expect((await manejar("rateware-api", { action }, "Bearer x", op)).status).toBe(501);
+    for (const action of SOLO_SIMULADO["rfx-bid-api"]) expect((await manejar("rfx-bid-api", { action, token: "t" }, null, op)).status).toBe(501);
+    expect(llamadas).toBe(0);
+    expect((await manejar("rateware-api", { action: "list_rfx_events" }, "Bearer x", op)).status).toBe(200);
   });
 
   it("sin respuesta de Rateware: 504 incierta, sin reintento automático", async () => {

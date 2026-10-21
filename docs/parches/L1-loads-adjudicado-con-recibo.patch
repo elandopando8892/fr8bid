@@ -1,0 +1,29 @@
+diff -ru a/packages/rateware-client/src/private-book-projection.mjs b/packages/rateware-client/src/private-book-projection.mjs
+--- a/packages/rateware-client/src/private-book-projection.mjs	2026-10-21 05:22:54.237044392 +0000
++++ b/packages/rateware-client/src/private-book-projection.mjs	2026-10-21 05:22:54.238378247 +0000
+@@ -22,7 +22,10 @@
+   if(![id,l.id,e.id].every(v=>typeof v==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(v))||r.is_invited!==true||r.rfx_lane_id!==l.id||r.rfx_event_id!==e.id||['archived','revoked','declined'].includes(r.participation_status)){counts.excluded++;continue;}
+   if(seen.has(id)){counts.duplicates++;continue;}seen.add(id);sources.set(id,r);
+   const due=Date.parse(e.due_date),active=e.status==='open'&&Number.isFinite(due)&&due>now&&!['awarded','backup','not_awarded','closed'].includes(r.business_status)&&['invited','viewed','quoted','bid_submitted','drafted'].includes(r.participation_status);
+-  rows.push({id,laneId:str(l.id),eventId:str(e.id),rfx:str(e.rfx_id),laneNumber:num(l.lane_number),customer:str(e.customer),dueAt:str(e.due_date),status:str(r.business_status||r.participation_status),active,
++  // L1 (Fr8Bid D3/I8): Rateware reports awarded/backup as soon as the admin decides;
++  // the carrier sees it only once the handoff receipt exists (rateware_closeout_at).
++  const decidedBeforeReceipt=['awarded','backup'].includes(r.business_status)&&!str(r.rateware_closeout_at);
++  rows.push({id,laneId:str(l.id),eventId:str(e.id),rfx:str(e.rfx_id),laneNumber:num(l.lane_number),customer:str(e.customer),dueAt:str(e.due_date),status:decidedBeforeReceipt?'closed':str(r.business_status||r.participation_status),active,
+    origin:str(l.origin||l.origin_city),destination:str(l.destination||l.destination_city),equipment:str(l.trailer||l.equipment),operation:str(l.operation),service:str(l.service),
+    borderNode:str(obj(l.border_crossing).label)?{label:str(l.border_crossing.label)}:null,
+    fit:Object.fromEntries(['logistics_model','operation_criteria','business_rules','service_specifications','carrier_requirements','other_notes'].map(k=>[k,str(l[k])])),
+diff -ru a/packages/rateware-client/test/private-book-projection.test.mjs b/packages/rateware-client/test/private-book-projection.test.mjs
+--- a/packages/rateware-client/test/private-book-projection.test.mjs	2026-10-21 05:22:54.244820812 +0000
++++ b/packages/rateware-client/test/private-book-projection.test.mjs	2026-10-21 05:22:54.246138383 +0000
+@@ -39,3 +39,10 @@
+  p.carrier_book.invited[1].participation_status='unexpected';
+  assert.equal(projectPrivateBook(p,now).rows.filter(r=>r.active).length,1);
+ });
++test('L1: awarded or backup stays closed until the Rateware handoff receipt exists',()=>{
++ const p=privateBookFixture(now),row=p.carrier_book.invited[0];
++ p.carrier_book.invited=[{...row,invitation_id:'won',business_status:'awarded',rateware_closeout_at:null},{...row,invitation_id:'bk',business_status:'backup'},{...row,invitation_id:'done',business_status:'awarded',rateware_closeout_at:'2026-10-21T15:00:00Z'},{...row,invitation_id:'lost',business_status:'not_awarded'}];
++ const b=projectPrivateBook(p,now),s=Object.fromEntries(b.rows.map(r=>[r.id,r.status]));
++ assert.deepEqual(s,{won:'closed',bk:'closed',done:'awarded',lost:'not_awarded'});
++ assert.equal(b.rows.filter(r=>r.active).length,0);
++});

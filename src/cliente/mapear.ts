@@ -5,6 +5,7 @@
 
 import { huellaAviso, huellaOferta } from "../dominio/huella";
 import { esProtegido } from "../dominio/protegidos";
+import { hoyMexico } from "../dominio/recorrido";
 import type {
   Aviso,
   Detalle,
@@ -30,21 +31,35 @@ const ESTADO_EVENTO: Record<string, EstadoEvento> = {
 };
 
 const ESTADO_PARTICIPACION: Record<string, EstadoParticipacion> = {
+  drafted: "preseleccionada",
   shortlisted: "preseleccionada",
   invited: "invitada",
   viewed: "vista",
+  responded: "respondio",
   quoted: "respondio",
+  bid_submitted: "respondio",
   declined: "declino",
+  withdrawn: "declino",
   archived: "excluida"
 };
 
-// Sin verificar contra una respuesta real de list_rfx_segment_confirmations.
+// rfx_segment_confirmations.answer (rfx-bid-api SEGMENT_CONFIRMATION_ANSWERS);
+// «disagree» es la negativa expresa que bloquea la entrega.
 const RUBRO: Record<string, RubroEstado> = {
+  pending: "sin_respuesta",
   agree: "de_acuerdo",
   exception: "excepcion",
-  cannot: "no_puedo",
+  disagree: "no_puedo",
   not_applicable: "no_aplica"
 };
+
+// Estado de la Mesa a partir de Rateware. «abierto» con el plazo vencido es
+// «cerrado a ofertas»: la liga ya no acepta versiones (rfx-bid-api dueState).
+function estadoEvento(e: Fila, hoy: string): EstadoEvento {
+  const base = ESTADO_EVENTO[e.status] || "borrador";
+  if (base === "abierto" && e.due_date && String(e.due_date).slice(0, 10) < hoy) return "cerrado";
+  return base;
+}
 
 const ESTADO_AVISO: Record<string, EstadoAviso> = {
   draft: "borrador",
@@ -85,7 +100,7 @@ function version(r: Fila, numero: number): OfertaVersion {
   };
 }
 
-function participacion(lv: Fila): Participacion {
+function participacion(lv: Fila, confirmaciones: Fila[]): Participacion {
   // Rateware real: solo la versión vigente (columnas de rfx_lane_vendors).
   // Simulado: además `bid_revisions`, el historial que Rateware no expone.
   const revisiones: Fila[] = Array.isArray(lv.bid_revisions) ? lv.bid_revisions : [];
@@ -105,7 +120,7 @@ function participacion(lv: Fila): Participacion {
     adjudicada = { numero: v.numero, huella: v.huella, por: String(lv.awarded_by || ""), en: corte };
   }
   const rubros: Record<string, RubroEstado> = {};
-  for (const c of lv.segment_confirmations || []) rubros[c.segment_key] = RUBRO[c.status] || "sin_respuesta";
+  for (const c of confirmaciones) if (c.rfx_lane_vendor_id === lv.id) rubros[c.rubric_key] = RUBRO[c.answer] || "sin_respuesta";
   const vendor = lv.vendors || {};
   return {
     id: lv.id,
@@ -123,7 +138,7 @@ function participacion(lv: Fila): Participacion {
   };
 }
 
-function ruta(l: Fila): Ruta {
+function ruta(l: Fila, confirmaciones: Fila[]): Ruta {
   return {
     id: l.id,
     numero: Number(l.lane_number || 1),
@@ -133,8 +148,8 @@ function ruta(l: Fila): Ruta {
     volumenSemanal: num(l.weekly_volume),
     objetivo: num(l.target_rate),
     moneda: String(l.currency || "USD"),
-    desiertaMotivo: l.no_award_reason || null,
-    participaciones: (l.invitations || []).map(participacion)
+    desiertaMotivo: l.no_award_reason || (l.no_award_at ? "Ruta desierta" : null),
+    participaciones: (l.invitations || []).map((lv: Fila) => participacion(lv, confirmaciones))
   };
 }
 
@@ -170,7 +185,13 @@ export function recibo(r: Fila): Recibo {
   };
 }
 
-export function detalle(crudo: Fila, mensajes: Fila[] = [], reciboCrudo: Fila | null = null): Detalle {
+export function detalle(
+  crudo: Fila,
+  mensajes: Fila[] = [],
+  reciboCrudo: Fila | null = null,
+  extra: { hoy?: string; rubros?: Fila[] } = {}
+): Detalle {
+  const hoy = extra.hoy ?? hoyMexico();
   const e = crudo.event || {};
   if (esProtegido(e.id)) throw new Error("Evento protegido");
   return {
@@ -179,17 +200,17 @@ export function detalle(crudo: Fila, mensajes: Fila[] = [], reciboCrudo: Fila | 
       folio: String(e.rfx_id || e.id),
       nombre: String(e.name || ""),
       shipper: String(e.customer || "—"),
-      estado: ESTADO_EVENTO[e.status] || "borrador",
+      estado: estadoEvento(e, hoy),
       plazo: e.due_date || null,
       prueba: esPrueba(e.name)
     },
-    rutas: (crudo.lanes || []).map(ruta).sort((a: Ruta, b: Ruta) => a.numero - b.numero),
+    rutas: (crudo.lanes || []).map((l: Fila) => ruta(l, extra.rubros || [])).sort((a: Ruta, b: Ruta) => a.numero - b.numero),
     avisos: mensajes.map(aviso),
     recibo: reciboCrudo ? recibo(reciboCrudo) : null
   };
 }
 
-export function resumenes(crudo: Fila): ResumenEvento[] {
+export function resumenes(crudo: Fila, hoy: string = hoyMexico()): ResumenEvento[] {
   return (crudo.events || [])
     .filter((e: Fila) => !esProtegido(e.id))
     .map((e: Fila) => ({
@@ -197,7 +218,7 @@ export function resumenes(crudo: Fila): ResumenEvento[] {
       folio: String(e.rfx_id || e.id),
       nombre: String(e.name || ""),
       shipper: String(e.customer || "—"),
-      estado: ESTADO_EVENTO[e.status] || "borrador",
+      estado: estadoEvento(e, hoy),
       plazo: e.due_date || null,
       prueba: esPrueba(e.name),
       rutas: e.lanes_preview || [],

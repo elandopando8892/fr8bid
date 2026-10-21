@@ -3,7 +3,7 @@
 // Rateware simulado detrás del mismo proxy).
 
 import { operacionEntrega } from "../dominio/operacion";
-import { primario, versionMasReciente, versionVigente } from "../dominio/recorrido";
+import { hoyMexico, primario, versionMasReciente, versionVigente } from "../dominio/recorrido";
 import type { Aviso, Detalle, EntregaLocal, Recibo, ResumenEvento } from "../dominio/tipos";
 import { manejar, type Respuesta, type Servicio } from "../servidor/proxy";
 import type { RatewareSimulado } from "../simulado/rateware";
@@ -43,13 +43,22 @@ export function transporteSimulado(sim: RatewareSimulado, usuario: () => string 
     return manejar(servicio, body, clave ? `Bearer sim:${clave}` : null, {
       enviar: (s, b, auth) => sim.llamar(s, b, auth),
       permitirEscrituras: true,
+      hoy: () => sim.hoy(),
       timeoutMs: 2000
     });
   };
 }
 
+// Día anterior a `hoy` (AAAA-MM-DD). rfx-bid-api cierra la liga al terminar el
+// día de due_date (23:59, hora de México), así que due_date = ayer la cierra ya.
+export function diaAnterior(hoy: string): string {
+  const d = new Date(`${hoy}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export class MesaApi {
-  constructor(private t: Transporte) {}
+  constructor(private t: Transporte, private hoy: () => string = () => hoyMexico()) {}
 
   private async rw(body: Record<string, unknown>, servicio: Servicio = "rateware-api") {
     const r = await this.t(servicio, body);
@@ -58,38 +67,42 @@ export class MesaApi {
   }
 
   async eventos(): Promise<ResumenEvento[]> {
-    return mapear.resumenes(await this.rw({ action: "list_rfx_events" }));
+    return mapear.resumenes(await this.rw({ action: "list_rfx_events" }), this.hoy());
   }
 
   async detalle(eventId: string, recibo: Recibo | null = null): Promise<Detalle> {
-    const [crudo, mensajes] = await Promise.all([
+    const [crudo, mensajes, rubros] = await Promise.all([
       this.rw({ action: "list_rfx_detail", event_id: eventId }),
-      this.rw({ action: "list_outreach_messages", rfx_event_id: eventId })
+      this.rw({ action: "list_outreach_messages", rfx_event_id: eventId }),
+      this.rw({ action: "list_rfx_segment_confirmations", event_id: eventId })
     ]);
-    const d = mapear.detalle(crudo, mensajes.messages || []);
+    const d = mapear.detalle(crudo, mensajes.messages || [], null, { hoy: this.hoy(), rubros: rubros.rows || [] });
     return { ...d, recibo };
   }
 
   // ——— Preparación (Operador) ———
   crearEvento(datos: { name: string; customer: string; due_date: string | null }) {
-    return this.rw({ action: "create_rfx_event", ...datos });
+    return this.rw({ action: "create_rfx_event", event: datos });
   }
-  importarRutas(eventId: string, lanes: Record<string, unknown>[]) {
-    return this.rw({ action: "import_rfx_lanes", event_id: eventId, lanes });
+  importarRutas(eventId: string, rows: Record<string, unknown>[]) {
+    return this.rw({ action: "import_rfx_lanes", event_id: eventId, rows });
   }
   preseleccionar(laneId: string, vendorIds: string[]) {
-    return this.rw({ action: "shortlist_rfx_lane_vendors", rfx_lane_id: laneId, vendor_ids: vendorIds });
+    return this.rw({ action: "shortlist_rfx_lane_vendors", lane_id: laneId, vendor_ids: vendorIds });
   }
   prepararInvitaciones(eventId: string) {
     return this.rw({ action: "generate_outreach_drafts", event_id: eventId });
   }
   publicar(eventId: string) {
-    return this.rw({ action: "update_rfx_event", event_id: eventId, status: "open" });
+    return this.rw({ action: "update_rfx_event", event_id: eventId, patch: { status: "open" } });
   }
 
   // ——— Decisiones (Administrador) ———
+  // En Rateware «closed» es la entrega, no el cierre a ofertas. Cerrar a ofertas
+  // es mover el plazo a ayer: la liga responde 409 y el evento sigue abierto
+  // para adjudicar y entregar con operation_id.
   cerrarAOfertas(eventId: string) {
-    return this.rw({ action: "update_rfx_event", event_id: eventId, status: "closed" });
+    return this.rw({ action: "update_rfx_event", event_id: eventId, patch: { due_date: diaAnterior(this.hoy()) } });
   }
 
   adjudicar(a: { eventId: string; participacionId: string; rol: "primario" | "respaldo"; motivo: string; operationId: string; confirmaSinVigencia: boolean }) {
@@ -167,7 +180,7 @@ export class MesaApi {
   enviarOferta(token: string, oferta: Record<string, unknown>) {
     return this.rw({ action: "submit_bid", token, ...oferta }, "rfx-bid-api");
   }
-  responderRubros(token: string, confirmations: { segment_key: string; status: string }[]) {
+  responderRubros(token: string, confirmations: { segment_key: string; rubric_key: string; answer: string }[]) {
     return this.rw({ action: "save_segment_confirmations", token, confirmations }, "rfx-bid-api");
   }
   declinar(token: string) {

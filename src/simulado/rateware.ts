@@ -165,28 +165,45 @@ export class RatewareSimulado {
         }));
         return ok({ event: { ...event }, lanes });
       }
+      case "list_rfx_segment_confirmations": {
+        const event = this.evento(u, body.event_id);
+        const rows = this.laneVendors
+          .filter((lv) => lv.rfx_event_id === event.id)
+          .flatMap((lv) =>
+            Object.entries(this.confirmaciones.get(lv.id) || {}).map(([rubric_key, answer]) => ({
+              rfx_lane_vendor_id: lv.id,
+              vendor_id: lv.vendor_id,
+              segment_key: this.lanes.find((l) => l.id === lv.rfx_lane_id)?.rfx_segment_key || "general",
+              rubric_key,
+              answer
+            }))
+          );
+        return ok({ rows });
+      }
       case "list_outreach_messages": {
         const event = this.evento(u, body.rfx_event_id || body.event_id);
         return ok({ messages: this.mensajes.filter((m) => m.rfx_event_id === event.id).map((m) => ({ ...m })) });
       }
       case "create_rfx_event": {
+        const datos: Fila = body.event && typeof body.event === "object" ? body.event : body;
         const e = {
           id: nuevoId("evt"),
           owner_email: u.ownerEmail,
-          rfx_id: body.rfx_id || `RFX-${String(this.events.length + 1).padStart(4, "0")}-PRBA`,
-          name: body.name,
-          customer: body.customer,
-          due_date: body.due_date || null,
+          rfx_id: datos.rfx_id || `RFX-${String(this.events.length + 1).padStart(4, "0")}-PRBA`,
+          name: datos.name,
+          customer: datos.customer,
+          due_date: datos.due_date || null,
           status: "draft",
           created_at: this.ahora()
         };
         this.events.push(e);
         this.bitacorar(u.email, "rfx.event.create", "rfx_events", e.id, null, "draft");
-        return ok({ event: { ...e } });
+        return ok({ row: { ...e } });
       }
       case "import_rfx_lanes": {
         const event = this.evento(u, body.event_id);
-        const creadas = (body.lanes || []).map((l: Fila, i: number) => {
+        if (["closed", "awarded", "archived"].includes(event.status)) throw new Falla(409, "This bid event is closed. New lanes cannot be added.", "RFX_CLOSED");
+        const creadas = (body.rows || []).map((l: Fila, i: number) => {
           const lane = {
             id: nuevoId("lan"),
             rfx_event_id: event.id,
@@ -199,10 +216,10 @@ export class RatewareSimulado {
         });
         this.lanes.push(...creadas);
         for (const l of creadas) this.bitacorar(u.email, "rfx.lane.import", "rfx_lanes", l.id, null, "open");
-        return ok({ lanes: creadas.map((l: Fila) => ({ ...l })) });
+        return ok({ inserted: creadas.length, rows: creadas.map((l: Fila) => ({ ...l })) });
       }
       case "shortlist_rfx_lane_vendors": {
-        const lane = this.lanes.find((l) => l.id === body.rfx_lane_id);
+        const lane = this.lanes.find((l) => l.id === body.lane_id);
         if (!lane) throw new Falla(404, "Lane not found", "NOT_FOUND");
         this.evento(u, lane.rfx_event_id);
         const filas = (body.vendor_ids || []).map((vid: string) => {
@@ -211,7 +228,7 @@ export class RatewareSimulado {
             rfx_event_id: lane.rfx_event_id,
             rfx_lane_id: lane.id,
             vendor_id: vid,
-            invitation_status: "shortlisted",
+            invitation_status: "drafted",
             invitation_token: `tok_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`,
             award_role: null,
             award_reason: null,
@@ -232,7 +249,7 @@ export class RatewareSimulado {
             rateware_closeout_at: null
           };
           this.revisiones.set(lv.id, []);
-          this.bitacorar(u.email, "rfx.vendor.shortlist", "rfx_lane_vendors", lv.id, null, "shortlisted");
+          this.bitacorar(u.email, "rfx.vendor.shortlist", "rfx_lane_vendors", lv.id, null, "drafted");
           return lv;
         });
         this.laneVendors.push(...filas);
@@ -241,7 +258,7 @@ export class RatewareSimulado {
       case "generate_outreach_drafts": {
         const event = this.evento(u, body.event_id || body.rfx_event_id);
         const nuevos = this.laneVendors
-          .filter((lv) => lv.rfx_event_id === event.id && lv.invitation_status === "shortlisted")
+          .filter((lv) => lv.rfx_event_id === event.id && lv.invitation_status === "drafted")
           .filter((lv) => !this.mensajes.some((m) => m.rfx_lane_vendor_id === lv.id && m.kind === "rfx_invitation"))
           .map((lv) => this.nuevoMensaje(event, lv, "rfx_invitation"));
         return ok({ messages: nuevos.map((m) => ({ ...m })) });
@@ -301,25 +318,36 @@ export class RatewareSimulado {
           if (m.kind === "rfx_invitation") {
             const lv = this.laneVendors.find((x) => x.id === m.rfx_lane_vendor_id)!;
             lv.invitation_status = "invited";
-            this.bitacorar(u.email, "rfx.vendor.invite", "rfx_lane_vendors", lv.id, "shortlisted", "invited");
+            this.bitacorar(u.email, "rfx.vendor.invite", "rfx_lane_vendors", lv.id, "drafted", "invited");
           }
         }
         return ok({ sent: mensajes.length, messages: mensajes.map((m) => ({ ...m })) });
       }
       case "update_rfx_event": {
+        // rateware-api: el cambio llega en body.patch. status «closed» NO es el
+        // cierre a ofertas: exige todas las rutas decididas y ejecuta la entrega
+        // a Rateware sin operation_id del cliente (y genera avisos). Fr8Bid no
+        // lo usa nunca; el proxy lo bloquea. El cierre a ofertas es due_date.
         const event = this.evento(u, body.event_id || body.id);
-        const destino = body.status;
-        if (destino) {
-          const permitidos: Record<string, string[]> = { draft: ["open"], open: ["closed"], closed: ["open"] };
-          if (["closed", "archived"].includes(destino) && !roles.includes("admin")) throw new Falla(403, "Cerrar es del Administrador.", "TEAM_ROLE_REQUIRED");
+        const patch: Fila = body.patch && typeof body.patch === "object" ? body.patch : {};
+        if (patch.status !== undefined) {
+          const destino = String(patch.status);
+          if (destino === "closed") {
+            if (!roles.includes("admin")) throw new Falla(403, "Cerrar es del Administrador.", "TEAM_ROLE_REQUIRED");
+            return this.closeout(u, { event_id: event.id });
+          }
+          const permitidos: Record<string, string[]> = { draft: ["open"], open: ["draft"] };
           if (!(permitidos[event.status] || []).includes(destino)) throw new Falla(409, `Transición no permitida: ${event.status} → ${destino}`, "INVALID_TRANSITION");
-          if (destino === "open" && event.status === "closed" && this.laneVendors.some((lv) => lv.rfx_event_id === event.id && lv.award_role))
-            throw new Falla(409, "No se reabre con adjudicaciones vigentes.", "INVALID_TRANSITION");
           const antes = event.status;
           event.status = destino;
           this.bitacorar(u.email, "rfx.event.status", "rfx_events", event.id, antes, destino);
         }
-        return ok({ event: { ...event } });
+        if (patch.due_date !== undefined) {
+          const antes = event.due_date;
+          event.due_date = patch.due_date || null;
+          this.bitacorar(u.email, "rfx.event.due_date", "rfx_events", event.id, antes, event.due_date);
+        }
+        return ok({ row: { ...event } });
       }
       case "update_rfx_bid": {
         // Captura del equipo cuando la oferta llega por otro canal.
@@ -393,7 +421,7 @@ export class RatewareSimulado {
     for (const lv of adjudicadas) {
       const vendor = this.vendors.find((v) => v.id === lv.vendor_id)!;
       if ((lv.valid_through && lv.valid_through < hoy) || String(vendor.status).toLowerCase() === "blocked") throw conflicto();
-      if (Object.values(this.confirmaciones.get(lv.id) || {}).includes("cannot")) throw new Falla(409, "Un rubro con negativa expresa bloquea el cierre.", "RFX_SEGMENT_BLOCKED");
+      if (Object.values(this.confirmaciones.get(lv.id) || {}).includes("disagree")) throw new Falla(409, "Un rubro con negativa expresa bloquea el cierre.", "RFX_SEGMENT_BLOCKED");
       const snap = this.staging.find((s) => s.rfx_lane_vendor_id === lv.id && s.kind === "bid_snapshot");
       if (snap && Number(snap.all_in_rate) !== Number(lv.bid_rate)) throw conflicto();
     }
@@ -465,6 +493,7 @@ export class RatewareSimulado {
             invitation: propia,
             event: { rfx_id: event.rfx_id, name: event.name, customer: event.customer, status: event.status, due_date: event.due_date },
             lane: { ...lane },
+            segment_confirmations: Object.entries(this.confirmaciones.get(lv.id) || {}).map(([rubric_key, answer]) => ({ segment_key: lane.rfx_segment_key || "general", rubric_key, answer })),
             bid_window_closed: Boolean(bloqueo())
           },
           headers: {}
@@ -480,7 +509,14 @@ export class RatewareSimulado {
         const b = bloqueo();
         if (b) throw new Falla(409, b, "BID_WINDOW_CLOSED");
         const actual = { ...(this.confirmaciones.get(lv.id) || {}) };
-        for (const c of body.confirmations || []) actual[c.segment_key] = c.status;
+        const RUBRICAS = ["logistics_model", "operation_criteria", "business_rules", "service_specifications", "carrier_requirements", "other_notes"];
+        const RESPUESTAS = ["pending", "agree", "exception", "disagree", "not_applicable"];
+        for (const c of body.confirmations || []) {
+          if (!c.segment_key) throw new Falla(400, "Segment key is required.", "BAD_REQUEST");
+          if (!RUBRICAS.includes(c.rubric_key)) throw new Falla(400, "Invalid segment rubric.", "BAD_REQUEST");
+          if (!RESPUESTAS.includes(c.answer || "pending")) throw new Falla(400, "Invalid segment confirmation answer.", "BAD_REQUEST");
+          actual[c.rubric_key] = c.answer || "pending";
+        }
         this.confirmaciones.set(lv.id, actual);
         this.bitacorar(`token:${lv.id}`, "rfx.segments.save", "rfx_lane_vendors", lv.id, null, null, { segments: actual });
         return { status: 200, body: { confirmations: actual }, headers: {} };
@@ -546,7 +582,6 @@ export class RatewareSimulado {
     return {
       ...lv,
       vendors: vendor ? { id: vendor.id, vendor_name: vendor.vendor_name, primary_email: vendor.primary_email, status: vendor.status } : null,
-      segment_confirmations: Object.entries(this.confirmaciones.get(lv.id) || {}).map(([segment_key, status]) => ({ segment_key, status })),
       // Solo simulado: Rateware real no devuelve el historial de versiones.
       bid_revisions: (this.revisiones.get(lv.id) || []).map((r) => ({ ...r }))
     };

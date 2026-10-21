@@ -9,7 +9,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!base || !anon) return res.status(503).json({ error: "Fr8Bid no tiene configurado Rateware.", code: "SIN_CONFIGURACION" });
   const r = await manejar("rateware-api", (req.body as Record<string, unknown>) || null, req.headers.authorization || null, {
     enviar: enviarAEdgeFunctions(base, anon),
-    permitirEscrituras: process.env.FR8BID_ESCRITURAS_REALES === "si"
+    permitirEscrituras: process.env.FR8BID_ESCRITURAS_REALES === "si",
+    real: true
   });
   for (const [k, v] of Object.entries(r.headers)) res.setHeader(k, v);
   return res.status(r.status).json(r.body);

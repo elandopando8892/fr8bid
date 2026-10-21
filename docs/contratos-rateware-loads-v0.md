@@ -200,3 +200,13 @@ Leído con `gh api` en modo consulta, sin checkout ni escrituras. `main` = `b119
 - Duda de §2.4 resuelta: `submit_bid` de `rfx-bid-api` responde 409 si el evento está `closed`, `awarded` o `archived`, si venció el plazo **o si la participación ya tiene `award_role`**. La liga no puede cambiar el importe adjudicado; solo la captura del equipo (`update_rfx_bid`) podría.
 - Ojo: `list_rfx_detail` no es de solo lectura en eventos abiertos (repara cobertura de participaciones) y devuelve las ligas privadas de cada carrier. Fr8Bid quita los tokens en el proxy.
 - No existe acción que devuelva el historial de versiones de una oferta. Con Rateware real la Mesa solo ve la versión vigente; el historial que muestra el modo simulado depende de C2.
+
+## 9. Desajustes del modo rateware corregidos (21/oct/2026)
+
+Leído en el `rateware-api` y `rfx-bid-api` del paquete del Sprint 19 y del worktree local (las acciones no relacionadas con el handoff no se compararon contra `b11991f8`).
+
+- **`update_rfx_event` con `status: "closed"` no es el cierre a ofertas.** Exige todas las rutas decididas, ejecuta `closeoutAwardedRfxToRateware` sin el `operation_id` de Fr8Bid y genera los avisos de adjudicación. Fr8Bid ya no lo manda nunca (el proxy responde 409 `CIERRE_POR_ENTREGA`). El cierre a ofertas es mover `due_date` a ayer: `rfx-bid-api` cierra la liga al terminar ese día y el evento sigue `open` hasta la entrega. La Mesa muestra «cerrado a ofertas» cuando el evento está `open` con el plazo vencido. Adjudicar no exige que el evento esté cerrado en Rateware; la exigencia (I3) es de Fr8Bid.
+- `update_rfx_event` lee el cambio de `body.patch`; antes se mandaba al nivel raíz y Rateware lo ignoraba.
+- `import_rfx_lanes` recibe `rows`; `shortlist_rfx_lane_vendors` recibe `lane_id`; la participación nace `drafted`.
+- Los rubros no vienen en `list_rfx_detail`: se leen con `list_rfx_segment_confirmations` (`rubric_key`, `answer` = `pending · agree · exception · disagree · not_applicable`). `disagree` es la negativa expresa.
+- `update_outreach_message` no existe; la Cola aprueba con `mark_outreach_messages` (`ids`) y envía con `expected_versions`. La preparación del evento, la Cola y la liga del carrier quedan como **solo simulado** (501 `PASO_EN_RATEWARE` contra Rateware real) y se hacen en las pantallas de Rateware hasta alinearlas una por una. Contra Rateware real, Fr8Bid lee, cierra a ofertas, adjudica, entrega con `operation_id` y genera los borradores de aviso.
