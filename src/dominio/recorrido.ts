@@ -207,9 +207,13 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
       "Administrador"
     )
   );
-  const ofertasEstado: EstadoPaso = !invitacionHecha ? "pendiente" : abierto ? "actual" : "hecho";
+  // Todos respondieron o declinaron: ya no se espera a los carriers, toca cerrar.
+  const sinPendientes = todas.every((p) => versionVigente(p) || p.estado === "declino");
+  const ofertasEstado: EstadoPaso = !invitacionHecha ? "pendiente" : abierto && !sinPendientes ? "actual" : "hecho";
   pasos.push(paso("ofertas", 5, ofertasEstado, `${respondieron.length} de ${todas.length} respondieron`, "Carriers"));
-  pasos.push(paso("comparar", 6, !invitacionHecha ? "pendiente" : cerradoOMas ? "hecho" : respondieron.length ? "actual" : "pendiente", "Comparativo por ruta", "Administrador"));
+  pasos.push(
+    paso("comparar", 6, !invitacionHecha || !respondieron.length ? "pendiente" : cerradoOMas || sinPendientes ? "hecho" : "actual", "Comparativo por ruta", "Administrador")
+  );
   pasos.push(
     paso(
       "cierre",

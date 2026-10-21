@@ -1,0 +1,119 @@
+/* Bid Room · Mesa del evento. Solo tokens de marksman-brand-tokens.css. */
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--canvas); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.45; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+h1 { font-size: 22px; margin: 2px 0; }
+h2 { font-size: 15px; margin: 0 0 10px; }
+h3 { font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; color: var(--grey); }
+p { margin: 6px 0; }
+button, input, select, textarea { font: inherit; }
+.mono { font-family: var(--mono); }
+.tenue { color: var(--muted); font-size: 12.5px; }
+.nota { color: var(--muted); font-size: 12px; margin-top: 10px; }
+
+.marco { display: grid; grid-template-columns: var(--sidebar) 1fr; min-height: 100vh; }
+.lateral { background: var(--ink); color: var(--cloud); padding: 20px 16px; display: flex; flex-direction: column; gap: 22px; }
+.marca .logo { font-weight: 700; letter-spacing: .06em; font-size: 17px; }
+.marca .logo b { color: var(--orange); }
+.marca .sub { display: block; color: var(--muted2); font-size: 12px; }
+.lateral nav a { display: block; color: var(--cloud); padding: 8px 10px; border-radius: 8px; }
+.lateral nav a.activo { background: #ffffff14; color: #fff; }
+.cuenta { margin-top: auto; display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+.cuenta .rol { color: var(--orange); font-weight: 600; }
+.cuenta select { width: 100%; }
+.contenido { padding: 24px 28px; max-width: 1280px; width: 100%; }
+.contenido.solo { margin: 0 auto; max-width: 760px; }
+
+.cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
+.miga { color: var(--muted); font-size: 12px; margin: 0; }
+.etiquetas { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; background: var(--cloud); color: var(--grey); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.pill.prueba { background: var(--orange-light); color: var(--accent); border: 1px solid #ea5e2740; }
+.pill.ok-pill { background: var(--green-light); color: var(--green); }
+.aviso-pill { background: #ffffff14; color: var(--orange); }
+
+.contadores { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 12px; color: var(--grey); }
+.tarjeta { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); margin-bottom: 14px; }
+.fila { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fila-botones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+
+.tabla-envoltura { overflow-x: auto; }
+.tabla { width: 100%; border-collapse: collapse; background: var(--panel); }
+.tabla th { text-align: left; font-size: 11.5px; color: var(--muted); font-weight: 600; padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tabla td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tabla tr.elegida td { background: var(--orange-light); }
+.alerta { color: var(--accent); font-weight: 600; }
+.error-texto { color: var(--red); font-weight: 600; }
+
+.estado { border-radius: 10px; padding: 10px 14px; margin: 10px 0; background: var(--subtle); color: var(--state-empty); border: 1px dashed var(--line); }
+.estado button { margin-left: 8px; }
+.estado-error { background: var(--state-error-bg); color: var(--state-error); border: 1px solid #a7434340; }
+.estado-permiso { background: var(--state-unauthorized-bg); color: var(--state-unauthorized); border: 1px solid #4c638740; }
+.estado-viejo { background: var(--state-stale-bg); color: var(--state-stale); border: 1px solid #c5471440; }
+.estado-ok { background: var(--green-light); color: var(--green); border: 1px solid #28725840; }
+
+.btn-primario { background: var(--orange); color: #fff; border: 0; border-radius: 9px; padding: 9px 16px; font-weight: 600; cursor: pointer; }
+.btn-primario:disabled { background: var(--muted2); cursor: not-allowed; }
+.btn-secundario { background: var(--panel); color: var(--ink); border: 1px solid var(--grey); border-radius: 9px; padding: 8px 14px; font-weight: 600; cursor: pointer; }
+.btn-texto { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 4px 2px; }
+.btn-texto:disabled, .btn-secundario:disabled { opacity: .5; cursor: not-allowed; }
+.confirmar { background: var(--orange-light); border: 1px solid #ea5e2740; border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
+.campo { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; font-size: 12.5px; color: var(--grey); }
+.campo input, .campo select, .campo textarea, textarea { border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; background: var(--panel); color: var(--ink); width: 100%; }
+.check { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0; font-size: 13px; }
+
+.paso-movil { display: none; }
+.mesa { display: grid; grid-template-columns: 250px 1fr; gap: 16px; align-items: start; }
+.riel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 10px; position: sticky; top: 16px; }
+.riel h2 { padding: 0 6px; }
+.riel ol { list-style: none; margin: 0; padding: 0; }
+.riel button { display: flex; gap: 10px; width: 100%; text-align: left; background: none; border: 0; padding: 7px 6px; border-radius: 8px; cursor: pointer; color: inherit; }
+.riel button small { display: block; color: var(--muted); font-size: 11.5px; }
+.riel .visto button { background: var(--subtle); }
+.marca-paso { flex: 0 0 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; background: var(--cloud); color: var(--grey); }
+.paso-hecho .marca-paso { background: var(--green-light); color: var(--green); }
+.paso-actual .marca-paso { background: var(--orange); color: #fff; }
+.paso-actual b { color: var(--accent); }
+.paso-bloqueado { opacity: .62; }
+.paso-pendiente { opacity: .8; }
+
+.dos-columnas { display: grid; grid-template-columns: 1fr 290px; gap: 14px; align-items: start; }
+.dos-columnas .tarjeta { margin-bottom: 14px; }
+.lado h3 { margin-top: 2px; }
+.candados ul { list-style: none; padding: 0; margin: 0 0 8px; }
+.candados li { padding: 4px 0; font-size: 13px; }
+.candados li.ok { color: var(--green); }
+.candados li.no { color: var(--red); }
+.candados li.confirmable { color: var(--accent); }
+.historial { margin-top: 12px; background: var(--subtle); border-radius: 10px; padding: 10px 12px; }
+.historial ol { margin: 0; padding-left: 18px; }
+.aviso-caja { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 10px 0; }
+.codigo { background: var(--subtle); padding: 10px; border-radius: 8px; overflow-x: auto; font-size: 12px; }
+.cadena ol { margin: 0; padding-left: 18px; color: var(--grey); }
+.liga-sim { margin-right: 10px; }
+.rejilla { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 12px; }
+.rubro { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.rubro select { max-width: 180px; }
+.entrar { margin-top: 15vh; text-align: center; }
+
+@media (max-width: 860px) {
+  .marco { grid-template-columns: 1fr; }
+  .lateral { flex-direction: row; align-items: center; padding: 10px 16px; gap: 12px; flex-wrap: wrap; }
+  .lateral nav { display: flex; gap: 4px; }
+  .cuenta { margin: 0 0 0 auto; flex-direction: row; align-items: center; }
+  .cuenta .campo { margin: 0; flex-direction: row; align-items: center; }
+  .contenido { padding: 16px; }
+  .mesa, .dos-columnas { grid-template-columns: 1fr; }
+  .riel { display: none; }
+  .paso-movil { display: block; background: var(--orange-light); color: var(--accent); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-weight: 600; }
+  .cabecera { flex-direction: column; }
+  .rejilla { grid-template-columns: 1fr 1fr; }
+}
+
+.contenido, .centro, .dos-columnas > * { min-width: 0; }
+@media (max-width: 1180px) {
+  .dos-columnas { grid-template-columns: 1fr; }
+}
+.tabla td.mono, .tabla td b { white-space: nowrap; }

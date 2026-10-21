@@ -187,3 +187,16 @@ Ninguna para seguir con conceptos y wireframes: D1 queda en (a) para la primera 
 1. **L1 en Loads** antes del primer recorrido, si quieres que el carrier vea la adjudicación solo después del recibo. Es un cambio fuera de Fr8Bid.
 2. **C1 y C2 en Rateware** cuando quieras pasar a (b). Son migraciones en `rateware-prod`.
 3. **Confirmar el handoff contra Rateware main `b11991f8`** antes de programar sobre él. Leerlo requiere un checkout reciente de Rateware o permiso para consultar GitHub.
+
+---
+
+## 8. Confirmación contra Rateware main `b11991f8` (21/oct/2026)
+
+Leído con `gh api` en modo consulta, sin checkout ni escrituras. `main` = `b11991f8`.
+
+- `supabase/migrations/20261018030000_rfx_handoff_atomic.sql` es **idéntica** a la copia del Sprint 19 (sin contar finales de línea).
+- `closeoutAwardedRfxToRateware` en `rateware-api/index.ts` es idéntica, igual que `handoff-contract.mjs`, `handoff-plan.ts` y `rfx-closeout-guards.ts`. Lo dicho en §1 y §2.1 sigue vigente.
+- Hallazgo nuevo que cambia el código: el despachador de `rateware-api` solo respeta un `operation_id` que cumpla `UUID_PATTERN` con **versión 1–5 y variante 8–b**; cualquier otro lo sustituye por uno aleatorio y se pierde la idempotencia del reintento. Fr8Bid genera ids con versión 5 y el proxy rechaza los demás.
+- Duda de §2.4 resuelta: `submit_bid` de `rfx-bid-api` responde 409 si el evento está `closed`, `awarded` o `archived`, si venció el plazo **o si la participación ya tiene `award_role`**. La liga no puede cambiar el importe adjudicado; solo la captura del equipo (`update_rfx_bid`) podría.
+- Ojo: `list_rfx_detail` no es de solo lectura en eventos abiertos (repara cobertura de participaciones) y devuelve las ligas privadas de cada carrier. Fr8Bid quita los tokens en el proxy.
+- No existe acción que devuelva el historial de versiones de una oferta. Con Rateware real la Mesa solo ve la versión vigente; el historial que muestra el modo simulado depende de C2.
