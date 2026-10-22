@@ -19,8 +19,10 @@ import {
   type Contexto
 } from "../dominio/recorrido";
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
+import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
 import { cambiosComerciales, describirModelo } from "../dominio/modelo";
-import { candidatosRecordatorio, ETIQUETA_SEGUIMIENTO, recordatorio, seguimiento, type EstadoSeguimiento } from "../dominio/seguimiento";
+import { candidatosRecordatorio, ETIQUETA_SEGUIMIENTO, preguntaAlCarrier, recordatorio, seguimiento, type EstadoSeguimiento } from "../dominio/seguimiento";
+import { crearXlsx } from "../dominio/xlsx";
 import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
 import type { Aviso, Detalle, EntregaLocal, Participacion, Recibo, Ruta } from "../dominio/tipos";
 import { EditorCondiciones, ListaCondiciones, MatrizCondiciones } from "./condiciones";
@@ -478,9 +480,19 @@ function PanelComparar({ d, ctx, accion }: Props) {
   const s = useSesion();
   const [elegido, setElegido] = useState<string | null>(null);
   const [historial, setHistorial] = useState<string | null>(null);
+  const [preguntaA, setPreguntaA] = useState<string | null>(null);
+  const hayOfertas = d.rutas.some((r) => conOferta(r).length > 0);
 
   return (
     <>
+      {hayOfertas && (
+        <div className="fila-botones">
+          <button className="btn-secundario" onClick={() => descargarComparativo(d, false)}>Descargar Excel interno</button>
+          <button className="btn-secundario" onClick={() => descargarComparativo(d, true)} title="Sin nombres de carrier, modelo comercial ni porcentajes">
+            Descargar Excel para el shipper (anónimo)
+          </button>
+        </div>
+      )}
       {d.rutas.map((ruta) => {
         const filas = [...conOferta(ruta)].sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
         const sel = ruta.participaciones.find((x) => x.id === elegido) ?? null;
@@ -521,6 +533,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
                         elegible={puedeElegir && !p.rol}
                         onElegir={() => setElegido(p.id)}
                         onHistorial={() => setHistorial(historial === p.id ? null : p.id)}
+                        onPreguntar={ctx.rol !== "viewer" && p.correo ? () => setPreguntaA(preguntaA === p.id ? null : p.id) : undefined}
                       />
                     ))}
                   </tbody>
@@ -530,7 +543,10 @@ function PanelComparar({ d, ctx, accion }: Props) {
               <MatrizCondiciones ruta={ruta} carriers={filas} />
               {!prim && <CapturaEquipo d={d} ruta={ruta} accion={accion} />}
               <LigasSimuladas d={d} />
-              {historial && <Historial p={ruta.participaciones.find((x) => x.id === historial)!} />}
+              {historial && ruta.participaciones.some((x) => x.id === historial) && <Historial p={ruta.participaciones.find((x) => x.id === historial)!} />}
+              {preguntaA && ruta.participaciones.some((x) => x.id === preguntaA) && (
+                <PreguntaCarrier d={d} ruta={ruta} p={ruta.participaciones.find((x) => x.id === preguntaA)!} onCerrar={() => setPreguntaA(null)} />
+              )}
               {ruta.participaciones.filter((p) => p.estado === "declino").map((p) => (
                 <p key={p.id} className="tenue">{p.carrier} declinó.</p>
               ))}
@@ -585,7 +601,7 @@ function ResumenCondiciones({ ruta, p }: { ruta: Ruta; p: Participacion }) {
   return <span title={r.marcadas.join(", ")}>{r.cumplidas}/{r.total}{r.marcadas.length ? ` · ${r.marcadas.length} con nota` : ""}</span>;
 }
 
-function FilaOferta({ p, ruta, totalRubros, elegido, elegible, onElegir, onHistorial }: { p: Participacion; ruta: Ruta; totalRubros: number; elegido: boolean; elegible: boolean; onElegir: () => void; onHistorial: () => void }) {
+function FilaOferta({ p, ruta, totalRubros, elegido, elegible, onElegir, onHistorial, onPreguntar }: { p: Participacion; ruta: Ruta; totalRubros: number; elegido: boolean; elegible: boolean; onElegir: () => void; onHistorial: () => void; onPreguntar?: () => void }) {
   const v = versionVigente(p)!;
   const rubros = Object.values(p.rubros);
   const negativa = rubros.includes("no_puedo");
@@ -611,8 +627,53 @@ function FilaOferta({ p, ruta, totalRubros, elegido, elegible, onElegir, onHisto
           v{v.numero}
           {anterior ? ` · antes ${anterior.tarifaAllIn.toLocaleString("es-MX")}` : ""}
         </button>
+        {onPreguntar && (
+          <button className="btn-texto" onClick={onPreguntar}>
+            Preguntar
+          </button>
+        )}
       </td>
     </tr>
+  );
+}
+
+function descargarComparativo(d: Detalle, anonimo: boolean) {
+  const datos = crearXlsx([hojaComparativo(d, anonimo)]);
+  const url = URL.createObjectURL(new Blob([datos], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nombreArchivo(d, anonimo);
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// La pregunta se abre como borrador en Gmail, en el hilo de la invitación.
+function PreguntaCarrier({ d, ruta, p, onCerrar }: { d: Detalle; ruta: Ruta; p: Participacion; onCerrar: () => void }) {
+  const [texto, setTexto] = useState("");
+  const r = preguntaAlCarrier(d, ruta, p, texto);
+  return (
+    <div className="aviso-caja">
+      <h3>Preguntar a {p.carrier}</h3>
+      <label className="campo">
+        <span>Pregunta</span>
+        <textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={3} placeholder="Por ejemplo: ¿el all-in incluye el cruce?" />
+      </label>
+      {texto.trim() && (
+        <>
+          <p className="tenue">Para: {r.para} · {r.asunto}</p>
+          <p className="texto-aviso">{r.cuerpo}</p>
+        </>
+      )}
+      <p className="tenue">Fr8Bid no envía la pregunta: «Abrir en Gmail» crea el borrador en tu cuenta y tú decides si lo envías.</p>
+      <div className="fila-botones">
+        {texto.trim() ? (
+          <a className="btn-secundario" href={r.gmail} target="_blank" rel="noreferrer">Abrir en Gmail</a>
+        ) : (
+          <button className="btn-secundario" disabled>Abrir en Gmail</button>
+        )}
+        <button className="btn-texto" onClick={onCerrar}>Cancelar</button>
+      </div>
+    </div>
   );
 }
 

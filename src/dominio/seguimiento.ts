@@ -125,3 +125,25 @@ export function recordatorio(d: Detalle, s: SeguimientoCarrier): Recordatorio {
   const gmail = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(s.correo || "")}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
   return { para: s.correo || "", asunto, cuerpo, gmail };
 }
+
+// «Preguntar al carrier» desde su oferta: borrador de Gmail en el hilo de la
+// invitación, con la versión y la ruta a la vista. Fr8Bid no lo envía.
+export function preguntaAlCarrier(d: Detalle, ruta: Ruta, p: Participacion, pregunta: string): Recordatorio {
+  const v = versionVigente(p);
+  const invitacion = d.avisos.find((a) => a.tipo === "invitacion" && a.participaciones.includes(p.id)) ?? null;
+  const original = invitacion?.asunto?.replace(/^\s*(re|fw|rv):\s*/i, "");
+  const asunto = original ? `Re: ${original}` : `${d.evento.prueba ? "[PRUEBA CONTROLADA] " : ""}Pregunta sobre su oferta · ${d.evento.folio}`;
+  const cuerpo = [
+    `Hola, ${p.carrier}:`,
+    "",
+    `Sobre su oferta para ${ruta.origen} → ${ruta.destino} · ${ruta.equipo} (${d.evento.folio})${v ? `, versión ${v.numero} de ${v.tarifaAllIn.toLocaleString("es-MX")} ${v.moneda} all-in` : ""}:`,
+    "",
+    pregunta.trim(),
+    "",
+    "Gracias,",
+    "Marksman"
+  ].join("\n");
+  const para = p.correo || "";
+  const gmail = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(para)}&su=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+  return { para, asunto, cuerpo, gmail };
+}
