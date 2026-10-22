@@ -328,8 +328,6 @@ function CapturaEquipo({ d, ruta, accion }: { d: Detalle; ruta: Ruta; accion: Pr
 function PanelComparar({ d, ctx, accion }: Props) {
   const s = useSesion();
   const [elegido, setElegido] = useState<string | null>(null);
-  const [motivo, setMotivo] = useState("");
-  const [confirmaVigencia, setConfirmaVigencia] = useState(false);
   const [historial, setHistorial] = useState<string | null>(null);
 
   return (
@@ -337,8 +335,10 @@ function PanelComparar({ d, ctx, accion }: Props) {
       {d.rutas.map((ruta) => {
         const filas = [...conOferta(ruta)].sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
         const sel = ruta.participaciones.find((x) => x.id === elegido) ?? null;
-        const candados = sel ? candadosAdjudicacion(d, ruta, sel, ctx) : [];
         const prim = primario(ruta);
+        const respaldos = ruta.participaciones.filter((x) => x.rol === "respaldo");
+        // Sin primario se elige primario; con primario y antes de entregar, respaldo.
+        const puedeElegir = d.evento.estado === "cerrado" && ctx.rol === "admin" && !(prim && prim.entregadaEn);
         const totalRubros = new Set(ruta.participaciones.flatMap((x) => Object.keys(x.rubros))).size;
         return (
           <div key={ruta.id} className="dos-columnas">
@@ -369,11 +369,8 @@ function PanelComparar({ d, ctx, accion }: Props) {
                         ruta={ruta}
                         totalRubros={totalRubros}
                         elegido={elegido === p.id}
-                        elegible={d.evento.estado === "cerrado" && ctx.rol === "admin" && !prim}
-                        onElegir={() => {
-                          setElegido(p.id);
-                          setConfirmaVigencia(false);
-                        }}
+                        elegible={puedeElegir && !p.rol}
+                        onElegir={() => setElegido(p.id)}
                         onHistorial={() => setHistorial(historial === p.id ? null : p.id)}
                       />
                     ))}
@@ -400,44 +397,19 @@ function PanelComparar({ d, ctx, accion }: Props) {
 
             <aside className="tarjeta lado">
               {prim ? (
-                <PrimarioActual d={d} ruta={ruta} p={prim} ctx={ctx} accion={accion} />
-              ) : sel ? (
                 <>
-                  <h3>Adjudicar primario</h3>
-                  <p>
-                    <b>{sel.carrier}</b> · {dinero(versionVigente(sel)?.tarifaAllIn, versionVigente(sel)?.moneda)} · v{versionVigente(sel)?.numero}
-                  </p>
-                  <Candados lista={candados} />
-                  {candados.some((c) => c.confirmable) && (
-                    <label className="check">
-                      <input type="checkbox" checked={confirmaVigencia} onChange={(e) => setConfirmaVigencia(e.target.checked)} />
-                      Confirmo adjudicar una oferta sin vigencia declarada (D4)
-                    </label>
+                  <PrimarioActual d={d} ruta={ruta} p={prim} ctx={ctx} accion={accion} />
+                  {respaldos.map((r) => (
+                    <Respaldo key={r.id} d={d} ruta={ruta} p={r} ctx={ctx} accion={accion} />
+                  ))}
+                  {sel && !sel.rol ? (
+                    <FormAdjudicar key={sel.id} d={d} ruta={ruta} sel={sel} rol="respaldo" ctx={ctx} accion={accion} />
+                  ) : (
+                    puedeElegir && <p className="tenue">Elige otra oferta para adjudicarla como respaldo (opcional).</p>
                   )}
-                  <label className="campo">
-                    <span>Motivo (obligatorio)</span>
-                    <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={2} />
-                  </label>
-                  <Confirmar
-                    etiqueta="Adjudicar como primario"
-                    deshabilitado={!puedeAdjudicar(candados, confirmaVigencia) || !motivo.trim()}
-                    advertencia={<>No se envía nada al carrier. El aviso se desbloquea cuando Rateware entregue el recibo. {ADVERTENCIA_REAL(s, d)}</>}
-                    onConfirmar={() =>
-                      accion(
-                        () =>
-                          s.api.adjudicar({
-                            eventId: d.evento.id,
-                            participacionId: sel.id,
-                            rol: "primario",
-                            motivo,
-                            operationId: operacionAdjudicacion(d.evento.id, sel.id, "primario", versionVigente(sel)!.huella),
-                            confirmaSinVigencia: confirmaVigencia
-                          }),
-                        `Adjudicado a ${sel.carrier}.`
-                      )
-                    }
-                  />
                 </>
+              ) : sel ? (
+                <FormAdjudicar key={sel.id} d={d} ruta={ruta} sel={sel} rol="primario" ctx={ctx} accion={accion} />
               ) : (
                 <>
                   <h3>Adjudicar</h3>
@@ -512,6 +484,74 @@ function Historial({ p }: { p: Participacion }) {
   );
 }
 
+function FormAdjudicar({ d, ruta, sel, rol, ctx, accion }: { d: Detalle; ruta: Ruta; sel: Participacion; rol: "primario" | "respaldo"; ctx: Contexto; accion: Props["accion"] }) {
+  const s = useSesion();
+  const [motivo, setMotivo] = useState("");
+  const [confirmaVigencia, setConfirmaVigencia] = useState(false);
+  const candados = candadosAdjudicacion(d, ruta, sel, ctx, rol);
+  const v = versionVigente(sel);
+  return (
+    <div className={rol === "respaldo" ? "aviso-caja" : ""}>
+      <h3>Adjudicar {rol}</h3>
+      <p>
+        <b>{sel.carrier}</b> · {dinero(v?.tarifaAllIn, v?.moneda)} · v{v?.numero}
+      </p>
+      {rol === "respaldo" && <p className="tenue">El respaldo cubre la ruta si el primario no tiene capacidad. Se entrega a Rateware junto con el primario.</p>}
+      <Candados lista={candados} />
+      {candados.some((c) => c.confirmable) && (
+        <label className="check">
+          <input type="checkbox" checked={confirmaVigencia} onChange={(e) => setConfirmaVigencia(e.target.checked)} />
+          Confirmo adjudicar una oferta sin vigencia declarada (D4)
+        </label>
+      )}
+      <label className="campo">
+        <span>Motivo (obligatorio)</span>
+        <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={2} />
+      </label>
+      <Confirmar
+        etiqueta={`Adjudicar como ${rol}`}
+        deshabilitado={!puedeAdjudicar(candados, confirmaVigencia) || !motivo.trim()}
+        advertencia={<>No se envía nada al carrier. El aviso se desbloquea cuando Rateware entregue el recibo. {ADVERTENCIA_REAL(s, d)}</>}
+        onConfirmar={() =>
+          accion(
+            () =>
+              s.api.adjudicar({
+                eventId: d.evento.id,
+                participacionId: sel.id,
+                rol,
+                motivo,
+                operationId: operacionAdjudicacion(d.evento.id, sel.id, rol, v!.huella),
+                confirmaSinVigencia: confirmaVigencia
+              }),
+            `${sel.carrier} adjudicado como ${rol}.`
+          )
+        }
+      />
+    </div>
+  );
+}
+
+function Respaldo({ d, ruta, p, ctx, accion }: { d: Detalle; ruta: Ruta; p: Participacion; ctx: Contexto; accion: Props["accion"] }) {
+  const s = useSesion();
+  return (
+    <div className="aviso-caja">
+      <h3>Respaldo de la ruta {ruta.numero}</h3>
+      <p>
+        <b>{p.carrier}</b> · v{p.adjudicada?.numero} · {dinero(p.versiones.find((v) => v.numero === p.adjudicada?.numero)?.tarifaAllIn, ruta.moneda)}
+      </p>
+      <p className="tenue">Motivo: {p.motivo}</p>
+      {!p.entregadaEn && ctx.rol === "admin" && (
+        <Confirmar
+          etiqueta="Anular respaldo"
+          clase="btn-texto"
+          advertencia={<>Solo antes de entregar. {ADVERTENCIA_REAL(s, d)}</>}
+          onConfirmar={() => accion(() => s.api.quitarAdjudicacion(p.id), "Respaldo anulado.")}
+        />
+      )}
+    </div>
+  );
+}
+
 function PrimarioActual({ d, ruta, p, ctx, accion }: { d: Detalle; ruta: Ruta; p: Participacion; ctx: Contexto; accion: Props["accion"] }) {
   const s = useSesion();
   const reciente = versionMasReciente(p);
@@ -527,7 +567,10 @@ function PrimarioActual({ d, ruta, p, ctx, accion }: { d: Detalle; ruta: Ruta; p
           Hay una versión más reciente (v{reciente.numero}, {dinero(reciente.tarifaAllIn, reciente.moneda)}). La adjudicación sigue en v{p.adjudicada?.numero}; cambiarla exige anular y adjudicar de nuevo.
         </div>
       )}
-      {!p.entregadaEn && ctx.rol === "admin" && (
+      {!p.entregadaEn && ctx.rol === "admin" && ruta.participaciones.some((x) => x.rol === "respaldo") && (
+        <p className="tenue">Para anular el primario, anula primero su respaldo.</p>
+      )}
+      {!p.entregadaEn && ctx.rol === "admin" && !ruta.participaciones.some((x) => x.rol === "respaldo") && (
         <Confirmar
           etiqueta="Anular adjudicación"
           clase="btn-texto"

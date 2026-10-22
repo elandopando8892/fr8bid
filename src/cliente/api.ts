@@ -184,10 +184,12 @@ export class MesaApi {
       if (ruta.desiertaMotivo) continue;
       const p = primario(ruta);
       if (!p) return { estado: "sin_preparar", operationId: null, error: `La ruta ${ruta.numero} no tiene primario.` };
-      const v = versionVigente(p);
-      if (!p.adjudicada || !v) return { estado: "sin_preparar", operationId: null, error: `No se identifica la versión adjudicada de ${p.carrier}.` };
-      if (versionMasReciente(p) || p.adjudicada.huella !== v.huella)
-        return { estado: "sin_preparar", operationId: null, error: `${p.carrier} tiene una versión más reciente que la adjudicada: anula y adjudica de nuevo.` };
+      for (const x of [p, ...ruta.participaciones.filter((y) => y.rol === "respaldo")]) {
+        const vx = versionVigente(x);
+        if (!x.adjudicada || !vx) return { estado: "sin_preparar", operationId: null, error: `No se identifica la versión adjudicada de ${x.carrier}.` };
+        if (versionMasReciente(x) || x.adjudicada.huella !== vx.huella)
+          return { estado: "sin_preparar", operationId: null, error: `${x.carrier} tiene una versión más reciente que la adjudicada: anula y adjudica de nuevo.` };
+      }
     }
     return { estado: "preparada", operationId: operacionEntrega(d), error: null };
   }

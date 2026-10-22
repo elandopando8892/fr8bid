@@ -387,6 +387,36 @@ describe("§9 recorrido de la rebanada", () => {
   });
 });
 
+describe("respaldo", () => {
+  beforeEach(preparar);
+
+  it("solo con primario de otro carrier; se entrega junto con el primario", async () => {
+    await admin.cerrarAOfertas(eventId);
+    let d = await admin.detalle(eventId);
+    const ruta = d.rutas[0];
+    const respaldo = (id: string) => {
+      const v = versionVigente(part(d, id))!;
+      return admin.adjudicar({ eventId, participacionId: id, rol: "respaldo", motivo: "capacidad extra", operationId: operacionAdjudicacion(eventId, id, "respaldo", v.huella), confirmaSinVigencia: true });
+    };
+    expect(candadosAdjudicacion(d, ruta, part(d, ids.A), ctx(), "respaldo").find((c) => c.regla === "I4" && /primario/.test(c.texto))?.ok).toBe(false);
+    await expect(respaldo(ids.A)).rejects.toMatchObject({ status: 409 });
+
+    await adjudicar(admin, d, ids.B);
+    d = await admin.detalle(eventId);
+    expect(candadosAdjudicacion(d, d.rutas[0], part(d, ids.B), ctx(), "respaldo").some((c) => !c.ok)).toBe(true);
+    await respaldo(ids.A);
+    d = await admin.detalle(eventId);
+    expect([part(d, ids.B).rol, part(d, ids.A).rol]).toEqual(["primario", "respaldo"]);
+
+    const prep = admin.prepararEntrega(d);
+    expect(prep.estado).toBe("preparada");
+    const { entrega } = await admin.confirmarEntrega(eventId, prep.operationId!);
+    expect(entrega.estado).toBe("confirmada");
+    d = await admin.detalle(eventId);
+    expect(part(d, ids.A).entregadaEn).not.toBeNull();
+  });
+});
+
 describe("condiciones de ruta (parche R1)", () => {
   beforeEach(preparar);
 
