@@ -32,7 +32,7 @@ El catálogo vive en código, versionado, y no en una tabla: así una condición
 |---|---|---|
 | `list_rfx_condition_catalog` | lectura | `{ version, conditions }` |
 | `list_rfx_lane_conditions { event_id }` | lectura | condiciones de todas las rutas del evento |
-| `save_rfx_lane_conditions { event_id, lane_id, conditions: [{ condition_key, importance, target?, note? }] }` | operador | reemplaza el juego de esa ruta; 409 si el evento está cerrado, adjudicado o archivado; deja bitácora `bid_room.lane.conditions` |
+| `save_rfx_lane_conditions { event_id, lane_id, conditions: [{ condition_key, importance, target?, note? }] }` | operador | reemplaza el juego de esa ruta; 409 si el evento está cerrado, adjudicado o archivado, o si su plazo (`due_date`, hora de México) ya pasó; deja bitácora `bid_room.lane.conditions` |
 | `list_rfx_segment_confirmations` | lectura | ahora también trae `value` y `condition_revision` |
 
 Si cambia la importancia, el objetivo o la nota de una condición, sube su `revision`. Las respuestas anteriores no se reescriben: quedan con su revisión vieja y Fr8Bid las muestra como «por confirmar de nuevo».
@@ -45,7 +45,7 @@ Si cambia la importancia, el objetivo o la nota de una condición, sube su `revi
   - el dato debe ser del tipo correcto; en condiciones numéricas, «cumple» o «cumple con condición» exigen el número;
   - «cumple con condición» exige comentario;
   - «cumple» con un dato que no alcanza el objetivo se rechaza (debe ser excepción o no cumple);
-  - con el evento cerrado, adjudicado o archivado ya no se aceptan respuestas a condiciones.
+  - con el evento cerrado, adjudicado, archivado o con el plazo vencido ya no se aceptan respuestas a condiciones. El plazo cuenta porque Fr8Bid cierra a ofertas moviendo `due_date` con el estado aún «open» (ajuste pedido por la Mesa el 22-oct).
 
 ## Compatibilidad con eventos existentes
 
@@ -62,7 +62,7 @@ Si cambia la importancia, el objetivo o la nota de una condición, sube su `revi
 
 ## Pruebas
 
-- 6 pruebas unitarias del catálogo y las reglas (`rfx-lane-conditions.test.mjs`, `node --test`): 6/6 en verde.
+- 7 pruebas unitarias del catálogo, las reglas y el cierre por plazo (`rfx-lane-conditions.test.mjs`, `node --test`): 7/7 en verde.
 - El parche aplica limpio sobre 59337fab y los tres archivos TypeScript compilan (revisión de sintaxis con esbuild). No corrí el typecheck de Deno ni las pruebas de Rateware: se hace al reaplicarlo sobre main.
 
 ## Qué falta y quién decide

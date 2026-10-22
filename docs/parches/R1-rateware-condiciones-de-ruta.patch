@@ -1,9 +1,9 @@
 diff --git a/supabase/functions/_shared/rfx-lane-conditions.mjs b/supabase/functions/_shared/rfx-lane-conditions.mjs
 new file mode 100644
-index 0000000..4bc1f01
+index 0000000..7da3a40
 --- /dev/null
 +++ b/supabase/functions/_shared/rfx-lane-conditions.mjs
-@@ -0,0 +1,215 @@
+@@ -0,0 +1,230 @@
 +// Route conditions of an RFx (decided 2026-10-22): concrete, verifiable
 +// requirements the team picks per lane, each required or preferred, that the
 +// carrier answers with a datum. They replace the six generic rubrics for new
@@ -68,6 +68,21 @@ index 0000000..4bc1f01
 +  { key: "payment_terms_days", group: "payment", kind: "number", unit: "days", comparator: "min", es: "Días de crédito aceptados", en: "Accepted payment terms" },
 +  { key: "factoring", group: "payment", kind: "boolean", es: "Usa factoraje", en: "Uses factoring" }
 +].map((entry) => Object.freeze(entry)));
++
++/**
++ * Whether the event no longer takes bids: a closing status, or its deadline
++ * passed (end of due_date at the given UTC offset, Mexico City "-06:00" like
++ * rfx-bid-api's dueState). Fr8Bid closes bids by moving due_date while the
++ * status stays "open", so the date alone must also freeze route conditions.
++ */
++export function biddingClosed(event, now = new Date(), utcOffset = "-06:00") {
++  const status = String(event?.status ?? "").trim().toLowerCase();
++  if (["closed", "awarded", "archived"].includes(status)) return true;
++  const due = String(event?.due_date ?? "").trim().slice(0, 10);
++  if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) return false;
++  const dueAt = new Date(`${due}T23:59:59${utcOffset}`);
++  return !Number.isNaN(dueAt.getTime()) && now.getTime() > dueAt.getTime();
++}
 +
 +const BY_KEY = new Map(RFX_CONDITION_CATALOG.map((entry) => [entry.key, entry]));
 +const IMPORTANCE = new Set(["required", "preferred"]);
@@ -221,13 +236,14 @@ index 0000000..4bc1f01
 +}
 diff --git a/supabase/functions/_shared/rfx-lane-conditions.test.mjs b/supabase/functions/_shared/rfx-lane-conditions.test.mjs
 new file mode 100644
-index 0000000..f8d6f6d
+index 0000000..fc38a87
 --- /dev/null
 +++ b/supabase/functions/_shared/rfx-lane-conditions.test.mjs
-@@ -0,0 +1,78 @@
+@@ -0,0 +1,88 @@
 +import assert from "node:assert/strict";
 +import test from "node:test";
 +import {
++  biddingClosed,
 +  checkConditionAnswer,
 +  conditionKeyFromRubric,
 +  conditionRubricKey,
@@ -303,6 +319,15 @@ index 0000000..f8d6f6d
 +  assert.equal(shown.revision, 3);
 +  assert.equal(publicLaneCondition({ condition_key: "gone" }), null);
 +});
++
++test("bidding closes by status or by a passed deadline in Mexico City time", () => {
++  const at = new Date("2026-10-22T05:00:00Z"); // 21-oct 23:00 in Mexico City
++  assert.equal(biddingClosed({ status: "awarded", due_date: "2026-12-01" }, at), true);
++  assert.equal(biddingClosed({ status: "open", due_date: "2026-10-21" }, at), false);
++  assert.equal(biddingClosed({ status: "open", due_date: "2026-10-20" }, at), true);
++  assert.equal(biddingClosed({ status: "open", due_date: null }, at), false);
++  assert.equal(biddingClosed({ status: "draft", due_date: "2026-10-21" }, new Date("2026-10-22T06:00:00Z")), true);
++});
 diff --git a/supabase/functions/_shared/team-roles.ts b/supabase/functions/_shared/team-roles.ts
 index 08ec0c4..3381a9a 100644
 --- a/supabase/functions/_shared/team-roles.ts
@@ -317,14 +342,15 @@ index 08ec0c4..3381a9a 100644
      "list_shipper_duplicates", "list_shippers", "list_staging", "list_staging_filter_values",
      "list_staging_options", "list_upload_staged_rows", "list_uploads", "list_vendor_improvement_cases",
 diff --git a/supabase/functions/rateware-api/index.ts b/supabase/functions/rateware-api/index.ts
-index 612ed49..3734a53 100644
+index 612ed49..6d5ec2e 100644
 --- a/supabase/functions/rateware-api/index.ts
 +++ b/supabase/functions/rateware-api/index.ts
-@@ -15,6 +15,13 @@ import { forwardSourceDownload, forwardSourceRemoval } from "../_shared/source-d
+@@ -15,6 +15,14 @@ import { forwardSourceDownload, forwardSourceRemoval } from "../_shared/source-d
  import type { WorkspaceUser } from "../_shared/workspace.ts";
  import { requireEligibleRfxCloseout } from "./rfx-closeout-guards.ts";
  import { rfxDemandOperation, rfxDemandService } from "./rfx-demand-values.ts";
 +import {
++  biddingClosed,
 +  normalizeLaneConditions,
 +  publicLaneCondition,
 +  RFX_CONDITION_CATALOG,
@@ -334,7 +360,7 @@ index 612ed49..3734a53 100644
  import {
    CARRIER_TEMPLATE_IMPORT_MAX_ROWS,
    carrierTemplateNameKey,
-@@ -10539,7 +10546,7 @@ async function fetchRfxSegmentConfirmations(supabase: RatewareSupabaseClient, ev
+@@ -10539,7 +10547,7 @@ async function fetchRfxSegmentConfirmations(supabase: RatewareSupabaseClient, ev
    for (let offset = 0; ; offset += pageSize) {
      const result = await supabase
        .from("rfx_segment_confirmations")
@@ -343,7 +369,7 @@ index 612ed49..3734a53 100644
        .eq("rfx_event_id", eventId)
        .order("updated_at", { ascending: false })
        .order("id", { ascending: true })
-@@ -28929,6 +28936,88 @@ export function createRatewareApiHandler(
+@@ -28929,6 +28937,89 @@ export function createRatewareApiHandler(
        return jsonResponse({ no_award: declare, updated: rows.length, unchanged: lanes.length - changing.length, rows });
      }
  
@@ -371,8 +397,9 @@ index 612ed49..3734a53 100644
 +      // target or note changes gets a new revision, so the carriers' earlier
 +      // answers read as stale instead of being rewritten (decided 2026-10-22).
 +      const event = await requireOwnedRfxEvent(supabase, user, body.event_id);
-+      if (["closed", "awarded", "archived"].includes(String(event.status || "").toLowerCase())) {
-+        return jsonResponse({ error: "This bid event is closed. Route conditions cannot change." }, 409);
++      // Closed by status or by a passed deadline (Fr8Bid closes bids by moving due_date).
++      if (biddingClosed(event, new Date(), (Deno.env.get("BID_DEADLINE_UTC_OFFSET") || "-06:00").trim())) {
++        return jsonResponse({ error: "Bidding on this event is closed. Route conditions cannot change." }, 409);
 +      }
 +      const laneId = cleanText(body.lane_id);
 +      if (!laneId) return jsonResponse({ error: "RFx lane id is required." }, 400);
@@ -433,14 +460,14 @@ index 612ed49..3734a53 100644
        // The event owns the scope; never trust owner_email supplied by the caller.
        const event = await requireOwnedRfxEvent(supabase, user, body.event_id);
 diff --git a/supabase/functions/rfx-bid-api/index.ts b/supabase/functions/rfx-bid-api/index.ts
-index 57f9536..b273d89 100644
+index 57f9536..036601f 100644
 --- a/supabase/functions/rfx-bid-api/index.ts
 +++ b/supabase/functions/rfx-bid-api/index.ts
 @@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
  import { corsHeaders, jsonResponse as baseJsonResponse } from "../_shared/kinde.ts";
  import { bidRoomGoogleThreadKey, googleChatAccessToken, syncBidRoomMessageToGoogleChat } from "../_shared/bid-room-google-chat.ts";
  import { belongsToThread, carrierChatMessage, carrierChatThread } from "../_shared/carrier-chat-view.mjs";
-+import { checkConditionAnswer, conditionKeyFromRubric, LEGACY_RUBRIC_KEYS, publicLaneCondition } from "../_shared/rfx-lane-conditions.mjs";
++import { biddingClosed, checkConditionAnswer, conditionKeyFromRubric, LEGACY_RUBRIC_KEYS, publicLaneCondition } from "../_shared/rfx-lane-conditions.mjs";
  
  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("RATEWARE_SUPABASE_SERVICE_ROLE_KEY");
@@ -471,7 +498,7 @@ index 57f9536..b273d89 100644
        answer,
        // A blank textarea can arrive as null from a carrier portal submission.
        // Keep the checklist save path valid when no exception note is needed.
-@@ -1098,6 +1104,48 @@ function normalizeSegmentConfirmationRows(input: unknown) {
+@@ -1098,6 +1104,49 @@ function normalizeSegmentConfirmationRows(input: unknown) {
    });
  }
  
@@ -491,7 +518,8 @@ index 57f9536..b273d89 100644
 + * A route condition answer must name a condition the team set on this
 + * invitation's own lane, carry a datum of the right kind, explain an
 + * exception, and not claim "agree" with a datum that misses the target. Once
-+ * the event stops taking bids the answers are frozen like the bid itself.
++ * the event stops taking bids (status or passed deadline) the answers are
++ * frozen like the bid itself.
 + */
 +async function checkLaneConditionAnswers(
 +  supabase: RfxBidSupabaseClient,
@@ -502,7 +530,7 @@ index 57f9536..b273d89 100644
 +  const checks = new Map<string, { value: unknown; revision: number }>();
 +  const conditionRows = rows.filter((row) => row.condition_key);
 +  if (!conditionRows.length) return checks;
-+  if (["closed", "awarded", "archived"].includes(String(cleanText(event.status) || "").toLowerCase())) {
++  if (biddingClosed(event, new Date(), BID_DEADLINE_UTC_OFFSET)) {
 +    throw new Error("This bid event is closed. Route conditions can no longer be answered.");
 +  }
 +  const conditions = new Map(
@@ -520,7 +548,7 @@ index 57f9536..b273d89 100644
  async function listSegmentConfirmations(
    supabase: RfxBidSupabaseClient,
    invitationIds: string[]
-@@ -1122,6 +1170,7 @@ async function saveSegmentConfirmations(
+@@ -1122,6 +1171,7 @@ async function saveSegmentConfirmations(
    const event = relationRecord(invitation.rfx_events);
    const rows = normalizeSegmentConfirmationRows(input.confirmations);
    if (!rows.length) return { rows: [] };
@@ -528,7 +556,7 @@ index 57f9536..b273d89 100644
    const now = new Date().toISOString();
    const payload = rows.map((row) => ({
      owner_user_id: cleanText(event.owner_user_id) || null,
-@@ -1133,6 +1182,8 @@ async function saveSegmentConfirmations(
+@@ -1133,6 +1183,8 @@ async function saveSegmentConfirmations(
      rubric_key: row.rubric_key,
      answer: row.answer,
      comment: row.comment,
@@ -537,7 +565,7 @@ index 57f9536..b273d89 100644
      source: "carrier_portal",
      metadata: {
        source: "rfx_lane_fit",
-@@ -5051,7 +5102,12 @@ Deno.serve(async (request) => {
+@@ -5051,7 +5103,12 @@ Deno.serve(async (request) => {
          live_board: readOnlyPeek ? { ...liveBoard, current_invitation_token: undefined } : liveBoard,
          carrier_book: readOnlyPeek ? { ...book, invited: book.invited.map(invitationWithoutToken),
            quoted: book.quoted.map(invitationWithoutToken) } : book,

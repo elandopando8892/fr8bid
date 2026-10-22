@@ -218,7 +218,9 @@ export class RatewareSimulado {
         // Como R1: reemplaza el juego de la ruta; un cambio de importancia,
         // objetivo o nota sube la revisión y deja vieja la respuesta anterior.
         const event = this.evento(u, body.event_id);
-        if (["closed", "awarded", "archived"].includes(event.status)) throw new Falla(409, "This bid event is closed. Route conditions cannot change.", "CONFLICT");
+        // biddingClosed de R1: status de cierre o plazo vencido.
+        if (["closed", "awarded", "archived"].includes(event.status) || (event.due_date && event.due_date < this.hoy()))
+          throw new Falla(409, "This bid event is closed. Route conditions cannot change.", "CONFLICT");
         const lane = this.lanes.find((l) => l.id === body.lane_id && l.rfx_event_id === event.id);
         if (!lane) throw new Falla(404, "RFx lane not found in this event.", "NOT_FOUND");
         let next: ReturnType<typeof normalizeLaneConditions>;

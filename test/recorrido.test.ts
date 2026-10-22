@@ -431,7 +431,6 @@ describe("condiciones de ruta (parche R1)", () => {
     // El proxy aplica el mismo candado con una lectura fresca.
     await expect(adjudicar(admin, d, ids.B)).rejects.toMatchObject({ status: 409, code: "CANDADO" });
     // Con el evento cerrado ya no cambian las condiciones ni sus respuestas.
-    // (R1 solo mira el status; el plazo vencido lo frena el proxy).
     await expect(operador.guardarCondiciones(eventId, lane.id, [])).rejects.toMatchObject({ status: 409, code: "EVENTO_CERRADO" });
     await expect(admin.responderRubros(liga(ids.B), [cond("cond.cargo_insurance_usd", "exception", 250000, "300k desde noviembre")])).rejects.toMatchObject({ status: 409 });
   });

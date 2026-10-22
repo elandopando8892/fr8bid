@@ -305,10 +305,8 @@ async function guardaAvisos(action: string, body: Record<string, unknown>, autor
   return null;
 }
 
-// R1 solo rechaza cambiar condiciones con el evento «closed/awarded/archived»,
-// pero el cierre a ofertas de Fr8Bid es el plazo vencido con el evento «open»:
-// aquí también se exige que el plazo no haya pasado, para que nadie cambie lo
-// que se pide después de recibir las ofertas.
+// R1 (biddingClosed) ya rechaza cambiar condiciones con el plazo vencido; el
+// proxy lo comprueba antes con una lectura fresca y además valida la ruta.
 async function guardaCondiciones(body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
   if (!body.event_id || !body.lane_id) return error(400, "FALTA_RUTA", "Indica el evento y la ruta.");
   let lectura: Respuesta;
