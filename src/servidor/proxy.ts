@@ -12,6 +12,8 @@ import { detalle } from "../cliente/mapear.js";
 import { UUID_RATEWARE } from "../dominio/operacion.js";
 import { esProtegido } from "../dominio/protegidos.js";
 import { candadosAdjudicacion, hoyMexico, puedeAdjudicar } from "../dominio/recorrido.js";
+import { revisionesVigentes } from "../dominio/revision.js";
+import { MAXIMO_POR_LLAMADA } from "../dominio/tandas.js";
 
 export type Servicio = "rateware-api" | "rfx-bid-api";
 
@@ -24,7 +26,7 @@ export interface Respuesta {
 export type Enviar = (servicio: Servicio, body: Record<string, unknown>, autorizacion: string | null) => Promise<Respuesta>;
 
 export const LECTURAS: Record<Servicio, Set<string>> = {
-  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions"]),
+  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews"]),
   "rfx-bid-api": new Set(["get_invitation"])
 };
 
@@ -166,6 +168,11 @@ export async function manejar(
     if (bloqueo) return bloqueo;
   }
 
+  if (action === "generate_outreach_drafts") {
+    const bloqueo = await guardaRevisados(body!, autorizacion, op);
+    if (bloqueo) return bloqueo;
+  }
+
   if (action === "generate_rfx_award_notices" || action === "send_outreach_messages") {
     const bloqueo = await guardaAvisos(action, body!, autorizacion, op);
     if (bloqueo) return bloqueo;
@@ -264,6 +271,7 @@ async function guardaAvisos(action: string, body: Record<string, unknown>, autor
     if (body.confirmed !== true || body.confirmation_action !== "send_outreach_messages")
       return error(400, "SIN_CONFIRMAR", "Enviar requiere confirmación explícita.");
     if (body.provider !== "gmail" || body.channel !== "email") return error(400, "CANAL", "Los avisos salen por Gmail.");
+    if (ids.length > MAXIMO_POR_LLAMADA) return error(400, "TANDA_GRANDE", `Se envía en tandas de hasta ${MAXIMO_POR_LLAMADA} avisos.`);
   }
   let lectura: Respuesta;
   let mensajes: Respuesta | null = null;
@@ -288,12 +296,14 @@ async function guardaAvisos(action: string, body: Record<string, unknown>, autor
   if (!mensajes || mensajes.status !== 200) return mensajes ? { ...mensajes, body: sinSecretos(mensajes.body) } : null;
   const filas: any[] = mensajes.body?.rows || mensajes.body?.messages || [];
   const porId = new Map(filas.map((m) => [m.id, m]));
+  const invitaciones: any[] = [];
   for (const id of ids) {
     const m = porId.get(id);
     if (!m) return error(404, "NOT_FOUND", "El aviso no pertenece a este evento.");
     const meta = m.metadata || {};
     if (meta.notice_type !== "rfx_award_closeout") {
       if (op.real) return error(501, "PASO_EN_RATEWARE", "Contra Rateware real Fr8Bid solo envía avisos de adjudicación.");
+      invitaciones.push(m);
       continue;
     }
     if (!adjudicado) return error(409, "RFX_NOT_CLOSED_OUT", "Sin recibo de Rateware no hay aviso de adjudicación.");
@@ -302,6 +312,36 @@ async function guardaAvisos(action: string, body: Record<string, unknown>, autor
     if (String(m.updated_at) !== String(versiones.get(id)))
       return error(409, "OUTREACH_VERSION_CONFLICT", "El texto cambió desde que lo viste. Revísalo otra vez.");
   }
+  if (!invitaciones.length) return null;
+  // La revisión pudo revocarse después de preparar el borrador.
+  const carrierDe = new Map<string, string>();
+  for (const l of lectura.body?.lanes || []) for (const lv of l.invitations || []) carrierDe.set(String(lv.id), String(lv.vendor_id));
+  const vendorIds = invitaciones.map((m) => carrierDe.get(String(m.rfx_lane_vendor_id)) || String(m.vendor_id || ""));
+  return comprobarRevisados(eventId, vendorIds, autorizacion, op, "No se envió nada.");
+}
+
+// Solo carriers con la marca «Revisado» vigente reciben invitación. Se lee la
+// revisión en el momento; si la lectura falla, no se prepara ni envía nada.
+async function guardaRevisados(body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
+  const eventId = body.event_id || body.rfx_event_id;
+  if (!eventId) return error(400, "FALTA_EVENTO", "Esta acción necesita el evento.");
+  const ids = body.reviewed_vendor_ids;
+  if (!Array.isArray(ids) || !ids.length || ids.some((x) => !x))
+    return error(409, "REVISADOS_REQUERIDOS", "Las invitaciones se preparan solo para carriers marcados como «Revisado».");
+  return comprobarRevisados(eventId, ids.map(String), autorizacion, op, "No se preparó nada.");
+}
+
+async function comprobarRevisados(eventId: unknown, vendorIds: string[], autorizacion: string | null, op: OpcionesProxy, nada: string): Promise<Respuesta | null> {
+  let lectura: Respuesta;
+  try {
+    lectura = await conLimite(op.enviar("rateware-api", { action: "list_rfx_invitation_wave_reviews", rfx_event_id: eventId }, autorizacion), op.timeoutMs ?? 25000);
+  } catch {
+    return error(504, "SIN_RESPUESTA", `No se pudo comprobar la revisión de los carriers. ${nada}`);
+  }
+  if (lectura.status !== 200) return error(503, "REVISION_NO_DISPONIBLE", `No se pudo comprobar la revisión de los carriers. ${nada}`);
+  const vigentes = revisionesVigentes(lectura.body?.rows || []);
+  const faltan = [...new Set(vendorIds)].filter((v) => !v || vigentes[v]?.revisado !== true);
+  if (faltan.length) return error(409, "CARRIER_SIN_REVISION", `${faltan.length} carrier(s) sin la marca «Revisado» vigente. ${nada}`, { vendor_ids: faltan });
   return null;
 }
 

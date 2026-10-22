@@ -2,6 +2,8 @@
 // verdad vive en las tablas RFx de rateware-prod; estos tipos son la forma en
 // que Fr8Bid lee esa verdad, no una base propia.
 
+import type { MarcaRevision } from "./revision.js";
+
 export type Rol = "admin" | "operator" | "viewer";
 
 export type EstadoEvento = "borrador" | "abierto" | "cerrado" | "adjudicado" | "archivado";
@@ -93,7 +95,9 @@ export interface Ruta {
 }
 
 export type TipoAviso = "invitacion" | "adjudicacion";
-export type EstadoAviso = "borrador" | "aceptado" | "rebotado" | "fallido" | "incierto";
+// «en_cola»: Rateware lo tiene en cola o enviando (p. ej. pausado por la cuota
+// de Gmail). Nunca se muestra como enviado.
+export type EstadoAviso = "borrador" | "en_cola" | "aceptado" | "rebotado" | "fallido" | "incierto";
 export type ResultadoAviso = "adjudicado" | "respaldo" | "no_adjudicado";
 
 // Mensaje de la Cola de Rateware (outreach_messages). Rateware no tiene estado
@@ -113,6 +117,7 @@ export interface Aviso {
   version: string; // updated_at de Rateware
   estado: EstadoAviso;
   reciboProveedor: string | null; // provider_message_id de Gmail
+  motivo: string | null; // delivery_error o last_error de Rateware
 }
 
 export interface Recibo {
@@ -141,6 +146,9 @@ export interface Detalle {
   rutas: Ruta[];
   avisos: Aviso[];
   recibo: Recibo | null;
+  // Marca «Revisado» vigente por carrier (vendor_id). null: no se pudo
+  // consultar, y entonces no se invita a nadie.
+  revisiones?: Record<string, MarcaRevision> | null;
 }
 
 export type EstadoEntrega = "sin_preparar" | "preparada" | "enviada" | "confirmada" | "rechazada" | "incierta";
