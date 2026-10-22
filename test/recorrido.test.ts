@@ -105,7 +105,7 @@ describe("§9 recorrido de la rebanada", () => {
     expect(r.actual?.clave).toBe("ofertas");
   });
 
-  it("captura del equipo sobre una participación «drafted»: 200 sin tarifa, como rateware-api", async () => {
+  it("captura del equipo sin `patch`: 200 sin tarifa, como rateware-api", async () => {
     const { sim: s, carriers } = crearSimulado();
     const op = new MesaApi(transporteSimulado(s, () => "operador"), () => s.hoy());
     const { row: event } = await op.crearEvento({ name: "PRUEBA CONTROLADA · captura", customer: "Shipper de Prueba", due_date: "2026-10-31" });
@@ -143,7 +143,7 @@ describe("§9 recorrido de la rebanada", () => {
     await expect(adjudicar(admin, d, ids.B)).rejects.toMatchObject({ status: 409, code: "CANDADO" });
 
     // Vencida: el equipo captura una oferta con vigencia pasada.
-    await sim.llamar("rateware-api", { action: "update_rfx_bid", id: ids.A, row: { bid_rate: 1740, currency: "USD", commercial_model: "fee_plus", valid_through: "2026-10-01" } }, "Bearer sim:operador");
+    await sim.llamar("rateware-api", { action: "update_rfx_bid", id: ids.A, patch: { bid_rate: 1740, currency: "USD", commercial_model: "fee_plus", valid_through: "2026-10-01" } }, "Bearer sim:operador");
     await admin.cerrarAOfertas(eventId);
     d = await admin.detalle(eventId);
     expect(candadosAdjudicacion(d, d.rutas[0], part(d, ids.A), ctx()).find((c) => /Vencida/.test(c.texto))?.ok).toBe(false);
@@ -171,7 +171,7 @@ describe("§9 recorrido de la rebanada", () => {
     await adjudicar(admin, d, ids.A, true);
     // La liga ya no acepta ofertas (409); la v3 llega por captura del equipo.
     await expect(admin.enviarOferta(sim.tokenDe(ids.A), { bid_rate: 1700 })).rejects.toMatchObject({ status: 409 });
-    await sim.llamar("rateware-api", { action: "update_rfx_bid", id: ids.A, row: { bid_rate: 1720, currency: "USD", commercial_model: "fee_plus", weekly_capacity: 5, transit_days: 2 } }, "Bearer sim:operador");
+    await sim.llamar("rateware-api", { action: "update_rfx_bid", id: ids.A, patch: { bid_rate: 1720, currency: "USD", commercial_model: "fee_plus", weekly_capacity: 5, transit_days: 2 } }, "Bearer sim:operador");
     d = await admin.detalle(eventId);
     const a = part(d, ids.A);
     expect(a.adjudicada?.numero).toBe(2);
