@@ -3,11 +3,13 @@
 // submit_bid en rfx-bid-api b11991f8. Campos marcados «sin verificar» se leyeron
 // del código, no de una respuesta real.
 
+import { conditionKeyFromRubric } from "../dominio/condiciones-r1.js";
 import { huellaAviso, huellaOferta } from "../dominio/huella.js";
 import { esProtegido } from "../dominio/protegidos.js";
 import { hoyMexico } from "../dominio/recorrido.js";
 import type {
   Aviso,
+  CondicionRuta,
   Detalle,
   EstadoAviso,
   EstadoEvento,
@@ -127,7 +129,14 @@ function participacion(lv: Fila, confirmaciones: Fila[]): Participacion {
     adjudicada = { numero: v.numero, huella: v.huella, por: String(lv.awarded_by || ""), en: corte };
   }
   const rubros: Record<string, RubroEstado> = {};
-  for (const c of confirmaciones) if (c.rfx_lane_vendor_id === lv.id) rubros[c.rubric_key] = RUBRO[c.answer] || "sin_respuesta";
+  const condiciones: Participacion["condiciones"] = {};
+  for (const c of confirmaciones) {
+    if (c.rfx_lane_vendor_id !== lv.id) continue;
+    const clave = conditionKeyFromRubric(c.rubric_key);
+    const estado = RUBRO[c.answer] || "sin_respuesta";
+    if (!clave) rubros[c.rubric_key] = estado;
+    else condiciones[clave] = { estado, valor: c.value ?? null, comentario: c.comment || null, revision: num(c.condition_revision) };
+  }
   const vendor = lv.vendors || {};
   return {
     id: lv.id,
@@ -137,6 +146,7 @@ function participacion(lv: Fila, confirmaciones: Fila[]): Participacion {
     carrierBloqueado: String(vendor.status || "").toLowerCase() === "blocked",
     estado: ESTADO_PARTICIPACION[lv.invitation_status] || "invitada",
     rubros,
+    condiciones,
     versiones,
     rol,
     motivo: lv.award_reason || null,
@@ -145,7 +155,24 @@ function participacion(lv: Fila, confirmaciones: Fila[]): Participacion {
   };
 }
 
-function ruta(l: Fila, confirmaciones: Fila[]): Ruta {
+// list_rfx_lane_conditions (R1): publicLaneCondition + rfx_lane_id.
+export function condicion(c: Fila): CondicionRuta {
+  return {
+    clave: String(c.condition_key),
+    grupo: String(c.group || ""),
+    etiqueta: String(c.label_es || c.condition_key),
+    tipo: c.kind,
+    unidad: c.unit || null,
+    comparador: c.comparator || null,
+    opciones: c.choices || null,
+    obligatoria: c.importance !== "preferred",
+    objetivo: c.target ?? null,
+    nota: c.note || null,
+    revision: Number(c.revision || 1)
+  };
+}
+
+function ruta(l: Fila, confirmaciones: Fila[], condiciones: Fila[] = []): Ruta {
   return {
     id: l.id,
     numero: Number(l.lane_number || 1),
@@ -156,6 +183,7 @@ function ruta(l: Fila, confirmaciones: Fila[]): Ruta {
     objetivo: num(l.target_rate),
     moneda: String(l.currency || "USD"),
     desiertaMotivo: l.no_award_reason || (l.no_award_at ? "Ruta desierta" : null),
+    condiciones: condiciones.filter((c) => c.rfx_lane_id === l.id).map(condicion),
     participaciones: (l.invitations || []).map((lv: Fila) => participacion(lv, confirmaciones))
   };
 }
@@ -202,7 +230,7 @@ export function detalle(
   crudo: Fila,
   mensajes: Fila[] = [],
   reciboCrudo: Fila | null = null,
-  extra: { hoy?: string; rubros?: Fila[] } = {}
+  extra: { hoy?: string; rubros?: Fila[]; condiciones?: Fila[] } = {}
 ): Detalle {
   const hoy = extra.hoy ?? hoyMexico();
   const e = crudo.event || {};
@@ -217,7 +245,7 @@ export function detalle(
       plazo: e.due_date || null,
       prueba: esPrueba(e.name)
     },
-    rutas: (crudo.lanes || []).map((l: Fila) => ruta(l, extra.rubros || [])).sort((a: Ruta, b: Ruta) => a.numero - b.numero),
+    rutas: (crudo.lanes || []).map((l: Fila) => ruta(l, extra.rubros || [], extra.condiciones || [])).sort((a: Ruta, b: Ruta) => a.numero - b.numero),
     avisos: mensajes.map(aviso),
     recibo: reciboCrudo ? recibo(reciboCrudo) : null
   };

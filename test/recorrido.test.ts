@@ -387,6 +387,81 @@ describe("§9 recorrido de la rebanada", () => {
   });
 });
 
+describe("condiciones de ruta (parche R1)", () => {
+  beforeEach(preparar);
+
+  it("el equipo las fija, el carrier contesta con dato y una obligatoria sin cumplir bloquea adjudicar", async () => {
+    let d = await admin.detalle(eventId);
+    const lane = d.rutas[0];
+    expect(lane.condiciones).toEqual([]);
+    expect((await admin.catalogoCondiciones()).length).toBe(29);
+    await expect(admin.guardarCondiciones(eventId, lane.id, [{ condition_key: "inventada", importance: "required" }])).rejects.toMatchObject({ status: 400 });
+    await operador.guardarCondiciones(eventId, lane.id, [
+      { condition_key: "cargo_insurance_usd", importance: "required", target: "100,000" },
+      { condition_key: "ctpat_oea", importance: "preferred", target: "si" }
+    ]);
+    d = await admin.detalle(eventId);
+    expect(d.rutas[0].condiciones.map((c) => [c.clave, c.obligatoria, c.objetivo, c.revision])).toEqual([
+      ["cargo_insurance_usd", true, 100000, 1],
+      ["ctpat_oea", false, true, 1]
+    ]);
+
+    const liga = (id: string) => sim.tokenDe(id);
+    const inv = await admin.invitacion(liga(ids.B));
+    expect(inv.lane_conditions.map((c: { rubric_key: string }) => c.rubric_key)).toEqual(["cond.cargo_insurance_usd", "cond.ctpat_oea"]);
+    const cond = (rubric_key: string, answer: string, value: unknown, comment: string | null = null) => ({ segment_key: "lane", rubric_key, answer, value, comment });
+    // «Cumple» con un dato que no alcanza, o excepción sin explicar: Rateware lo rechaza.
+    await expect(admin.responderRubros(liga(ids.A), [cond("cond.cargo_insurance_usd", "agree", 50000)])).rejects.toMatchObject({ status: 400 });
+    await expect(admin.responderRubros(liga(ids.A), [cond("cond.cargo_insurance_usd", "exception", 50000)])).rejects.toMatchObject({ status: 400 });
+    await admin.responderRubros(liga(ids.A), [cond("cond.cargo_insurance_usd", "disagree", 50000)]);
+    await admin.responderRubros(liga(ids.B), [cond("cond.cargo_insurance_usd", "agree", "250,000"), cond("cond.ctpat_oea", "agree", "si")]);
+
+    // El equipo sube el objetivo: la respuesta de B queda vieja y bloquea.
+    await operador.guardarCondiciones(eventId, lane.id, [
+      { condition_key: "cargo_insurance_usd", importance: "required", target: 300000 },
+      { condition_key: "ctpat_oea", importance: "preferred", target: "si" }
+    ]);
+    await admin.cerrarAOfertas(eventId);
+    d = await admin.detalle(eventId);
+    const ruta = d.rutas[0];
+    expect(ruta.condiciones.map((c) => c.revision)).toEqual([2, 1]);
+    const bloqueaB = candadosAdjudicacion(d, ruta, part(d, ids.B), ctx()).find((c) => /Condición obligatoria/.test(c.texto));
+    expect(bloqueaB?.ok).toBe(false);
+    expect(candadosAdjudicacion(d, ruta, part(d, ids.A), ctx()).some((c) => !c.ok && /Póliza de carga/.test(c.texto))).toBe(true);
+    // El proxy aplica el mismo candado con una lectura fresca.
+    await expect(adjudicar(admin, d, ids.B)).rejects.toMatchObject({ status: 409, code: "CANDADO" });
+    // Con el evento cerrado ya no cambian las condiciones ni sus respuestas.
+    // (R1 solo mira el status; el plazo vencido lo frena el proxy).
+    await expect(operador.guardarCondiciones(eventId, lane.id, [])).rejects.toMatchObject({ status: 409, code: "EVENTO_CERRADO" });
+    await expect(admin.responderRubros(liga(ids.B), [cond("cond.cargo_insurance_usd", "exception", 250000, "300k desde noviembre")])).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("una excepción explicada en la revisión vigente no bloquea; contra Rateware real la Mesa sigue sin condiciones", async () => {
+    let d = await admin.detalle(eventId);
+    await operador.guardarCondiciones(eventId, d.rutas[0].id, [{ condition_key: "cargo_insurance_usd", importance: "required", target: 300000 }]);
+    await admin.responderRubros(sim.tokenDe(ids.B), [{ segment_key: "lane", rubric_key: "cond.cargo_insurance_usd", answer: "exception", value: 250000, comment: "300k desde noviembre" }]);
+    await admin.cerrarAOfertas(eventId);
+    d = await admin.detalle(eventId);
+    const p = part(d, ids.B);
+    expect(p.condiciones.cargo_insurance_usd).toMatchObject({ estado: "excepcion", valor: 250000, comentario: "300k desde noviembre", revision: 1 });
+    expect(candadosAdjudicacion(d, d.rutas[0], p, ctx()).every((c) => c.ok || c.confirmable)).toBe(true);
+    await adjudicar(admin, d, ids.B);
+
+    const llamadas: string[] = [];
+    const op = {
+      enviar: async (_s: string, b: Record<string, unknown>) => {
+        llamadas.push(String(b.action));
+        return { status: 200, body: { event: { id: "e1", status: "open" }, lanes: [], rows: [] }, headers: {} };
+      },
+      permitirEscrituras: false,
+      real: true
+    };
+    const api = new MesaApi(async (servicio, body) => manejar(servicio, body, "Bearer x", op), () => "2026-10-21");
+    expect((await api.detalle("e1")).rutas).toEqual([]);
+    expect(llamadas).not.toContain("list_rfx_lane_conditions");
+  });
+});
+
 describe("proxy de /api", () => {
   beforeEach(preparar);
 

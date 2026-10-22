@@ -104,6 +104,24 @@ export function versionMasReciente(p: Participacion): OfertaVersion | null {
   return vigente.numero > p.adjudicada.numero ? vigente : null;
 }
 
+// Condiciones de ruta (R1): una obligatoria con «no cumple», sin respuesta o
+// contestada en una revisión anterior bloquea adjudicar; una deseable en esa
+// situación, o cualquier excepción, solo se marca.
+export function revisarCondiciones(ruta: Ruta, p: Participacion) {
+  const bloquean: string[] = [];
+  const marcadas: string[] = [];
+  let cumplidas = 0;
+  for (const c of ruta.condiciones) {
+    const r = p.condiciones[c.clave];
+    const vieja = !r || r.revision === null || r.revision < c.revision;
+    const falla = vieja || r.estado === "sin_respuesta" || r.estado === "no_puedo";
+    if (falla) (c.obligatoria ? bloquean : marcadas).push(c.etiqueta);
+    else if (r.estado === "excepcion") marcadas.push(c.etiqueta);
+    else cumplidas += 1;
+  }
+  return { bloquean, marcadas, cumplidas, total: ruta.condiciones.length };
+}
+
 // I3, I4 y D4, a la vista antes de pulsar «Adjudicar».
 export function candadosAdjudicacion(
   detalle: Detalle,
@@ -125,6 +143,18 @@ export function candadosAdjudicacion(
       ok: negativas.length === 0,
       texto: negativas.length ? `Rubro «no puedo»: ${negativas.join(", ")}` : "Ningún rubro «no puedo»"
     },
+    ...(ruta.condiciones.length
+      ? [
+          (() => {
+            const { bloquean } = revisarCondiciones(ruta, p);
+            return {
+              regla: "I3",
+              ok: bloquean.length === 0,
+              texto: bloquean.length ? `Condición obligatoria sin cumplir o por confirmar: ${bloquean.join(", ")}` : "Condiciones obligatorias cumplidas"
+            };
+          })()
+        ]
+      : []),
     { regla: "I3", ok: !p.carrierBloqueado, texto: p.carrierBloqueado ? "Carrier bloqueado en CRM" : "Carrier no bloqueado en CRM" },
     { regla: "I3", ok: ctx.rol === "admin", texto: ctx.rol === "admin" ? "Tu rol: Administrador" : "Solo el Administrador adjudica" },
     { regla: "I4", ok: !ruta.desiertaMotivo, texto: ruta.desiertaMotivo ? "La ruta está declarada desierta" : "Ruta no desierta" },

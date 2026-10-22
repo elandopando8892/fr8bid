@@ -16,6 +16,29 @@ export type EstadoParticipacion =
 
 export type RubroEstado = "de_acuerdo" | "excepcion" | "no_puedo" | "no_aplica" | "sin_respuesta";
 
+// Condición de ruta (parche R1 de Rateware): la elige el equipo por ruta,
+// obligatoria o deseable, y el carrier la contesta con dato.
+export interface CondicionRuta {
+  clave: string;
+  grupo: string;
+  etiqueta: string;
+  tipo: "text" | "number" | "money" | "boolean" | "choice";
+  unidad: string | null;
+  comparador: "min" | "max" | "eq" | null;
+  opciones: string[] | null;
+  obligatoria: boolean;
+  objetivo: string | number | boolean | null;
+  nota: string | null;
+  revision: number;
+}
+
+export interface RespuestaCondicion {
+  estado: RubroEstado;
+  valor: string | number | boolean | null;
+  comentario: string | null;
+  revision: number | null; // revisión de la condición que contestó
+}
+
 export type ModeloComercial = "fee_plus" | "cost_plus" | "sell_share" | "brokerage";
 
 export interface OfertaVersion {
@@ -44,6 +67,7 @@ export interface Participacion {
   carrierBloqueado: boolean;
   estado: EstadoParticipacion;
   rubros: Record<string, RubroEstado>;
+  condiciones: Record<string, RespuestaCondicion>; // por clave del catálogo
   // Historial completo si la fuente lo da; con Rateware real hoy solo llega la vigente.
   versiones: OfertaVersion[];
   rol: "primario" | "respaldo" | null;
@@ -64,6 +88,7 @@ export interface Ruta {
   objetivo: number | null;
   moneda: string;
   desiertaMotivo: string | null;
+  condiciones: CondicionRuta[];
   participaciones: Participacion[];
 }
 

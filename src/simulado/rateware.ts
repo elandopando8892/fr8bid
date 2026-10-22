@@ -7,6 +7,15 @@
 // expone el historial de versiones por acción; ver contratos §4, I1) y las
 // fallas inyectables de `fallas`.
 
+import {
+  checkConditionAnswer,
+  conditionKeyFromRubric,
+  normalizeLaneConditions,
+  publicLaneCondition,
+  RFX_CONDITION_CATALOG,
+  RFX_CONDITION_CATALOG_VERSION,
+  sameRequirement
+} from "../dominio/condiciones-r1";
 import { UUID_RATEWARE } from "../dominio/operacion";
 
 export type Servicio = "rateware-api" | "rfx-bid-api";
@@ -42,7 +51,8 @@ const WRITE_ACTIONS = new Set([
   "invite_rfx_lane_vendors",
   "update_rfx_event",
   "update_rfx_bid",
-  "generate_outreach_drafts"
+  "generate_outreach_drafts",
+  "save_rfx_lane_conditions"
 ]);
 
 export class ErrorRed extends Error {
@@ -66,6 +76,9 @@ export class RatewareSimulado {
   laneVendors: Fila[] = [];
   revisiones = new Map<string, Readonly<Fila>[]>();
   confirmaciones = new Map<string, Record<string, string>>();
+  // Parche R1: condiciones por ruta y respuestas del carrier con dato.
+  condicionesRuta: Fila[] = [];
+  respuestasCondicion = new Map<string, Record<string, { answer: string; comment: string | null; value: unknown; condition_revision: number }>>();
   staging: Fila[] = [];
   recibos: Fila[] = [];
   mensajes: Fila[] = [];
@@ -169,15 +182,61 @@ export class RatewareSimulado {
         const rows = this.laneVendors
           .filter((lv) => lv.rfx_event_id === event.id)
           .flatMap((lv) =>
-            Object.entries(this.confirmaciones.get(lv.id) || {}).map(([rubric_key, answer]) => ({
-              rfx_lane_vendor_id: lv.id,
-              vendor_id: lv.vendor_id,
-              segment_key: this.lanes.find((l) => l.id === lv.rfx_lane_id)?.rfx_segment_key || "general",
-              rubric_key,
-              answer
-            }))
+            [
+              ...Object.entries(this.confirmaciones.get(lv.id) || {}).map(([rubric_key, answer]) => ({
+                rfx_lane_vendor_id: lv.id,
+                vendor_id: lv.vendor_id,
+                segment_key: this.lanes.find((l) => l.id === lv.rfx_lane_id)?.rfx_segment_key || "general",
+                rubric_key,
+                answer,
+                comment: null,
+                value: null,
+                condition_revision: null
+              })),
+              ...Object.entries(this.respuestasCondicion.get(lv.id) || {}).map(([rubric_key, r]) => ({
+                rfx_lane_vendor_id: lv.id,
+                vendor_id: lv.vendor_id,
+                segment_key: "lane",
+                rubric_key,
+                ...r
+              }))
+            ]
           );
         return ok({ rows });
+      }
+      case "list_rfx_condition_catalog":
+        return ok({ version: RFX_CONDITION_CATALOG_VERSION, conditions: RFX_CONDITION_CATALOG });
+      case "list_rfx_lane_conditions": {
+        const event = this.evento(u, body.event_id);
+        const rows = this.condicionesRuta
+          .filter((c) => c.rfx_event_id === event.id)
+          .sort((a, b) => a.sort_order - b.sort_order)
+          .map((c) => ({ rfx_lane_id: c.rfx_lane_id, updated_at: c.updated_at, ...publicLaneCondition(c) }));
+        return ok({ version: RFX_CONDITION_CATALOG_VERSION, rows });
+      }
+      case "save_rfx_lane_conditions": {
+        // Como R1: reemplaza el juego de la ruta; un cambio de importancia,
+        // objetivo o nota sube la revisión y deja vieja la respuesta anterior.
+        const event = this.evento(u, body.event_id);
+        if (["closed", "awarded", "archived"].includes(event.status)) throw new Falla(409, "This bid event is closed. Route conditions cannot change.", "CONFLICT");
+        const lane = this.lanes.find((l) => l.id === body.lane_id && l.rfx_event_id === event.id);
+        if (!lane) throw new Falla(404, "RFx lane not found in this event.", "NOT_FOUND");
+        let next: ReturnType<typeof normalizeLaneConditions>;
+        try {
+          next = normalizeLaneConditions(body.conditions);
+        } catch (e) {
+          throw new Falla(400, e instanceof Error ? e.message : "Invalid route conditions.", "BAD_REQUEST");
+        }
+        const actuales = new Map(this.condicionesRuta.filter((c) => c.rfx_lane_id === lane.id).map((c) => [c.condition_key, c]));
+        const filas = next.map((row) => {
+          const antes = actuales.get(row.condition_key);
+          const revision = !antes ? 1 : sameRequirement(antes, row) ? antes.revision : antes.revision + 1;
+          return { ...row, rfx_event_id: event.id, rfx_lane_id: lane.id, revision, updated_at: this.ahora() };
+        });
+        const quitadas = [...actuales.keys()].filter((k) => !next.some((r) => r.condition_key === k));
+        this.condicionesRuta = [...this.condicionesRuta.filter((c) => c.rfx_lane_id !== lane.id), ...filas];
+        this.bitacorar(u.email, "bid_room.lane.conditions", "rfx_lanes", lane.id, null, null, { keys: filas.map((f) => f.condition_key), removed: quitadas });
+        return ok({ version: RFX_CONDITION_CATALOG_VERSION, rows: filas.map((f) => ({ rfx_lane_id: f.rfx_lane_id, ...publicLaneCondition(f) })), removed: quitadas });
       }
       case "list_outreach_messages": {
         const event = this.evento(u, body.rfx_event_id || body.event_id);
@@ -492,7 +551,14 @@ export class RatewareSimulado {
             invitation: propia,
             event: { rfx_id: event.rfx_id, name: event.name, customer: event.customer, status: event.status, due_date: event.due_date },
             lane: { ...lane },
-            segment_confirmations: Object.entries(this.confirmaciones.get(lv.id) || {}).map(([rubric_key, answer]) => ({ segment_key: lane.rfx_segment_key || "general", rubric_key, answer })),
+            segment_confirmations: [
+              ...Object.entries(this.confirmaciones.get(lv.id) || {}).map(([rubric_key, answer]) => ({ segment_key: lane.rfx_segment_key || "general", rubric_key, answer })),
+              ...Object.entries(this.respuestasCondicion.get(lv.id) || {}).map(([rubric_key, r]) => ({ segment_key: "lane", rubric_key, ...r }))
+            ],
+            lane_conditions: this.condicionesRuta
+              .filter((c) => c.rfx_lane_id === lane.id)
+              .sort((a, b) => a.sort_order - b.sort_order)
+              .map((c) => publicLaneCondition(c)),
             bid_window_closed: Boolean(bloqueo())
           },
           headers: {}
@@ -510,13 +576,28 @@ export class RatewareSimulado {
         const actual = { ...(this.confirmaciones.get(lv.id) || {}) };
         const RUBRICAS = ["logistics_model", "operation_criteria", "business_rules", "service_specifications", "carrier_requirements", "other_notes"];
         const RESPUESTAS = ["pending", "agree", "exception", "disagree", "not_applicable"];
+        const condiciones = { ...(this.respuestasCondicion.get(lv.id) || {}) };
         for (const c of body.confirmations || []) {
           if (!c.segment_key) throw new Falla(400, "Segment key is required.", "BAD_REQUEST");
-          if (!RUBRICAS.includes(c.rubric_key)) throw new Falla(400, "Invalid segment rubric.", "BAD_REQUEST");
+          const clave = conditionKeyFromRubric(c.rubric_key);
+          if (!clave && !RUBRICAS.includes(c.rubric_key)) throw new Falla(400, "Invalid segment rubric.", "BAD_REQUEST");
           if (!RESPUESTAS.includes(c.answer || "pending")) throw new Falla(400, "Invalid segment confirmation answer.", "BAD_REQUEST");
-          actual[c.rubric_key] = c.answer || "pending";
+          if (!clave) {
+            actual[c.rubric_key] = c.answer || "pending";
+            continue;
+          }
+          const cond = this.condicionesRuta.find((x) => x.rfx_lane_id === lane.id && x.condition_key === clave);
+          if (!cond) throw new Falla(400, "Invalid segment rubric.", "BAD_REQUEST");
+          let value: unknown;
+          try {
+            value = checkConditionAnswer(cond as { condition_key: string; target?: any }, c.answer || "pending", c.value, c.comment);
+          } catch (e) {
+            throw new Falla(400, e instanceof Error ? e.message : "Invalid answer.", "BAD_REQUEST");
+          }
+          condiciones[c.rubric_key] = { answer: c.answer || "pending", comment: c.comment ? String(c.comment).trim() : null, value, condition_revision: cond.revision };
         }
         this.confirmaciones.set(lv.id, actual);
+        this.respuestasCondicion.set(lv.id, condiciones);
         this.bitacorar(`token:${lv.id}`, "rfx.segments.save", "rfx_lane_vendors", lv.id, null, null, { segments: actual });
         return { status: 200, body: { confirmations: actual }, headers: {} };
       }

@@ -11,6 +11,7 @@ import {
   primario,
   puedeAdjudicar,
   recorrido,
+  revisarCondiciones,
   versionMasReciente,
   versionVigente,
   type Candado,
@@ -18,6 +19,7 @@ import {
   type Contexto
 } from "../dominio/recorrido";
 import type { Detalle, EntregaLocal, Participacion, Recibo, Ruta } from "../dominio/tipos";
+import { EditorCondiciones, ListaCondiciones, MatrizCondiciones } from "./condiciones";
 import { aCarga, Confirmar, Desactualizado, dinero, EstadoVista, fecha, Liga, Prueba, type Carga } from "./comun";
 import { useSesion } from "./sesion";
 
@@ -108,7 +110,7 @@ export function Mesa({ id }: { id: string }) {
 
         <div className="centro">
           {(actual === "invitacion" || actual === "carriers") && <PanelInvitacion {...p} />}
-          {["necesidad", "evento"].includes(actual) && <PanelEvento d={d} />}
+          {["necesidad", "evento"].includes(actual) && <PanelEvento {...p} />}
           {["ofertas", "comparar", "cierre", "adjudicar"].includes(actual) && <PanelComparar {...p} />}
           {actual === "entrega" && <PanelEntrega {...p} />}
           {actual === "aviso" && <PanelAviso {...p} />}
@@ -175,7 +177,8 @@ function LigasSimuladas({ d }: { d: Detalle }) {
   );
 }
 
-function PanelEvento({ d }: { d: Detalle }) {
+function PanelEvento({ d, ctx, accion }: Props) {
+  const editable = ctx.rol !== "viewer" && ["borrador", "abierto"].includes(d.evento.estado);
   return (
     <div className="tarjeta">
       <h2>Necesidad y evento</h2>
@@ -183,9 +186,13 @@ function PanelEvento({ d }: { d: Detalle }) {
         {d.evento.nombre} · shipper {d.evento.shipper} · plazo {fecha(d.evento.plazo)}
       </p>
       {d.rutas.map((r) => (
-        <p key={r.id}>
-          Ruta {r.numero}: {r.origen} → {r.destino} · {r.equipo} · {r.volumenSemanal ?? "—"}/sem · objetivo {dinero(r.objetivo, r.moneda)}
-        </p>
+        <div key={r.id} className="ruta-evento">
+          <p>
+            Ruta {r.numero}: {r.origen} → {r.destino} · {r.equipo} · {r.volumenSemanal ?? "—"}/sem · objetivo {dinero(r.objetivo, r.moneda)}
+          </p>
+          <ListaCondiciones condiciones={r.condiciones} />
+          {editable && <EditorCondiciones d={d} ruta={r} accion={accion} />}
+        </div>
       ))}
       <p className="nota">En la opción (a) la necesidad entra como evento directo en Rateware; el RFI del shipper llega después del MVP.</p>
     </div>
@@ -350,7 +357,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
                       <th>Cap./sem</th>
                       <th>Tránsito</th>
                       <th>Vigencia</th>
-                      <th>Rubros</th>
+                      <th>{ruta.condiciones.length ? "Condiciones" : "Rubros"}</th>
                       <th>Versión</th>
                     </tr>
                   </thead>
@@ -359,6 +366,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
                       <FilaOferta
                         key={p.id}
                         p={p}
+                        ruta={ruta}
                         totalRubros={totalRubros}
                         elegido={elegido === p.id}
                         elegible={d.evento.estado === "cerrado" && ctx.rol === "admin" && !prim}
@@ -373,6 +381,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
                 </table>
               </div>
               {!filas.length && <p className="tenue">Aún no llegan ofertas.</p>}
+              <MatrizCondiciones ruta={ruta} carriers={filas} />
               {!prim && <CapturaEquipo d={d} ruta={ruta} accion={accion} />}
               <LigasSimuladas d={d} />
               {historial && <Historial p={ruta.participaciones.find((x) => x.id === historial)!} />}
@@ -449,7 +458,13 @@ function PanelComparar({ d, ctx, accion }: Props) {
   );
 }
 
-function FilaOferta({ p, totalRubros, elegido, elegible, onElegir, onHistorial }: { p: Participacion; totalRubros: number; elegido: boolean; elegible: boolean; onElegir: () => void; onHistorial: () => void }) {
+function ResumenCondiciones({ ruta, p }: { ruta: Ruta; p: Participacion }) {
+  const r = revisarCondiciones(ruta, p);
+  if (r.bloquean.length) return <span className="error-texto" title={r.bloquean.join(", ")}>Bloquea {r.bloquean.length}</span>;
+  return <span title={r.marcadas.join(", ")}>{r.cumplidas}/{r.total}{r.marcadas.length ? ` · ${r.marcadas.length} con nota` : ""}</span>;
+}
+
+function FilaOferta({ p, ruta, totalRubros, elegido, elegible, onElegir, onHistorial }: { p: Participacion; ruta: Ruta; totalRubros: number; elegido: boolean; elegible: boolean; onElegir: () => void; onHistorial: () => void }) {
   const v = versionVigente(p)!;
   const rubros = Object.values(p.rubros);
   const negativa = rubros.includes("no_puedo");
@@ -469,7 +484,7 @@ function FilaOferta({ p, totalRubros, elegido, elegible, onElegir, onHistorial }
       <td>{v.capacidadSemanal ?? "—"}</td>
       <td>{v.transitoDias !== null ? `${v.transitoDias} d` : "—"}</td>
       <td>{v.vigenteHasta ? fecha(v.vigenteHasta) : <span className="alerta">Sin vigencia</span>}</td>
-      <td>{negativa ? <span className="error-texto">No puedo</span> : `${deAcuerdo}/${totalRubros}`}</td>
+      <td>{ruta.condiciones.length ? <ResumenCondiciones ruta={ruta} p={p} /> : negativa ? <span className="error-texto">No puedo</span> : `${deAcuerdo}/${totalRubros}`}</td>
       <td>
         <button className="btn-texto" onClick={onHistorial}>
           v{v.numero}

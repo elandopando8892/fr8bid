@@ -121,3 +121,26 @@ button, input, select, textarea { font: inherit; }
 .texto-aviso {
   white-space: pre-wrap;
 }
+
+.grupo-condiciones {
+  border: 1px solid var(--borde, #ddd);
+  border-radius: 8px;
+  margin: 8px 0;
+  padding: 8px 12px;
+}
+.condicion {
+  padding: 6px 0;
+}
+.lista-condiciones {
+  margin: 4px 0 8px;
+  padding-left: 18px;
+}
+.matriz-condiciones td.celda-no {
+  background: rgba(200, 40, 40, 0.12);
+}
+.matriz-condiciones td.celda-aviso {
+  background: rgba(220, 160, 0, 0.14);
+}
+.matriz-condiciones td:first-child {
+  min-width: 180px;
+}

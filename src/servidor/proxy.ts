@@ -24,7 +24,7 @@ export interface Respuesta {
 export type Enviar = (servicio: Servicio, body: Record<string, unknown>, autorizacion: string | null) => Promise<Respuesta>;
 
 export const LECTURAS: Record<Servicio, Set<string>> = {
-  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages"]),
+  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions"]),
   "rfx-bid-api": new Set(["get_invitation"])
 };
 
@@ -41,7 +41,8 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
     "closeout_awarded_rfx_to_rateware",
     "generate_outreach_drafts",
     "generate_rfx_award_notices",
-    "send_outreach_messages"
+    "send_outreach_messages",
+    "save_rfx_lane_conditions"
   ]),
   "rfx-bid-api": new Set(["submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
@@ -58,7 +59,11 @@ export const SOLO_SIMULADO: Record<Servicio, Set<string>> = {
     "create_rfx_event",
     "import_rfx_lanes",
     "shortlist_rfx_lane_vendors",
-    "generate_outreach_drafts"
+    "generate_outreach_drafts",
+    // Parche R1 (condiciones de ruta): aún sin aplicar en rateware-prod.
+    "list_rfx_condition_catalog",
+    "list_rfx_lane_conditions",
+    "save_rfx_lane_conditions"
   ]),
   "rfx-bid-api": new Set(["get_invitation", "submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
@@ -156,6 +161,11 @@ export async function manejar(
     if (bloqueo) return bloqueo;
   }
 
+  if (action === "save_rfx_lane_conditions") {
+    const bloqueo = await guardaCondiciones(body!, autorizacion, op);
+    if (bloqueo) return bloqueo;
+  }
+
   if (action === "generate_rfx_award_notices" || action === "send_outreach_messages") {
     const bloqueo = await guardaAvisos(action, body!, autorizacion, op);
     if (bloqueo) return bloqueo;
@@ -183,11 +193,16 @@ async function guardaAdjudicacion(body: Record<string, unknown>, autorizacion: s
   if (!String(body.award_reason || "").trim()) return error(400, "MOTIVO", "El motivo es obligatorio.");
   let lectura: Respuesta;
   let rubros: Respuesta;
+  let condiciones: Respuesta;
+  const sinCondiciones = op.real && SOLO_SIMULADO["rateware-api"].has("list_rfx_lane_conditions");
   try {
-    [lectura, rubros] = await conLimite(
+    [lectura, rubros, condiciones] = await conLimite(
       Promise.all([
         op.enviar("rateware-api", { action: "list_rfx_detail", event_id: body.event_id }, autorizacion),
-        op.enviar("rateware-api", { action: "list_rfx_segment_confirmations", event_id: body.event_id }, autorizacion)
+        op.enviar("rateware-api", { action: "list_rfx_segment_confirmations", event_id: body.event_id }, autorizacion),
+        sinCondiciones
+          ? Promise.resolve({ status: 200, body: { rows: [] }, headers: {} })
+          : op.enviar("rateware-api", { action: "list_rfx_lane_conditions", event_id: body.event_id }, autorizacion)
       ]),
       op.timeoutMs ?? 25000
     );
@@ -196,7 +211,8 @@ async function guardaAdjudicacion(body: Record<string, unknown>, autorizacion: s
   }
   if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
   if (rubros.status !== 200) return { ...rubros, body: sinSecretos(rubros.body) };
-  const d = detalle(lectura.body, [], null, { hoy: op.hoy?.() ?? hoyMexico(), rubros: rubros.body?.rows || [] });
+  if (condiciones.status !== 200) return { ...condiciones, body: sinSecretos(condiciones.body) };
+  const d = detalle(lectura.body, [], null, { hoy: op.hoy?.() ?? hoyMexico(), rubros: rubros.body?.rows || [], condiciones: condiciones.body?.rows || [] });
   for (const ruta of d.rutas) {
     const p = ruta.participaciones.find((x) => x.id === body.rfx_lane_vendor_id);
     if (!p) continue;
@@ -286,6 +302,26 @@ async function guardaAvisos(action: string, body: Record<string, unknown>, autor
     if (String(m.updated_at) !== String(versiones.get(id)))
       return error(409, "OUTREACH_VERSION_CONFLICT", "El texto cambió desde que lo viste. Revísalo otra vez.");
   }
+  return null;
+}
+
+// R1 solo rechaza cambiar condiciones con el evento «closed/awarded/archived»,
+// pero el cierre a ofertas de Fr8Bid es el plazo vencido con el evento «open»:
+// aquí también se exige que el plazo no haya pasado, para que nadie cambie lo
+// que se pide después de recibir las ofertas.
+async function guardaCondiciones(body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
+  if (!body.event_id || !body.lane_id) return error(400, "FALTA_RUTA", "Indica el evento y la ruta.");
+  let lectura: Respuesta;
+  try {
+    lectura = await conLimite(op.enviar("rateware-api", { action: "list_rfx_detail", event_id: body.event_id }, autorizacion), op.timeoutMs ?? 25000);
+  } catch {
+    return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se guardó nada.");
+  }
+  if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
+  const d = detalle(lectura.body, [], null, { hoy: op.hoy?.() ?? hoyMexico() });
+  if (!["borrador", "abierto"].includes(d.evento.estado))
+    return error(409, "EVENTO_CERRADO", "El evento ya está cerrado a ofertas: las condiciones ya no cambian.");
+  if (!d.rutas.some((r) => r.id === body.lane_id)) return error(404, "NOT_FOUND", "La ruta no pertenece a este evento.");
   return null;
 }
 

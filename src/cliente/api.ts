@@ -2,6 +2,7 @@
 // recorrido usan esta misma capa; solo cambia el transporte (HTTP a /api o el
 // Rateware simulado detrás del mismo proxy).
 
+import type { EntradaCatalogo } from "../dominio/condiciones-r1";
 import { operacionEntrega } from "../dominio/operacion";
 import { hoyMexico, primario, versionMasReciente, versionVigente } from "../dominio/recorrido";
 import type { Aviso, Detalle, EntregaLocal, Recibo, ResumenEvento } from "../dominio/tipos";
@@ -71,13 +72,31 @@ export class MesaApi {
   }
 
   async detalle(eventId: string, recibo: Recibo | null = null): Promise<Detalle> {
-    const [crudo, mensajes, rubros] = await Promise.all([
+    const [crudo, mensajes, rubros, condiciones] = await Promise.all([
       this.rw({ action: "list_rfx_detail", event_id: eventId }),
       this.rw({ action: "list_outreach_messages", rfx_event_id: eventId }),
-      this.rw({ action: "list_rfx_segment_confirmations", event_id: eventId })
+      this.rw({ action: "list_rfx_segment_confirmations", event_id: eventId }),
+      this.condicionesDe(eventId)
     ]);
-    const d = mapear.detalle(crudo, mensajes.rows || mensajes.messages || [], null, { hoy: this.hoy(), rubros: rubros.rows || [] });
+    const d = mapear.detalle(crudo, mensajes.rows || mensajes.messages || [], null, { hoy: this.hoy(), rubros: rubros.rows || [], condiciones });
     return { ...d, recibo };
+  }
+
+  // ——— Condiciones de ruta (parche R1; contra Rateware real, hasta que se
+  // aplique, el proxy responde 501 y la Mesa sigue sin condiciones) ———
+  private async condicionesDe(eventId: string): Promise<Record<string, unknown>[]> {
+    try {
+      return (await this.rw({ action: "list_rfx_lane_conditions", event_id: eventId })).rows || [];
+    } catch (e) {
+      if (e instanceof ErrorApi && e.code === "PASO_EN_RATEWARE") return [];
+      throw e;
+    }
+  }
+  async catalogoCondiciones(): Promise<EntradaCatalogo[]> {
+    return (await this.rw({ action: "list_rfx_condition_catalog" })).conditions || [];
+  }
+  guardarCondiciones(eventId: string, laneId: string, condiciones: { condition_key: string; importance: "required" | "preferred"; target?: unknown; note?: string | null }[]) {
+    return this.rw({ action: "save_rfx_lane_conditions", event_id: eventId, lane_id: laneId, conditions: condiciones });
   }
 
   // ——— Preparación (Operador) ———
@@ -223,7 +242,7 @@ export class MesaApi {
   enviarOferta(token: string, oferta: Record<string, unknown>) {
     return this.rw({ action: "submit_bid", token, ...oferta }, "rfx-bid-api");
   }
-  responderRubros(token: string, confirmations: { segment_key: string; rubric_key: string; answer: string }[]) {
+  responderRubros(token: string, confirmations: { segment_key: string; rubric_key: string; answer: string; value?: unknown; comment?: string | null }[]) {
     return this.rw({ action: "save_segment_confirmations", token, confirmations }, "rfx-bid-api");
   }
   declinar(token: string) {

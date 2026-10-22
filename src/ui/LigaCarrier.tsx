@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ErrorApi } from "../cliente/api";
 import { aCarga, dinero, EstadoVista, fecha, Prueba, type Carga } from "./comun";
+import { textoObjetivo } from "./condiciones";
 import { useSesion } from "./sesion";
 
 // rubric_key de rfx-bid-api (SEGMENT_CONFIRMATION_RUBRICS).
@@ -22,6 +23,8 @@ export function LigaCarrier({ token }: { token: string }) {
   const [carga, setCarga] = useState<Carga<any>>({ tipo: "cargando" });
   const [form, setForm] = useState({ bid_rate: "", currency: "USD", commercial_model: "fee_plus", weekly_capacity: "", transit_days: "", valid_through: "", notes: "" });
   const [rubros, setRubros] = useState<Record<string, string>>({});
+  // Condiciones de la ruta (R1): respuesta, dato y comentario por rubric_key.
+  const [conds, setConds] = useState<Record<string, { answer: string; value: string; comment: string }>>({});
   const [msg, setMsg] = useState<{ ok: boolean; texto: string } | null>(null);
 
   const leer = useCallback(() => {
@@ -29,8 +32,13 @@ export function LigaCarrier({ token }: { token: string }) {
       (datos) => {
         setCarga({ tipo: "ok", datos, leidoEn: Date.now() });
         const r: Record<string, string> = {};
-        for (const c of datos.segment_confirmations || []) r[c.rubric_key] = c.answer === "pending" ? "" : c.answer;
+        const cs: Record<string, { answer: string; value: string; comment: string }> = {};
+        for (const c of datos.segment_confirmations || []) {
+          if (c.segment_key === "lane") cs[c.rubric_key] = { answer: c.answer === "pending" ? "" : c.answer, value: c.value === null || c.value === undefined ? "" : typeof c.value === "boolean" ? (c.value ? "si" : "no") : String(c.value), comment: c.comment || "" };
+          else r[c.rubric_key] = c.answer === "pending" ? "" : c.answer;
+        }
         setRubros(r);
+        setConds(cs);
       },
       (e) => setCarga(aCarga(e))
     );
@@ -41,6 +49,9 @@ export function LigaCarrier({ token }: { token: string }) {
 
   if (carga.tipo !== "ok") return <EstadoVista carga={carga} reintentar={leer} />;
   const { invitation: inv, event, lane, bid_window_closed } = carga.datos;
+  const condiciones: any[] = carga.datos.lane_conditions || [];
+  const respuesta = (k: string) => conds[k] || { answer: "", value: "", comment: "" };
+  const poner = (k: string, cambio: Partial<{ answer: string; value: string; comment: string }>) => setConds({ ...conds, [k]: { ...respuesta(k), ...cambio } });
   const prueba = /PRUEBA CONTROLADA/i.test(event?.name || "");
 
   const hacer = async (f: () => Promise<unknown>, ok: string) => {
@@ -113,7 +124,80 @@ export function LigaCarrier({ token }: { token: string }) {
           </div>
         </form>
       )}
-      {!bid_window_closed && inv.invitation_status !== "declined" && (
+      {!bid_window_closed && inv.invitation_status !== "declined" && condiciones.length > 0 && (
+        <div className="tarjeta">
+          <h2>Condiciones de la ruta</h2>
+          <p className="tenue">Contesta cada una con el dato. «Cumple con condición» pide explicar la condición; las obligatorias sin cumplir impiden la adjudicación.</p>
+          {condiciones.map((c) => {
+            const r = respuesta(c.rubric_key);
+            const vieja = conds[c.rubric_key] && carga.datos.segment_confirmations?.find((x: any) => x.rubric_key === c.rubric_key)?.condition_revision < c.revision;
+            return (
+              <div key={c.rubric_key} className="condicion">
+                <div className="fila">
+                  <b>{c.label_es}</b>
+                  <span className={c.importance === "required" ? "pill" : "pill tenue"}>{c.importance === "required" ? "Obligatoria" : "Deseable"}</span>
+                </div>
+                {(textoObjetivo(c) || c.note) && <p className="tenue">{[textoObjetivo(c) && `Se pide: ${textoObjetivo(c)}`, c.note].filter(Boolean).join(" · ")}</p>}
+                {vieja && <p className="alerta">El equipo cambió esta condición: confírmala otra vez.</p>}
+                <div className="fila-botones">
+                  <select value={r.answer} onChange={(e) => poner(c.rubric_key, { answer: e.target.value })} aria-label="Respuesta">
+                    <option value="">Sin respuesta</option>
+                    <option value="agree">Cumple</option>
+                    <option value="exception">Cumple con condición</option>
+                    <option value="disagree">No cumple</option>
+                    <option value="not_applicable">No aplica</option>
+                  </select>
+                  {c.kind === "boolean" ? (
+                    <select value={r.value} onChange={(e) => poner(c.rubric_key, { value: e.target.value })} aria-label="Dato">
+                      <option value="">—</option>
+                      <option value="si">Sí</option>
+                      <option value="no">No</option>
+                    </select>
+                  ) : c.kind === "choice" ? (
+                    <select value={r.value} onChange={(e) => poner(c.rubric_key, { value: e.target.value })} aria-label="Dato">
+                      <option value="">—</option>
+                      {(c.choices || []).map((o: string) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      aria-label="Dato"
+                      placeholder={c.kind === "text" ? "Detalle" : `Tu dato${c.unit ? ` (${c.unit})` : ""}`}
+                      inputMode={c.kind === "text" ? "text" : "decimal"}
+                      value={r.value}
+                      onChange={(e) => poner(c.rubric_key, { value: e.target.value })}
+                    />
+                  )}
+                  {r.answer === "exception" && <input aria-label="Condición" placeholder="¿Con qué condición?" value={r.comment} onChange={(e) => poner(c.rubric_key, { comment: e.target.value })} />}
+                </div>
+              </div>
+            );
+          })}
+          <button
+            className="btn-secundario"
+            onClick={() =>
+              hacer(
+                () =>
+                  api.responderRubros(
+                    token,
+                    condiciones
+                      .filter((c) => respuesta(c.rubric_key).answer)
+                      .map((c) => ({
+                        segment_key: "lane",
+                        rubric_key: c.rubric_key,
+                        answer: respuesta(c.rubric_key).answer,
+                        value: respuesta(c.rubric_key).value || null,
+                        comment: respuesta(c.rubric_key).comment || null
+                      }))
+                  ),
+                "Condiciones guardadas."
+              )
+            }
+          >
+            Guardar condiciones
+          </button>
+        </div>
+      )}
+      {!bid_window_closed && inv.invitation_status !== "declined" && !condiciones.length && (
         <div className="tarjeta">
           <h2>Rubros</h2>
           {RUBROS.map((k) => (
