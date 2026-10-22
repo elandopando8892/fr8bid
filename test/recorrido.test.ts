@@ -19,6 +19,7 @@ import {
   type Contexto
 } from "../src/dominio/recorrido";
 import type { Detalle, EntregaLocal, Participacion } from "../src/dominio/tipos";
+import { cambiosComerciales, describirModelo } from "../src/dominio/modelo";
 import { audienciaInvitacion } from "../src/dominio/revision";
 import { candidatosRecordatorio, diasEntre, recordatorio, seguimiento } from "../src/dominio/seguimiento";
 import { operacionTanda, planearTandas } from "../src/dominio/tandas";
@@ -668,6 +669,23 @@ describe("seguimiento por carrier y recordatorio", () => {
   it("cuenta días completos entre la invitación y hoy", () => {
     expect(diasEntre("2026-10-20T23:50:00Z", "2026-10-22")).toBe(2);
     expect(diasEntre("2026-10-22T10:00:00Z", "2026-10-21")).toBe(0);
+  });
+});
+
+describe("modelo comercial visible", () => {
+  beforeEach(preparar);
+
+  it("muestra el modelo con su % junto al all-in y explica qué cambió entre versiones", async () => {
+    const d = await admin.detalle(eventId);
+    const a = part(d, ids.A);
+    const [v1, v2] = a.versiones;
+    expect(describirModelo(v1)).toBe("Fee plus · margen Marksman sin indicar");
+    expect(describirModelo(v2)).toBe("Sell share · share del carrier 3 %");
+    expect(cambiosComerciales(v1, v2)).toEqual(["all-in 1,800 USD → 1,750 USD", "modelo Fee plus → Sell share", "share del carrier sin indicar → 3 %"]);
+    // El % no altera el all-in que se compara y se adjudica.
+    expect(versionVigente(a)!.tarifaAllIn).toBe(1750);
+    expect(describirModelo(versionVigente(part(d, ids.B))!)).toBe("Fee plus · margen Marksman 3 %");
+    expect(describirModelo({ modeloComercial: "brokerage", carrierSharePct: null, margenPct: 8 })).toBe("Brokerage (buy/sell) · markup 8 %");
   });
 });
 
