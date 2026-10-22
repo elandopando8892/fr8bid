@@ -41,9 +41,14 @@ export async function sembrarDemo() {
   });
   const { rows } = await op({ action: "shortlist_rfx_lane_vendors", lane_id: lanes[0].id, vendor_ids: [carriers.A.id, carriers.B.id, carriers.C.id] });
   await op({ action: "update_rfx_event", event_id: event.id, patch: { status: "open" } });
-  const { messages } = await op({ action: "generate_outreach_drafts", event_id: event.id });
-  for (const m of messages) await admin({ action: "mark_outreach_messages", message_ids: [m.id], status: "approved", content_version: m.content_version });
-  await admin({ action: "send_outreach_messages", message_ids: messages.map((m: any) => m.id) });
+  const { rows: messages } = await op({ action: "generate_outreach_drafts", event_id: event.id });
+  await admin({
+    action: "send_outreach_messages",
+    ids: messages.map((m: any) => m.id),
+    expected_versions: messages.map((m: any) => ({ id: m.id, updated_at: m.updated_at })),
+    confirmed: true,
+    confirmation_action: "send_outreach_messages"
+  });
 
   const liga = (id: string) => (body: Record<string, unknown>) => sim.llamar("rfx-bid-api", { ...body, token: sim.tokenDe(id) }, null);
   const [a, b, c] = rows.map((r: any) => r.id);

@@ -32,7 +32,6 @@ const ADMIN_ACTIONS = new Set([
   "set_rfx_lane_no_award",
   "closeout_awarded_rfx_to_rateware",
   "generate_rfx_award_notices",
-  "mark_outreach_messages",
   "send_outreach_messages"
 ]);
 const WRITE_ACTIONS = new Set([
@@ -43,8 +42,7 @@ const WRITE_ACTIONS = new Set([
   "invite_rfx_lane_vendors",
   "update_rfx_event",
   "update_rfx_bid",
-  "generate_outreach_drafts",
-  "update_outreach_message"
+  "generate_outreach_drafts"
 ]);
 
 export class ErrorRed extends Error {
@@ -183,7 +181,7 @@ export class RatewareSimulado {
       }
       case "list_outreach_messages": {
         const event = this.evento(u, body.rfx_event_id || body.event_id);
-        return ok({ messages: this.mensajes.filter((m) => m.rfx_event_id === event.id).map((m) => ({ ...m })) });
+        return ok({ rows: this.mensajes.filter((m) => m.rfx_event_id === event.id).map((m) => structuredClone(m)) });
       }
       case "create_rfx_event": {
         const datos: Fila = body.event && typeof body.event === "object" ? body.event : body;
@@ -260,69 +258,50 @@ export class RatewareSimulado {
         const event = this.evento(u, body.event_id || body.rfx_event_id);
         const nuevos = this.laneVendors
           .filter((lv) => lv.rfx_event_id === event.id && lv.invitation_status === "drafted")
-          .filter((lv) => !this.mensajes.some((m) => m.rfx_lane_vendor_id === lv.id && m.kind === "rfx_invitation"))
-          .map((lv) => this.nuevoMensaje(event, lv, "rfx_invitation"));
-        return ok({ messages: nuevos.map((m) => ({ ...m })) });
+          .filter((lv) => !this.mensajes.some((m) => m.rfx_lane_vendor_id === lv.id && m.metadata.notice_type === "rfx_invitation"))
+          .map((lv) => this.invitacionMensaje(event, lv));
+        return ok({ rows: nuevos.map((m) => structuredClone(m)) });
       }
       case "generate_rfx_award_notices": {
+        // Como rateware-api: no exige el evento «awarded» (eso lo pone el
+        // proxy de Fr8Bid), un mensaje por carrier con decisión o
+        // participación, y nunca reinicia uno que ya no está en «drafted».
         const event = this.evento(u, body.event_id || body.rfx_event_id);
-        if (event.status !== "awarded") throw new Falla(409, "Los avisos de adjudicación se generan después del cierre hacia Rateware.", "RFX_NOT_CLOSED_OUT");
-        const nuevos = this.laneVendors
-          .filter((lv) => lv.rfx_event_id === event.id && lv.award_role === "primary")
-          .filter((lv) => !this.mensajes.some((m) => m.rfx_lane_vendor_id === lv.id && m.kind === "rfx_award"))
-          .map((lv) => this.nuevoMensaje(event, lv, "rfx_award"));
-        return ok({ messages: nuevos.map((m) => ({ ...m })) });
-      }
-      case "update_outreach_message": {
-        const m = this.mensaje(u, body.message_id);
-        if (["sent", "uncertain"].includes(m.status)) throw new Falla(409, "El mensaje ya salió.", "OUTREACH_LOCKED");
-        const antes = m.status;
-        if (typeof body.subject === "string") m.subject = body.subject;
-        if (typeof body.body === "string") m.body = body.body;
-        m.content_version += 1;
-        // outreach_approval_guard: editar invalida la aprobación.
-        m.status = "draft";
-        m.approved_version = null;
-        m.approved_by = null;
-        this.bitacorar(u.email, "outreach.edit", "outreach_messages", m.id, antes, "draft", { version: m.content_version });
-        return ok({ message: { ...m } });
-      }
-      case "mark_outreach_messages": {
-        if (body.status !== "approved") throw new Falla(400, "Estado no soportado en la simulación", "BAD_REQUEST");
-        const out = (body.message_ids || []).map((id: string) => {
-          const m = this.mensaje(u, id);
-          if (Number(body.content_version) !== m.content_version) throw new Falla(409, "El contenido cambió; vuelve a revisarlo.", "OUTREACH_VERSION_CONFLICT");
-          const antes = m.status;
-          m.status = "approved";
-          m.approved_version = m.content_version;
-          m.approved_by = u.email;
-          this.bitacorar(u.email, "outreach.approve", "outreach_messages", m.id, antes, "approved", { version: m.content_version });
-          return { ...m };
-        });
-        return ok({ messages: out });
+        const porVendor = new Map<string, Fila[]>();
+        for (const lv of this.laneVendors.filter((x) => x.rfx_event_id === event.id)) {
+          const participo = lv.bid_rate !== null && lv.bid_rate !== undefined;
+          if (!lv.award_role && !participo && !["invited", "viewed", "responded", "quoted"].includes(lv.invitation_status)) continue;
+          porVendor.set(lv.vendor_id, [...(porVendor.get(lv.vendor_id) || []), lv]);
+        }
+        const rows: Fila[] = [];
+        for (const grupo of porVendor.values()) rows.push(this.avisoAdjudicacion(event, grupo));
+        return ok({ generated: rows.length, rows: rows.map((m) => structuredClone(m)) });
       }
       case "send_outreach_messages": {
-        const ids: string[] = body.message_ids || [];
+        // outreach-version-v1: cada id con su updated_at; solo drafted, queued
+        // o failed; con confirmación explícita.
+        if (body.confirmed !== true || body.confirmation_action !== "send_outreach_messages") throw new Falla(400, "Confirmation required", "CONFIRMATION_REQUIRED");
+        const ids: string[] = Array.isArray(body.ids) ? body.ids : [];
+        const versiones = new Map((body.expected_versions || []).map((v: Fila) => [v.id, v.updated_at]));
         const mensajes = ids.map((id) => this.mensaje(u, id));
         for (const m of mensajes) {
-          if (m.status !== "approved" || m.approved_version !== m.content_version) throw new Falla(409, "Solo se envía la versión aprobada.", "OUTREACH_VERSION_CONFLICT");
-          if (m.kind === "rfx_award") {
-            const e = this.events.find((x) => x.id === m.rfx_event_id)!;
-            if (e.status !== "awarded") throw new Falla(409, "Sin recibo de Rateware no hay aviso de adjudicación.", "RFX_NOT_CLOSED_OUT");
-          }
+          if (versiones.get(m.id) !== m.updated_at) throw new Falla(409, "The message changed since it was reviewed.", "OUTREACH_VERSION_CONFLICT");
+          if (!["drafted", "queued", "failed"].includes(m.status)) throw new Falla(409, "The message is not sendable.", "OUTREACH_NOT_SENDABLE");
         }
         for (const m of mensajes) {
+          const antes = m.status;
           m.status = "sent";
-          m.gmail_message_id = `gm_${m.id.slice(-6)}`;
+          m.provider_message_id = `gm_${m.id.slice(-6)}`;
           m.sent_at = this.ahora();
-          this.bitacorar(u.email, "outreach.send", "outreach_messages", m.id, "approved", "sent", { gmail_message_id: m.gmail_message_id });
-          if (m.kind === "rfx_invitation") {
+          m.updated_at = this.marca();
+          this.bitacorar(u.email, "outreach.send", "outreach_messages", m.id, antes, "sent", { provider_message_id: m.provider_message_id, version: versiones.get(m.id) });
+          if (m.metadata.notice_type === "rfx_invitation") {
             const lv = this.laneVendors.find((x) => x.id === m.rfx_lane_vendor_id)!;
             lv.invitation_status = "invited";
             this.bitacorar(u.email, "rfx.vendor.invite", "rfx_lane_vendors", lv.id, "drafted", "invited");
           }
         }
-        return ok({ sent: mensajes.length, messages: mensajes.map((m) => ({ ...m })) });
+        return ok({ sent: mensajes.length, rows: mensajes.map((m) => structuredClone(m)) });
       }
       case "update_rfx_event": {
         // rateware-api: el cambio llega en body.patch. status «closed» NO es el
@@ -607,33 +586,83 @@ export class RatewareSimulado {
     };
   }
 
-  private nuevoMensaje(event: Fila, lv: Fila, kind: "rfx_invitation" | "rfx_award"): Fila {
+  // Edición hecha en la Cola de Rateware (solo para pruebas): cambia updated_at.
+  editarMensaje(id: string, cambios: { subject?: string; text_body?: string }) {
+    const m = this.mensajes.find((x) => x.id === id)!;
+    Object.assign(m, cambios, { updated_at: this.marca() });
+  }
+
+  private ultimaMarca = "";
+  private marca(): string {
+    let t = this.ahora();
+    if (t <= this.ultimaMarca) t = new Date(Date.parse(this.ultimaMarca) + 1).toISOString();
+    this.ultimaMarca = t;
+    return t;
+  }
+
+  private filaMensaje(event: Fila, lv: Fila, vendor: Fila, subject: string, text: string, metadata: Fila): Fila {
+    return {
+      id: nuevoId("msg"),
+      owner_email: event.owner_email,
+      rfx_event_id: event.id,
+      rfx_lane_id: lv.rfx_lane_id,
+      rfx_lane_vendor_id: lv.id,
+      vendor_id: lv.vendor_id,
+      channel: "email",
+      recipient_email: vendor.primary_email,
+      subject,
+      text_body: text,
+      html_body: `<p>${text}</p>`,
+      status: "drafted",
+      metadata,
+      provider_message_id: null,
+      sent_at: null,
+      updated_at: this.marca()
+    };
+  }
+
+  private invitacionMensaje(event: Fila, lv: Fila): Fila {
     const vendor = this.vendors.find((v) => v.id === lv.vendor_id)!;
     const lane = this.lanes.find((l) => l.id === lv.rfx_lane_id)!;
     const prueba = /PRUEBA CONTROLADA/i.test(event.name) ? "[PRUEBA CONTROLADA] " : "";
     const ruta = `${lane.origin_city} → ${lane.destination_city}`;
-    const m = {
-      id: nuevoId("msg"),
-      owner_email: event.owner_email,
-      rfx_event_id: event.id,
-      rfx_lane_vendor_id: lv.id,
-      kind,
-      channel: "gmail",
-      to_email: vendor.primary_email,
-      subject: kind === "rfx_invitation" ? `${prueba}Invitación ${event.rfx_id} · ${ruta}` : `${prueba}Adjudicación ${event.rfx_id} · ${ruta}`,
-      body:
-        kind === "rfx_invitation"
-          ? `${vendor.vendor_name}: le invitamos a cotizar la ruta ${ruta}, ${lane.equipment}. Plazo ${event.due_date ?? "por definir"}.${prueba ? " Prueba controlada, sin valor comercial." : ""}`
-          : `${vendor.vendor_name}: le confirmamos la adjudicación como primario de la ruta ${ruta}, ${lane.equipment}, a ${lv.bid_rate} ${lv.currency} all-in.${prueba ? " Prueba controlada, sin valor comercial." : ""}`,
-      status: "draft",
-      content_version: 1,
-      approved_version: null,
-      approved_by: null,
-      gmail_message_id: null,
-      sent_at: null
-    };
+    const m = this.filaMensaje(
+      event,
+      lv,
+      vendor,
+      `${prueba}Invitación ${event.rfx_id} · ${ruta}`,
+      `${vendor.vendor_name}: le invitamos a cotizar la ruta ${ruta}, ${lane.equipment}. Plazo ${event.due_date ?? "por definir"}.${prueba ? " Prueba controlada, sin valor comercial." : ""} Liga: https://rateware.vercel.app/rfx-bid.html?token=${lv.invitation_token}`,
+      { notice_type: "rfx_invitation", rfx_lane_vendor_ids: [lv.id] }
+    );
     this.mensajes.push(m);
-    this.bitacorar("sistema", "outreach.draft", "outreach_messages", m.id, null, "draft", { kind });
+    this.bitacorar("sistema", "outreach.draft", "outreach_messages", m.id, null, "drafted", { notice_type: "rfx_invitation" });
+    return m;
+  }
+
+  private avisoAdjudicacion(event: Fila, grupo: Fila[]): Fila {
+    const first = grupo[0];
+    const vendor = this.vendors.find((v) => v.id === first.vendor_id)!;
+    const conteo: Record<string, number> = {};
+    const lineas = grupo.map((lv) => {
+      const lane = this.lanes.find((l) => l.id === lv.rfx_lane_id)!;
+      const clave = lv.award_role === "primary" ? "awarded" : lv.award_role === "backup" ? "backup" : lane.no_award_at ? "no_award" : "not_awarded";
+      conteo[clave] = (conteo[clave] || 0) + 1;
+      const etiqueta = { awarded: "Adjudicada", backup: "Respaldo", no_award: "Sin adjudicar", not_awarded: "No adjudicada" }[clave];
+      return `${lane.origin_city} → ${lane.destination_city} · ${lane.equipment}: ${etiqueta}${clave === "awarded" ? ` a ${lv.bid_rate} ${lv.currency}` : ""}`;
+    });
+    const prefijo = conteo.awarded ? "Adjudicación" : conteo.backup ? "Capacidad de respaldo" : "Cierre de RFx";
+    const subject = `${prefijo}: ${event.rfx_id}`;
+    const text = [`Estimados ${vendor.vendor_name},`, `RFx: ${event.rfx_id}`, "", ...lineas, "", `Bid Room: https://rateware.vercel.app/rfx-bid.html?token=${first.invitation_token}`, "Gracias por participar."].join("\n");
+    const metadata = { notice_type: "rfx_award_closeout", award_summary: conteo, rfx_lane_vendor_ids: grupo.map((lv) => lv.id), channel: "email" };
+    const existente = this.mensajes.find((m) => m.rfx_event_id === event.id && m.vendor_id === first.vendor_id && m.metadata.notice_type === "rfx_award_closeout");
+    if (existente && existente.status !== "drafted") return existente;
+    if (existente) {
+      Object.assign(existente, { subject, text_body: text, html_body: `<p>${text}</p>`, metadata, updated_at: this.marca() });
+      return existente;
+    }
+    const m = this.filaMensaje(event, first, vendor, subject, text, metadata);
+    this.mensajes.push(m);
+    this.bitacorar("sistema", "outreach.draft", "outreach_messages", m.id, null, "drafted", { notice_type: "rfx_award_closeout" });
     return m;
   }
 

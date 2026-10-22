@@ -195,7 +195,7 @@ function PanelEvento({ d }: { d: Detalle }) {
 function PanelInvitacion({ d, ctx, accion }: Props) {
   const s = useSesion();
   const invitaciones = d.avisos.filter((a) => a.tipo === "invitacion");
-  const porEnviar = invitaciones.filter((a) => a.estado === "aprobado" && a.aprobadoHuella === a.huella);
+  const porEnviar = invitaciones.filter((a) => a.estado === "borrador" || a.estado === "fallido");
   const preseleccionadas = d.rutas.flatMap((r) => r.participaciones).filter((x) => x.estado === "preseleccionada");
   return (
     <div className="tarjeta">
@@ -225,18 +225,15 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
             </div>
             <p className="tenue">Para: {a.destinatario} · Gmail</p>
             <p><b>{a.asunto}</b></p>
-            <p>{a.cuerpo}</p>
-            {a.estado === "borrador" && ctx.rol === "admin" && (
-              <button className="btn-secundario" onClick={() => accion(() => s.api.aprobarAviso(a), "Texto aprobado.")}>Aprobar este texto exacto</button>
-            )}
+            <p className="texto-aviso">{a.cuerpo}</p>
           </div>
         );
       })}
       {porEnviar.length > 0 && ctx.rol === "admin" && (
         <Confirmar
-          etiqueta={`Enviar ${porEnviar.length} invitación(es) aprobada(s)`}
-          advertencia={<>Se envían por Gmail desde sales@heymarksman.com. {ADVERTENCIA_REAL(s, d)}</>}
-          onConfirmar={() => accion(() => s.api.enviarAvisos(porEnviar), "Invitaciones aceptadas por Gmail.")}
+          etiqueta={`Aprobar y enviar ${porEnviar.length} invitación(es) con este texto exacto`}
+          advertencia={<>Se envían por Gmail desde sales@heymarksman.com, exactamente como se ven arriba. {ADVERTENCIA_REAL(s, d)}</>}
+          onConfirmar={() => accion(() => s.api.enviarAvisos(d.evento.id, porEnviar), "Invitaciones aceptadas por Gmail.")}
         />
       )}
       {preseleccionadas.length > 0 && ctx.rol === "admin" && (
@@ -602,23 +599,24 @@ function PanelAviso({ d, ctx, accion }: Props) {
   const s = useSesion();
   const r = recorrido(d, ctx);
   const prims = d.rutas.map(primario).filter(Boolean) as Participacion[];
-  const [editando, setEditando] = useState<string | null>(null);
-  const [cuerpo, setCuerpo] = useState("");
   const faltan = prims.filter((p) => !avisoDe(d, p.id, "adjudicacion"));
+  const otros = d.avisos.filter((a) => a.tipo === "adjudicacion" && a.resultado !== "adjudicado");
   return (
     <div className="tarjeta">
       <h2>Aviso de adjudicación</h2>
       {!r.entregaConfirmada && <p className="tenue">Requiere el recibo de Rateware (I8). El carrier no se entera de algo que Rateware no tiene.</p>}
       {r.entregaConfirmada && faltan.length > 0 && ctx.rol === "admin" && (
-        <button className="btn-secundario" onClick={() => accion(() => s.api.generarAvisosAdjudicacion(d.evento.id), "Borrador de aviso generado.")}>
-          Generar borrador de aviso
-        </button>
+        <Confirmar
+          etiqueta="Generar borradores en la Cola de Rateware"
+          clase="btn-secundario"
+          advertencia={<>Rateware prepara un borrador por carrier que participó (adjudicado o no). No envía nada. {ADVERTENCIA_REAL(s, d)}</>}
+          onConfirmar={() => accion(() => s.api.generarAvisosAdjudicacion(d.evento.id), "Borradores generados en la Cola de Rateware.")}
+        />
       )}
       {prims.map((p) => {
         const a = avisoDe(d, p.id, "adjudicacion");
         if (!a) return null;
         const candados = candadosAviso(d, a, ctx);
-        const aprobadoExacto = a.estado === "aprobado" && a.aprobadoHuella === a.huella;
         return (
           <div key={a.id} className="dos-columnas">
             <div className="aviso-caja">
@@ -626,35 +624,19 @@ function PanelAviso({ d, ctx, accion }: Props) {
                 <b>{p.carrier}</b>
                 <span className="pill">{a.estado}</span>
               </div>
-              <p className="tenue">Para: {a.destinatario} · Canal: Gmail · sales@heymarksman.com</p>
+              <p className="tenue">Para: {a.destinatario} · Canal: Gmail · sales@heymarksman.com · versión {fecha(a.version)}</p>
               <p><b>{a.asunto}</b></p>
-              {editando === a.id ? (
-                <>
-                  <textarea value={cuerpo} onChange={(e) => setCuerpo(e.target.value)} rows={4} />
-                  <div className="fila-botones">
-                    <button className="btn-secundario" onClick={() => accion(() => s.api.editarAviso(a, { cuerpo }), "Texto editado. La aprobación anterior quedó invalidada.").then(() => setEditando(null))}>Guardar</button>
-                    <button className="btn-texto" onClick={() => setEditando(null)}>Cancelar</button>
-                  </div>
-                </>
-              ) : (
-                <p>{a.cuerpo}</p>
-              )}
+              <p className="texto-aviso">{a.cuerpo}</p>
               {a.reciboProveedor && <p className="tenue">Gmail aceptó el mensaje · id {a.reciboProveedor}</p>}
-              {ctx.rol === "admin" && a.estado !== "aceptado" && editando !== a.id && (
-                <div className="fila-botones">
-                  {!aprobadoExacto && <button className="btn-secundario" onClick={() => accion(() => s.api.aprobarAviso(a), "Texto exacto aprobado.")}>Aprobar este texto exacto</button>}
-                  {aprobadoExacto && (
-                    <Confirmar
-                      etiqueta="Enviar por Gmail"
-                      deshabilitado={!candados.every((c) => c.ok)}
-                      advertencia={<>Se envía este texto exacto a {a.destinatario}. {ADVERTENCIA_REAL(s, d)}</>}
-                      onConfirmar={() => accion(() => s.api.enviarAvisos([a]), "Aviso aceptado por Gmail.")}
-                    />
-                  )}
-                  <button className="btn-texto" onClick={() => { setEditando(a.id); setCuerpo(a.cuerpo); }}>Editar texto</button>
-                </div>
+              {ctx.rol === "admin" && (a.estado === "borrador" || a.estado === "fallido") && (
+                <Confirmar
+                  etiqueta="Aprobar este texto exacto y enviar por Gmail"
+                  deshabilitado={!candados.every((c) => c.ok)}
+                  advertencia={<>Se envía a {a.destinatario} exactamente esta versión. Si alguien la cambia en la Cola antes, Rateware la rechaza y la vuelves a revisar. {ADVERTENCIA_REAL(s, d)}</>}
+                  onConfirmar={() => accion(() => s.api.enviarAvisos(d.evento.id, [a]), "Aviso aceptado por Gmail.")}
+                />
               )}
-              <p className="nota">Editar el texto invalida la aprobación. Gmail llega hasta «aceptado»; un rebote se muestra aquí.</p>
+              <p className="nota">El texto se edita en la Cola de Rateware; al volver, Fr8Bid muestra la versión nueva. Gmail llega hasta «aceptado»; un rebote se muestra aquí.</p>
             </div>
             <aside className="lado">
               <Candados lista={candados} />
@@ -662,6 +644,11 @@ function PanelAviso({ d, ctx, accion }: Props) {
           </div>
         );
       })}
+      {otros.length > 0 && (
+        <p className="nota">
+          Rateware también preparó {otros.length} aviso(s) de no adjudicación o respaldo ({otros.map((a) => a.destinatario).join(", ")}). Se revisan y envían desde la Cola de Rateware.
+        </p>
+      )}
     </div>
   );
 }
@@ -702,7 +689,7 @@ function Cadena({ d, recibo, entrega }: { d: Detalle; recibo: Recibo | null; ent
             <li>oferta v{v?.numero} {p.carrier} · {dinero(v?.tarifaAllIn, v?.moneda)} · <span className="mono">#{v?.huella.slice(0, 8)}</span></li>
             <li>adjudicación · {p.motivo} · {p.adjudicada?.por}</li>
             <li>entrega · operación <span className="mono">{(recibo?.operationId ?? entrega.operationId ?? "").slice(0, 8) || "registrada en Rateware"}</span> · recibo {fecha(recibo?.momento ?? p.entregadaEn)}</li>
-            <li>aviso · {a ? `${a.estado}${a.aprobadoPor ? ` · aprobó ${a.aprobadoPor}` : ""}` : "pendiente"}</li>
+            <li>aviso · {a ? `${a.estado} · versión ${fecha(a.version)}` : "pendiente"}</li>
             <li>Loads · {p.entregadaEn ? "visible" : "pendiente"}</li>
           </ol>
         );

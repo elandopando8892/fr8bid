@@ -155,18 +155,20 @@ export function puedeAdjudicar(candados: Candado[], confirmaVigencia: boolean): 
 }
 
 export function avisoDe(detalle: Detalle, participacionId: string, tipo: Aviso["tipo"]): Aviso | null {
-  return detalle.avisos.find((a) => a.participacionId === participacionId && a.tipo === tipo) ?? null;
+  return detalle.avisos.find((a) => a.tipo === tipo && (a.participacionId === participacionId || a.participaciones.includes(participacionId))) ?? null;
 }
 
-// I7 e I8: el aviso de adjudicación se envía solo con recibo y con la aprobación
-// atada a la huella exacta del contenido.
+// I7 e I8: el aviso de adjudicación se envía solo con recibo y solo la versión
+// exacta que el Administrador tiene a la vista (Rateware rechaza con 409
+// OUTREACH_VERSION_CONFLICT si el texto cambió desde entonces).
 export function candadosAviso(detalle: Detalle, aviso: Aviso, ctx: Contexto): Candado[] {
   const recibo = entregaConfirmada(detalle, ctx.entrega);
+  const enviable = aviso.estado === "borrador" || aviso.estado === "fallido";
   return [
     { regla: "I8", ok: aviso.tipo !== "adjudicacion" || recibo, texto: recibo ? "Recibo de Rateware confirmado" : "Requiere el recibo de Rateware" },
-    { regla: "I7", ok: aviso.estado === "aprobado" && aviso.aprobadoHuella === aviso.huella, texto: aviso.aprobadoHuella === aviso.huella && aviso.estado === "aprobado" ? "Texto exacto aprobado" : "Falta aprobar este texto exacto" },
-    { regla: "I7", ok: aviso.estado !== "incierto", texto: aviso.estado === "incierto" ? "Envío incierto: conciliar antes de otro intento" : "Sin envío incierto" },
-    { regla: "rol", ok: ctx.rol === "admin", texto: ctx.rol === "admin" ? "Tu rol: Administrador" : "Solo el Administrador aprueba avisos" }
+    { regla: "I7", ok: Boolean(aviso.version), texto: aviso.version ? "Se envía solo esta versión exacta del texto" : "Sin versión del texto: vuelve a cargar" },
+    { regla: "I7", ok: enviable, texto: aviso.estado === "incierto" ? "Envío incierto: conciliar en la Cola antes de otro intento" : enviable ? "Sin envío previo" : "Ya salió" },
+    { regla: "rol", ok: ctx.rol === "admin", texto: ctx.rol === "admin" ? "Tu rol: Administrador" : "Solo el Administrador aprueba y envía avisos" }
   ];
 }
 
@@ -251,7 +253,7 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
   );
   const avisoHecho = primarios.length > 0 && avisosAceptados === primarios.length;
   pasos.push(
-    paso("aviso", 10, avisoHecho ? "hecho" : confirmada && primarios.length ? "actual" : "bloqueado", avisoHecho ? "Aviso aceptado por Gmail" : confirmada ? "Aprobar el texto exacto" : "Requiere recibo", "Administrador")
+    paso("aviso", 10, avisoHecho ? "hecho" : confirmada && primarios.length ? "actual" : "bloqueado", avisoHecho ? "Aviso aceptado por Gmail" : confirmada ? "Aprobar y enviar el texto exacto" : "Requiere recibo", "Administrador")
   );
   const loadsHecho = primarios.length > 0 && visiblesLoads === primarios.length;
   pasos.push(

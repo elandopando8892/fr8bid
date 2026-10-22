@@ -117,3 +117,7 @@ button, input, select, textarea { font: inherit; }
   .dos-columnas { grid-template-columns: 1fr; }
 }
 .tabla td.mono, .tabla td b { white-space: nowrap; }
+
+.texto-aviso {
+  white-space: pre-wrap;
+}

@@ -61,13 +61,20 @@ function estadoEvento(e: Fila, hoy: string): EstadoEvento {
   return base;
 }
 
+// Estados de outreach_messages (OUTREACH_MANUAL_STATUSES de rateware-api).
+// queued/sending/delivery_unknown no se reenvían: cuentan como inciertos.
 const ESTADO_AVISO: Record<string, EstadoAviso> = {
-  draft: "borrador",
-  approved: "aprobado",
+  drafted: "borrador",
+  queued: "incierto",
+  sending: "incierto",
   sent: "aceptado",
-  bounced: "rebotado",
+  delivered: "aceptado",
+  read: "aceptado",
+  manual_sent: "aceptado",
+  replied: "aceptado",
+  delivery_unknown: "incierto",
   failed: "fallido",
-  uncertain: "incierto"
+  bounced: "rebotado"
 };
 
 const num = (x: unknown): number | null => (x === null || x === undefined || x === "" ? null : Number(x));
@@ -153,22 +160,28 @@ function ruta(l: Fila, confirmaciones: Fila[]): Ruta {
   };
 }
 
+// generate_rfx_award_notices: metadata.notice_type «rfx_award_closeout», un
+// mensaje por carrier (metadata.rfx_lane_vendor_ids) y award_summary con el
+// conteo awarded/backup/not_awarded/no_award.
 export function aviso(m: Fila): Aviso {
-  const base = { destinatario: String(m.to_email || ""), asunto: String(m.subject || ""), cuerpo: String(m.body || "") };
-  const huella = huellaAviso(base);
-  const aprobadaVigente = m.approved_version !== null && m.approved_version === m.content_version;
+  const meta: Fila = m.metadata && typeof m.metadata === "object" ? m.metadata : {};
+  const base = { destinatario: String(m.recipient_email || ""), asunto: String(m.subject || ""), cuerpo: String(m.text_body || "") };
+  const esAdjudicacion = meta.notice_type === "rfx_award_closeout";
+  const conteo: Fila = meta.award_summary || {};
+  const resultado = !esAdjudicacion ? null : conteo.awarded ? "adjudicado" : conteo.backup ? "respaldo" : "no_adjudicado";
+  const participaciones = Array.isArray(meta.rfx_lane_vendor_ids) && meta.rfx_lane_vendor_ids.length ? meta.rfx_lane_vendor_ids.map(String) : [String(m.rfx_lane_vendor_id)];
   return {
     id: m.id,
-    tipo: m.kind === "rfx_award" ? "adjudicacion" : "invitacion",
-    participacionId: m.rfx_lane_vendor_id,
+    tipo: esAdjudicacion ? "adjudicacion" : "invitacion",
+    participacionId: String(m.rfx_lane_vendor_id),
+    participaciones,
+    resultado,
     canal: "gmail",
     ...base,
-    huella,
-    version: Number(m.content_version || 1),
-    estado: ESTADO_AVISO[m.status] || "borrador",
-    aprobadoPor: m.approved_by || null,
-    aprobadoHuella: aprobadaVigente ? huella : null,
-    reciboProveedor: m.gmail_message_id || null
+    huella: huellaAviso(base),
+    version: String(m.updated_at || ""),
+    estado: ESTADO_AVISO[String(m.status)] || "incierto",
+    reciboProveedor: m.provider_message_id || null
   };
 }
 

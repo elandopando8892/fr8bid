@@ -76,7 +76,7 @@ export class MesaApi {
       this.rw({ action: "list_outreach_messages", rfx_event_id: eventId }),
       this.rw({ action: "list_rfx_segment_confirmations", event_id: eventId })
     ]);
-    const d = mapear.detalle(crudo, mensajes.messages || [], null, { hoy: this.hoy(), rubros: rubros.rows || [] });
+    const d = mapear.detalle(crudo, mensajes.rows || mensajes.messages || [], null, { hoy: this.hoy(), rubros: rubros.rows || [] });
     return { ...d, recibo };
   }
 
@@ -197,17 +197,23 @@ export class MesaApi {
   }
 
   // ——— Avisos (Cola de Rateware, Gmail) ———
+  // Rateware genera un borrador por carrier (adjudicado o no). El texto se
+  // edita en la Cola de Rateware; aquí se aprueba y envía la versión exacta.
   generarAvisosAdjudicacion(eventId: string) {
     return this.rw({ action: "generate_rfx_award_notices", event_id: eventId });
   }
-  editarAviso(aviso: Aviso, cambios: { asunto?: string; cuerpo?: string }) {
-    return this.rw({ action: "update_outreach_message", message_id: aviso.id, subject: cambios.asunto, body: cambios.cuerpo });
-  }
-  aprobarAviso(aviso: Aviso) {
-    return this.rw({ action: "mark_outreach_messages", message_ids: [aviso.id], status: "approved", content_version: aviso.version });
-  }
-  enviarAvisos(avisos: Aviso[]) {
-    return this.rw({ action: "send_outreach_messages", message_ids: avisos.map((a) => a.id) });
+  // Aprobar = enviar con la versión (updated_at) que el Administrador vio.
+  enviarAvisos(eventId: string, avisos: Aviso[]) {
+    return this.rw({
+      action: "send_outreach_messages",
+      rfx_event_id: eventId,
+      ids: avisos.map((a) => a.id),
+      expected_versions: avisos.map((a) => ({ id: a.id, updated_at: a.version })),
+      provider: "gmail",
+      channel: "email",
+      confirmed: true,
+      confirmation_action: "send_outreach_messages"
+    });
   }
 
   // ——— Liga del carrier ———

@@ -41,8 +41,6 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
     "closeout_awarded_rfx_to_rateware",
     "generate_outreach_drafts",
     "generate_rfx_award_notices",
-    "update_outreach_message",
-    "mark_outreach_messages",
     "send_outreach_messages"
   ]),
   "rfx-bid-api": new Set(["submit_bid", "save_segment_confirmations", "decline_invitation"])
@@ -53,17 +51,14 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
 // _encrypted/_hash las quita Rateware, pero aquí se quitan otra vez por si acaso.
 // Acciones cuya forma en Fr8Bid solo está probada contra el simulado. Contra
 // Rateware real se hacen en las pantallas de Rateware (Bid Room y Cola) hasta
-// alinear cada una con su handler: la preparación del evento, la Cola de avisos
+// alinear cada una con su handler: la preparación del evento, las invitaciones
 // y la liga del carrier (las invitaciones reales apuntan al portal de Rateware).
 export const SOLO_SIMULADO: Record<Servicio, Set<string>> = {
   "rateware-api": new Set([
     "create_rfx_event",
     "import_rfx_lanes",
     "shortlist_rfx_lane_vendors",
-    "generate_outreach_drafts",
-    "update_outreach_message",
-    "mark_outreach_messages",
-    "send_outreach_messages"
+    "generate_outreach_drafts"
   ]),
   "rfx-bid-api": new Set(["get_invitation", "submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
@@ -76,7 +71,12 @@ const ESTADOS_DE_CIERRE = new Set(["closed", "awarded", "archived"]);
 
 const CLAVES_SECRETAS = /^(token|token_digest|token_hash|bid_link|invitation_token(_encrypted|_hash|_ciphertext|_digest)?)$/i;
 
+// Los avisos de Rateware llevan la liga con token dentro del texto
+// (text_body, html_body, gmail_compose_url).
+const TOKEN_EN_TEXTO = /([?&](?:amp;)?token=)[^&\s"'<>]+/gi;
+
 export function sinSecretos(x: any): any {
+  if (typeof x === "string") return x.replace(TOKEN_EN_TEXTO, "$1[oculto]");
   if (Array.isArray(x)) return x.map(sinSecretos);
   if (x && typeof x === "object") {
     const out: Record<string, unknown> = {};
@@ -156,6 +156,11 @@ export async function manejar(
     if (bloqueo) return bloqueo;
   }
 
+  if (action === "generate_rfx_award_notices" || action === "send_outreach_messages") {
+    const bloqueo = await guardaAvisos(action, body!, autorizacion, op);
+    if (bloqueo) return bloqueo;
+  }
+
   let respuesta: Respuesta;
   try {
     respuesta = await conLimite(op.enviar(servicio, body!, autorizacion), op.timeoutMs ?? 25000);
@@ -222,6 +227,65 @@ async function guardaParticipaciones(action: string, body: Record<string, unknow
   if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
   const propias = new Set(((lectura.body?.lanes || []) as any[]).flatMap((l) => (l.invitations || []).map((v: any) => v.id)));
   if (ids.some((x) => !propias.has(x))) return error(404, "NOT_FOUND", "La participación no pertenece a este evento.");
+  return null;
+}
+
+// I8 y D3 del lado del servidor: generate_rfx_award_notices de rateware-api no
+// exige el evento «awarded» y send_outreach_messages tampoco distingue avisos.
+// Aquí, con lecturas frescas: avisos solo tras el recibo, solo mensajes de este
+// evento, solo al adjudicado y solo la versión que el Administrador vio. Contra
+// Rateware real Fr8Bid no envía invitaciones ni avisos de no adjudicación.
+async function guardaAvisos(action: string, body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
+  const eventId = action === "send_outreach_messages" ? body.rfx_event_id : body.event_id;
+  if (!eventId) return error(400, "FALTA_EVENTO", "Esta acción necesita el evento.");
+  const ids: unknown[] = Array.isArray(body.ids) ? body.ids : [];
+  const versiones = new Map<unknown, unknown>(
+    (Array.isArray(body.expected_versions) ? body.expected_versions : []).map((v: any) => [v?.id, v?.updated_at])
+  );
+  if (action === "send_outreach_messages") {
+    if (!ids.length || ids.some((x) => !x)) return error(400, "FALTA_MENSAJE", "Indica los avisos.");
+    if (ids.some((x) => !versiones.get(x))) return error(400, "FALTA_VERSION", "Cada aviso necesita la versión exacta aprobada.");
+    if (body.confirmed !== true || body.confirmation_action !== "send_outreach_messages")
+      return error(400, "SIN_CONFIRMAR", "Enviar requiere confirmación explícita.");
+    if (body.provider !== "gmail" || body.channel !== "email") return error(400, "CANAL", "Los avisos salen por Gmail.");
+  }
+  let lectura: Respuesta;
+  let mensajes: Respuesta | null = null;
+  try {
+    [lectura, mensajes] = await conLimite(
+      Promise.all([
+        op.enviar("rateware-api", { action: "list_rfx_detail", event_id: eventId }, autorizacion),
+        action === "send_outreach_messages"
+          ? op.enviar("rateware-api", { action: "list_outreach_messages", rfx_event_id: eventId, limit: 200 }, autorizacion)
+          : Promise.resolve(null)
+      ]),
+      op.timeoutMs ?? 25000
+    );
+  } catch {
+    return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se generó ni envió nada.");
+  }
+  if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
+  const adjudicado = String(lectura.body?.event?.status || "") === "awarded";
+  if (action === "generate_rfx_award_notices") {
+    return adjudicado ? null : error(409, "RFX_NOT_CLOSED_OUT", "Los avisos de adjudicación se generan después del recibo de Rateware.");
+  }
+  if (!mensajes || mensajes.status !== 200) return mensajes ? { ...mensajes, body: sinSecretos(mensajes.body) } : null;
+  const filas: any[] = mensajes.body?.rows || mensajes.body?.messages || [];
+  const porId = new Map(filas.map((m) => [m.id, m]));
+  for (const id of ids) {
+    const m = porId.get(id);
+    if (!m) return error(404, "NOT_FOUND", "El aviso no pertenece a este evento.");
+    const meta = m.metadata || {};
+    if (meta.notice_type !== "rfx_award_closeout") {
+      if (op.real) return error(501, "PASO_EN_RATEWARE", "Contra Rateware real Fr8Bid solo envía avisos de adjudicación.");
+      continue;
+    }
+    if (!adjudicado) return error(409, "RFX_NOT_CLOSED_OUT", "Sin recibo de Rateware no hay aviso de adjudicación.");
+    if (!Number(meta.award_summary?.awarded || 0))
+      return error(409, "SOLO_ADJUDICADO", "Fr8Bid solo envía el aviso al adjudicado; los demás se revisan en la Cola de Rateware.");
+    if (String(m.updated_at) !== String(versiones.get(id)))
+      return error(409, "OUTREACH_VERSION_CONFLICT", "El texto cambió desde que lo viste. Revísalo otra vez.");
+  }
   return null;
 }
 

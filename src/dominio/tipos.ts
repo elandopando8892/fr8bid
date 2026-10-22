@@ -68,22 +68,26 @@ export interface Ruta {
 }
 
 export type TipoAviso = "invitacion" | "adjudicacion";
-export type EstadoAviso = "borrador" | "aprobado" | "aceptado" | "rebotado" | "fallido" | "incierto";
+export type EstadoAviso = "borrador" | "aceptado" | "rebotado" | "fallido" | "incierto";
+export type ResultadoAviso = "adjudicado" | "respaldo" | "no_adjudicado";
 
+// Mensaje de la Cola de Rateware (outreach_messages). Rateware no tiene estado
+// «aprobado»: la aprobación es la versión exacta (updated_at) que el
+// Administrador vio; send_outreach_messages la exige y responde 409 si cambió.
 export interface Aviso {
   id: string;
   tipo: TipoAviso;
   participacionId: string;
+  participaciones: string[]; // un aviso por carrier puede cubrir varias rutas
+  resultado: ResultadoAviso | null;
   canal: "gmail";
   destinatario: string;
   asunto: string;
   cuerpo: string;
   huella: string;
-  version: number;
+  version: string; // updated_at de Rateware
   estado: EstadoAviso;
-  aprobadoPor: string | null;
-  aprobadoHuella: string | null;
-  reciboProveedor: string | null; // id de mensaje de Gmail
+  reciboProveedor: string | null; // provider_message_id de Gmail
 }
 
 export interface Recibo {

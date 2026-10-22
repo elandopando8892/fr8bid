@@ -91,11 +91,10 @@ describe("§9 recorrido de la rebanada", () => {
     expect(r.actual?.clave).toBe("invitacion");
     expect(r.siguiente.teToca).toBe(true);
 
-    // El Operador no aprueba; el Administrador aprueba el texto exacto y envía.
-    await expect(op.aprobarAviso(d.avisos[0])).rejects.toMatchObject({ status: 403 });
-    for (const a of d.avisos) await adm.aprobarAviso(a);
-    d = await adm.detalle(event.id);
-    await adm.enviarAvisos(d.avisos);
+    // El Operador no envía; el Administrador aprueba la versión exacta al enviar.
+    await expect(op.enviarAvisos(event.id, d.avisos)).rejects.toMatchObject({ status: 403 });
+    expect(d.avisos.every((a) => !/tok_/.test(a.cuerpo) && a.cuerpo.includes("token=[oculto]"))).toBe(true);
+    await adm.enviarAvisos(event.id, d.avisos);
     d = await adm.detalle(event.id);
     r = recorrido(d, ctx());
     expect(d.evento.prueba).toBe(true);
@@ -275,34 +274,47 @@ describe("§9 recorrido de la rebanada", () => {
     expect(sim.staging.filter((s) => s.kind === "rfx_award")).toHaveLength(1);
   });
 
-  it("9 · aviso de adjudicación antes del recibo: bloqueado; editar el aprobado invalida la aprobación", async () => {
+  it("9 · aviso de adjudicación: solo tras el recibo, solo al adjudicado y solo la versión que se vio", async () => {
     let d = await cerrarYAdjudicarB();
-    await expect(admin.generarAvisosAdjudicacion(eventId)).rejects.toMatchObject({ status: 409 });
+    await expect(admin.generarAvisosAdjudicacion(eventId)).rejects.toMatchObject({ status: 409, code: "RFX_NOT_CLOSED_OUT" });
     expect(recorrido(d, ctx()).pasos[9].estado).toBe("bloqueado");
 
     const prep = admin.prepararEntrega(d);
     const { entrega } = await admin.confirmarEntrega(eventId, prep.operationId!);
     await admin.generarAvisosAdjudicacion(eventId);
     d = await admin.detalle(eventId);
-    let aviso = avisoDe(d, ids.B, "adjudicacion")!;
-    expect(aviso.asunto).toMatch(/^\[PRUEBA CONTROLADA\]/);
-    expect(candadosAviso(d, aviso, ctx("admin", entrega)).find((c) => c.regla === "I8")?.ok).toBe(true);
+    // Como rateware-api: un borrador por carrier que participó, adjudicado o no.
+    const aviso = avisoDe(d, ids.B, "adjudicacion")!;
+    expect([aviso.resultado, aviso.estado]).toEqual(["adjudicado", "borrador"]);
+    expect(aviso.asunto).toMatch(/^Adjudicación: /);
+    expect(aviso.cuerpo).not.toMatch(/tok_/);
+    expect(candadosAviso(d, aviso, ctx("admin", entrega)).every((c) => c.ok)).toBe(true);
+    const noAdj = avisoDe(d, ids.A, "adjudicacion")!;
+    expect(noAdj.resultado).toBe("no_adjudicado");
+    await expect(admin.enviarAvisos(eventId, [noAdj])).rejects.toMatchObject({ status: 409, code: "SOLO_ADJUDICADO" });
 
-    await admin.aprobarAviso(aviso);
-    d = await admin.detalle(eventId);
-    aviso = avisoDe(d, ids.B, "adjudicacion")!;
-    expect(aviso.estado).toBe("aprobado");
-    expect(aviso.aprobadoHuella).toBe(aviso.huella);
+    // Alguien edita el texto en la Cola: la versión que se vio ya no sirve.
+    sim.editarMensaje(aviso.id, { text_body: aviso.cuerpo + "\nCambio." });
+    await expect(admin.enviarAvisos(eventId, [aviso])).rejects.toMatchObject({ status: 409, code: "OUTREACH_VERSION_CONFLICT" });
+    expect(sim.mensajes.find((m) => m.id === aviso.id)?.status).toBe("drafted");
 
-    await admin.editarAviso(aviso, { cuerpo: aviso.cuerpo + " Cambio." });
     d = await admin.detalle(eventId);
-    const editado = avisoDe(d, ids.B, "adjudicacion")!;
-    expect(editado.estado).toBe("borrador");
-    expect(editado.aprobadoHuella).toBeNull();
-    expect(editado.huella).not.toBe(aviso.huella);
-    await expect(admin.enviarAvisos([editado])).rejects.toMatchObject({ status: 409 });
-    // Aprobar con la versión vieja tampoco sirve.
-    await expect(admin.aprobarAviso(aviso)).rejects.toMatchObject({ status: 409 });
+    const nueva = avisoDe(d, ids.B, "adjudicacion")!;
+    expect(nueva.version).not.toBe(aviso.version);
+    await expect(operador.enviarAvisos(eventId, [nueva])).rejects.toMatchObject({ status: 403 });
+    await admin.enviarAvisos(eventId, [nueva]);
+    d = await admin.detalle(eventId);
+    expect(avisoDe(d, ids.B, "adjudicacion")).toMatchObject({ estado: "aceptado", reciboProveedor: expect.any(String) });
+    expect(recorrido(d, ctx("admin", entrega)).pasos[9].estado).toBe("hecho");
+
+    // Volver a generar no reinicia un aviso que ya salió; reenviar tampoco pasa.
+    await admin.generarAvisosAdjudicacion(eventId);
+    d = await admin.detalle(eventId);
+    const enviado = avisoDe(d, ids.B, "adjudicacion")!;
+    expect(enviado.estado).toBe("aceptado");
+    await expect(admin.enviarAvisos(eventId, [enviado])).rejects.toMatchObject({ status: 409 });
+    // Un aviso de otro evento no pasa por este.
+    await expect(admin.enviarAvisos("evt-ajeno", [enviado])).rejects.toMatchObject({ status: 404 });
   });
 
   it("10 · Loads solo tras recibo; la proyección no lleva token ni datos de otros carriers", async () => {
@@ -350,18 +362,18 @@ describe("§9 recorrido de la rebanada", () => {
     await admin.confirmarEntrega(eventId, entrega.operationId!); // reintento: sin filas nuevas
     await admin.generarAvisosAdjudicacion(eventId);
     d = await admin.detalle(eventId);
-    await admin.aprobarAviso(avisoDe(d, ids.B, "adjudicacion")!);
-    d = await admin.detalle(eventId);
-    await admin.enviarAvisos([avisoDe(d, ids.B, "adjudicacion")!]);
+    await admin.enviarAvisos(eventId, [avisoDe(d, ids.B, "adjudicacion")!]);
     const filas = sim.bitacora.slice(inicio).map((f) => `${f.accion}:${f.de_estado}→${f.a_estado}`);
     expect(filas).toEqual([
       "rfx.event.due_date:2026-10-31→2026-10-20",
       "rfx.award:null→primary",
       "rate_staging.insert:null→pending_review",
       "rfx.award.closeout:open→awarded",
-      "outreach.draft:null→draft",
-      "outreach.approve:draft→approved",
-      "outreach.send:approved→sent"
+      // un borrador por carrier que participó (A, B y C); solo sale el de B
+      "outreach.draft:null→drafted",
+      "outreach.draft:null→drafted",
+      "outreach.draft:null→drafted",
+      "outreach.send:drafted→sent"
     ]);
     // La siembra (pasos 1 a 5) también dejó una fila por transición.
     const siembra = sim.bitacora.slice(0, inicio).map((f) => f.accion);
@@ -463,6 +475,38 @@ describe("proxy de /api", () => {
     expect(r.body.rows.map((e: { id: string }) => e.id)).toEqual(["e1"]);
     const api = new MesaApi(async (servicio, body) => manejar(servicio, body, "Bearer x", op), () => "2026-10-21");
     expect((await api.eventos()).map((e) => [e.id, e.prueba])).toEqual([["e1", true]]);
+  });
+
+  it("contra Rateware real, el aviso sale con la versión exacta y solo si es de adjudicación", async () => {
+    const enviados: Record<string, unknown>[] = [];
+    const mensajes = [
+      { id: "m-inv", rfx_event_id: "e1", rfx_lane_vendor_id: "lv1", status: "drafted", updated_at: "v1", metadata: {} },
+      { id: "m-adj", rfx_event_id: "e1", rfx_lane_vendor_id: "lv1", status: "drafted", updated_at: "v2", text_body: "Bid Room: https://x/rfx-bid.html?token=abc123", metadata: { notice_type: "rfx_award_closeout", award_summary: { awarded: 1 } } }
+    ];
+    const enviar = async (_s: string, b: Record<string, unknown>) => {
+      enviados.push(b);
+      if (b.action === "list_rfx_detail") return { status: 200, body: { event: { id: "e1", status: "awarded" }, lanes: [] }, headers: {} };
+      if (b.action === "list_outreach_messages") return { status: 200, body: { rows: mensajes }, headers: {} };
+      return { status: 200, body: { sent: 1 }, headers: {} };
+    };
+    const enviarAviso = (id: string, version: string, extra: Record<string, unknown> = {}) => ({
+      action: "send_outreach_messages", rfx_event_id: "e1", ids: [id], expected_versions: [{ id, updated_at: version }],
+      provider: "gmail", channel: "email", confirmed: true, confirmation_action: "send_outreach_messages", ...extra
+    });
+    const apagado = { enviar, permitirEscrituras: false, real: true };
+    expect((await manejar("rateware-api", enviarAviso("m-adj", "v2"), "Bearer x", apagado)).status).toBe(423);
+    expect(enviados).toHaveLength(0);
+
+    const op = { enviar, permitirEscrituras: true, real: true };
+    expect((await manejar("rateware-api", enviarAviso("m-adj", "v2", { confirmed: false }), "Bearer x", op)).body.code).toBe("SIN_CONFIRMAR");
+    expect((await manejar("rateware-api", enviarAviso("m-inv", "v1"), "Bearer x", op)).status).toBe(501);
+    expect((await manejar("rateware-api", enviarAviso("m-adj", "v1"), "Bearer x", op)).body.code).toBe("OUTREACH_VERSION_CONFLICT");
+    expect(enviados.some((b) => b.action === "send_outreach_messages")).toBe(false);
+    expect((await manejar("rateware-api", enviarAviso("m-adj", "v2"), "Bearer x", op)).status).toBe(200);
+    expect(enviados.filter((b) => b.action === "send_outreach_messages")).toEqual([enviarAviso("m-adj", "v2")]);
+    // Y la liga con token del texto del aviso no sale del proxy.
+    const lista = await manejar("rateware-api", { action: "list_outreach_messages", rfx_event_id: "e1" }, "Bearer x", op);
+    expect(JSON.stringify(lista.body)).not.toMatch(/abc123/);
   });
 
   it("sin respuesta de Rateware: 504 incierta, sin reintento automático", async () => {
