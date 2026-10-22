@@ -144,3 +144,4 @@ button, input, select, textarea { font: inherit; }
 .matriz-condiciones td:first-child {
   min-width: 180px;
 }
+a.btn-secundario { display: inline-block; text-decoration: none; }

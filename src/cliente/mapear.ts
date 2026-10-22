@@ -152,7 +152,9 @@ function participacion(lv: Fila, confirmaciones: Fila[]): Participacion {
     rol,
     motivo: lv.award_reason || null,
     adjudicada,
-    entregadaEn: lv.rateware_closeout_at || null
+    entregadaEn: lv.rateware_closeout_at || null,
+    vistaEn: lv.viewed_at || null,
+    respondioEn: lv.responded_at || null
   };
 }
 
@@ -211,7 +213,8 @@ export function aviso(m: Fila): Aviso {
     version: String(m.updated_at || ""),
     estado: ESTADO_AVISO[String(m.status)] || "incierto",
     reciboProveedor: m.provider_message_id || null,
-    motivo: m.delivery_error || m.last_error || null
+    motivo: m.delivery_error || m.last_error || null,
+    enviadoEn: m.sent_at || null
   };
 }
 

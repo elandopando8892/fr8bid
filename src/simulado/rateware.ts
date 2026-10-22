@@ -318,6 +318,7 @@ export class RatewareSimulado {
             carrier_share_pct: null,
             best_final: false,
             responded_at: null,
+            viewed_at: null,
             response_source: null,
             notes: null,
             rateware_closeout_at: null
@@ -594,6 +595,8 @@ export class RatewareSimulado {
     };
     switch (action) {
       case "get_invitation": {
+        // Como rfx-bid-api: la primera apertura deja viewed_at.
+        if (!lv.viewed_at) lv.viewed_at = this.ahora();
         if (lv.invitation_status === "invited") {
           lv.invitation_status = "viewed";
           this.bitacorar(`token:${lv.id}`, "rfx.vendor.view", "rfx_lane_vendors", lv.id, "invited", "viewed");

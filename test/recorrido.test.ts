@@ -20,6 +20,7 @@ import {
 } from "../src/dominio/recorrido";
 import type { Detalle, EntregaLocal, Participacion } from "../src/dominio/tipos";
 import { audienciaInvitacion } from "../src/dominio/revision";
+import { candidatosRecordatorio, diasEntre, recordatorio, seguimiento } from "../src/dominio/seguimiento";
 import { operacionTanda, planearTandas } from "../src/dominio/tandas";
 import { ESCRITURAS, manejar, sinSecretos, SOLO_SIMULADO } from "../src/servidor/proxy";
 import { crearSimulado, ORG, sembrarDemo } from "../src/simulado/semilla";
@@ -615,6 +616,58 @@ describe("envío por tandas y cuota de Gmail", () => {
       { enviar: async () => { throw new Error("no debe llamar"); }, permitirEscrituras: true }
     );
     expect(r.body.code).toBe("TANDA_GRANDE");
+  });
+});
+
+describe("seguimiento por carrier y recordatorio", () => {
+  it("distingue abrió, no abrió, ofertó y declinó; recuerda solo a quien falta", async () => {
+    const { s, carriers, op, adm, eventId: id } = await eventoConTres();
+    const extra = s.agregarVendor(ORG, "Carrier Prueba D");
+    const lane = s.lanes.find((l) => l.rfx_event_id === id)!;
+    await op.preseleccionar(lane.id, [extra.id]);
+    for (const c of [carriers.A, carriers.B, carriers.C, extra]) s.revisar(id, c.id);
+    await op.prepararInvitaciones(id, [carriers.A.id, carriers.B.id, carriers.C.id, extra.id]);
+    let d = await adm.detalle(id);
+    await adm.enviarAvisos(id, d.avisos);
+    const lvDe = (vendorId: string) => s.laneVendors.find((x) => x.rfx_event_id === id && x.vendor_id === vendorId)!.id;
+    const liga = (vendorId: string) => (body: Record<string, unknown>) => s.llamar("rfx-bid-api", { ...body, token: s.tokenDe(lvDe(vendorId)) }, null);
+    await liga(carriers.A.id)({ action: "get_invitation" });
+    await liga(carriers.A.id)({ action: "submit_bid", bid_rate: 1700, currency: "USD", commercial_model: "fee_plus" });
+    await liga(carriers.B.id)({ action: "get_invitation" });
+    await liga(extra.id)({ action: "get_invitation" });
+    await liga(extra.id)({ action: "decline_invitation" });
+
+    d = await adm.detalle(id);
+    const filas = seguimiento(d, "2026-10-25");
+    const estado = Object.fromEntries(filas.map((x) => [x.carrier, x.estado]));
+    expect(estado).toEqual({ "Carrier Prueba A": "oferto", "Carrier Prueba B": "abrio", "Carrier Prueba C": "sin_abrir", "Carrier Prueba D": "declino" });
+    const b = filas.find((x) => x.carrier === "Carrier Prueba B")!;
+    expect(b.vistaEn).toBeTruthy();
+    expect(b.invitadaEn).toBeTruthy();
+    expect(b.diasSinRespuesta).toBe(diasEntre(b.invitadaEn!, "2026-10-25"));
+
+    const candidatos = candidatosRecordatorio(d, "2026-10-25");
+    expect(candidatos.map((x) => x.carrier)).toEqual(["Carrier Prueba B", "Carrier Prueba C"]);
+    const r = recordatorio(d, candidatos[0]);
+    expect(r.para).toBe("sales@heymarksman.com");
+    expect(r.asunto).toMatch(/^Re: \[PRUEBA CONTROLADA\] Invitación /);
+    expect(r.cuerpo).toContain("ya abrió la liga");
+    expect(r.cuerpo).toContain("Monterrey → Dallas · Dry Van");
+    expect(r.cuerpo).not.toMatch(/tok_|token=/);
+    expect(r.gmail).toMatch(/^https:\/\/mail\.google\.com\/mail\/\?view=cm/);
+    expect(recordatorio(d, candidatos[1]).cuerpo).not.toContain("ya abrió");
+    // Generarlo no escribe ni envía nada.
+    expect(s.mensajes.filter((m) => m.status === "sent")).toHaveLength(4);
+
+    // Cerrado a ofertas: ya no hay a quién recordar.
+    await adm.cerrarAOfertas(id);
+    d = await adm.detalle(id);
+    expect(candidatosRecordatorio(d, s.hoy())).toEqual([]);
+  });
+
+  it("cuenta días completos entre la invitación y hoy", () => {
+    expect(diasEntre("2026-10-20T23:50:00Z", "2026-10-22")).toBe(2);
+    expect(diasEntre("2026-10-22T10:00:00Z", "2026-10-21")).toBe(0);
   });
 });
 

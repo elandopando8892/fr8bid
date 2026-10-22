@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorApi, type AvanceEnvio } from "../cliente/api";
 import { proyeccionLoads } from "../dominio/loads";
 import { operacionAdjudicacion } from "../dominio/operacion";
@@ -19,6 +19,7 @@ import {
   type Contexto
 } from "../dominio/recorrido";
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
+import { candidatosRecordatorio, ETIQUETA_SEGUIMIENTO, recordatorio, seguimiento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
 import type { Aviso, Detalle, EntregaLocal, Participacion, Recibo, Ruta } from "../dominio/tipos";
 import { EditorCondiciones, ListaCondiciones, MatrizCondiciones } from "./condiciones";
@@ -113,6 +114,7 @@ export function Mesa({ id }: { id: string }) {
         <div className="centro">
           {(actual === "invitacion" || actual === "carriers") && <PanelInvitacion {...p} />}
           {["necesidad", "evento"].includes(actual) && <PanelEvento {...p} />}
+          {["invitacion", "ofertas", "comparar", "cierre"].includes(actual) && <PanelSeguimiento d={d} ctx={ctx} />}
           {["ofertas", "comparar", "cierre", "adjudicar"].includes(actual) && <PanelComparar {...p} />}
           {actual === "entrega" && <PanelEntrega {...p} />}
           {actual === "aviso" && <PanelAviso {...p} />}
@@ -332,6 +334,74 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
           />
         </div>
       )}
+    </div>
+  );
+}
+
+// Seguimiento por carrier y recordatorio. El recordatorio se abre como
+// borrador en Gmail: Fr8Bid no lo envía, lo envía el Administrador.
+function PanelSeguimiento({ d, ctx }: { d: Detalle; ctx: Contexto }) {
+  const [abierto, setAbierto] = useState<string | null>(null);
+  const filas = seguimiento(d, ctx.hoy);
+  if (!filas.length) return null;
+  const candidatos = new Set(candidatosRecordatorio(d, ctx.hoy).map((x) => x.carrierId));
+  const conteo = (e: EstadoSeguimiento) => filas.filter((x) => x.estado === e).length;
+  const orden: EstadoSeguimiento[] = ["sin_abrir", "abrio", "rebote", "declino", "oferto"];
+  const ordenadas = [...filas].sort((a, b) => orden.indexOf(a.estado) - orden.indexOf(b.estado) || (b.diasSinRespuesta ?? 0) - (a.diasSinRespuesta ?? 0));
+  return (
+    <div className="tarjeta">
+      <h2>Seguimiento</h2>
+      <p className="tenue">
+        {filas.length} invitado(s): {conteo("oferto")} ofertaron, {conteo("abrio")} abrieron sin ofertar, {conteo("sin_abrir")} no han abierto la liga
+        {conteo("declino") ? `, ${conteo("declino")} declinaron` : ""}
+        {conteo("rebote") ? `, ${conteo("rebote")} rebotaron` : ""}.
+      </p>
+      <div className="tabla-envoltura">
+      <table className="tabla">
+        <thead>
+          <tr><th>Carrier</th><th>Estado</th><th>Rutas</th><th>Invitado</th><th>Abrió</th><th></th></tr>
+        </thead>
+        <tbody>
+          {ordenadas.map((x) => {
+            const r = candidatos.has(x.carrierId) ? recordatorio(d, x) : null;
+            return (
+              <Fragment key={x.carrierId}>
+                <tr>
+                  <td>{x.carrier}</td>
+                  <td>
+                    {ETIQUETA_SEGUIMIENTO[x.estado]}
+                    {x.diasSinRespuesta !== null ? ` · ${x.diasSinRespuesta} día(s)` : ""}
+                  </td>
+                  <td>{x.estado === "oferto" && x.ofertadas < x.rutas ? `${x.ofertadas} de ${x.rutas}` : x.rutas}</td>
+                  <td>{fecha(x.invitadaEn)}</td>
+                  <td>{fecha(x.vistaEn)}</td>
+                  <td>
+                    {r && ctx.rol !== "viewer" && (
+                      <button className="btn-texto" onClick={() => setAbierto(abierto === x.carrierId ? null : x.carrierId)}>
+                        {abierto === x.carrierId ? "Ocultar" : "Recordatorio"}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+                {r && abierto === x.carrierId && (
+                  <tr>
+                    <td colSpan={6}>
+                      <div className="aviso-caja">
+                        <p className="tenue">Para: {r.para} · Gmail</p>
+                        <p><b>{r.asunto}</b></p>
+                        <p className="texto-aviso">{r.cuerpo}</p>
+                        <p className="tenue">Fr8Bid no envía este recordatorio. «Abrir en Gmail» crea el borrador en tu cuenta; revísalo y envíalo tú si estás de acuerdo.</p>
+                        <a className="btn-secundario" href={r.gmail} target="_blank" rel="noreferrer">Abrir en Gmail</a>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+      </div>
     </div>
   );
 }
