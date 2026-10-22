@@ -78,6 +78,9 @@ export interface Participacion {
   adjudicada: { numero: number; huella: string; por: string; en: string } | null;
   // rateware_closeout_at: la entrega con recibo cubrió esta participación.
   entregadaEn: string | null;
+  // rfx-bid-api pone viewed_at la primera vez que el carrier abre su liga.
+  vistaEn: string | null;
+  respondioEn: string | null;
 }
 
 export interface Ruta {
@@ -118,6 +121,7 @@ export interface Aviso {
   estado: EstadoAviso;
   reciboProveedor: string | null; // provider_message_id de Gmail
   motivo: string | null; // delivery_error o last_error de Rateware
+  enviadoEn: string | null; // sent_at
 }
 
 export interface Recibo {
