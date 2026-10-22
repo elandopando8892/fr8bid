@@ -84,7 +84,12 @@ export class RatewareSimulado {
   mensajes: Fila[] = [];
   bitacora: Fila[] = [];
   llamadas: { servicio: Servicio; action: string }[] = [];
-  fallas = { perderRespuestaDe: new Set<string>(), sinResponder: new Set<string>() };
+  // Marca «Revisado» de Bidware (saas_audit_log rfx.invitation_carrier.reviewed).
+  revisionesCarrier: Fila[] = [];
+  // Resultado de send_outreach_messages por operation_id (repetirlo no reenvía).
+  operacionesEnvio = new Map<string, Fila>();
+  // cuotaGmail: cuántos mensajes más acepta Gmail hoy (null = sin límite).
+  fallas = { perderRespuestaDe: new Set<string>(), sinResponder: new Set<string>(), cuotaGmail: null as number | null, fallarRevisiones: false };
   hoy: () => string = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(new Date());
   ahora: () => string = () => new Date().toISOString();
 
@@ -97,6 +102,10 @@ export class RatewareSimulado {
     const v = { id: nuevoId("ven"), owner_email: ownerEmail, vendor_name: nombre, primary_email: "sales@heymarksman.com", status: "active", ...extra };
     this.vendors.push(v);
     return v;
+  }
+
+  revisar(eventId: string, vendorId: string, revisado = true, por = "sales@heymarksman.com") {
+    this.revisionesCarrier.push({ rfx_event_id: eventId, vendor_id: vendorId, reviewed: revisado, reviewed_at: this.ahora(), reviewed_by: por, channel: "email" });
   }
 
   tokenDe(laneVendorId: string) {
@@ -240,6 +249,11 @@ export class RatewareSimulado {
         this.bitacorar(u.email, "bid_room.lane.conditions", "rfx_lanes", lane.id, null, null, { keys: filas.map((f) => f.condition_key), removed: quitadas });
         return ok({ version: RFX_CONDITION_CATALOG_VERSION, rows: filas.map((f) => ({ rfx_lane_id: f.rfx_lane_id, ...publicLaneCondition(f) })), removed: quitadas });
       }
+      case "list_rfx_invitation_wave_reviews": {
+        const event = this.evento(u, body.rfx_event_id || body.event_id);
+        if (this.fallas.fallarRevisiones) throw new Falla(500, "Review log unavailable", "REVIEWS_UNAVAILABLE");
+        return ok({ rows: this.revisionesCarrier.filter((r) => r.rfx_event_id === event.id).map((r) => ({ ...r })) });
+      }
       case "list_outreach_messages": {
         const event = this.evento(u, body.rfx_event_id || body.event_id);
         return ok({ rows: this.mensajes.filter((m) => m.rfx_event_id === event.id).map((m) => structuredClone(m)) });
@@ -316,12 +330,22 @@ export class RatewareSimulado {
         return ok({ rows: filas.map((f: Fila) => this.invitacionCruda(f)) });
       }
       case "generate_outreach_drafts": {
+        // Con reviewed_vendor_ids (Bidware) solo se preparan esos carriers; el
+        // resto se reporta en skipped_rows con su motivo.
         const event = this.evento(u, body.event_id || body.rfx_event_id);
-        const nuevos = this.laneVendors
+        const revisados = Array.isArray(body.reviewed_vendor_ids) ? new Set(body.reviewed_vendor_ids.map(String)) : null;
+        if (revisados && !revisados.size) throw new Falla(409, "Reviewed audience required", "reviewed_audience_required");
+        const pendientes = this.laneVendors
           .filter((lv) => lv.rfx_event_id === event.id && lv.invitation_status === "drafted")
-          .filter((lv) => !this.mensajes.some((m) => m.rfx_lane_vendor_id === lv.id && m.metadata.notice_type === "rfx_invitation"))
-          .map((lv) => this.invitacionMensaje(event, lv));
-        return ok({ rows: nuevos.map((m) => structuredClone(m)) });
+          .filter((lv) => !this.mensajes.some((m) => m.rfx_lane_vendor_id === lv.id && m.metadata.notice_type === "rfx_invitation"));
+        const omitidos = pendientes.filter((lv) => revisados && !revisados.has(lv.vendor_id));
+        const nuevos = pendientes.filter((lv) => !omitidos.includes(lv)).map((lv) => this.invitacionMensaje(event, lv));
+        return ok({
+          generated: nuevos.length,
+          skipped: omitidos.length,
+          skipped_rows: omitidos.map((lv) => ({ rfx_lane_vendor_id: lv.id, vendor_id: lv.vendor_id, reason: "not_reviewed" })),
+          rows: nuevos.map((m) => structuredClone(m))
+        });
       }
       case "generate_rfx_award_notices": {
         // Como rateware-api: no exige el evento «awarded» (eso lo pone el
@@ -343,15 +367,32 @@ export class RatewareSimulado {
         // o failed; con confirmación explícita.
         if (body.confirmed !== true || body.confirmation_action !== "send_outreach_messages") throw new Falla(400, "Confirmation required", "CONFIRMATION_REQUIRED");
         const ids: string[] = Array.isArray(body.ids) ? body.ids : [];
+        if (ids.length > 100) throw new Falla(400, "At most 100 messages per call.", "TOO_MANY_MESSAGES");
+        const previa = body.operation_id ? this.operacionesEnvio.get(String(body.operation_id)) : null;
+        if (previa) return ok(structuredClone(previa));
         const versiones = new Map((body.expected_versions || []).map((v: Fila) => [v.id, v.updated_at]));
         const mensajes = ids.map((id) => this.mensaje(u, id));
         for (const m of mensajes) {
           if (versiones.get(m.id) !== m.updated_at) throw new Falla(409, "The message changed since it was reviewed.", "OUTREACH_VERSION_CONFLICT");
           if (!["drafted", "queued", "failed"].includes(m.status)) throw new Falla(409, "The message is not sendable.", "OUTREACH_NOT_SENDABLE");
         }
+        const enviados: Fila[] = [];
+        const enCola: Fila[] = [];
         for (const m of mensajes) {
           const antes = m.status;
+          if (this.fallas.cuotaGmail !== null && this.fallas.cuotaGmail <= 0) {
+            // Gmail respondió dailyLimitExceeded: Rateware pausa y lo deja en cola.
+            m.status = "queued";
+            m.delivery_error = "dailyLimitExceeded";
+            m.updated_at = this.marca();
+            this.bitacorar(u.email, "outreach.queue", "outreach_messages", m.id, antes, "queued", { reason: "daily_cap" });
+            enCola.push(m);
+            continue;
+          }
+          if (this.fallas.cuotaGmail !== null) this.fallas.cuotaGmail -= 1;
+          enviados.push(m);
           m.status = "sent";
+          m.delivery_error = null;
           m.provider_message_id = `gm_${m.id.slice(-6)}`;
           m.sent_at = this.ahora();
           m.updated_at = this.marca();
@@ -362,7 +403,18 @@ export class RatewareSimulado {
             this.bitacorar(u.email, "rfx.vendor.invite", "rfx_lane_vendors", lv.id, "drafted", "invited");
           }
         }
-        return ok({ sent: mensajes.length, rows: mensajes.map((m) => structuredClone(m)) });
+        const resultado = {
+          sent: enviados.length,
+          failed: 0,
+          skipped: enCola.length,
+          delivery_unknown: 0,
+          failures: [],
+          skipped_rows: enCola.map((m) => ({ id: m.id, reason: "daily_cap" })),
+          operation_id: body.operation_id ?? null,
+          rows: mensajes.map((m) => structuredClone(m))
+        };
+        if (body.operation_id) this.operacionesEnvio.set(String(body.operation_id), structuredClone(resultado));
+        return ok(resultado);
       }
       case "update_rfx_event": {
         // rateware-api: el cambio llega en body.patch. status «closed» NO es el

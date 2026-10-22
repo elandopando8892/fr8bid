@@ -5,12 +5,24 @@
 import type { EntradaCatalogo } from "../dominio/condiciones-r1";
 import { operacionEntrega } from "../dominio/operacion";
 import { hoyMexico, primario, versionMasReciente, versionVigente } from "../dominio/recorrido";
+import { ESPERA_ENTRE_TANDAS_MS, esCuota, leerResultado, operacionTanda, planearTandas, requiereAtencion, type ResultadoEnvio } from "../dominio/tandas";
 import type { Aviso, Detalle, EntregaLocal, Recibo, ResumenEvento } from "../dominio/tipos";
 import { manejar, type Respuesta, type Servicio } from "../servidor/proxy";
 import type { RatewareSimulado } from "../simulado/rateware";
 import * as mapear from "./mapear";
 
 export type Transporte = (servicio: Servicio, body: Record<string, unknown>) => Promise<Respuesta>;
+
+export interface AvanceEnvio {
+  tandas: number;
+  hechas: number;
+  enviados: number;
+  enCola: number;
+  fallidos: number;
+  inciertos: number;
+  pendientes: number;
+  detenido: string | null;
+}
 
 export class ErrorApi extends Error {
   constructor(public status: number, public code: string, mensaje: string, public incierta = false) {
@@ -72,13 +84,14 @@ export class MesaApi {
   }
 
   async detalle(eventId: string, recibo: Recibo | null = null): Promise<Detalle> {
-    const [crudo, mensajes, rubros, condiciones] = await Promise.all([
+    const [crudo, mensajes, rubros, condiciones, revisiones] = await Promise.all([
       this.rw({ action: "list_rfx_detail", event_id: eventId }),
       this.rw({ action: "list_outreach_messages", rfx_event_id: eventId }),
       this.rw({ action: "list_rfx_segment_confirmations", event_id: eventId }),
-      this.condicionesDe(eventId)
+      this.condicionesDe(eventId),
+      this.revisionesDe(eventId)
     ]);
-    const d = mapear.detalle(crudo, mensajes.rows || mensajes.messages || [], null, { hoy: this.hoy(), rubros: rubros.rows || [], condiciones });
+    const d = mapear.detalle(crudo, mensajes.rows || mensajes.messages || [], null, { hoy: this.hoy(), rubros: rubros.rows || [], condiciones, revisiones });
     return { ...d, recibo };
   }
 
@@ -90,6 +103,15 @@ export class MesaApi {
     } catch (e) {
       if (e instanceof ErrorApi && e.code === "PASO_EN_RATEWARE") return [];
       throw e;
+    }
+  }
+  // Marca «Revisado» de Bidware. Si no se puede leer, la Mesa no deja invitar
+  // a nadie (null), pero el resto del evento se sigue viendo.
+  private async revisionesDe(eventId: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      return (await this.rw({ action: "list_rfx_invitation_wave_reviews", rfx_event_id: eventId })).rows || [];
+    } catch {
+      return null;
     }
   }
   async catalogoCondiciones(): Promise<EntradaCatalogo[]> {
@@ -109,8 +131,10 @@ export class MesaApi {
   preseleccionar(laneId: string, vendorIds: string[]) {
     return this.rw({ action: "shortlist_rfx_lane_vendors", lane_id: laneId, vendor_ids: vendorIds });
   }
-  prepararInvitaciones(eventId: string) {
-    return this.rw({ action: "generate_outreach_drafts", event_id: eventId });
+  // Solo para carriers con la marca «Revisado» vigente (el proxy lo vuelve a
+  // comprobar). Rateware reporta los omitidos en skipped_rows.
+  prepararInvitaciones(eventId: string, revisados: string[]) {
+    return this.rw({ action: "generate_outreach_drafts", event_id: eventId, reviewed_vendor_ids: revisados });
   }
   publicar(eventId: string) {
     return this.rw({ action: "update_rfx_event", event_id: eventId, patch: { status: "open" } });
@@ -223,7 +247,8 @@ export class MesaApi {
   generarAvisosAdjudicacion(eventId: string) {
     return this.rw({ action: "generate_rfx_award_notices", event_id: eventId });
   }
-  // Aprobar = enviar con la versión (updated_at) que el Administrador vio.
+  // Aprobar = enviar con la versión (updated_at) que el Administrador vio. El
+  // operation_id sale de los avisos y sus versiones: repetir no reenvía.
   enviarAvisos(eventId: string, avisos: Aviso[]) {
     return this.rw({
       action: "send_outreach_messages",
@@ -233,8 +258,56 @@ export class MesaApi {
       provider: "gmail",
       channel: "email",
       confirmed: true,
-      confirmation_action: "send_outreach_messages"
+      confirmation_action: "send_outreach_messages",
+      operation_id: operacionTanda(eventId, avisos)
     });
+  }
+
+  // Varias invitaciones: tandas espaciadas. Se detiene en la primera tanda que
+  // no sale completa (cuota de Gmail, fallo, incierto) y no reintenta sola; lo
+  // que quedó en cola se ve como «en cola», nunca como enviado.
+  async enviarPorTandas(
+    eventId: string,
+    avisos: Aviso[],
+    o: { tamano?: number; esperaMs?: number; esperar?: (ms: number) => Promise<void>; alAvanzar?: (p: AvanceEnvio) => void; detener?: () => boolean } = {}
+  ): Promise<AvanceEnvio> {
+    const tandas = planearTandas(avisos, o.tamano);
+    const esperar = o.esperar ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    const avance: AvanceEnvio = { tandas: tandas.length, hechas: 0, enviados: 0, enCola: 0, fallidos: 0, inciertos: 0, pendientes: avisos.length, detenido: null };
+    for (const [i, tanda] of tandas.entries()) {
+      if (i > 0) {
+        if (o.detener?.()) return { ...avance, detenido: "Detenido por el Administrador." };
+        await esperar(o.esperaMs ?? ESPERA_ENTRE_TANDAS_MS);
+        if (o.detener?.()) return { ...avance, detenido: "Detenido por el Administrador." };
+      }
+      const ids = tanda.map((a) => a.id);
+      let r: ResultadoEnvio;
+      try {
+        r = leerResultado(await this.enviarAvisos(eventId, tanda), ids);
+      } catch (e) {
+        if (e instanceof ErrorApi && e.incierta) {
+          avance.inciertos += ids.length;
+          avance.detenido = "Rateware no respondió: esta tanda queda incierta. Revisa la Cola antes de seguir; reintentar no la duplica.";
+          return avance;
+        }
+        throw e;
+      }
+      const enCola = r.skipped_rows.filter((x) => esCuota(x.reason)).length;
+      avance.hechas += 1;
+      avance.enviados += r.sent;
+      avance.enCola += enCola;
+      avance.fallidos += r.failed;
+      avance.inciertos += r.delivery_unknown;
+      avance.pendientes -= r.sent;
+      o.alAvanzar?.({ ...avance });
+      if (requiereAtencion(r, ids)) {
+        avance.detenido = enCola
+          ? `Gmail llegó a su cuota diaria: ${enCola} quedan en cola, sin enviar. Vuelve a aprobarlas cuando Gmail renueve la cuota; no se reintentan solas.`
+          : "Una tanda no salió completa. Revisa los avisos antes de seguir.";
+        return avance;
+      }
+    }
+    return avance;
   }
 
   // ——— Liga del carrier ———

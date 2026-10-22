@@ -19,8 +19,10 @@ import {
   type Contexto
 } from "../src/dominio/recorrido";
 import type { Detalle, EntregaLocal, Participacion } from "../src/dominio/tipos";
+import { audienciaInvitacion } from "../src/dominio/revision";
+import { operacionTanda, planearTandas } from "../src/dominio/tandas";
 import { ESCRITURAS, manejar, sinSecretos, SOLO_SIMULADO } from "../src/servidor/proxy";
-import { crearSimulado, sembrarDemo } from "../src/simulado/semilla";
+import { crearSimulado, ORG, sembrarDemo } from "../src/simulado/semilla";
 import type { RatewareSimulado } from "../src/simulado/rateware";
 
 const SIN_ENTREGA: EntregaLocal = { estado: "sin_preparar", operationId: null, error: null };
@@ -83,7 +85,9 @@ describe("§9 recorrido de la rebanada", () => {
     const { rows: lanes } = await op.importarRutas(event.id, [{ origin_city: "Monterrey", destination_city: "Dallas", equipment: "Dry Van", target_rate: 1700 }]);
     await op.preseleccionar(lanes[0].id, [carriers.A.id, carriers.B.id]);
     await op.publicar(event.id);
-    await op.prepararInvitaciones(event.id);
+    s.revisar(event.id, carriers.A.id);
+    s.revisar(event.id, carriers.B.id);
+    await op.prepararInvitaciones(event.id, [carriers.A.id, carriers.B.id]);
 
     let d = await adm.detalle(event.id);
     let r = recorrido(d, ctx());
@@ -488,6 +492,129 @@ describe("condiciones de ruta (parche R1)", () => {
     const api = new MesaApi(async (servicio, body) => manejar(servicio, body, "Bearer x", op), () => "2026-10-21");
     expect((await api.detalle("e1")).rutas).toEqual([]);
     expect(llamadas).not.toContain("list_rfx_lane_conditions");
+  });
+});
+
+// Regla de PRIMA (22-oct): solo se invita a carriers con «Revisado» vigente.
+async function eventoConTres() {
+  const { sim: s, carriers } = crearSimulado();
+  relojDeTicks(s);
+  const op = new MesaApi(transporteSimulado(s, () => "operador"), () => s.hoy());
+  const adm = new MesaApi(transporteSimulado(s, () => "admin"), () => s.hoy());
+  const { row: event } = await op.crearEvento({ name: "PRUEBA CONTROLADA · revisados", customer: "Shipper de Prueba", due_date: "2026-10-31" });
+  const { rows: lanes } = await op.importarRutas(event.id, [{ origin_city: "Monterrey", destination_city: "Dallas", equipment: "Dry Van" }]);
+  await op.preseleccionar(lanes[0].id, [carriers.A.id, carriers.B.id, carriers.C.id]);
+  await op.publicar(event.id);
+  return { s, carriers, op, adm, eventId: event.id as string };
+}
+
+describe("solo carriers revisados", () => {
+  it("prepara solo para revisados, dice a quién omite y por qué", async () => {
+    const { s, carriers, op, adm, eventId: id } = await eventoConTres();
+    s.revisar(id, carriers.A.id);
+    s.revisar(id, carriers.B.id);
+    s.revisar(id, carriers.B.id, false); // revocada después
+    let d = await adm.detalle(id);
+    const a = audienciaInvitacion(d);
+    expect(a.aptas.map((p) => p.carrier)).toEqual(["Carrier Prueba A"]);
+    expect(a.omitidas.map((o) => [o.p.carrier, o.motivo])).toEqual([
+      ["Carrier Prueba B", "revisión revocada"],
+      ["Carrier Prueba C", "sin revisión"]
+    ]);
+
+    // Sin lista de revisados, o con un carrier sin revisar, no se prepara nada.
+    await expect(op.prepararInvitaciones(id, [])).rejects.toMatchObject({ status: 409, code: "REVISADOS_REQUERIDOS" });
+    await expect(op.prepararInvitaciones(id, [carriers.A.id, carriers.C.id])).rejects.toMatchObject({ status: 409, code: "CARRIER_SIN_REVISION" });
+    expect(s.mensajes).toHaveLength(0);
+
+    const r = await op.prepararInvitaciones(id, [carriers.A.id]);
+    expect(r.generated).toBe(1);
+    expect(r.skipped_rows.map((x: any) => x.reason)).toEqual(["not_reviewed", "not_reviewed"]);
+    d = await adm.detalle(id);
+    expect(d.avisos).toHaveLength(1);
+    await adm.enviarAvisos(id, d.avisos);
+    d = await adm.detalle(id);
+    // Los omitidos no detienen el recorrido, pero se ven.
+    const paso4 = recorrido(d, ctx()).pasos[3];
+    expect(paso4.estado).toBe("hecho");
+    expect(paso4.detalle).toContain("2 sin revisión");
+  });
+
+  it("si la revisión se revoca o no se puede leer, no se envía", async () => {
+    const { s, carriers, op, adm, eventId: id } = await eventoConTres();
+    s.revisar(id, carriers.A.id);
+    await op.prepararInvitaciones(id, [carriers.A.id]);
+    s.revisar(id, carriers.A.id, false);
+    let d = await adm.detalle(id);
+    await expect(adm.enviarAvisos(id, d.avisos)).rejects.toMatchObject({ status: 409, code: "CARRIER_SIN_REVISION" });
+
+    s.revisar(id, carriers.A.id);
+    s.fallas.fallarRevisiones = true;
+    d = await adm.detalle(id);
+    expect(d.revisiones).toBeNull();
+    expect(audienciaInvitacion(d).omitidas.every((o) => o.estado === "sin_consulta")).toBe(true);
+    await expect(adm.enviarAvisos(id, d.avisos)).rejects.toMatchObject({ status: 503, code: "REVISION_NO_DISPONIBLE" });
+    expect(s.mensajes.every((m) => m.status === "drafted")).toBe(true);
+  });
+});
+
+describe("envío por tandas y cuota de Gmail", () => {
+  it("tandas con operation_id fijo; la cuota detiene, deja «en cola» y no duplica", async () => {
+    const { sim: s, carriers } = crearSimulado();
+    relojDeTicks(s);
+    const op = new MesaApi(transporteSimulado(s, () => "operador"), () => s.hoy());
+    const adm = new MesaApi(transporteSimulado(s, () => "admin"), () => s.hoy());
+    const extra = Array.from({ length: 4 }, (_, i) => s.agregarVendor(ORG, `Carrier Extra ${i + 1}`));
+    const vendors = [carriers.A, carriers.B, carriers.C, ...extra];
+    const { row: event } = await op.crearEvento({ name: "PRUEBA CONTROLADA · tandas", customer: "Shipper de Prueba", due_date: "2026-10-31" });
+    const { rows: lanes } = await op.importarRutas(event.id, [{ origin_city: "Monterrey", destination_city: "Dallas", equipment: "Dry Van" }]);
+    await op.preseleccionar(lanes[0].id, vendors.map((v) => v.id));
+    await op.publicar(event.id);
+    for (const v of vendors) s.revisar(event.id, v.id);
+    await op.prepararInvitaciones(event.id, vendors.map((v) => v.id));
+    let d = await adm.detalle(event.id);
+    expect(planearTandas(d.avisos, 3).map((t) => t.length)).toEqual([3, 3, 1]);
+    expect(operacionTanda(event.id, d.avisos)).toBe(operacionTanda(event.id, [...d.avisos].reverse()));
+
+    const inicial = d.avisos;
+    s.fallas.cuotaGmail = 4;
+    const esperas: number[] = [];
+    const r = await adm.enviarPorTandas(event.id, d.avisos, { tamano: 3, esperaMs: 60000, esperar: async (ms) => void esperas.push(ms) });
+    expect(r).toMatchObject({ tandas: 3, hechas: 2, enviados: 4, enCola: 2, detenido: expect.stringContaining("cuota") });
+    expect(esperas).toEqual([60000]); // la tercera tanda ni se intenta
+    d = await adm.detalle(event.id);
+    const estados = d.avisos.map((a) => a.estado).sort();
+    expect(estados).toEqual(["aceptado", "aceptado", "aceptado", "aceptado", "borrador", "en_cola", "en_cola"]);
+    expect(d.avisos.filter((a) => a.estado === "en_cola").every((a) => a.motivo === "dailyLimitExceeded")).toBe(true);
+    expect(recorrido(d, ctx()).pasos[3].estado).toBe("actual");
+
+    // Repetir la misma tanda (mismo operation_id, p. ej. tras perder la
+    // respuesta) devuelve el resultado guardado y no reenvía nada.
+    const antes = s.bitacora.filter((b) => b.accion === "outreach.send").length;
+    expect(s.operacionesEnvio.size).toBe(2);
+    const otraVez = await adm.enviarAvisos(event.id, planearTandas(inicial, 3)[0]);
+    expect(otraVez.sent).toBe(3);
+    expect(s.bitacora.filter((b) => b.accion === "outreach.send").length).toBe(antes);
+
+    // Gmail renueva la cuota: se aprueban otra vez las pendientes, con su versión nueva.
+    s.fallas.cuotaGmail = null;
+    const pendientes = d.avisos.filter((a) => a.estado === "en_cola" || a.estado === "borrador");
+    const fin = await adm.enviarPorTandas(event.id, pendientes, { tamano: 3, esperar: async () => {} });
+    expect(fin).toMatchObject({ enviados: 3, detenido: null });
+    d = await adm.detalle(event.id);
+    expect(d.avisos.every((a) => a.estado === "aceptado")).toBe(true);
+    expect(recorrido(d, ctx()).pasos[3].estado).toBe("hecho");
+  });
+
+  it("el proxy rechaza más de 100 avisos por llamada", async () => {
+    const ids = Array.from({ length: 101 }, (_, i) => `m${i}`);
+    const r = await manejar(
+      "rateware-api",
+      { action: "send_outreach_messages", rfx_event_id: "e1", ids, expected_versions: ids.map((id) => ({ id, updated_at: "v" })), provider: "gmail", channel: "email", confirmed: true, confirmation_action: "send_outreach_messages" },
+      "Bearer x",
+      { enviar: async () => { throw new Error("no debe llamar"); }, permitirEscrituras: true }
+    );
+    expect(r.body.code).toBe("TANDA_GRANDE");
   });
 });
 

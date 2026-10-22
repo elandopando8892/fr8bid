@@ -7,6 +7,7 @@ import { conditionKeyFromRubric } from "../dominio/condiciones-r1.js";
 import { huellaAviso, huellaOferta } from "../dominio/huella.js";
 import { esProtegido } from "../dominio/protegidos.js";
 import { hoyMexico } from "../dominio/recorrido.js";
+import { revisionesVigentes } from "../dominio/revision.js";
 import type {
   Aviso,
   CondicionRuta,
@@ -67,8 +68,8 @@ function estadoEvento(e: Fila, hoy: string): EstadoEvento {
 // queued/sending/delivery_unknown no se reenvían: cuentan como inciertos.
 const ESTADO_AVISO: Record<string, EstadoAviso> = {
   drafted: "borrador",
-  queued: "incierto",
-  sending: "incierto",
+  queued: "en_cola",
+  sending: "en_cola",
   sent: "aceptado",
   delivered: "aceptado",
   read: "aceptado",
@@ -209,7 +210,8 @@ export function aviso(m: Fila): Aviso {
     huella: huellaAviso(base),
     version: String(m.updated_at || ""),
     estado: ESTADO_AVISO[String(m.status)] || "incierto",
-    reciboProveedor: m.provider_message_id || null
+    reciboProveedor: m.provider_message_id || null,
+    motivo: m.delivery_error || m.last_error || null
   };
 }
 
@@ -230,7 +232,7 @@ export function detalle(
   crudo: Fila,
   mensajes: Fila[] = [],
   reciboCrudo: Fila | null = null,
-  extra: { hoy?: string; rubros?: Fila[]; condiciones?: Fila[] } = {}
+  extra: { hoy?: string; rubros?: Fila[]; condiciones?: Fila[]; revisiones?: Fila[] | null } = {}
 ): Detalle {
   const hoy = extra.hoy ?? hoyMexico();
   const e = crudo.event || {};
@@ -247,7 +249,8 @@ export function detalle(
     },
     rutas: (crudo.lanes || []).map((l: Fila) => ruta(l, extra.rubros || [], extra.condiciones || [])).sort((a: Ruta, b: Ruta) => a.numero - b.numero),
     avisos: mensajes.map(aviso),
-    recibo: reciboCrudo ? recibo(reciboCrudo) : null
+    recibo: reciboCrudo ? recibo(reciboCrudo) : null,
+    revisiones: extra.revisiones ? revisionesVigentes(extra.revisiones) : null
   };
 }
 

@@ -2,6 +2,7 @@
 // el siguiente paso con su responsable. La Mesa del evento solo pinta lo que
 // esta función decide; las pruebas del §9 se escriben contra ella.
 
+import { audienciaInvitacion } from "./revision.js";
 import type { Aviso, Detalle, EntregaLocal, OfertaVersion, Participacion, Rol, Ruta } from "./tipos.js";
 
 export type EstadoPaso = "hecho" | "actual" | "bloqueado" | "pendiente";
@@ -193,11 +194,12 @@ export function avisoDe(detalle: Detalle, participacionId: string, tipo: Aviso["
 // OUTREACH_VERSION_CONFLICT si el texto cambió desde entonces).
 export function candadosAviso(detalle: Detalle, aviso: Aviso, ctx: Contexto): Candado[] {
   const recibo = entregaConfirmada(detalle, ctx.entrega);
-  const enviable = aviso.estado === "borrador" || aviso.estado === "fallido";
+  // «en_cola» (pausado por cuota de Gmail) se puede volver a enviar con su versión nueva.
+  const enviable = aviso.estado === "borrador" || aviso.estado === "fallido" || aviso.estado === "en_cola";
   return [
     { regla: "I8", ok: aviso.tipo !== "adjudicacion" || recibo, texto: recibo ? "Recibo de Rateware confirmado" : "Requiere el recibo de Rateware" },
     { regla: "I7", ok: Boolean(aviso.version), texto: aviso.version ? "Se envía solo esta versión exacta del texto" : "Sin versión del texto: vuelve a cargar" },
-    { regla: "I7", ok: enviable, texto: aviso.estado === "incierto" ? "Envío incierto: conciliar en la Cola antes de otro intento" : enviable ? "Sin envío previo" : "Ya salió" },
+    { regla: "I7", ok: enviable, texto: aviso.estado === "incierto" ? "Envío incierto: conciliar en la Cola antes de otro intento" : aviso.estado === "en_cola" ? "En cola en Rateware: aún no salió" : enviable ? "Sin envío previo" : "Ya salió" },
     { regla: "rol", ok: ctx.rol === "admin", texto: ctx.rol === "admin" ? "Tu rol: Administrador" : "Solo el Administrador aprueba y envía avisos" }
   ];
 }
@@ -229,20 +231,26 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
   pasos.push(
     paso("carriers", 3, !rutas.length ? "pendiente" : todas.length ? "hecho" : "actual", todas.length ? `${todas.length} carrier(s)` : "Elegir carriers", "Operador")
   );
-  const invitacionHecha = todas.length > 0 && preseleccionadas.length === 0 && evento.estado !== "borrador";
+  // Los carriers sin «Revisado» no se invitan y no detienen el paso; si la
+  // revisión no se pudo consultar, nadie cuenta como omitido a propósito.
+  const { aptas, omitidas } = audienciaInvitacion(detalle);
+  const porInvitar = detalle.revisiones ? aptas.length : preseleccionadas.length;
+  const invitadas = todas.length - preseleccionadas.length;
+  const invitacionHecha = invitadas > 0 && porInvitar === 0 && evento.estado !== "borrador";
+  const sinRevision = detalle.revisiones && omitidas.length ? ` · ${omitidas.length} sin revisión (no se invitan)` : "";
   pasos.push(
     paso(
       "invitacion",
       4,
       !todas.length ? "pendiente" : invitacionHecha ? "hecho" : "actual",
-      invitacionHecha ? `${todas.length} invitación(es) aceptadas` : `${preseleccionadas.length} por aprobar y enviar`,
+      (invitacionHecha ? `${invitadas} invitación(es) aceptadas` : `${porInvitar} por aprobar y enviar`) + sinRevision,
       "Administrador"
     )
   );
   // Todos respondieron o declinaron: ya no se espera a los carriers, toca cerrar.
-  const sinPendientes = todas.every((p) => versionVigente(p) || p.estado === "declino");
+  const sinPendientes = todas.filter((p) => p.estado !== "preseleccionada").every((p) => versionVigente(p) || p.estado === "declino");
   const ofertasEstado: EstadoPaso = !invitacionHecha ? "pendiente" : abierto && !sinPendientes ? "actual" : "hecho";
-  pasos.push(paso("ofertas", 5, ofertasEstado, `${respondieron.length} de ${todas.length} respondieron`, "Carriers"));
+  pasos.push(paso("ofertas", 5, ofertasEstado, `${respondieron.length} de ${invitadas} respondieron`, "Carriers"));
   pasos.push(
     paso("comparar", 6, !invitacionHecha || !respondieron.length ? "pendiente" : cerradoOMas || sinPendientes ? "hecho" : "actual", "Comparativo por ruta", "Administrador")
   );

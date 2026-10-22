@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ErrorApi } from "../cliente/api";
+import { ErrorApi, type AvanceEnvio } from "../cliente/api";
 import { proyeccionLoads } from "../dominio/loads";
 import { operacionAdjudicacion } from "../dominio/operacion";
 import {
@@ -18,7 +18,9 @@ import {
   type ClavePaso,
   type Contexto
 } from "../dominio/recorrido";
-import type { Detalle, EntregaLocal, Participacion, Recibo, Ruta } from "../dominio/tipos";
+import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
+import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
+import type { Aviso, Detalle, EntregaLocal, Participacion, Recibo, Ruta } from "../dominio/tipos";
 import { EditorCondiciones, ListaCondiciones, MatrizCondiciones } from "./condiciones";
 import { aCarga, Confirmar, Desactualizado, dinero, EstadoVista, fecha, Liga, Prueba, type Carga } from "./comun";
 import { useSesion } from "./sesion";
@@ -52,11 +54,11 @@ export function Mesa({ id }: { id: string }) {
   const r = recorrido(d, ctx);
   const actual = vista ?? r.actual?.clave ?? "loads";
 
-  const accion = async (f: () => Promise<unknown>, ok?: string) => {
+  const accion = async <T,>(f: () => Promise<T>, ok?: string | ((r: T) => string)) => {
     setAvisoMsg(null);
     try {
-      await f();
-      if (ok) setAvisoMsg({ tipo: "ok", texto: ok });
+      const r = await f();
+      if (ok) setAvisoMsg({ tipo: "ok", texto: typeof ok === "function" ? ok(r) : ok });
     } catch (e) {
       const extra = e instanceof ErrorApi && e.code === "ESCRITURA_NO_AUTORIZADA" ? " (FR8BID_ESCRITURAS_REALES no está activo)" : "";
       setAvisoMsg({ tipo: "error", texto: (e instanceof Error ? e.message : String(e)) + extra });
@@ -133,7 +135,7 @@ const ESTADO: Record<Detalle["evento"]["estado"], string> = {
 type Props = {
   d: Detalle;
   ctx: Contexto;
-  accion: (f: () => Promise<unknown>, ok?: string) => Promise<void>;
+  accion: <T>(f: () => Promise<T>, ok?: string | ((r: T) => string)) => Promise<void>;
   entrega: EntregaLocal;
   setEntrega: (e: EntregaLocal) => void;
   recibo: Recibo | null;
@@ -199,11 +201,33 @@ function PanelEvento({ d, ctx, accion }: Props) {
   );
 }
 
+const ESTADO_INVITACION: Record<string, string> = {
+  borrador: "borrador",
+  en_cola: "en cola (sin enviar)",
+  aceptado: "aceptada por Gmail",
+  rebotado: "rebotada",
+  fallido: "falló",
+  incierto: "incierta"
+};
+
 function PanelInvitacion({ d, ctx, accion }: Props) {
   const s = useSesion();
+  const [avance, setAvance] = useState<AvanceEnvio | null>(null);
   const invitaciones = d.avisos.filter((a) => a.tipo === "invitacion");
-  const porEnviar = invitaciones.filter((a) => a.estado === "borrador" || a.estado === "fallido");
-  const preseleccionadas = d.rutas.flatMap((r) => r.participaciones).filter((x) => x.estado === "preseleccionada");
+  const todas = d.rutas.flatMap((r) => r.participaciones);
+  const carrierDe = (a: Aviso) => todas.find((x) => x.id === a.participacionId);
+  // Solo salen invitaciones de carriers con «Revisado» vigente (el servidor lo
+  // vuelve a comprobar); las demás se quedan y se dice por qué.
+  const revisada = (a: Aviso) => {
+    const p = carrierDe(a);
+    return Boolean(p && estadoRevision(d, p.carrierId) === "revisado");
+  };
+  const enviables = invitaciones.filter((a) => a.estado === "borrador" || a.estado === "fallido" || a.estado === "en_cola");
+  const porEnviar = enviables.filter(revisada);
+  const detenidas = enviables.filter((a) => !revisada(a));
+  const audiencia = audienciaInvitacion(d);
+  const sinBorrador = audiencia.aptas.filter((p) => !invitaciones.some((a) => a.participaciones.includes(p.id)));
+  const tandas = planearTandas(porEnviar).length;
   return (
     <div className="tarjeta">
       <h2>Invitación</h2>
@@ -218,39 +242,93 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
           />
         </div>
       )}
-      {!invitaciones.length && !preseleccionadas.length && <p className="tenue">El Operador aún no prepara las invitaciones.</p>}
-      {!invitaciones.length && preseleccionadas.length > 0 && (
-        <p className="tenue">Sin invitaciones preparadas en Fr8Bid para {preseleccionadas.length} carrier(s) preseleccionado(s).</p>
+      {!d.revisiones && (
+        <p className="estado estado-error">No se pudo consultar qué carriers están revisados en Bidware. No se prepara ni envía ninguna invitación hasta poder consultarlo.</p>
+      )}
+      {audiencia.omitidas.length > 0 && d.revisiones && (
+        <div className="aviso-caja">
+          <p><b>{resumenOmisiones(audiencia)}</b> Márcalos como «Revisado» en Bidware si deben recibirla.</p>
+          <ul>
+            {audiencia.omitidas.map((o) => <li key={o.p.id}>{o.p.carrier}: {o.motivo}</li>)}
+          </ul>
+        </div>
+      )}
+      {!invitaciones.length && !audiencia.aptas.length && !audiencia.omitidas.length && <p className="tenue">El Operador aún no prepara las invitaciones.</p>}
+      {sinBorrador.length > 0 && ctx.rol !== "viewer" && (
+        <Confirmar
+          etiqueta={`Preparar invitación para ${sinBorrador.length} carrier(s) revisado(s)`}
+          clase="btn-secundario"
+          advertencia={<>Crea los borradores en la Cola de Rateware solo para: {sinBorrador.map((x) => x.carrier).join(", ")}. No envía nada. {ADVERTENCIA_REAL(s, d)}</>}
+          onConfirmar={() =>
+            accion(
+              () => s.api.prepararInvitaciones(d.evento.id, [...new Set(sinBorrador.map((x) => x.carrierId))]),
+              (r: any) => {
+                const n = Number(r?.generated ?? r?.rows?.length ?? 0);
+                const omitidos = Number(r?.skipped ?? r?.skipped_rows?.length ?? 0);
+                if (!n) return `No se preparó ningún borrador${omitidos ? `: Rateware omitió ${omitidos}` : ""}. Revisa la Cola de Rateware.`;
+                return `${n} borrador(es) preparados${omitidos ? `; ${omitidos} omitido(s) por Rateware` : ""}.`;
+              }
+            )
+          }
+        />
       )}
       {invitaciones.map((a) => {
-        const p = d.rutas.flatMap((r) => r.participaciones).find((x) => x.id === a.participacionId);
+        const p = carrierDe(a);
         return (
           <div key={a.id} className="aviso-caja">
             <div className="fila">
               <b>{p?.carrier}</b>
-              <span className="pill">{a.estado}</span>
+              <span className="pill">{ESTADO_INVITACION[a.estado] ?? a.estado}</span>
+              {p && enviables.includes(a) && !revisada(a) && <span className="pill">{MOTIVO_OMISION[estadoRevision(d, p.carrierId) as keyof typeof MOTIVO_OMISION]}</span>}
             </div>
             <p className="tenue">Para: {a.destinatario} · Gmail</p>
+            {a.estado === "en_cola" && (
+              <p className="tenue">Rateware la tiene en cola{a.motivo ? ` (${/dailyLimit|daily_cap|quota/i.test(a.motivo) ? "cuota diaria de Gmail" : a.motivo})` : ""}. Todavía no salió.</p>
+            )}
             <p><b>{a.asunto}</b></p>
             <p className="texto-aviso">{a.cuerpo}</p>
           </div>
         );
       })}
+      {detenidas.length > 0 && (
+        <p className="tenue">{detenidas.length} borrador(es) no se envían porque su carrier no tiene «Revisado» vigente.</p>
+      )}
+      {avance && (
+        <p className={avance.detenido ? "estado estado-error" : "tenue"}>
+          Tanda {avance.hechas} de {avance.tandas}: {avance.enviados} aceptada(s) por Gmail{avance.enCola ? `, ${avance.enCola} en cola` : ""}
+          {avance.inciertos ? `, ${avance.inciertos} incierta(s)` : ""}. {avance.detenido ?? ""}
+        </p>
+      )}
       {porEnviar.length > 0 && ctx.rol === "admin" && (
         <Confirmar
           etiqueta={`Aprobar y enviar ${porEnviar.length} invitación(es) con este texto exacto`}
-          advertencia={<>Se envían por Gmail desde sales@heymarksman.com, exactamente como se ven arriba. {ADVERTENCIA_REAL(s, d)}</>}
-          onConfirmar={() => accion(() => s.api.enviarAvisos(d.evento.id, porEnviar), "Invitaciones aceptadas por Gmail.")}
+          advertencia={
+            <>
+              Se envían por Gmail desde sales@heymarksman.com, exactamente como se ven arriba
+              {tandas > 1 ? `, en ${tandas} tandas de hasta ${TAMANO_TANDA} con un minuto entre tandas` : ""}. Si Gmail llega a su cuota diaria, el envío se detiene y lo pendiente queda en cola, sin reintentos automáticos. {ADVERTENCIA_REAL(s, d)}
+            </>
+          }
+          onConfirmar={() =>
+            accion(
+              async () => {
+                const r = await s.api.enviarPorTandas(d.evento.id, porEnviar, { alAvanzar: setAvance });
+                setAvance(r);
+                if (r.detenido) throw new Error(`${r.enviados} de ${porEnviar.length} aceptadas por Gmail. ${r.detenido}`);
+                return r;
+              },
+              (r) => `${r.enviados} invitación(es) aceptadas por Gmail.`
+            )
+          }
         />
       )}
-      {preseleccionadas.length > 0 && ctx.rol === "admin" && (
+      {audiencia.aptas.length > 0 && ctx.rol === "admin" && (
         <div className="aviso-caja">
-          <p>¿La invitación ya salió por otro canal (correo propio, WhatsApp, llamada)? Márcalos como invitados para poder capturar sus ofertas.</p>
+          <p>¿La invitación ya salió por otro canal (correo propio, WhatsApp, llamada)? Márcalos como invitados para poder capturar sus ofertas. Solo aparecen los carriers revisados.</p>
           <Confirmar
-            etiqueta={`Marcar ${preseleccionadas.length} como invitado(s) sin enviar`}
+            etiqueta={`Marcar ${audiencia.aptas.length} como invitado(s) sin enviar`}
             clase="btn-secundario"
-            advertencia={<>Solo cambia el estado en Rateware: {preseleccionadas.map((x) => x.carrier).join(", ")}. Fr8Bid no envía nada. {ADVERTENCIA_REAL(s, d)}</>}
-            onConfirmar={() => accion(() => s.api.marcarInvitadas(d.evento.id, preseleccionadas.map((x) => x.id)), "Marcados como invitados.")}
+            advertencia={<>Solo cambia el estado en Rateware: {audiencia.aptas.map((x) => x.carrier).join(", ")}. Fr8Bid no envía nada. {ADVERTENCIA_REAL(s, d)}</>}
+            onConfirmar={() => accion(() => s.api.marcarInvitadas(d.evento.id, audiencia.aptas.map((x) => x.id)), "Marcados como invitados.")}
           />
         </div>
       )}

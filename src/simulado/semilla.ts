@@ -41,7 +41,9 @@ export async function sembrarDemo() {
   });
   const { rows } = await op({ action: "shortlist_rfx_lane_vendors", lane_id: lanes[0].id, vendor_ids: [carriers.A.id, carriers.B.id, carriers.C.id] });
   await op({ action: "update_rfx_event", event_id: event.id, patch: { status: "open" } });
-  const { rows: messages } = await op({ action: "generate_outreach_drafts", event_id: event.id });
+  // Jose revisa a los tres en Bidware antes de preparar las invitaciones.
+  for (const c of Object.values(carriers)) sim.revisar(event.id, c.id);
+  const { rows: messages } = await op({ action: "generate_outreach_drafts", event_id: event.id, reviewed_vendor_ids: Object.values(carriers).map((c) => c.id) });
   await admin({
     action: "send_outreach_messages",
     ids: messages.map((m: any) => m.id),
