@@ -35,6 +35,7 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
     "shortlist_rfx_lane_vendors",
     "update_rfx_event",
     "update_rfx_bid",
+    "invite_rfx_lane_vendors",
     "award_rfx_lane_vendor",
     "clear_rfx_award",
     "closeout_awarded_rfx_to_rateware",
@@ -59,7 +60,6 @@ export const SOLO_SIMULADO: Record<Servicio, Set<string>> = {
     "create_rfx_event",
     "import_rfx_lanes",
     "shortlist_rfx_lane_vendors",
-    "update_rfx_bid",
     "generate_outreach_drafts",
     "update_outreach_message",
     "mark_outreach_messages",
@@ -146,6 +146,11 @@ export async function manejar(
     return error(400, "OPERACION_INVALIDA", "La entrega necesita un operation_id generado antes del primer intento.");
   }
 
+  if (action === "update_rfx_bid" || action === "invite_rfx_lane_vendors") {
+    const bloqueo = await guardaParticipaciones(action, body!, autorizacion, op);
+    if (bloqueo) return bloqueo;
+  }
+
   if (action === "award_rfx_lane_vendor") {
     const bloqueo = await guardaAdjudicacion(body!, autorizacion, op);
     if (bloqueo) return bloqueo;
@@ -196,6 +201,28 @@ async function guardaAdjudicacion(body: Record<string, unknown>, autorizacion: s
     return error(409, "CANDADO", "La adjudicación no cumple los candados.", { candados: candados.filter((c) => !c.ok) });
   }
   return error(404, "NOT_FOUND", "La participación no pertenece a este evento.");
+}
+
+// La captura del equipo y «marcar invitadas» llevan ids de participación, no
+// de evento: se exige event_id y se comprueba con una lectura fresca que cada id
+// es de ese evento (así un id ajeno, p. ej. de HDships, no pasa).
+async function guardaParticipaciones(action: string, body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
+  if (!body.event_id) return error(400, "FALTA_EVENTO", "Esta acción necesita event_id.");
+  const ids = action === "update_rfx_bid" ? [body.id] : Array.isArray(body.ids) ? body.ids : [];
+  if (!ids.length || ids.some((x) => !x)) return error(400, "FALTA_PARTICIPACION", "Indica la participación.");
+  if (action === "update_rfx_bid" && (!body.patch || typeof body.patch !== "object")) return error(400, "FALTA_PATCH", "update_rfx_bid necesita patch.");
+  if (action === "invite_rfx_lane_vendors" && (body.confirmed !== true || body.confirmation_action !== "invite_rfx_lane_vendors"))
+    return error(400, "SIN_CONFIRMAR", "Marcar como invitadas requiere confirmación explícita.");
+  let lectura: Respuesta;
+  try {
+    lectura = await conLimite(op.enviar("rateware-api", { action: "list_rfx_detail", event_id: body.event_id }, autorizacion), op.timeoutMs ?? 25000);
+  } catch {
+    return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se escribió nada.");
+  }
+  if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
+  const propias = new Set(((lectura.body?.lanes || []) as any[]).flatMap((l) => (l.invitations || []).map((v: any) => v.id)));
+  if (ids.some((x) => !propias.has(x))) return error(404, "NOT_FOUND", "La participación no pertenece a este evento.");
+  return null;
 }
 
 function conLimite<T>(p: Promise<T>, ms: number): Promise<T> {

@@ -196,10 +196,25 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
   const s = useSesion();
   const invitaciones = d.avisos.filter((a) => a.tipo === "invitacion");
   const porEnviar = invitaciones.filter((a) => a.estado === "aprobado" && a.aprobadoHuella === a.huella);
+  const preseleccionadas = d.rutas.flatMap((r) => r.participaciones).filter((x) => x.estado === "preseleccionada");
   return (
     <div className="tarjeta">
       <h2>Invitación</h2>
-      {!invitaciones.length && <p className="tenue">El Operador aún no prepara las invitaciones.</p>}
+      {d.evento.estado === "borrador" && ctx.rol === "admin" && (
+        <div className="aviso-caja">
+          <p>El evento sigue en borrador: los carriers no pueden ofertar hasta publicarlo.</p>
+          <Confirmar
+            etiqueta="Publicar evento"
+            clase="btn-secundario"
+            advertencia={<>Abre el evento a ofertas hasta el {fecha(d.evento.plazo)}. No envía nada. {ADVERTENCIA_REAL(s, d)}</>}
+            onConfirmar={() => accion(() => s.api.publicar(d.evento.id), "Evento publicado.")}
+          />
+        </div>
+      )}
+      {!invitaciones.length && !preseleccionadas.length && <p className="tenue">El Operador aún no prepara las invitaciones.</p>}
+      {!invitaciones.length && preseleccionadas.length > 0 && (
+        <p className="tenue">Sin invitaciones preparadas en Fr8Bid para {preseleccionadas.length} carrier(s) preseleccionado(s).</p>
+      )}
       {invitaciones.map((a) => {
         const p = d.rutas.flatMap((r) => r.participaciones).find((x) => x.id === a.participacionId);
         return (
@@ -224,6 +239,84 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
           onConfirmar={() => accion(() => s.api.enviarAvisos(porEnviar), "Invitaciones aceptadas por Gmail.")}
         />
       )}
+      {preseleccionadas.length > 0 && ctx.rol === "admin" && (
+        <div className="aviso-caja">
+          <p>¿La invitación ya salió por otro canal (correo propio, WhatsApp, llamada)? Márcalos como invitados para poder capturar sus ofertas.</p>
+          <Confirmar
+            etiqueta={`Marcar ${preseleccionadas.length} como invitado(s) sin enviar`}
+            clase="btn-secundario"
+            advertencia={<>Solo cambia el estado en Rateware: {preseleccionadas.map((x) => x.carrier).join(", ")}. Fr8Bid no envía nada. {ADVERTENCIA_REAL(s, d)}</>}
+            onConfirmar={() => accion(() => s.api.marcarInvitadas(d.evento.id, preseleccionadas.map((x) => x.id)), "Marcados como invitados.")}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Captura del equipo: la oferta llegó por otro canal. Cada captura es una
+// versión nueva; las anteriores no se tocan.
+function CapturaEquipo({ d, ruta, accion }: { d: Detalle; ruta: Ruta; accion: Props["accion"] }) {
+  const s = useSesion();
+  const candidatas = ruta.participaciones.filter((x) => !["preseleccionada", "declino"].includes(x.estado) && !x.rol);
+  const vacio = { id: "", tarifa: "", moneda: "USD", vigencia: "", capacidad: "", transito: "", canal: "email" as const, notas: "" };
+  const [f, setF] = useState<{ id: string; tarifa: string; moneda: string; vigencia: string; capacidad: string; transito: string; canal: "email" | "phone" | "whatsapp" | "other"; notas: string }>(vacio);
+  const [abierto, setAbierto] = useState(false);
+  if (!candidatas.length || d.evento.estado === "adjudicado" || d.evento.estado === "archivado") return null;
+  if (!abierto) return <button className="btn-texto" onClick={() => setAbierto(true)}>Capturar oferta recibida por otro canal</button>;
+  const tarifa = Number(f.tarifa.replace(/,/g, ""));
+  const num = (x: string) => (x.trim() === "" ? null : Number(x));
+  const valido = f.id && tarifa > 0 && [f.capacidad, f.transito].every((x) => x.trim() === "" || Number.isFinite(Number(x)));
+  const elegida = candidatas.find((x) => x.id === f.id);
+  return (
+    <div className="aviso-caja">
+      <h3>Captura del equipo</h3>
+      <div className="rejilla">
+        <label className="campo"><span>Carrier</span>
+          <select value={f.id} onChange={(e) => setF({ ...f, id: e.target.value })}>
+            <option value="">Elige…</option>
+            {candidatas.map((x) => <option key={x.id} value={x.id}>{x.carrier}</option>)}
+          </select>
+        </label>
+        <label className="campo"><span>Tarifa all-in</span><input inputMode="decimal" value={f.tarifa} onChange={(e) => setF({ ...f, tarifa: e.target.value })} /></label>
+        <label className="campo"><span>Moneda</span><select value={f.moneda} onChange={(e) => setF({ ...f, moneda: e.target.value })}><option>USD</option><option>MXN</option></select></label>
+        <label className="campo"><span>Vigente hasta</span><input type="date" value={f.vigencia} onChange={(e) => setF({ ...f, vigencia: e.target.value })} /></label>
+        <label className="campo"><span>Capacidad semanal</span><input inputMode="numeric" value={f.capacidad} onChange={(e) => setF({ ...f, capacidad: e.target.value })} /></label>
+        <label className="campo"><span>Tránsito (días)</span><input inputMode="numeric" value={f.transito} onChange={(e) => setF({ ...f, transito: e.target.value })} /></label>
+        <label className="campo"><span>Llegó por</span>
+          <select value={f.canal} onChange={(e) => setF({ ...f, canal: e.target.value as typeof f.canal })}>
+            <option value="email">Correo</option><option value="phone">Teléfono</option><option value="whatsapp">WhatsApp</option><option value="other">Otro</option>
+          </select>
+        </label>
+      </div>
+      <label className="campo"><span>Nota</span><input value={f.notas} onChange={(e) => setF({ ...f, notas: e.target.value })} /></label>
+      <div className="fila-botones">
+        <Confirmar
+          etiqueta="Guardar como nueva versión"
+          deshabilitado={!valido}
+          advertencia={<>{elegida?.carrier}: {dinero(tarifa, f.moneda)}{f.vigencia ? `, vigente hasta ${fecha(f.vigencia)}` : ", sin vigencia"}. Queda como una versión más; las anteriores no cambian. {ADVERTENCIA_REAL(s, d)}</>}
+          onConfirmar={async () => {
+            await accion(
+              () =>
+                s.api.capturarOferta({
+                  eventId: d.evento.id,
+                  participacionId: f.id,
+                  tarifa,
+                  moneda: f.moneda,
+                  vigencia: f.vigencia || null,
+                  capacidadSemanal: num(f.capacidad),
+                  diasTransito: num(f.transito),
+                  canal: f.canal,
+                  notas: f.notas
+                }),
+              "Oferta capturada."
+            );
+            setF(vacio);
+            setAbierto(false);
+          }}
+        />
+        <button className="btn-texto" onClick={() => setAbierto(false)}>Cancelar</button>
+      </div>
     </div>
   );
 }
@@ -283,6 +376,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
                 </table>
               </div>
               {!filas.length && <p className="tenue">Aún no llegan ofertas.</p>}
+              {!prim && <CapturaEquipo d={d} ruta={ruta} accion={accion} />}
               <LigasSimuladas d={d} />
               {historial && <Historial p={ruta.participaciones.find((x) => x.id === historial)!} />}
               {ruta.participaciones.filter((p) => p.estado === "declino").map((p) => (

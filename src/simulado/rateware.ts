@@ -40,6 +40,7 @@ const WRITE_ACTIONS = new Set([
   "create_rfx_event",
   "import_rfx_lanes",
   "shortlist_rfx_lane_vendors",
+  "invite_rfx_lane_vendors",
   "update_rfx_event",
   "update_rfx_bid",
   "generate_outreach_drafts",
@@ -360,6 +361,21 @@ export class RatewareSimulado {
         if (!body.patch) return ok({ row: this.invitacionCruda(lv) });
         this.registrarOferta(lv, body.patch, "team_capture", u.email);
         return ok({ row: this.invitacionCruda(lv) });
+      }
+      case "invite_rfx_lane_vendors": {
+        // «Mark as invited» del Bid Room: solo cambia el estado, no envía nada.
+        // rateware-api pide `ids` y la confirmación explícita.
+        if (body.confirmed !== true || body.confirmation_action !== "invite_rfx_lane_vendors")
+          throw new Falla(400, "Confirmation is required.", "CONFIRMATION_REQUIRED");
+        const filas = (Array.isArray(body.ids) ? body.ids : []).map((id: unknown) => this.laneVendor(u, id));
+        let updated = 0;
+        for (const lv of filas) {
+          if (lv.invitation_status !== "drafted") continue;
+          lv.invitation_status = "invited";
+          updated += 1;
+          this.bitacorar(u.email, "rfx.vendor.invite", "rfx_lane_vendors", lv.id, "drafted", "invited", { canal: "fuera_de_fr8bid" });
+        }
+        return ok({ updated, rows: filas.map((lv: Fila) => this.invitacionCruda(lv)) });
       }
       case "award_rfx_lane_vendor": {
         const lv = this.laneVendor(u, body.rfx_lane_vendor_id || body.id);

@@ -116,6 +116,41 @@ describe("§9 recorrido de la rebanada", () => {
     expect((await op.detalle(event.id)).rutas[0].participaciones[0].versiones).toHaveLength(0);
   });
 
+  it("sin enviar nada: publicar, marcar invitados y capturar la oferta del equipo", async () => {
+    const { sim: s, carriers } = crearSimulado();
+    relojDeTicks(s);
+    const adm = new MesaApi(transporteSimulado(s, () => "admin"), () => s.hoy());
+    const { row: event } = await adm.crearEvento({ name: "PRUEBA CONTROLADA · otro canal", customer: "Shipper de Prueba", due_date: "2026-10-31" });
+    const { rows: lanes } = await adm.importarRutas(event.id, [{ origin_city: "Monterrey", destination_city: "Dallas", equipment: "Dry Van" }]);
+    await adm.preseleccionar(lanes[0].id, [carriers.A.id, carriers.B.id]);
+    await adm.publicar(event.id);
+    let d = await adm.detalle(event.id);
+    const ids = d.rutas[0].participaciones.map((p) => p.id);
+    expect(recorrido(d, ctx()).actual?.clave).toBe("invitacion");
+
+    await adm.marcarInvitadas(event.id, ids);
+    d = await adm.detalle(event.id);
+    expect(d.rutas[0].participaciones.every((p) => p.estado === "invitada")).toBe(true);
+    expect(recorrido(d, ctx()).pasos[3].estado).toBe("hecho");
+
+    await adm.capturarOferta({ eventId: event.id, participacionId: ids[0], tarifa: 1690, moneda: "USD", vigencia: "2026-11-30", capacidadSemanal: 1, diasTransito: 2, canal: "whatsapp", notas: "PRUEBA" });
+    d = await adm.detalle(event.id);
+    const v = versionVigente(part(d, ids[0]));
+    expect([v?.tarifaAllIn, v?.vigenteHasta, v?.fuente]).toEqual([1690, "2026-11-30", "captura_equipo"]);
+    expect(s.llamadas.some((l) => /send_outreach|generate_outreach/.test(l.action))).toBe(false);
+  });
+
+  it("captura y «marcar invitados» solo con ids del evento y con confirmación", async () => {
+    const d = await admin.detalle(eventId);
+    const captura = { eventId, participacionId: "rlv_ajeno", tarifa: 1, moneda: "USD", vigencia: null, capacidadSemanal: null, diasTransito: null, canal: "other" as const, notas: "" };
+    await expect(admin.capturarOferta(captura)).rejects.toMatchObject({ status: 404 });
+    await expect(admin.capturarOferta({ ...captura, eventId: [...EVENTOS_PROTEGIDOS][0], participacionId: ids.A })).rejects.toMatchObject({ status: 404 });
+    const op = { enviar: (sv: any, b: any, a: any) => sim.llamar(sv, b, a), permitirEscrituras: true };
+    expect((await manejar("rateware-api", { action: "invite_rfx_lane_vendors", event_id: eventId, ids: [ids.A] }, "Bearer sim:admin", op)).body.code).toBe("SIN_CONFIRMAR");
+    expect((await manejar("rateware-api", { action: "update_rfx_bid", id: ids.A, patch: { bid_rate: 1 } }, "Bearer sim:admin", op)).body.code).toBe("FALTA_EVENTO");
+    expect(versionVigente(part(await admin.detalle(eventId), ids.A))?.huella).toBe(versionVigente(part(d, ids.A))?.huella);
+  });
+
   it("2 · versión 1 y luego versión 2: la 1 queda intacta y la vigente es la 2", async () => {
     const d = await admin.detalle(eventId);
     const a = part(d, ids.A);

@@ -96,6 +96,43 @@ export class MesaApi {
   publicar(eventId: string) {
     return this.rw({ action: "update_rfx_event", event_id: eventId, patch: { status: "open" } });
   }
+  // La invitación salió por otro canal (correo propio, WhatsApp, llamada): solo
+  // cambia el estado en Rateware; Fr8Bid no envía nada.
+  marcarInvitadas(eventId: string, ids: string[]) {
+    return this.rw({ action: "invite_rfx_lane_vendors", event_id: eventId, ids, confirmed: true, confirmation_action: "invite_rfx_lane_vendors" });
+  }
+  // Captura del equipo: la oferta llegó por otro canal y la registra el Operador.
+  // Rateware la guarda como una versión más (no edita las anteriores).
+  capturarOferta(c: {
+    eventId: string;
+    participacionId: string;
+    tarifa: number;
+    moneda: string;
+    vigencia: string | null;
+    capacidadSemanal: number | null;
+    diasTransito: number | null;
+    canal: "email" | "phone" | "whatsapp" | "other";
+    notas: string;
+  }) {
+    const etiqueta = { email: "Email", phone: "Phone", whatsapp: "WhatsApp", other: "Other" }[c.canal];
+    const notas = c.notas.trim();
+    return this.rw({
+      action: "update_rfx_bid",
+      event_id: c.eventId,
+      id: c.participacionId,
+      patch: {
+        bid_rate: c.tarifa,
+        currency: c.moneda,
+        valid_through: c.vigencia,
+        weekly_capacity: c.capacidadSemanal,
+        transit_days: c.diasTransito,
+        notes: notas || null,
+        capture_source: "manual_operator",
+        manual_source_channel: c.canal,
+        source_note: `Captured from ${etiqueta}${notas ? `: ${notas}` : ""}`
+      }
+    });
+  }
 
   // ——— Decisiones (Administrador) ———
   // En Rateware «closed» es la entrega, no el cierre a ofertas. Cerrar a ofertas
