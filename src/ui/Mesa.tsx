@@ -19,6 +19,7 @@ import {
   type Contexto
 } from "../dominio/recorrido";
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
+import { cambiosComerciales, describirModelo } from "../dominio/modelo";
 import { candidatosRecordatorio, ETIQUETA_SEGUIMIENTO, recordatorio, seguimiento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
 import type { Aviso, Detalle, EntregaLocal, Participacion, Recibo, Ruta } from "../dominio/tipos";
@@ -493,7 +494,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
             <div className="tarjeta">
               <div className="fila">
                 <h2>Ruta {ruta.numero} · ofertas vigentes</h2>
-                <span className="tenue">Objetivo {dinero(ruta.objetivo, ruta.moneda)} · ordenado por all-in</span>
+                <span className="tenue">Objetivo {dinero(ruta.objetivo, ruta.moneda)} · ordenado por all-in (el % del modelo comercial no cambia el all-in)</span>
               </div>
               <div className="tabla-envoltura">
                 <table className="tabla">
@@ -597,9 +598,9 @@ function FilaOferta({ p, ruta, totalRubros, elegido, elegible, onElegir, onHisto
         <b>{p.carrier}</b>
         {p.rol && <span className="pill ok-pill"> {p.rol}</span>}
       </td>
-      <td className="mono">
-        {dinero(v.tarifaAllIn, v.moneda)}
-        <div className="tenue">{v.modeloComercial}</div>
+      <td>
+        <span className="mono">{dinero(v.tarifaAllIn, v.moneda)}</span>
+        <div className="tenue">{describirModelo(v)}</div>
       </td>
       <td>{v.capacidadSemanal ?? "—"}</td>
       <td>{v.transitoDias !== null ? `${v.transitoDias} d` : "—"}</td>
@@ -620,12 +621,18 @@ function Historial({ p }: { p: Participacion }) {
     <div className="historial">
       <h3>Historial de la oferta · {p.carrier}</h3>
       <ol>
-        {p.versiones.map((v) => (
-          <li key={v.numero}>
-            v{v.numero} · {dinero(v.tarifaAllIn, v.moneda)} · {v.fuente === "portal_carrier" ? "portal del carrier" : "captura del equipo"} · {fecha(v.creadaEn)}
-            {v.nota && <> · nota: «{v.nota}»</>} <span className="mono tenue">#{v.huella.slice(0, 8)}</span>
-          </li>
-        ))}
+        {p.versiones.map((v) => {
+          const anterior = p.versiones.find((x) => x.numero === v.numero - 1);
+          const cambios = anterior ? cambiosComerciales(anterior, v) : [];
+          return (
+            <li key={v.numero}>
+              v{v.numero} · {dinero(v.tarifaAllIn, v.moneda)} · {describirModelo(v)} · {v.fuente === "portal_carrier" ? "portal del carrier" : "captura del equipo"} · {fecha(v.creadaEn)}
+              {v.esFinal && " · oferta final"}
+              {v.nota && <> · nota: «{v.nota}»</>} <span className="mono tenue">#{v.huella.slice(0, 8)}</span>
+              {cambios.length > 0 && <div className="tenue">Cambió: {cambios.join("; ")}</div>}
+            </li>
+          );
+        })}
       </ol>
       {p.versiones.length === 1 && <p className="nota">Con Rateware real solo llega la versión vigente: Rateware no expone el historial por acción (contrato C2 pendiente).</p>}
     </div>
@@ -642,8 +649,9 @@ function FormAdjudicar({ d, ruta, sel, rol, ctx, accion }: { d: Detalle; ruta: R
     <div className={rol === "respaldo" ? "aviso-caja" : ""}>
       <h3>Adjudicar {rol}</h3>
       <p>
-        <b>{sel.carrier}</b> · {dinero(v?.tarifaAllIn, v?.moneda)} · v{v?.numero}
+        <b>{sel.carrier}</b> · {dinero(v?.tarifaAllIn, v?.moneda)} all-in · v{v?.numero}
       </p>
+      {v && <p className="tenue">{describirModelo(v)}. Se adjudica el all-in; el porcentaje no lo modifica.</p>}
       {rol === "respaldo" && <p className="tenue">El respaldo cubre la ruta si el primario no tiene capacidad. Se entrega a Rateware junto con el primario.</p>}
       <Candados lista={candados} />
       {candados.some((c) => c.confirmable) && (

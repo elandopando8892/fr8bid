@@ -56,10 +56,11 @@ export async function sembrarDemo() {
   const [a, b, c] = rows.map((r: any) => r.id);
   await liga(a)({ action: "get_invitation" });
   await liga(a)({ action: "submit_bid", bid_rate: 1800, currency: "USD", commercial_model: "fee_plus", weekly_capacity: 5, transit_days: 2 });
-  await liga(a)({ action: "submit_bid", bid_rate: 1750, currency: "USD", commercial_model: "fee_plus", weekly_capacity: 5, transit_days: 2, notes: "ajuste por volumen" });
+  // Como Nexos: la versión nueva cambia de modelo y trae su porcentaje.
+  await liga(a)({ action: "submit_bid", bid_rate: 1750, currency: "USD", commercial_model: "sell_share", carrier_share_pct: 3, weekly_capacity: 5, transit_days: 2, notes: "ajuste por volumen" });
   await liga(a)({ action: "save_segment_confirmations", confirmations: RUBRICAS.slice(0, 5).map((k) => ({ segment_key: "general", rubric_key: k, answer: "agree" })) });
   await liga(b)({ action: "get_invitation" });
-  await liga(b)({ action: "submit_bid", bid_rate: 1690, currency: "USD", commercial_model: "fee_plus", weekly_capacity: 4, transit_days: 2, valid_through: "2026-11-30" });
+  await liga(b)({ action: "submit_bid", bid_rate: 1690, currency: "USD", commercial_model: "fee_plus", marksman_margin_pct: 3, weekly_capacity: 4, transit_days: 2, valid_through: "2026-11-30" });
   await liga(b)({ action: "save_segment_confirmations", confirmations: RUBRICAS.map((k) => ({ segment_key: "general", rubric_key: k, answer: "agree" })) });
   await liga(c)({ action: "get_invitation" });
   await liga(c)({ action: "submit_bid", bid_rate: 1820, currency: "USD", commercial_model: "cost_plus", weekly_capacity: 3, transit_days: 3, valid_through: "2026-11-15" });

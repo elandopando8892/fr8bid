@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ErrorApi } from "../cliente/api";
+import { describirModelo } from "../dominio/modelo";
 import { aCarga, dinero, EstadoVista, fecha, Prueba, type Carga } from "./comun";
 import { textoObjetivo } from "./condiciones";
 import { useSesion } from "./sesion";
@@ -82,7 +83,7 @@ export function LigaCarrier({ token }: { token: string }) {
         <div className="tarjeta">
           <h2>Tu oferta vigente</h2>
           <p>
-            {dinero(inv.bid_rate, inv.currency)} all-in · {inv.commercial_model} · vigencia {inv.valid_through ? fecha(inv.valid_through) : "sin vigencia"}
+            {dinero(inv.bid_rate, inv.currency)} all-in · {describirModelo({ modeloComercial: String(inv.commercial_model || "cost_plus"), carrierSharePct: inv.carrier_share_pct ?? null, margenPct: inv.marksman_margin_pct ?? null })} · vigencia {inv.valid_through ? fecha(inv.valid_through) : "sin vigencia"}
           </p>
           {inv.award_role && <p><b>Adjudicada como {inv.award_role === "primary" ? "primario" : "respaldo"}.</b></p>}
         </div>
