@@ -3,7 +3,7 @@
 // nombres de carrier, sin all-in del carrier (costo Marksman), sin porcentajes,
 // notas ni historial.
 
-import { nombreModelo, porcentajeModelo, tarifaVenta } from "./modelo.js";
+import { modeloConFamilia, porcentajeModelo, tarifaVenta } from "./modelo.js";
 import { conOferta, revisarCondiciones, versionVigente } from "./recorrido.js";
 import type { Detalle, Participacion, Ruta } from "./tipos.js";
 import type { Celda, Hoja } from "./xlsx.js";
@@ -38,7 +38,7 @@ export function hojaComparativo(d: Detalle, anonimo: boolean): Hoja {
       const v = versionVigente(p)!;
       const venta = tarifaVenta(v);
       if (anonimo) {
-        filas.push([...base, `Opción ${letra(i)}`, venta.venta, v.moneda, nombreModelo(String(v.modeloComercial)), v.capacidadSemanal, v.transitoDias, v.vigenteHasta, cumplimiento(ruta, p)]);
+        filas.push([...base, `Opción ${letra(i)}`, venta.venta, v.moneda, modeloConFamilia(String(v.modeloComercial)), v.capacidadSemanal, v.transitoDias, v.vigenteHasta, cumplimiento(ruta, p)]);
         return;
       }
       filas.push([
@@ -48,7 +48,7 @@ export function hojaComparativo(d: Detalle, anonimo: boolean): Hoja {
         p.carrier,
         v.tarifaAllIn,
         v.moneda,
-        nombreModelo(String(v.modeloComercial)),
+        modeloConFamilia(String(v.modeloComercial)),
         porcentajeModelo(v).valor ?? `${venta.pct} (por defecto)`,
         venta.venta,
         venta.ingreso,

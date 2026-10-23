@@ -681,13 +681,13 @@ describe("modelo comercial visible", () => {
     const d = await admin.detalle(eventId);
     const a = part(d, ids.A);
     const [v1, v2] = a.versiones;
-    expect(describirModelo(v1)).toBe("Fee plus · margen Marksman sin indicar");
-    expect(describirModelo(v2)).toBe("Sell share · share del carrier 3 %");
+    expect(describirModelo(v1)).toBe("Managed Transportation · Fee plus · margen Marksman sin indicar");
+    expect(describirModelo(v2)).toBe("Managed Transportation · Sell share · share del carrier 3 %");
     expect(cambiosComerciales(v1, v2)).toEqual(["all-in 1,800 USD → 1,750 USD", "modelo Fee plus → Sell share", "share del carrier sin indicar → 3 %"]);
     // El % no altera el all-in que se compara y se adjudica.
     expect(versionVigente(a)!.tarifaAllIn).toBe(1750);
-    expect(describirModelo(versionVigente(part(d, ids.B))!)).toBe("Fee plus · margen Marksman 3 %");
-    expect(describirModelo({ modeloComercial: "brokerage", carrierSharePct: null, margenPct: 8 })).toBe("Brokerage (buy/sell) · markup 8 %");
+    expect(describirModelo(versionVigente(part(d, ids.B))!)).toBe("Managed Transportation · Fee plus · margen Marksman 3 %");
+    expect(describirModelo({ modeloComercial: "brokerage", carrierSharePct: null, margenPct: 8 })).toBe("Brokerage (compra-venta) · markup 8 %");
     // Venta al shipper como el Board de Rateware: brokerage suma el markup (12 % por defecto).
     expect(tarifaVenta({ modeloComercial: "brokerage", carrierSharePct: null, margenPct: null, tarifaAllIn: 1000 })).toEqual({ venta: 1120, ingreso: 120, pct: 12, porDefecto: true });
     expect(tarifaVenta({ modeloComercial: "brokerage", carrierSharePct: null, margenPct: 8, tarifaAllIn: 1000 }).venta).toBe(1080);
@@ -702,9 +702,9 @@ describe("Excel del comparativo y pregunta al carrier", () => {
     const interno = hojaComparativo(d, false);
     expect(interno.filas[0]).toContain("Carrier");
     expect(interno.filas.slice(1).map((f) => [f[7], f[8], f[10], f[11]])).toEqual([
-      ["Carrier Prueba B", 1690, "Fee plus", 3],
-      ["Carrier Prueba A", 1750, "Sell share", 3],
-      ["Carrier Prueba C", 1820, "Cost plus", "3 (por defecto)"]
+      ["Carrier Prueba B", 1690, "Managed Transportation · Fee plus", 3],
+      ["Carrier Prueba A", 1750, "Managed Transportation · Sell share", 3],
+      ["Carrier Prueba C", 1820, "Managed Transportation · Cost plus", "3 (por defecto)"]
     ]);
     // Interno: tarifa de venta e ingreso por modelo; C sin % usa el 3 % por defecto.
     expect(interno.filas.slice(1).map((f) => [f[11], f[12], f[13]])).toEqual([
@@ -717,9 +717,9 @@ describe("Excel del comparativo y pregunta al carrier", () => {
     expect(texto).not.toMatch(/Carrier Prueba|All-in|% del modelo|Ingreso|1690|1820/);
     expect(shipper.filas[0]).toContain("Tarifa de venta");
     expect(shipper.filas.slice(1).map((f) => [f[5], f[6], f[8]])).toEqual([
-      ["Opción A", 1740.7, "Fee plus"],
-      ["Opción B", 1750, "Sell share"],
-      ["Opción C", 1874.6, "Cost plus"]
+      ["Opción A", 1740.7, "Managed Transportation · Fee plus"],
+      ["Opción B", 1750, "Managed Transportation · Sell share"],
+      ["Opción C", 1874.6, "Managed Transportation · Cost plus"]
     ]);
     expect(nombreArchivo(d, true)).toBe("RFX-0001-PRBA-comparativo-shipper.xlsx");
 
