@@ -19,6 +19,7 @@ export interface SeguimientoCarrier {
   invitadaEn: string | null; // sent_at de la invitación aceptada por Gmail
   intentos: number; // invitaciones que Gmail aceptó (1 = solo la original)
   ultimoEnvio: string | null;
+  borradorEnCola: boolean; // ya hay un intento preparado en la Cola sin enviar
   vistaEn: string | null;
   diasSinRespuesta: number | null;
   pendientes: { participacion: Participacion; ruta: Ruta }[];
@@ -80,6 +81,7 @@ export function seguimiento(d: Detalle, hoy: string): SeguimientoCarrier[] {
       invitadaEn,
       intentos: envios.length,
       ultimoEnvio: envios[envios.length - 1] ?? null,
+      borradorEnCola: suyas.some((a) => a.estado === "borrador" || a.estado === "en_cola"),
       vistaEn,
       diasSinRespuesta: invitadaEn && (estado === "sin_abrir" || estado === "abrio") ? diasEntre(invitadaEn, hoy) : null,
       pendientes: filas.filter((f) => f.participacion.estado !== "declino" && !versionVigente(f.participacion)),
@@ -115,6 +117,7 @@ export const CADENCIA: PasoCadencia[] = [
 export interface SiguienteIntento extends PasoCadencia {
   tocaEn: string;
   vencido: boolean;
+  enCola: boolean;
 }
 
 // Rutas abiertas con menos ofertas vigentes que el mínimo.
@@ -134,8 +137,40 @@ export function siguienteIntento(d: Detalle, s: SeguimientoCarrier, ahora: Date,
   const paso = CADENCIA.find((c) => c.intento === s.intentos + 1);
   if (!paso) return null;
   const tocaEn = new Date(Date.parse(s.ultimoEnvio) + paso.horasDesdeAnterior * 3_600_000).toISOString();
-  return { ...paso, tocaEn, vencido: Date.parse(tocaEn) <= ahora.getTime() };
+  return { ...paso, tocaEn, vencido: Date.parse(tocaEn) <= ahora.getTime(), enCola: s.borradorEnCola };
 }
+
+// Intentos por correo que ya tocan y no tienen borrador en la Cola: lo que
+// «Preparar intento» deja como borrador en Rateware.
+export function intentosPorPreparar(d: Detalle, ahora: Date, hoy: string): { s: SeguimientoCarrier; paso: SiguienteIntento; participacion: Participacion; ruta: Ruta }[] {
+  const flacas = new Set(rutasSinProfundidad(d).map((x) => x.ruta.id));
+  return seguimiento(d, hoy).flatMap((s) => {
+    const paso = siguienteIntento(d, s, ahora);
+    const pendiente = s.pendientes.find((f) => flacas.has(f.ruta.id));
+    if (!paso || !paso.vencido || paso.enCola || paso.canal !== "correo" || !s.correo || !pendiente) return [];
+    return [{ s, paso, participacion: pendiente.participacion, ruta: pendiente.ruta }];
+  });
+}
+
+// Texto del intento. Rateware (draft_bid_room_carrier_message) lo pone como
+// pregunta dentro de una respuesta en el hilo de Gmail de la invitación, con
+// el resumen de la ruta y el botón a la liga privada; acepta hasta 600
+// caracteres.
+export const LIMITE_TEXTO_INTENTO = 600;
+
+export function textoIntento(d: Detalle, ruta: Ruta, paso: Pick<PasoCadencia, "intento">): string {
+  const corta = (x: string) => x.split(",")[0].trim();
+  const texto = [
+    `${paso.intento === 2 ? "Seguimos" : "Último aviso: seguimos"} buscando tarifa all-in en ${ruta.moneda} para ${corta(ruta.origen)} → ${corta(ruta.destino)} · ${ruta.equipo}.`,
+    `¿Nos comparte su oferta con el botón «Abrir Private Bid Room»? También puede responder a este correo con su tarifa y la capturamos.`,
+    "Si no tiene unidad disponible, responda «sin unidad» y no le volvemos a escribir por este evento."
+  ].join(" ");
+  return texto.length > LIMITE_TEXTO_INTENTO ? texto.slice(0, LIMITE_TEXTO_INTENTO - 1) + "…" : texto;
+}
+
+// Misma clave en cada clic: Rateware devuelve el borrador existente en vez de
+// crear otro.
+export const claveIntento = (eventoId: string, participacionId: string, intento: number) => `fr8bid-intento-${intento}-${eventoId}-${participacionId}`;
 
 export interface Recordatorio {
   para: string;

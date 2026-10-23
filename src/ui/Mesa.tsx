@@ -21,7 +21,7 @@ import {
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
 import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
 import { cambiosComerciales, describirModelo, tarifaVenta } from "../dominio/modelo";
-import { candidatosRecordatorio, ETIQUETA_SEGUIMIENTO, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
+import { candidatosRecordatorio, claveIntento, ETIQUETA_SEGUIMIENTO, intentosPorPreparar, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
 import type { CarrierFit } from "../dominio/carrierFit";
 import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
@@ -119,7 +119,7 @@ export function Mesa({ id }: { id: string }) {
           {(actual === "invitacion" || actual === "carriers") && <PanelInvitacion {...p} />}
           {(actual === "invitacion" || actual === "carriers") && <PanelCarrierFit d={d} />}
           {["necesidad", "evento"].includes(actual) && <PanelEvento {...p} />}
-          {["invitacion", "ofertas", "comparar", "cierre"].includes(actual) && <PanelSeguimiento d={d} ctx={ctx} />}
+          {["invitacion", "ofertas", "comparar", "cierre"].includes(actual) && <PanelSeguimiento d={d} ctx={ctx} accion={accion} />}
           {["ofertas", "comparar", "cierre", "adjudicar"].includes(actual) && <PanelComparar {...p} />}
           {actual === "entrega" && <PanelEntrega {...p} />}
           {actual === "aviso" && <PanelAviso {...p} />}
@@ -408,7 +408,8 @@ function PanelCarrierFit({ d }: { d: Detalle }) {
 
 // Seguimiento por carrier y recordatorio. El recordatorio se abre como
 // borrador en Gmail: Fr8Bid no lo envía, lo envía el Administrador.
-function PanelSeguimiento({ d, ctx }: { d: Detalle; ctx: Contexto }) {
+function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion: Props["accion"] }) {
+  const s = useSesion();
   const [abierto, setAbierto] = useState<string | null>(null);
   const filas = seguimiento(d, ctx.hoy);
   if (!filas.length) return null;
@@ -420,6 +421,8 @@ function PanelSeguimiento({ d, ctx }: { d: Detalle; ctx: Contexto }) {
   const flacas = rutasSinProfundidad(d);
   const siguiente = new Map(filas.map((x) => [x.carrierId, siguienteIntento(d, x, ahora)]));
   const tocan = [...siguiente.values()].filter((x) => x?.vencido);
+  const porPreparar = intentosPorPreparar(d, ahora, ctx.hoy);
+  const muestra = porPreparar[0];
   return (
     <div className="tarjeta">
       <h2>Seguimiento</h2>
@@ -439,6 +442,29 @@ function PanelSeguimiento({ d, ctx }: { d: Detalle; ctx: Contexto }) {
               <span className="pill alerta">Ya toca</span> {[...new Set(tocan.map((x) => `${x!.intento}º intento por ${x!.canal === "whatsapp" ? "WhatsApp" : "correo"}`))].join(", ")} a {tocan.length} carrier(s).
               Fr8Bid no envía solo: el envío se aprueba en la Cola.
             </p>
+          )}
+          {muestra && ctx.rol !== "viewer" && (
+            <>
+              <p className="tenue">
+                Texto del {muestra.paso.intento}º intento (va como respuesta en el hilo de la invitación, con el resumen de la ruta y el botón a su liga privada):
+              </p>
+              <p className="texto-aviso">{textoIntento(d, muestra.ruta, muestra.paso)}</p>
+              <Confirmar
+                etiqueta={`Preparar ${porPreparar.length} borrador(es) en la Cola`}
+                clase="btn-secundario"
+                advertencia={`Rateware deja ${porPreparar.length} borrador(es) en la Cola, uno por carrier sin respuesta. No se envía nada: el envío lo apruebas en la Cola de Rateware.`}
+                onConfirmar={() =>
+                  accion(async () => {
+                    let listos = 0;
+                    for (const x of porPreparar) {
+                      await s.api.prepararIntento(d.evento.id, x.participacion.id, textoIntento(d, x.ruta, x.paso), claveIntento(d.evento.id, x.participacion.id, x.paso.intento));
+                      listos++;
+                    }
+                    return listos;
+                  }, (n) => `${n} borrador(es) en la Cola de Rateware. Revísalos y envíalos desde la Cola.`)
+                }
+              />
+            </>
           )}
         </div>
       )}
@@ -465,7 +491,7 @@ function PanelSeguimiento({ d, ctx }: { d: Detalle; ctx: Contexto }) {
                     {(() => {
                       const sig = siguiente.get(x.carrierId);
                       if (!sig) return "—";
-                      return <>{sig.intento}º por {sig.canal === "whatsapp" ? "WhatsApp" : "correo"} · {sig.vencido ? <span className="pill alerta">ya toca</span> : fecha(sig.tocaEn)}</>;
+                      return <>{sig.intento}º por {sig.canal === "whatsapp" ? "WhatsApp" : "correo"} · {sig.enCola ? "borrador en la Cola" : sig.vencido ? <span className="pill alerta">ya toca</span> : fecha(sig.tocaEn)}</>;
                     })()}
                   </td>
                   <td>

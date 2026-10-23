@@ -1,7 +1,7 @@
 // Cadencia de seguimiento por falta de profundidad (regla de Jose, 23-oct-2026).
 
 import { describe, expect, it } from "vitest";
-import { rutasSinProfundidad, seguimiento, siguienteIntento } from "../src/dominio/seguimiento";
+import { claveIntento, intentosPorPreparar, LIMITE_TEXTO_INTENTO, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento } from "../src/dominio/seguimiento";
 import type { Aviso, Detalle, Participacion } from "../src/dominio/tipos";
 
 const ENVIO = "2026-10-22T15:13:00.000Z";
@@ -65,5 +65,20 @@ describe("cadencia por falta de profundidad", () => {
     const cerrado = detalle(parts, avisos);
     cerrado.evento.estado = "cerrado";
     expect(de(cerrado, "a", horas(30))).toBeNull();
+  });
+
+  it("prepara el intento solo a quien ya le toca y no tiene borrador en la Cola", () => {
+    const d = detalle(parts, avisos);
+    expect(intentosPorPreparar(d, horas(7), "2026-10-23")).toEqual([]);
+    expect(intentosPorPreparar(d, horas(8), "2026-10-23").map((x) => x.participacion.id).sort()).toEqual(["a", "b"]);
+    const borrador = { ...invitacion("a", ENVIO, 2), estado: "borrador" as const, enviadoEn: null };
+    const conCola = detalle(parts, [...avisos, borrador]);
+    expect(intentosPorPreparar(conCola, horas(8), "2026-10-23").map((x) => x.participacion.id)).toEqual(["b"]);
+    expect(de(conCola, "a", horas(8))?.enCola).toBe(true);
+    const texto = textoIntento(d, d.rutas[0], { intento: 2 });
+    expect(texto.length).toBeLessThanOrEqual(LIMITE_TEXTO_INTENTO);
+    expect(texto).toContain("San Luis Potosí → Tulsa");
+    expect(texto).not.toMatch(/token=/);
+    expect(claveIntento("e", "a", 2)).toBe(claveIntento("e", "a", 2));
   });
 });

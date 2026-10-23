@@ -44,7 +44,9 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
     "generate_outreach_drafts",
     "generate_rfx_award_notices",
     "send_outreach_messages",
-    "save_rfx_lane_conditions"
+    "save_rfx_lane_conditions",
+    // 2º y 3º intento: solo deja un borrador en la Cola de Rateware (no envía).
+    "draft_bid_room_carrier_message"
   ]),
   "rfx-bid-api": new Set(["submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
@@ -162,7 +164,13 @@ export async function manejar(
     return error(400, "OPERACION_INVALIDA", "La entrega necesita un operation_id generado antes del primer intento.");
   }
 
-  if (action === "update_rfx_bid" || action === "invite_rfx_lane_vendors") {
+  if (action === "draft_bid_room_carrier_message") {
+    const texto = String(body?.body || "").trim();
+    if (!texto || texto.length > 600) return error(400, "TEXTO_INVALIDO", "El texto del intento debe tener entre 1 y 600 caracteres.");
+    if (!String(body?.idempotency_key || "").startsWith("fr8bid-intento-")) return error(400, "FALTA_CLAVE", "El intento necesita su clave para no duplicar borradores.");
+  }
+
+  if (action === "update_rfx_bid" || action === "invite_rfx_lane_vendors" || action === "draft_bid_room_carrier_message") {
     const bloqueo = await guardaParticipaciones(action, body!, autorizacion, op);
     if (bloqueo) return bloqueo;
   }
@@ -245,11 +253,13 @@ async function guardaAdjudicacion(body: Record<string, unknown>, autorizacion: s
 // es de ese evento (así un id ajeno, p. ej. de HDships, no pasa).
 async function guardaParticipaciones(action: string, body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
   if (!body.event_id) return error(400, "FALTA_EVENTO", "Esta acción necesita event_id.");
-  const ids = action === "update_rfx_bid" ? [body.id] : Array.isArray(body.ids) ? body.ids : [];
+  const ids = action === "update_rfx_bid" ? [body.id] : action === "draft_bid_room_carrier_message" ? [body.rfx_lane_vendor_id] : Array.isArray(body.ids) ? body.ids : [];
   if (!ids.length || ids.some((x) => !x)) return error(400, "FALTA_PARTICIPACION", "Indica la participación.");
   if (action === "update_rfx_bid" && (!body.patch || typeof body.patch !== "object")) return error(400, "FALTA_PATCH", "update_rfx_bid necesita patch.");
   if (action === "invite_rfx_lane_vendors" && (body.confirmed !== true || body.confirmation_action !== "invite_rfx_lane_vendors"))
     return error(400, "SIN_CONFIRMAR", "Marcar como invitadas requiere confirmación explícita.");
+  if (action === "draft_bid_room_carrier_message" && (body.confirmed !== true || body.confirmation_action !== "draft_bid_room_carrier_message"))
+    return error(400, "SIN_CONFIRMAR", "Preparar el intento requiere confirmación explícita.");
   let lectura: Respuesta;
   try {
     lectura = await conLimite(op.enviar("rateware-api", { action: "list_rfx_detail", event_id: body.event_id }, autorizacion), op.timeoutMs ?? 25000);

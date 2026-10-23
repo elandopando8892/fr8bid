@@ -159,6 +159,21 @@ describe("§9 recorrido de la rebanada", () => {
     expect(versionVigente(part(await admin.detalle(eventId), ids.A))?.huella).toBe(versionVigente(part(d, ids.A))?.huella);
   });
 
+  it("el 2º intento solo deja un borrador en la Cola, una vez por clave y solo con ids del evento", async () => {
+    const op = { enviar: (sv: any, b: any, a: any) => sim.llamar(sv, b, a), permitirEscrituras: true };
+    const base = { action: "draft_bid_room_carrier_message", event_id: eventId, rfx_event_id: eventId, rfx_lane_vendor_id: ids.A, body: "¿Nos comparte su oferta?", idempotency_key: `fr8bid-intento-2-${eventId}-${ids.A}` };
+    expect((await manejar("rateware-api", base, "Bearer sim:admin", op)).body.code).toBe("SIN_CONFIRMAR");
+    expect((await manejar("rateware-api", { ...base, body: "x".repeat(601), confirmed: true, confirmation_action: base.action }, "Bearer sim:admin", op)).body.code).toBe("TEXTO_INVALIDO");
+    expect((await manejar("rateware-api", { ...base, rfx_lane_vendor_id: "rlv_ajeno", confirmed: true, confirmation_action: base.action }, "Bearer sim:admin", op)).status).toBe(404);
+    const antes = (await admin.detalle(eventId)).avisos.length;
+    const r1 = await admin.prepararIntento(eventId, ids.A, base.body, base.idempotency_key);
+    const r2 = await admin.prepararIntento(eventId, ids.A, base.body, base.idempotency_key);
+    expect(r2.outreach_message.id).toBe(r1.outreach_message.id);
+    const d = await admin.detalle(eventId);
+    expect(d.avisos.length).toBe(antes + 1);
+    expect(d.avisos.find((a) => a.id === r1.outreach_message.id)?.estado).toBe("borrador");
+  });
+
   it("2 · versión 1 y luego versión 2: la 1 queda intacta y la vigente es la 2", async () => {
     const d = await admin.detalle(eventId);
     const a = part(d, ids.A);

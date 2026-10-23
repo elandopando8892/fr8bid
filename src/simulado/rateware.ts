@@ -52,7 +52,8 @@ const WRITE_ACTIONS = new Set([
   "update_rfx_event",
   "update_rfx_bid",
   "generate_outreach_drafts",
-  "save_rfx_lane_conditions"
+  "save_rfx_lane_conditions",
+  "draft_bid_room_carrier_message"
 ]);
 
 export class ErrorRed extends Error {
@@ -378,6 +379,31 @@ export class RatewareSimulado {
           skipped_rows: omitidos.map((lv) => ({ rfx_lane_vendor_id: lv.id, vendor_id: lv.vendor_id, reason: "not_reviewed" })),
           rows: nuevos.map((m) => structuredClone(m))
         });
+      }
+      case "draft_bid_room_carrier_message": {
+        // Como rateware-api: un borrador por clave (la misma clave devuelve el
+        // existente), respuesta en el hilo de la invitación; nunca envía.
+        if (body.confirmed !== true || body.confirmation_action !== "draft_bid_room_carrier_message") throw new Falla(400, "Confirmation required", "CONFIRMATION_REQUIRED");
+        const texto = String(body.body || "").trim();
+        if (!texto) throw new Falla(400, "Message body is required.", "BODY_REQUIRED");
+        if (texto.length > 600) throw new Falla(400, "Keep a direct carrier question under 600 characters.", "BODY_TOO_LONG");
+        const clave = String(body.idempotency_key || "");
+        if (!clave) throw new Falla(400, "A message request key is required to prevent duplicate sends.", "KEY_REQUIRED");
+        const event = this.evento(u, body.rfx_event_id || body.event_id);
+        const previo = this.mensajes.find((m) => m.metadata.bid_room_request_key === clave);
+        if (previo) return ok({ reused: true, draft_only: true, outreach_message: structuredClone(previo) });
+        const lv = this.laneVendors.find((x) => x.id === body.rfx_lane_vendor_id && x.rfx_event_id === event.id);
+        if (!lv) throw new Falla(404, "That carrier invitation does not belong to the selected RFx.", "NOT_FOUND");
+        const vendor = this.vendors.find((v) => v.id === lv.vendor_id)!;
+        const original = this.mensajes.find((m) => m.rfx_lane_vendor_id === lv.id && m.metadata.notice_type === "rfx_invitation");
+        const m = this.filaMensaje(event, lv, vendor, original ? `Re: ${original.subject}` : `${event.rfx_id} | Question`, texto, {
+          source: "bid_room_carrier_ask",
+          bid_room_request_key: clave,
+          rfx_lane_vendor_ids: [lv.id]
+        });
+        this.mensajes.push(m);
+        this.bitacorar(u.email, "bid_room.carrier_question.draft", "outreach_messages", m.id, null, "drafted", { request_key: clave });
+        return ok({ reused: false, draft_only: true, outreach_message: structuredClone(m) });
       }
       case "generate_rfx_award_notices": {
         // Como rateware-api: no exige el evento «awarded» (eso lo pone el

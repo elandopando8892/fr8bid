@@ -149,6 +149,21 @@ export class MesaApi {
   marcarInvitadas(eventId: string, ids: string[]) {
     return this.rw({ action: "invite_rfx_lane_vendors", event_id: eventId, ids, confirmed: true, confirmation_action: "invite_rfx_lane_vendors" });
   }
+  // 2º/3º intento: rateware-api deja un borrador en la Cola como respuesta en
+  // el hilo de Gmail de la invitación (con la liga privada). No envía: el envío
+  // se aprueba en la Cola de Rateware.
+  prepararIntento(eventId: string, participacionId: string, texto: string, clave: string) {
+    return this.rw({
+      action: "draft_bid_room_carrier_message",
+      event_id: eventId,
+      rfx_event_id: eventId,
+      rfx_lane_vendor_id: participacionId,
+      body: texto,
+      idempotency_key: clave,
+      confirmed: true,
+      confirmation_action: "draft_bid_room_carrier_message"
+    });
+  }
   // Captura del equipo: la oferta llegó por otro canal y la registra el Operador.
   // Rateware la guarda como una versión más (no edita las anteriores).
   capturarOferta(c: {
