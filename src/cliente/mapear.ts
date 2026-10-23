@@ -181,7 +181,7 @@ function ruta(l: Fila, confirmaciones: Fila[], condiciones: Fila[] = []): Ruta {
     numero: Number(l.lane_number || 1),
     origen: lugar(l.origin_city, l.origin_state, l.origin),
     destino: lugar(l.destination_city, l.destination_state, l.destination),
-    equipo: String(l.equipment || "—"),
+    equipo: [l.equipment, l.trailer].filter(Boolean).map(String).join(" · ") || "—",
     volumenSemanal: num(l.weekly_volume),
     objetivo: num(l.target_rate),
     moneda: String(l.currency || "USD"),

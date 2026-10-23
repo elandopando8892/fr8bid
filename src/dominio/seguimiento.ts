@@ -155,13 +155,13 @@ export function intentosPorPreparar(d: Detalle, ahora: Date, hoy: string): { s: 
 // Texto del intento. Rateware (draft_bid_room_carrier_message) lo pone como
 // pregunta dentro de una respuesta en el hilo de Gmail de la invitación, con
 // el resumen de la ruta y el botón a la liga privada; acepta hasta 600
-// caracteres.
+// caracteres. «ruta» hace que Rateware arme el correo en español.
 export const LIMITE_TEXTO_INTENTO = 600;
 
 export function textoIntento(d: Detalle, ruta: Ruta, paso: Pick<PasoCadencia, "intento">): string {
   const corta = (x: string) => x.split(",")[0].trim();
   const texto = [
-    `${paso.intento === 2 ? "Seguimos" : "Último aviso: seguimos"} buscando tarifa all-in en ${ruta.moneda} para ${corta(ruta.origen)} → ${corta(ruta.destino)} · ${ruta.equipo}.`,
+    `${paso.intento === 2 ? "Seguimos" : "Último aviso: seguimos"} buscando tarifa all-in en ${ruta.moneda} para la ruta ${corta(ruta.origen)} → ${corta(ruta.destino)} · ${ruta.equipo}.`,
     `¿Nos comparte su oferta con el botón «Abrir Private Bid Room»? También puede responder a este correo con su tarifa y la capturamos.`,
     "Si no tiene unidad disponible, responda «sin unidad» y no le volvemos a escribir por este evento."
   ].join(" ");
