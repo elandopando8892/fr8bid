@@ -21,7 +21,7 @@ import {
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
 import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
 import { cambiosComerciales, describirModelo, tarifaVenta } from "../dominio/modelo";
-import { candidatosRecordatorio, ETIQUETA_SEGUIMIENTO, preguntaAlCarrier, recordatorio, seguimiento, type EstadoSeguimiento } from "../dominio/seguimiento";
+import { candidatosRecordatorio, ETIQUETA_SEGUIMIENTO, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
 import type { CarrierFit } from "../dominio/carrierFit";
 import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
@@ -416,6 +416,10 @@ function PanelSeguimiento({ d, ctx }: { d: Detalle; ctx: Contexto }) {
   const conteo = (e: EstadoSeguimiento) => filas.filter((x) => x.estado === e).length;
   const orden: EstadoSeguimiento[] = ["sin_abrir", "abrio", "rebote", "declino", "oferto"];
   const ordenadas = [...filas].sort((a, b) => orden.indexOf(a.estado) - orden.indexOf(b.estado) || (b.diasSinRespuesta ?? 0) - (a.diasSinRespuesta ?? 0));
+  const ahora = new Date();
+  const flacas = rutasSinProfundidad(d);
+  const siguiente = new Map(filas.map((x) => [x.carrierId, siguienteIntento(d, x, ahora)]));
+  const tocan = [...siguiente.values()].filter((x) => x?.vencido);
   return (
     <div className="tarjeta">
       <h2>Seguimiento</h2>
@@ -424,10 +428,24 @@ function PanelSeguimiento({ d, ctx }: { d: Detalle; ctx: Contexto }) {
         {conteo("declino") ? `, ${conteo("declino")} declinaron` : ""}
         {conteo("rebote") ? `, ${conteo("rebote")} rebotaron` : ""}.
       </p>
+      {flacas.length > 0 && (
+        <div className="aviso-caja">
+          <p>
+            <b>Falta profundidad:</b> {flacas.map((x) => `ruta ${x.ruta.numero} con ${x.ofertas} oferta(s)`).join(", ")} de {PROFUNDIDAD_MINIMA} mínimas.
+            Cadencia: 2º intento a las 8 h del envío, 3º 12 h después del 2º y luego WhatsApp.
+          </p>
+          {tocan.length > 0 && (
+            <p>
+              <span className="pill alerta">Ya toca</span> {[...new Set(tocan.map((x) => `${x!.intento}º intento por ${x!.canal === "whatsapp" ? "WhatsApp" : "correo"}`))].join(", ")} a {tocan.length} carrier(s).
+              Fr8Bid no envía solo: el envío se aprueba en la Cola.
+            </p>
+          )}
+        </div>
+      )}
       <div className="tabla-envoltura">
       <table className="tabla">
         <thead>
-          <tr><th>Carrier</th><th>Estado</th><th>Rutas</th><th>Invitado</th><th>Abrió</th><th></th></tr>
+          <tr><th>Carrier</th><th>Estado</th><th>Rutas</th><th>Invitado</th><th>Abrió</th><th>Siguiente intento</th><th></th></tr>
         </thead>
         <tbody>
           {ordenadas.map((x) => {
@@ -444,6 +462,13 @@ function PanelSeguimiento({ d, ctx }: { d: Detalle; ctx: Contexto }) {
                   <td>{fecha(x.invitadaEn)}</td>
                   <td>{fecha(x.vistaEn)}</td>
                   <td>
+                    {(() => {
+                      const sig = siguiente.get(x.carrierId);
+                      if (!sig) return "—";
+                      return <>{sig.intento}º por {sig.canal === "whatsapp" ? "WhatsApp" : "correo"} · {sig.vencido ? <span className="pill alerta">ya toca</span> : fecha(sig.tocaEn)}</>;
+                    })()}
+                  </td>
+                  <td>
                     {r && ctx.rol !== "viewer" && (
                       <button className="btn-texto" onClick={() => setAbierto(abierto === x.carrierId ? null : x.carrierId)}>
                         {abierto === x.carrierId ? "Ocultar" : "Recordatorio"}
@@ -453,7 +478,7 @@ function PanelSeguimiento({ d, ctx }: { d: Detalle; ctx: Contexto }) {
                 </tr>
                 {r && abierto === x.carrierId && (
                   <tr>
-                    <td colSpan={6}>
+                    <td colSpan={7}>
                       <div className="aviso-caja">
                         <p className="tenue">Para: {r.para} · Gmail</p>
                         <p><b>{r.asunto}</b></p>

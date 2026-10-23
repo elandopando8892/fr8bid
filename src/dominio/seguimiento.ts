@@ -17,6 +17,8 @@ export interface SeguimientoCarrier {
   ofertadas: number;
   declinadas: number;
   invitadaEn: string | null; // sent_at de la invitación aceptada por Gmail
+  intentos: number; // invitaciones que Gmail aceptó (1 = solo la original)
+  ultimoEnvio: string | null;
   vistaEn: string | null;
   diasSinRespuesta: number | null;
   pendientes: { participacion: Participacion; ruta: Ruta }[];
@@ -66,6 +68,7 @@ export function seguimiento(d: Detalle, hoy: string): SeguimientoCarrier[] {
       : vista ? "abrio"
       : "sin_abrir";
     const invitadaEn = minimo(aceptadas.map((a) => a.enviadoEn));
+    const envios = aceptadas.map((a) => a.enviadoEn).filter((x): x is string => Boolean(x)).sort();
     return {
       carrierId: p0.carrierId,
       carrier: p0.carrier,
@@ -75,6 +78,8 @@ export function seguimiento(d: Detalle, hoy: string): SeguimientoCarrier[] {
       ofertadas,
       declinadas,
       invitadaEn,
+      intentos: envios.length,
+      ultimoEnvio: envios[envios.length - 1] ?? null,
       vistaEn,
       diasSinRespuesta: invitadaEn && (estado === "sin_abrir" || estado === "abrio") ? diasEntre(invitadaEn, hoy) : null,
       pendientes: filas.filter((f) => f.participacion.estado !== "declino" && !versionVigente(f.participacion)),
@@ -87,6 +92,49 @@ export function seguimiento(d: Detalle, hoy: string): SeguimientoCarrier[] {
 export function candidatosRecordatorio(d: Detalle, hoy: string): SeguimientoCarrier[] {
   if (d.evento.estado !== "abierto") return [];
   return seguimiento(d, hoy).filter((s) => (s.estado === "sin_abrir" || s.estado === "abrio") && s.correo);
+}
+
+// Cadencia de Jose (23-oct-2026) cuando una ruta no junta suficientes ofertas:
+// 2º intento a las 8 h del envío, 3º 12 h después del 2º y luego WhatsApp.
+// Cada paso cuenta desde el envío anterior que Gmail aceptó. Fr8Bid solo dice
+// cuándo toca y a quién; cada envío lo aprueba el Administrador.
+export const PROFUNDIDAD_MINIMA = 3;
+
+export interface PasoCadencia {
+  intento: number;
+  canal: "correo" | "whatsapp";
+  horasDesdeAnterior: number;
+}
+
+export const CADENCIA: PasoCadencia[] = [
+  { intento: 2, canal: "correo", horasDesdeAnterior: 8 },
+  { intento: 3, canal: "correo", horasDesdeAnterior: 12 },
+  { intento: 4, canal: "whatsapp", horasDesdeAnterior: 12 }
+];
+
+export interface SiguienteIntento extends PasoCadencia {
+  tocaEn: string;
+  vencido: boolean;
+}
+
+// Rutas abiertas con menos ofertas vigentes que el mínimo.
+export function rutasSinProfundidad(d: Detalle, minimoOfertas = PROFUNDIDAD_MINIMA): { ruta: Ruta; ofertas: number }[] {
+  if (d.evento.estado !== "abierto") return [];
+  return d.rutas
+    .map((ruta) => ({ ruta, ofertas: ruta.participaciones.filter((p) => p.estado !== "declino" && versionVigente(p)).length }))
+    .filter((x) => x.ofertas < minimoOfertas);
+}
+
+// Siguiente paso para un carrier que sigue sin responder en alguna ruta sin
+// profundidad. null: no le toca seguimiento o ya se agotó la cadencia.
+export function siguienteIntento(d: Detalle, s: SeguimientoCarrier, ahora: Date, minimoOfertas = PROFUNDIDAD_MINIMA): SiguienteIntento | null {
+  if (!(s.estado === "sin_abrir" || s.estado === "abrio") || !s.ultimoEnvio) return null;
+  const flacas = new Set(rutasSinProfundidad(d, minimoOfertas).map((x) => x.ruta.id));
+  if (!s.pendientes.some((f) => flacas.has(f.ruta.id))) return null;
+  const paso = CADENCIA.find((c) => c.intento === s.intentos + 1);
+  if (!paso) return null;
+  const tocaEn = new Date(Date.parse(s.ultimoEnvio) + paso.horasDesdeAnterior * 3_600_000).toISOString();
+  return { ...paso, tocaEn, vencido: Date.parse(tocaEn) <= ahora.getTime() };
 }
 
 export interface Recordatorio {

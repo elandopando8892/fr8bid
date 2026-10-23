@@ -32,6 +32,7 @@ button, input, select, textarea { font: inherit; }
 .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; background: var(--cloud); color: var(--grey); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
 .pill.prueba { background: var(--orange-light); color: var(--accent); border: 1px solid #ea5e2740; }
 .pill.ok-pill { background: var(--green-light); color: var(--green); }
+.pill.alerta { background: var(--orange-light); color: var(--accent); margin-left: 6px; }
 .aviso-pill { background: #ffffff14; color: var(--orange); }
 
 .contadores { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 12px; color: var(--grey); }
