@@ -527,6 +527,13 @@ export class RatewareSimulado {
         const e = this.events.find((x) => x.id === lv.rfx_event_id)!;
         if (e.status === "awarded") throw new Falla(409, "El evento ya se entregó.", "RFX_CLOSED");
         if (!body.patch) return ok({ row: this.invitacionCruda(lv) });
+        if (body.patch.bid_rate === null || body.patch.bid_rate === undefined) {
+          // Igual que rateware-api: sin tarifa queda el estado que se mande.
+          const antes = lv.invitation_status;
+          Object.assign(lv, { bid_rate: null, invitation_status: body.patch.invitation_status || "drafted", notes: body.patch.notes ?? null, responded_at: null });
+          this.bitacorar(u.email, "rfx.vendor.status", "rfx_lane_vendors", lv.id, antes, lv.invitation_status);
+          return ok({ row: this.invitacionCruda(lv) });
+        }
         this.registrarOferta(lv, body.patch, "team_capture", u.email);
         return ok({ row: this.invitacionCruda(lv) });
       }

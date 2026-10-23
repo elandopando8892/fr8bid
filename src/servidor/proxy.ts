@@ -288,6 +288,16 @@ async function guardaParticipaciones(action: string, body: Record<string, unknow
   if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
   const propias = new Set(((lectura.body?.lanes || []) as any[]).flatMap((l) => (l.invitations || []).map((v: any) => v.id)));
   if (ids.some((x) => !propias.has(x))) return error(404, "NOT_FOUND", "La participación no pertenece a este evento.");
+  // update_rfx_bid sin tarifa reescribe bid_rate a null en rateware-api: solo se
+  // usa para marcar «respondió» o «rechazó», y nunca sobre una oferta existente.
+  const patch = body.patch as Record<string, unknown> | undefined;
+  if (action === "update_rfx_bid" && (patch?.bid_rate === null || patch?.bid_rate === undefined)) {
+    if (!["responded", "declined"].includes(String(patch?.invitation_status || "")))
+      return error(400, "SIN_TARIFA", "Sin tarifa solo se puede marcar que el carrier respondió o rechazó.");
+    const fila = ((lectura.body?.lanes || []) as any[]).flatMap((l) => l.invitations || []).find((v: any) => v.id === body.id);
+    if (fila && fila.bid_rate !== null && fila.bid_rate !== undefined)
+      return error(409, "YA_OFERTO", "Esta participación ya tiene oferta; no se marca como respuesta sin tarifa.");
+  }
   return null;
 }
 
