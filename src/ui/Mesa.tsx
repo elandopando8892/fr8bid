@@ -23,6 +23,7 @@ import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
 import { cambiosComerciales, describirModelo, tarifaVenta } from "../dominio/modelo";
 import { candidatosRecordatorio, ETIQUETA_SEGUIMIENTO, preguntaAlCarrier, recordatorio, seguimiento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
+import type { CarrierFit } from "../dominio/carrierFit";
 import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
 import type { Aviso, Detalle, EntregaLocal, Participacion, Recibo, Ruta } from "../dominio/tipos";
 import { EditorCondiciones, ListaCondiciones, MatrizCondiciones } from "./condiciones";
@@ -116,6 +117,7 @@ export function Mesa({ id }: { id: string }) {
 
         <div className="centro">
           {(actual === "invitacion" || actual === "carriers") && <PanelInvitacion {...p} />}
+          {(actual === "invitacion" || actual === "carriers") && <PanelCarrierFit d={d} />}
           {["necesidad", "evento"].includes(actual) && <PanelEvento {...p} />}
           {["invitacion", "ofertas", "comparar", "cierre"].includes(actual) && <PanelSeguimiento d={d} ctx={ctx} />}
           {["ofertas", "comparar", "cierre", "adjudicar"].includes(actual) && <PanelComparar {...p} />}
@@ -336,6 +338,69 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
             onConfirmar={() => accion(() => s.api.marcarInvitadas(d.evento.id, audiencia.aptas.map((x) => x.id)), "Marcados como invitados.")}
           />
         </div>
+      )}
+    </div>
+  );
+}
+
+// «Carrier fit» de Rateware: solo lectura. Se consulta a pedido porque
+// Rateware tarda unos segundos en juntar la evidencia.
+function PanelCarrierFit({ d }: { d: Detalle }) {
+  const s = useSesion();
+  type Estado = { tipo: "cargando" } | { tipo: "ok"; datos: CarrierFit } | { tipo: "error"; mensaje: string };
+  const [fit, setFit] = useState<Estado | null>(null);
+  const consultar = () => {
+    setFit({ tipo: "cargando" });
+    s.api.carrierFit(d).then(
+      (datos) => setFit({ tipo: "ok", datos }),
+      (e) => setFit({ tipo: "error", mensaje: e instanceof Error ? e.message : "Error desconocido" })
+    );
+  };
+  return (
+    <div className="tarjeta">
+      <h2>Carriers sugeridos</h2>
+      <p className="tenue">
+        «Carrier fit» de Rateware para las rutas de este evento, según cotizaciones y ofertas anteriores. Fr8Bid solo lo muestra: para sumar un carrier, agrégalo en el Bid Room y márcalo «Revisado» en Bidware.
+      </p>
+      {!fit || fit.tipo === "error" ? (
+        <>
+          {fit?.tipo === "error" && <p className="error-texto">No se pudo consultar el Carrier fit: {fit.mensaje}</p>}
+          <button className="btn-secundario" onClick={consultar}>
+            {fit ? "Reintentar" : "Consultar Carrier fit"}
+          </button>
+        </>
+      ) : fit.tipo === "cargando" ? (
+        <p className="tenue">Consultando a Rateware…</p>
+      ) : (
+        <>
+          {fit.datos.avisos.length > 0 && <p className="alerta">{fit.datos.avisos.join(" ")}</p>}
+          {!fit.datos.sugerencias.length ? (
+            <p className="tenue">Rateware no tiene carriers con historial para estas rutas.</p>
+          ) : (
+            <div className="tabla-envoltura">
+              <table className="tabla">
+                <thead>
+                  <tr><th>Carrier</th><th>Fit</th><th>Por qué</th><th>Le falta</th><th>En este evento</th></tr>
+                </thead>
+                <tbody>
+                  {fit.datos.sugerencias.map((x) => (
+                    <tr key={x.vendorId}>
+                      <td>
+                        <b>{x.nombre}</b>
+                        {x.cotizaciones > 0 && <div className="tenue">{x.cotizaciones} cotización(es) ligadas</div>}
+                      </td>
+                      <td className="mono">{x.puntaje}</td>
+                      <td>{x.porque || "—"}</td>
+                      <td>{x.huecos.length ? x.huecos.join("; ") : "—"}</td>
+                      <td>{x.yaEnEvento ? <span className="pill ok-pill">Ya invitado</span> : x.revisado ? <span className="pill">Revisado, sin invitar</span> : <span className="pill">No está</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <button className="btn-texto" onClick={consultar}>Volver a consultar</button>
+        </>
       )}
     </div>
   );

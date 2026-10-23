@@ -71,6 +71,8 @@ const nuevoId = (prefijo: string) => {
 export class RatewareSimulado {
   usuarios = new Map<string, UsuarioSimulado>();
   vendors: Fila[] = [];
+  // Historial que Rateware usa para «Carrier fit» (carrier_recommendations).
+  fitCarrier = new Map<string, { score: number; evidence: string[]; gaps?: string[]; linked_rates?: number }>();
   events: Fila[] = [];
   lanes: Fila[] = [];
   laneVendors: Fila[] = [];
@@ -253,6 +255,35 @@ export class RatewareSimulado {
         const event = this.evento(u, body.rfx_event_id || body.event_id);
         if (this.fallas.fallarRevisiones) throw new Falla(500, "Review log unavailable", "REVIEWS_UNAVAILABLE");
         return ok({ rows: this.revisionesCarrier.filter((r) => r.rfx_event_id === event.id).map((r) => ({ ...r })) });
+      }
+      case "carrier_recommendations": {
+        // Como buildCarrierRecommendations en modo rfx_carrier_fit: vendors de
+        // la organización ordenados por fit_score, con evidencia y huecos.
+        const config: Fila = body.config && typeof body.config === "object" ? body.config : {};
+        if (config.rfx_event_id) this.evento(u, config.rfx_event_id);
+        const limit = Math.min(Math.max(Number(config.limit) || 30, 1), 100);
+        const recommendations = this.vendors
+          .filter((v) => v.owner_email === u.ownerEmail)
+          .map((v) => {
+            const f = this.fitCarrier.get(v.id) || { score: 10, evidence: [], gaps: ["Sin cotizaciones en rutas parecidas"], linked_rates: 0 };
+            return {
+              vendor_id: v.id,
+              vendor_name: v.vendor_name,
+              primary_email: v.primary_email,
+              base_stage: v.base_stage || "procurement",
+              status: v.status,
+              duplicate_vendor_ids: [],
+              fit_score: f.score,
+              why: f.evidence.slice(0, 3).join("; "),
+              evidence: f.evidence,
+              gaps: f.gaps || [],
+              metrics: { linked_rates: f.linked_rates || 0 }
+            };
+          })
+          .sort((a, b) => b.fit_score - a.fit_score)
+          .slice(0, limit)
+          .map((r, i) => ({ ...r, rank: i + 1 }));
+        return ok({ recommendations, warnings: [], evidence_mode: config.rfx_carrier_fit ? "bounded_rfx_fit" : "full_recommendation", model_status: "deterministic" });
       }
       case "list_outreach_messages": {
         const event = this.evento(u, body.rfx_event_id || body.event_id);

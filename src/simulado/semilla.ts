@@ -20,6 +20,10 @@ export function crearSimulado() {
     B: sim.agregarVendor(ORG, "Carrier Prueba B"),
     C: sim.agregarVendor(ORG, "Carrier Prueba C")
   };
+  // Carrier fuera del evento con historial en el corredor, para «Carrier fit».
+  const d = sim.agregarVendor(ORG, "Carrier Prueba D");
+  sim.fitCarrier.set(d.id, { score: 82, evidence: ["6 cotizaciones Monterrey → Dallas", "Dry Van", "Ofertó en 2 RFx anteriores"], gaps: [], linked_rates: 6 });
+  sim.fitCarrier.set(carriers.B.id, { score: 74, evidence: ["3 cotizaciones Monterrey → Dallas", "Dry Van"], gaps: ["Sin tarifa aprobada reciente"], linked_rates: 3 });
   // HDships existe en las mismas tablas; Fr8Bid no debe verlo nunca (I12).
   const [hdships] = EVENTOS_PROTEGIDOS;
   sim.events.push({ id: hdships, owner_email: ORG, rfx_id: "RFX-HDSHIPS", name: "HDships", customer: "HDships", status: "open", due_date: null });
