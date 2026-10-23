@@ -20,7 +20,7 @@ import {
 } from "../src/dominio/recorrido";
 import type { Detalle, EntregaLocal, Participacion } from "../src/dominio/tipos";
 import { hojaComparativo, nombreArchivo } from "../src/dominio/exportar";
-import { cambiosComerciales, describirModelo } from "../src/dominio/modelo";
+import { cambiosComerciales, describirModelo, tarifaVenta } from "../src/dominio/modelo";
 import { audienciaInvitacion } from "../src/dominio/revision";
 import { candidatosRecordatorio, diasEntre, preguntaAlCarrier, recordatorio, seguimiento } from "../src/dominio/seguimiento";
 import { crearXlsx } from "../src/dominio/xlsx";
@@ -688,25 +688,39 @@ describe("modelo comercial visible", () => {
     expect(versionVigente(a)!.tarifaAllIn).toBe(1750);
     expect(describirModelo(versionVigente(part(d, ids.B))!)).toBe("Fee plus · margen Marksman 3 %");
     expect(describirModelo({ modeloComercial: "brokerage", carrierSharePct: null, margenPct: 8 })).toBe("Brokerage (buy/sell) · markup 8 %");
+    // Venta al shipper como el Board de Rateware: brokerage suma el markup (12 % por defecto).
+    expect(tarifaVenta({ modeloComercial: "brokerage", carrierSharePct: null, margenPct: null, tarifaAllIn: 1000 })).toEqual({ venta: 1120, ingreso: 120, pct: 12, porDefecto: true });
+    expect(tarifaVenta({ modeloComercial: "brokerage", carrierSharePct: null, margenPct: 8, tarifaAllIn: 1000 }).venta).toBe(1080);
   });
 });
 
 describe("Excel del comparativo y pregunta al carrier", () => {
   beforeEach(preparar);
 
-  it("el Excel interno lleva carriers y modelo; el del shipper no muestra nombres ni porcentajes", async () => {
+  it("el Excel interno lleva carriers, costo y venta; el del shipper solo venta y modelo, sin nombres ni porcentajes", async () => {
     const d = await admin.detalle(eventId);
     const interno = hojaComparativo(d, false);
     expect(interno.filas[0]).toContain("Carrier");
     expect(interno.filas.slice(1).map((f) => [f[7], f[8], f[10], f[11]])).toEqual([
       ["Carrier Prueba B", 1690, "Fee plus", 3],
       ["Carrier Prueba A", 1750, "Sell share", 3],
-      ["Carrier Prueba C", 1820, "Cost plus", null]
+      ["Carrier Prueba C", 1820, "Cost plus", "3 (por defecto)"]
+    ]);
+    // Interno: tarifa de venta e ingreso por modelo; C sin % usa el 3 % por defecto.
+    expect(interno.filas.slice(1).map((f) => [f[11], f[12], f[13]])).toEqual([
+      [3, 1740.7, 50.7],
+      [3, 1750, 52.5],
+      ["3 (por defecto)", 1874.6, 54.6]
     ]);
     const shipper = hojaComparativo(d, true);
     const texto = JSON.stringify(shipper);
-    expect(texto).not.toMatch(/Carrier Prueba|Sell share|Fee plus|Cost plus|% del modelo/);
-    expect(shipper.filas.slice(1).map((f) => [f[5], f[6]])).toEqual([["Opción A", 1690], ["Opción B", 1750], ["Opción C", 1820]]);
+    expect(texto).not.toMatch(/Carrier Prueba|All-in|% del modelo|Ingreso|1690|1820/);
+    expect(shipper.filas[0]).toContain("Tarifa de venta");
+    expect(shipper.filas.slice(1).map((f) => [f[5], f[6], f[8]])).toEqual([
+      ["Opción A", 1740.7, "Fee plus"],
+      ["Opción B", 1750, "Sell share"],
+      ["Opción C", 1874.6, "Cost plus"]
+    ]);
     expect(nombreArchivo(d, true)).toBe("RFX-0001-PRBA-comparativo-shipper.xlsx");
 
     // Es un ZIP válido (PK…) con la hoja y el texto escapado.

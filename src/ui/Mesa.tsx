@@ -20,7 +20,7 @@ import {
 } from "../dominio/recorrido";
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
 import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
-import { cambiosComerciales, describirModelo } from "../dominio/modelo";
+import { cambiosComerciales, describirModelo, tarifaVenta } from "../dominio/modelo";
 import { candidatosRecordatorio, ETIQUETA_SEGUIMIENTO, preguntaAlCarrier, recordatorio, seguimiento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
 import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
@@ -617,6 +617,7 @@ function FilaOferta({ p, ruta, totalRubros, elegido, elegible, onElegir, onHisto
       <td>
         <span className="mono">{dinero(v.tarifaAllIn, v.moneda)}</span>
         <div className="tenue">{describirModelo(v)}</div>
+        <div className="tenue">Venta al shipper {dinero(tarifaVenta(v).venta, v.moneda)}{tarifaVenta(v).porDefecto ? " (% por defecto)" : ""}</div>
       </td>
       <td>{v.capacidadSemanal ?? "—"}</td>
       <td>{v.transitoDias !== null ? `${v.transitoDias} d` : "—"}</td>
