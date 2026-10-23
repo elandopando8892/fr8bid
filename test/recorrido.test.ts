@@ -24,6 +24,7 @@ import { cambiosComerciales, describirModelo, tarifaVenta } from "../src/dominio
 import { audienciaInvitacion } from "../src/dominio/revision";
 import { candidatosRecordatorio, diasEntre, preguntaAlCarrier, recordatorio, seguimiento } from "../src/dominio/seguimiento";
 import { crearXlsx } from "../src/dominio/xlsx";
+import { configCarrierFit } from "../src/dominio/carrierFit";
 import { operacionTanda, planearTandas } from "../src/dominio/tandas";
 import { ESCRITURAS, manejar, sinSecretos, SOLO_SIMULADO } from "../src/servidor/proxy";
 import { crearSimulado, ORG, sembrarDemo } from "../src/simulado/semilla";
@@ -744,6 +745,44 @@ describe("Excel del comparativo y pregunta al carrier", () => {
     expect(r.cuerpo).not.toMatch(/tok_|token=/);
     expect(decodeURIComponent(r.gmail)).toContain("¿El all-in incluye el cruce?");
     expect(sim.mensajes.filter((m) => m.status === "sent")).toHaveLength(enviados);
+  });
+});
+
+describe("Carrier fit de Rateware en la Mesa", () => {
+  beforeEach(preparar);
+
+  it("pide la consulta acotada del evento y marca quién ya está invitado o revisado", async () => {
+    const d = await admin.detalle(eventId);
+    const cfg = configCarrierFit(d);
+    expect(cfg).toMatchObject({ ranking_mode: "fit", rfx_carrier_fit: true, rfx_event_id: eventId, limit: 25 });
+    expect(cfg.filters).toMatchObject({ origin: "Monterrey, NL", destination: "Dallas, TX", equipment: "Dry Van" });
+
+    const fit = await admin.carrierFit(d);
+    const [primero, segundo] = fit.sugerencias;
+    expect(primero).toMatchObject({ nombre: "Carrier Prueba D", puntaje: 82, cotizaciones: 6, yaEnEvento: false, revisado: false });
+    expect(primero.porque).toContain("Monterrey → Dallas");
+    expect(segundo).toMatchObject({ nombre: "Carrier Prueba B", yaEnEvento: true, huecos: ["Sin tarifa aprobada reciente"] });
+    // Es lectura: nada cambia en el evento.
+    expect((await admin.detalle(eventId)).rutas[0].participaciones).toHaveLength(3);
+  });
+
+  it("el proxy solo deja pasar el Carrier fit de un evento, nunca el de HDships, y también contra Rateware real", async () => {
+    const llamadas: any[] = [];
+    const op = {
+      enviar: async (_s: any, b: any) => {
+        llamadas.push(b);
+        return { status: 200, body: { recommendations: [] }, headers: {} };
+      },
+      permitirEscrituras: false,
+      real: true
+    };
+    const [hd] = EVENTOS_PROTEGIDOS;
+    expect((await manejar("rateware-api", { action: "carrier_recommendations", config: { ranking_mode: "fit" } }, "Bearer x", op)).body.code).toBe("SOLO_CARRIER_FIT");
+    expect((await manejar("rateware-api", { action: "carrier_recommendations", config: { rfx_carrier_fit: true, rfx_event_id: hd } }, "Bearer x", op)).status).toBe(404);
+    expect(llamadas).toHaveLength(0);
+    const ok = await manejar("rateware-api", { action: "carrier_recommendations", config: { rfx_carrier_fit: true, rfx_event_id: eventId } }, "Bearer x", op);
+    expect(ok.status).toBe(200);
+    expect(llamadas).toHaveLength(1);
   });
 });
 

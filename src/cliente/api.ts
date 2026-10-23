@@ -2,6 +2,7 @@
 // recorrido usan esta misma capa; solo cambia el transporte (HTTP a /api o el
 // Rateware simulado detrás del mismo proxy).
 
+import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit";
 import type { EntradaCatalogo } from "../dominio/condiciones-r1";
 import { operacionEntrega } from "../dominio/operacion";
 import { hoyMexico, primario, versionMasReciente, versionVigente } from "../dominio/recorrido";
@@ -113,6 +114,10 @@ export class MesaApi {
     } catch {
       return null;
     }
+  }
+  // «Carrier fit» de Rateware para las rutas del evento (solo lectura).
+  async carrierFit(d: Detalle): Promise<CarrierFit> {
+    return leerCarrierFit(d, await this.rw({ action: "carrier_recommendations", config: configCarrierFit(d) }));
   }
   async catalogoCondiciones(): Promise<EntradaCatalogo[]> {
     return (await this.rw({ action: "list_rfx_condition_catalog" })).conditions || [];

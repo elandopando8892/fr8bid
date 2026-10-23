@@ -26,7 +26,7 @@ export interface Respuesta {
 export type Enviar = (servicio: Servicio, body: Record<string, unknown>, autorizacion: string | null) => Promise<Respuesta>;
 
 export const LECTURAS: Record<Servicio, Set<string>> = {
-  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews"]),
+  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations"]),
   "rfx-bid-api": new Set(["get_invitation"])
 };
 
@@ -131,6 +131,15 @@ export async function manejar(
 
   for (const clave of ["event_id", "rfx_event_id", "id"]) {
     if (esProtegido(body?.[clave])) return error(404, "NOT_FOUND", "No encontrado.");
+  }
+
+  if (action === "carrier_recommendations") {
+    // Solo el «Carrier fit» de un evento: la consulta acotada del Bid Room, no
+    // el motor completo de inteligencia de Rateware.
+    const config = body?.config && typeof body.config === "object" ? (body.config as Record<string, unknown>) : null;
+    if (!config || config.rfx_carrier_fit !== true || !config.rfx_event_id)
+      return error(400, "SOLO_CARRIER_FIT", "Fr8Bid solo consulta el Carrier fit de un evento.");
+    if (esProtegido(config.rfx_event_id)) return error(404, "NOT_FOUND", "No encontrado.");
   }
 
   if (op.real && SOLO_SIMULADO[servicio].has(action)) {
