@@ -515,6 +515,38 @@ describe("condiciones de ruta (parche R1)", () => {
   });
 });
 
+describe("ya respondió por otro canal", () => {
+  it("marca respondió o rechazó sin tarifa, y nunca borra una oferta", async () => {
+    const { s, carriers, op, adm, eventId: id } = await eventoConTres();
+    const d0 = await adm.detalle(id);
+    const ruta = d0.rutas[0];
+    const pa = ruta.participaciones.find((p) => p.carrierId === carriers.A.id)!;
+    const pb = ruta.participaciones.find((p) => p.carrierId === carriers.B.id)!;
+    await op.marcarRespondio({ eventId: id, participacionId: pa.id, rechazo: false, canal: "whatsapp", nota: "preguntó por el amarre" });
+    await op.marcarRespondio({ eventId: id, participacionId: pb.id, rechazo: true, canal: "email", nota: "sin unidades" });
+    const d = await adm.detalle(id);
+    expect(d.rutas[0].participaciones.find((p) => p.id === pa.id)?.estado).toBe("respondio");
+    expect(d.rutas[0].participaciones.find((p) => p.id === pb.id)?.estado).toBe("declino");
+
+    const llamadas: any[] = [];
+    const opReal = {
+      enviar: async (_s: string, b: Record<string, unknown>) => {
+        llamadas.push(b);
+        return { status: 200, body: { lanes: [{ invitations: [{ id: "lv1", bid_rate: 6000 }, { id: "lv2", bid_rate: null }] }] }, headers: {} };
+      },
+      permitirEscrituras: true,
+      real: true
+    };
+    const con = (patch: Record<string, unknown>, lv = "lv2") => manejar("rateware-api", { action: "update_rfx_bid", event_id: "e1", id: lv, patch }, "Bearer x", opReal);
+    expect((await con({ invitation_status: "responded" }, "lv1")).body.code).toBe("YA_OFERTO");
+    expect((await con({ invitation_status: "invited" })).body.code).toBe("SIN_TARIFA");
+    expect((await con({ notes: "x" })).body.code).toBe("SIN_TARIFA");
+    expect((await con({ invitation_status: "declined", notes: "Correo: sin unidades" })).status).toBe(200);
+    expect(llamadas.filter((b) => b.action === "update_rfx_bid")).toHaveLength(1);
+    void s;
+  });
+});
+
 // Regla de PRIMA (22-oct): solo se invita a carriers con «Revisado» vigente.
 async function eventoConTres() {
   const { sim: s, carriers } = crearSimulado();

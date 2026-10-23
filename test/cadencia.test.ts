@@ -67,6 +67,14 @@ describe("cadencia por falta de profundidad", () => {
     expect(de(cerrado, "a", horas(30))).toBeNull();
   });
 
+  it("quien respondió por correo o WhatsApp sin ofertar no recibe más intentos", () => {
+    const sunline = { ...part("sun"), estado: "respondio" as const };
+    const d = detalle([...parts, sunline], [...avisos, invitacion("sun", ENVIO)]);
+    expect(seguimiento(d, "2026-10-23").find((x) => x.carrierId === "c-sun")?.estado).toBe("respondio");
+    expect(de(d, "sun", horas(8))).toBeNull();
+    expect(intentosPorPreparar(d, horas(8), "2026-10-23").map((x) => x.participacion.id).sort()).toEqual(["a", "b"]);
+  });
+
   it("prepara el intento solo a quien ya le toca y no tiene borrador en la Cola", () => {
     const d = detalle(parts, avisos);
     expect(intentosPorPreparar(d, horas(7), "2026-10-23")).toEqual([]);

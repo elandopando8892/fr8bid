@@ -222,6 +222,18 @@ export class MesaApi {
     });
   }
 
+  // Respuesta por correo o WhatsApp sin oferta: la saca de los intentos. Solo
+  // cambia el estado y la nota de la participación; no envía nada.
+  marcarRespondio(c: { eventId: string; participacionId: string; rechazo: boolean; canal: "email" | "whatsapp" | "phone"; nota: string }) {
+    const etiqueta = { email: "Correo", whatsapp: "WhatsApp", phone: "Teléfono" }[c.canal];
+    return this.rw({
+      action: "update_rfx_bid",
+      event_id: c.eventId,
+      id: c.participacionId,
+      patch: { invitation_status: c.rechazo ? "declined" : "responded", notes: `${etiqueta}: ${c.nota.trim() || (c.rechazo ? "rechazó" : "respondió")}` }
+    });
+  }
+
   // ——— Decisiones (Administrador) ———
   // En Rateware «closed» es la entrega, no el cierre a ofertas. Cerrar a ofertas
   // es mover el plazo a ayer: la liga responde 409 y el evento sigue abierto

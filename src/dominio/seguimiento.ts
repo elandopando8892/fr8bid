@@ -6,7 +6,7 @@
 import { versionVigente } from "./recorrido.js";
 import type { Aviso, Detalle, Participacion, Ruta } from "./tipos.js";
 
-export type EstadoSeguimiento = "rebote" | "sin_abrir" | "abrio" | "oferto" | "declino";
+export type EstadoSeguimiento = "rebote" | "sin_abrir" | "abrio" | "respondio" | "oferto" | "declino";
 
 export interface SeguimientoCarrier {
   carrierId: string;
@@ -30,6 +30,7 @@ export const ETIQUETA_SEGUIMIENTO: Record<EstadoSeguimiento, string> = {
   rebote: "rebotó la invitación",
   sin_abrir: "no ha abierto la liga",
   abrio: "abrió la liga, sin oferta",
+  respondio: "ya respondió por otro canal",
   oferto: "ofertó",
   declino: "declinó"
 };
@@ -65,6 +66,9 @@ export function seguimiento(d: Detalle, hoy: string): SeguimientoCarrier[] {
     const estado: EstadoSeguimiento =
       ofertadas > 0 ? "oferto"
       : declinadas === filas.length ? "declino"
+      // Regla de Jose (23-oct-2026): quien ya respondió por correo o WhatsApp
+      // (preguntó, rechazó o cotizó fuera de la liga) no recibe más intentos.
+      : filas.some((f) => f.participacion.estado === "respondio") ? "respondio"
       : suyas.some((a) => a.estado === "rebotado") && !aceptadas.length ? "rebote"
       : vista ? "abrio"
       : "sin_abrir";

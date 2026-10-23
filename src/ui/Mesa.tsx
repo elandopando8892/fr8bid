@@ -504,7 +504,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
   if (!filas.length) return null;
   const candidatos = new Set(candidatosRecordatorio(d, ctx.hoy).map((x) => x.carrierId));
   const conteo = (e: EstadoSeguimiento) => filas.filter((x) => x.estado === e).length;
-  const orden: EstadoSeguimiento[] = ["sin_abrir", "abrio", "rebote", "declino", "oferto"];
+  const orden: EstadoSeguimiento[] = ["sin_abrir", "abrio", "rebote", "respondio", "declino", "oferto"];
   const ordenadas = [...filas].sort((a, b) => orden.indexOf(a.estado) - orden.indexOf(b.estado) || (b.diasSinRespuesta ?? 0) - (a.diasSinRespuesta ?? 0));
   const ahora = new Date();
   const flacas = rutasSinProfundidad(d);
@@ -517,6 +517,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
       <h2>Seguimiento</h2>
       <p className="tenue">
         {filas.length} invitado(s): {conteo("oferto")} ofertaron, {conteo("abrio")} abrieron sin ofertar, {conteo("sin_abrir")} no han abierto la liga
+        {conteo("respondio") ? `, ${conteo("respondio")} respondieron por otro canal` : ""}
         {conteo("declino") ? `, ${conteo("declino")} declinaron` : ""}
         {conteo("rebote") ? `, ${conteo("rebote")} rebotaron` : ""}.
       </p>
@@ -589,8 +590,20 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                         {abierto === x.carrierId ? "Ocultar" : "Recordatorio"}
                       </button>
                     )}
+                    {(x.estado === "sin_abrir" || x.estado === "abrio") && ctx.rol !== "viewer" && d.evento.estado === "abierto" && (
+                      <button className="btn-texto" onClick={() => setAbierto(abierto === `r:${x.carrierId}` ? null : `r:${x.carrierId}`)}>
+                        {abierto === `r:${x.carrierId}` ? "Ocultar" : "Ya respondió"}
+                      </button>
+                    )}
                   </td>
                 </tr>
+                {abierto === `r:${x.carrierId}` && (
+                  <tr>
+                    <td colSpan={7}>
+                      <YaRespondio d={d} s={x} accion={accion} />
+                    </td>
+                  </tr>
+                )}
                 {r && abierto === x.carrierId && (
                   <tr>
                     <td colSpan={7}>
@@ -610,6 +623,46 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
         </tbody>
       </table>
       </div>
+    </div>
+  );
+}
+
+// El carrier contestó por correo o WhatsApp sin ofertar en la liga (preguntó o
+// rechazó): se marca en Rateware y sale de los intentos. Si mandó tarifa, va por
+// «Capturar oferta recibida por otro canal».
+function YaRespondio({ d, s: x, accion }: { d: Detalle; s: ReturnType<typeof seguimiento>[number]; accion: Props["accion"] }) {
+  const s = useSesion();
+  const [canal, setCanal] = useState<"email" | "whatsapp" | "phone">("email");
+  const [rechazo, setRechazo] = useState(false);
+  const [nota, setNota] = useState("");
+  const ids = x.pendientes.map((f) => f.participacion.id);
+  return (
+    <div className="aviso-caja">
+      <div className="rejilla">
+        <label className="campo"><span>Canal</span>
+          <select value={canal} onChange={(e) => setCanal(e.target.value as typeof canal)}>
+            <option value="email">Correo</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="phone">Teléfono</option>
+          </select>
+        </label>
+        <label className="campo"><span>Qué dijo</span>
+          <input value={nota} maxLength={300} placeholder="p. ej. sin unidades directas a OK" onChange={(e) => setNota(e.target.value)} />
+        </label>
+        <label className="campo"><span><input type="checkbox" checked={rechazo} onChange={(e) => setRechazo(e.target.checked)} /> Rechazó</span></label>
+      </div>
+      <Confirmar
+        etiqueta={rechazo ? "Marcar que rechazó" : "Marcar que respondió"}
+        clase="btn-secundario"
+        advertencia={`${x.carrier} queda como ${rechazo ? "«declinó»" : "«respondió»"} en Rateware en ${ids.length} ruta(s) y ya no recibe intentos. No se envía nada.`}
+        deshabilitado={!ids.length}
+        onConfirmar={() =>
+          accion(async () => {
+            for (const id of ids) await s.api.marcarRespondio({ eventId: d.evento.id, participacionId: id, rechazo, canal, nota });
+            return ids.length;
+          }, () => `${x.carrier} ya no recibe intentos.`)
+        }
+      />
     </div>
   );
 }
