@@ -27,6 +27,16 @@ export function nombreModelo(modelo: string): string {
   return NOMBRE[modelo] ?? modelo;
 }
 
+// Familia que ve el shipper: todo lo que no es compra-venta (brokerage) es
+// Managed Transportation (decisión de Jose, 23-oct-2026).
+export function familiaModelo(modelo: string): "Brokerage" | "Managed Transportation" {
+  return modelo === "brokerage" ? "Brokerage" : "Managed Transportation";
+}
+
+export function modeloConFamilia(modelo: string): string {
+  return modelo === "brokerage" ? "Brokerage (compra-venta)" : `Managed Transportation · ${nombreModelo(modelo)}`;
+}
+
 export function porcentajeModelo(v: Comercial): { etiqueta: string; valor: number | null } {
   if (v.modeloComercial === "sell_share") return { etiqueta: "share del carrier", valor: v.carrierSharePct };
   if (v.modeloComercial === "brokerage") return { etiqueta: "markup", valor: v.margenPct };
@@ -37,7 +47,7 @@ const pct = (n: number | null) => (n === null ? "sin indicar" : `${n.toLocaleStr
 
 export function describirModelo(v: Comercial): string {
   const p = porcentajeModelo(v);
-  return `${nombreModelo(String(v.modeloComercial))} · ${p.etiqueta} ${pct(p.valor)}`;
+  return `${modeloConFamilia(String(v.modeloComercial))} · ${p.etiqueta} ${pct(p.valor)}`;
 }
 
 // Qué cambió entre dos versiones, en palabras: all-in, modelo y porcentaje.
