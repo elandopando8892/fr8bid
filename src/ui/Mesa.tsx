@@ -24,6 +24,7 @@ import { cambiosComerciales, describirModelo, tarifaVenta } from "../dominio/mod
 import { candidatosRecordatorio, claveIntento, ETIQUETA_SEGUIMIENTO, intentosPorPreparar, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
 import type { CarrierFit } from "../dominio/carrierFit";
+import { NOMBRE_FAMILIA, type HistorialSegmento } from "../dominio/segmento";
 import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
 import type { Aviso, Detalle, EntregaLocal, Participacion, Recibo, Ruta } from "../dominio/tipos";
 import { EditorCondiciones, ListaCondiciones, MatrizCondiciones } from "./condiciones";
@@ -118,6 +119,7 @@ export function Mesa({ id }: { id: string }) {
         <div className="centro">
           {(actual === "invitacion" || actual === "carriers") && <PanelInvitacion {...p} />}
           {(actual === "invitacion" || actual === "carriers") && <PanelCarrierFit d={d} />}
+          {(actual === "invitacion" || actual === "carriers") && <PanelHistorialSegmento d={d} />}
           {["necesidad", "evento"].includes(actual) && <PanelEvento {...p} />}
           {["invitacion", "ofertas", "comparar", "cierre"].includes(actual) && <PanelSeguimiento d={d} ctx={ctx} accion={accion} />}
           {["ofertas", "comparar", "cierre", "adjudicar"].includes(actual) && <PanelComparar {...p} />}
@@ -399,6 +401,93 @@ function PanelCarrierFit({ d }: { d: Detalle }) {
               </table>
             </div>
           )}
+          <button className="btn-texto" onClick={consultar}>Volver a consultar</button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Historial del segmento: carriers con tarifas aprobadas en Rateware de la
+// misma caja, operación D2D y cruce que la ruta. Es evidencia «solo tarifa»:
+// no confirma el equipo y no reemplaza la revisión en Bidware.
+function PanelHistorialSegmento({ d }: { d: Detalle }) {
+  const s = useSesion();
+  type Estado = { tipo: "cargando" } | { tipo: "ok"; datos: HistorialSegmento[] } | { tipo: "error"; mensaje: string };
+  const [h, setH] = useState<Estado | null>(null);
+  const consultar = () => {
+    setH({ tipo: "cargando" });
+    s.api.historialSegmento(d).then(
+      (datos) => setH({ tipo: "ok", datos }),
+      (e) => setH({ tipo: "error", mensaje: e instanceof Error ? e.message : "Error desconocido" })
+    );
+  };
+  return (
+    <div className="tarjeta">
+      <h2>Historial del segmento</h2>
+      <p className="tenue">
+        Carriers con tarifas aprobadas en Rateware de la misma caja, puerta a puerta y con cruce (sin tramos a frontera ni Intra-Mex). Es solo tarifa: confirma el equipo por correo y márcalo «Revisado» en Bidware antes de invitarlo.
+      </p>
+      {!h || h.tipo === "error" ? (
+        <>
+          {h?.tipo === "error" && <p className="error-texto">No se pudo consultar el historial: {h.mensaje}</p>}
+          <button className="btn-secundario" onClick={consultar}>
+            {h ? "Reintentar" : "Consultar historial del segmento"}
+          </button>
+        </>
+      ) : h.tipo === "cargando" ? (
+        <p className="tenue">Consultando a Rateware…</p>
+      ) : (
+        <>
+          {!h.datos.length && <p className="tenue">Ninguna ruta de este evento es D2D crossborder con una caja conocida.</p>}
+          {h.datos.map((g) => (
+            <div key={`${g.segmento.familia}|${g.segmento.operacion}`}>
+              <h3>
+                {NOMBRE_FAMILIA[g.segmento.familia]} · {g.segmento.operacion} · ruta(s) {g.rutas.join(", ")}
+              </h3>
+              {g.truncado && <p className="alerta">Se leyeron las primeras {g.filasLeidas} tarifas; puede haber más.</p>}
+              {!g.sugerencias.length ? (
+                <p className="tenue">Rateware no tiene tarifas de este segmento.</p>
+              ) : (
+                <div className="tabla-envoltura">
+                  <table className="tabla">
+                    <thead>
+                      <tr><th>Carrier</th><th>Tarifas</th><th>Mismo origen / destino (estado)</th><th>Rutas</th><th>Última</th><th>En este evento</th></tr>
+                    </thead>
+                    <tbody>
+                      {g.sugerencias.map((x) => (
+                        <tr key={x.clave}>
+                          <td>
+                            <b>{x.nombre}</b>
+                            {x.inactivo && <div className="tenue">Inactivo en Rateware</div>}
+                            {!x.vendorId && <div className="tenue">Sin carrier ligado en Rateware</div>}
+                            {x.nota && <div className="alerta">Jose: {x.nota.texto}</div>}
+                          </td>
+                          <td className="mono">{x.tarifas}</td>
+                          <td className="mono">{x.mismoOrigen} / {x.mismoDestino}</td>
+                          <td>{x.ejemplos.join("; ")}</td>
+                          <td className="mono">{x.ultima || "—"}</td>
+                          <td>{x.yaEnEvento ? <span className="pill ok-pill">Ya invitado</span> : x.revisado ? <span className="pill">Revisado, sin invitar</span> : <span className="pill">No está</span>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {g.descartados.length > 0 && (
+                <details>
+                  <summary className="tenue">{g.descartados.length} carrier(s) con tarifas de este segmento que Jose descartó</summary>
+                  <ul>
+                    {g.descartados.map((x) => (
+                      <li key={x.clave}>
+                        <b>{x.nombre}</b> ({x.tarifas} tarifa(s)): {x.nota?.texto}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          ))}
           <button className="btn-texto" onClick={consultar}>Volver a consultar</button>
         </>
       )}

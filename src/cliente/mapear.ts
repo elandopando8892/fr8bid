@@ -186,6 +186,14 @@ function ruta(l: Fila, confirmaciones: Fila[], condiciones: Fila[] = []): Ruta {
     objetivo: num(l.target_rate),
     moneda: String(l.currency || "USD"),
     desiertaMotivo: l.no_award_reason || (l.no_award_at ? "Ruta desierta" : null),
+    segmento: {
+      operacion: String(l.operation || ""),
+      caja: String(l.trailer || l.equipment || ""),
+      paisOrigen: l.origin_country ? String(l.origin_country).toUpperCase() : null,
+      paisDestino: l.destination_country ? String(l.destination_country).toUpperCase() : null,
+      estadoOrigen: l.origin_state ? String(l.origin_state) : null,
+      estadoDestino: l.destination_state ? String(l.destination_state) : null
+    },
     condiciones: condiciones.filter((c) => c.rfx_lane_id === l.id).map(condicion),
     participaciones: (l.invitations || []).map((lv: Fila) => participacion(lv, confirmaciones))
   };

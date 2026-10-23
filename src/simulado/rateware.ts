@@ -74,6 +74,8 @@ export class RatewareSimulado {
   vendors: Fila[] = [];
   // Historial que Rateware usa para «Carrier fit» (carrier_recommendations).
   fitCarrier = new Map<string, { score: number; evidence: string[]; gaps?: string[]; linked_rates?: number }>();
+  // Tarifas aprobadas de rate_staging (list_rateware), para el historial del segmento.
+  tarifas: Fila[] = [];
   events: Fila[] = [];
   lanes: Fila[] = [];
   laneVendors: Fila[] = [];
@@ -256,6 +258,22 @@ export class RatewareSimulado {
         const event = this.evento(u, body.rfx_event_id || body.event_id);
         if (this.fallas.fallarRevisiones) throw new Falla(500, "Review log unavailable", "REVIEWS_UNAVAILABLE");
         return ok({ rows: this.revisionesCarrier.filter((r) => r.rfx_event_id === event.id).map((r) => ({ ...r })) });
+      }
+      case "list_rateware": {
+        // Como list_rateware con column_filters: arreglo = coincidencia exacta;
+        // solo status approved y de la misma organización, con vendors(...).
+        const filtros: Fila = body.column_filters && typeof body.column_filters === "object" ? body.column_filters : {};
+        const limit = Math.min(Math.max(Number(body.limit) || 500, 1), 1000);
+        const offset = Math.max(Number(body.offset) || 0, 0);
+        const todas = this.tarifas
+          .filter((t) => t.owner_email === u.ownerEmail && t.status === "approved")
+          .filter((t) => Object.entries(filtros).every(([k, v]) => (Array.isArray(v) ? v.map(String).includes(String(t[k])) : String(t[k] || "").toLowerCase().includes(String(v).toLowerCase()))));
+        const rows = todas.slice(offset, offset + limit).map((t) => {
+          const v = this.vendors.find((x) => x.id === t.vendor_id);
+          const { owner_email: _o, ...resto } = t;
+          return { ...resto, vendors: v ? { vendor_name: v.vendor_name, domain: v.domain || null, primary_email: v.primary_email, base_stage: v.base_stage || null, status: v.status } : null };
+        });
+        return ok({ rows, total: todas.length, limit, offset, has_more: offset + rows.length < todas.length });
       }
       case "carrier_recommendations": {
         // Como buildCarrierRecommendations en modo rfx_carrier_fit: vendors de
