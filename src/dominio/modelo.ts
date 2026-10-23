@@ -5,6 +5,12 @@
 // rfx-bid-api: sell_share usa carrier_share_pct («Carrier invoice share»);
 // cost_plus, fee_plus y brokerage usan marksman_margin_pct («Suggested margin»,
 // markup en brokerage).
+//
+// La tarifa de venta al shipper sigue el «Board price» de Rateware
+// (bidCommercialEconomics en src/rfx-events.js): cost_plus y fee_plus suman el
+// margen al all-in (3 % si viene vacío), brokerage suma el markup (12 % si viene
+// vacío) y sell_share conserva el all-in, porque el share se le cobra al carrier
+// después del pago del cliente.
 
 import type { OfertaVersion } from "./tipos.js";
 
@@ -45,4 +51,19 @@ export function cambiosComerciales(antes: OfertaVersion, despues: OfertaVersion)
   const d = porcentajeModelo(despues);
   if (a.valor !== d.valor || a.etiqueta !== d.etiqueta) cambios.push(`${d.etiqueta} ${pct(a.etiqueta === d.etiqueta ? a.valor : null)} → ${pct(d.valor)}`);
   return cambios;
+}
+
+const POR_DEFECTO: Record<string, number> = { cost_plus: 3, fee_plus: 3, brokerage: 12, sell_share: 3 };
+
+export type Venta = { venta: number; ingreso: number; pct: number; porDefecto: boolean };
+
+const centavos = (n: number) => Math.round(n * 100) / 100;
+
+export function tarifaVenta(v: Comercial & Pick<OfertaVersion, "tarifaAllIn">): Venta {
+  const modelo = String(v.modeloComercial);
+  const declarado = porcentajeModelo(v).valor;
+  const pct = declarado ?? POR_DEFECTO[modelo] ?? POR_DEFECTO.cost_plus;
+  if (modelo === "sell_share") return { venta: v.tarifaAllIn, ingreso: centavos((v.tarifaAllIn * pct) / 100), pct, porDefecto: declarado === null };
+  const venta = centavos(v.tarifaAllIn * (1 + pct / 100));
+  return { venta, ingreso: centavos(venta - v.tarifaAllIn), pct, porDefecto: declarado === null };
 }
