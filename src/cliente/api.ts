@@ -97,8 +97,8 @@ export class MesaApi {
     return { ...d, recibo };
   }
 
-  // ——— Condiciones de ruta (parche R1; contra Rateware real, hasta que se
-  // aplique, el proxy responde 501 y la Mesa sigue sin condiciones) ———
+  // ——— Condiciones de ruta (parche R1, en rateware-prod desde el 23-oct-2026;
+  // si la lectura falla, la Mesa sigue sin condiciones) ———
   private async condicionesDe(eventId: string): Promise<Record<string, unknown>[]> {
     try {
       return (await this.rw({ action: "list_rfx_lane_conditions", event_id: eventId })).rows || [];

@@ -489,7 +489,7 @@ describe("condiciones de ruta (parche R1)", () => {
     await expect(admin.responderRubros(liga(ids.B), [cond("cond.cargo_insurance_usd", "exception", 250000, "300k desde noviembre")])).rejects.toMatchObject({ status: 409 });
   });
 
-  it("una excepción explicada en la revisión vigente no bloquea; contra Rateware real la Mesa sigue sin condiciones", async () => {
+  it("una excepción explicada en la revisión vigente no bloquea; contra Rateware real la Mesa ya lee las condiciones (R1 en prod)", async () => {
     let d = await admin.detalle(eventId);
     await operador.guardarCondiciones(eventId, d.rutas[0].id, [{ condition_key: "cargo_insurance_usd", importance: "required", target: 300000 }]);
     await admin.responderRubros(sim.tokenDe(ids.B), [{ segment_key: "lane", rubric_key: "cond.cargo_insurance_usd", answer: "exception", value: 250000, comment: "300k desde noviembre" }]);
@@ -511,7 +511,7 @@ describe("condiciones de ruta (parche R1)", () => {
     };
     const api = new MesaApi(async (servicio, body) => manejar(servicio, body, "Bearer x", op), () => "2026-10-21");
     expect((await api.detalle("e1")).rutas).toEqual([]);
-    expect(llamadas).not.toContain("list_rfx_lane_conditions");
+    expect(llamadas).toContain("list_rfx_lane_conditions");
   });
 });
 

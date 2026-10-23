@@ -78,11 +78,9 @@ export const SOLO_SIMULADO: Record<Servicio, Set<string>> = {
     "create_rfx_event",
     "import_rfx_lanes",
     "shortlist_rfx_lane_vendors",
-    "generate_outreach_drafts",
-    // Parche R1 (condiciones de ruta): aún sin aplicar en rateware-prod.
-    "list_rfx_condition_catalog",
-    "list_rfx_lane_conditions",
-    "save_rfx_lane_conditions"
+    "generate_outreach_drafts"
+    // Las condiciones de ruta (R1) ya van contra Rateware real: desplegado en
+    // rateware-prod el 23-oct-2026 (rateware-api v715, rfx-bid-api v344).
   ]),
   "rfx-bid-api": new Set(["get_invitation", "submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
