@@ -83,6 +83,15 @@ export interface Participacion {
   respondioEn: string | null;
 }
 
+export interface SegmentoRuta {
+  operacion: string;
+  caja: string;
+  paisOrigen: string | null;
+  paisDestino: string | null;
+  estadoOrigen: string | null;
+  estadoDestino: string | null;
+}
+
 export interface Ruta {
   id: string;
   numero: number;
@@ -93,6 +102,9 @@ export interface Ruta {
   objetivo: number | null;
   moneda: string;
   desiertaMotivo: string | null;
+  // Datos crudos del segmento (operación, caja y países) para la sugerencia
+  // por historial. Opcional: un evento viejo puede no traerlos.
+  segmento?: SegmentoRuta;
   condiciones: CondicionRuta[];
   participaciones: Participacion[];
 }

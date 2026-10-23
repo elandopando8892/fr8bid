@@ -13,7 +13,22 @@ import { UUID_RATEWARE } from "../dominio/operacion.js";
 import { esProtegido } from "../dominio/protegidos.js";
 import { candadosAdjudicacion, hoyMexico, puedeAdjudicar } from "../dominio/recorrido.js";
 import { revisionesVigentes } from "../dominio/revision.js";
+import { CAJAS_FAMILIA, POR_PAGINA } from "../dominio/segmento.js";
 import { MAXIMO_POR_LLAMADA } from "../dominio/tandas.js";
+
+const CAJAS_SEGMENTO = new Set(Object.values(CAJAS_FAMILIA).flat());
+
+function esConsultaSegmento(body: Record<string, unknown>) {
+  const permitidas = new Set(["action", "column_filters", "limit", "offset"]);
+  if (Object.keys(body).some((k) => !permitidas.has(k))) return false;
+  const f = body.column_filters && typeof body.column_filters === "object" ? (body.column_filters as Record<string, unknown>) : null;
+  if (!f || Object.keys(f).sort().join(",") !== "operation,trailer") return false;
+  const cajas = f.trailer, ops = f.operation;
+  if (!Array.isArray(cajas) || !cajas.length || !cajas.every((c) => CAJAS_SEGMENTO.has(String(c)))) return false;
+  if (!Array.isArray(ops) || ops.length !== 1 || !["D2D Export", "D2D Import"].includes(String(ops[0]))) return false;
+  const limit = Number(body.limit), offset = Number(body.offset ?? 0);
+  return Number.isInteger(limit) && limit > 0 && limit <= POR_PAGINA && Number.isInteger(offset) && offset >= 0;
+}
 
 export type Servicio = "rateware-api" | "rfx-bid-api";
 
@@ -26,7 +41,7 @@ export interface Respuesta {
 export type Enviar = (servicio: Servicio, body: Record<string, unknown>, autorizacion: string | null) => Promise<Respuesta>;
 
 export const LECTURAS: Record<Servicio, Set<string>> = {
-  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations"]),
+  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware"]),
   "rfx-bid-api": new Set(["get_invitation"])
 };
 
@@ -142,6 +157,12 @@ export async function manejar(
     if (!config || config.rfx_carrier_fit !== true || !config.rfx_event_id)
       return error(400, "SOLO_CARRIER_FIT", "Fr8Bid solo consulta el Carrier fit de un evento.");
     if (esProtegido(config.rfx_event_id)) return error(404, "NOT_FOUND", "No encontrado.");
+  }
+
+  if (action === "list_rateware" && !esConsultaSegmento(body!)) {
+    // Solo la consulta del historial del segmento: caja y operación, sin
+    // búsqueda libre ni otros filtros (no es una puerta al tarifario).
+    return error(400, "SOLO_HISTORIAL_SEGMENTO", "Fr8Bid solo consulta el historial del segmento de una ruta.");
   }
 
   if (op.real && SOLO_SIMULADO[servicio].has(action)) {

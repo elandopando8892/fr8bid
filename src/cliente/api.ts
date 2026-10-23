@@ -4,6 +4,7 @@
 
 import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit";
 import type { EntradaCatalogo } from "../dominio/condiciones-r1";
+import { MAX_PAGINAS, POR_PAGINA, claveSegmento, consultaSegmento, leerHistorialSegmento, segmentoDeRuta, type HistorialSegmento, type Segmento } from "../dominio/segmento";
 import { operacionEntrega } from "../dominio/operacion";
 import { hoyMexico, primario, versionMasReciente, versionVigente } from "../dominio/recorrido";
 import { ESPERA_ENTRE_TANDAS_MS, esCuota, leerResultado, operacionTanda, planearTandas, requiereAtencion, type ResultadoEnvio } from "../dominio/tandas";
@@ -118,6 +119,30 @@ export class MesaApi {
   // «Carrier fit» de Rateware para las rutas del evento (solo lectura).
   async carrierFit(d: Detalle): Promise<CarrierFit> {
     return leerCarrierFit(d, await this.rw({ action: "carrier_recommendations", config: configCarrierFit(d) }));
+  }
+  // Historial del segmento: tarifas aprobadas de Rateware con la misma caja,
+  // operación D2D y cruce que cada ruta (solo lectura). Un segmento por grupo
+  // de rutas; si hay más de MAX_PAGINAS páginas, se marca «truncado».
+  async historialSegmento(d: Detalle): Promise<HistorialSegmento[]> {
+    const segmentos = new Map<string, Segmento>();
+    for (const r of d.rutas) {
+      const s = segmentoDeRuta(r);
+      if (s && !segmentos.has(claveSegmento(s))) segmentos.set(claveSegmento(s), s);
+    }
+    const salida: HistorialSegmento[] = [];
+    for (const s of segmentos.values()) {
+      const filas: Record<string, any>[] = [];
+      let truncado = false;
+      for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
+        const r = await this.rw(consultaSegmento(s, pagina));
+        const rows: Record<string, any>[] = Array.isArray(r?.rows) ? r.rows : [];
+        filas.push(...rows);
+        if (!r?.has_more || rows.length < POR_PAGINA) break;
+        if (pagina === MAX_PAGINAS - 1) truncado = true;
+      }
+      salida.push(leerHistorialSegmento(d, s, filas, truncado));
+    }
+    return salida;
   }
   async catalogoCondiciones(): Promise<EntradaCatalogo[]> {
     return (await this.rw({ action: "list_rfx_condition_catalog" })).conditions || [];
