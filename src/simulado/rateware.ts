@@ -76,6 +76,8 @@ export class RatewareSimulado {
   vendors: Fila[] = [];
   // Historial que Rateware usa para «Carrier fit» (carrier_recommendations).
   fitCarrier = new Map<string, { score: number; evidence: string[]; gaps?: string[]; linked_rates?: number }>();
+  // contact_history: rebotes de Gmail, ligas entregadas, envíos fallidos…
+  historialContacto: Fila[] = [];
   // Tarifas aprobadas de rate_staging (list_rateware), para el historial del segmento.
   tarifas: Fila[] = [];
   events: Fila[] = [];
@@ -298,6 +300,25 @@ export class RatewareSimulado {
         if (this.fallas.fallarRespuestas) throw new Falla(500, "Gmail reply lookup failed", "REPLIES_UNAVAILABLE");
         const ids = new Set(this.laneVendors.filter((lv) => lv.rfx_event_id === event.id).map((lv) => lv.id));
         return ok({ event_id: event.id, checked_at: this.ahora(), email_status: "checked", rows: this.respuestasCarrier.filter((r) => ids.has(r.rfx_lane_vendor_id)).map((r) => ({ ...r })) });
+      }
+      case "list_vendors": {
+        // Como list_vendors con lightweight: por ids o búsqueda (nombre o dominio).
+        const ids = Array.isArray(body.ids || body.vendor_ids) ? (body.ids || body.vendor_ids).map(String) : null;
+        const buscar = String(body.search || "").trim().toLowerCase();
+        const limit = Math.min(Math.max(Number(body.limit) || 75, 1), 1000);
+        const rows = this.vendors
+          .filter((v) => v.owner_email === u.ownerEmail)
+          .filter((v) => !ids || ids.includes(v.id))
+          .filter((v) => !buscar || [v.vendor_name, v.domain, v.primary_email].some((x) => String(x || "").toLowerCase().includes(buscar)))
+          .slice(0, limit)
+          .map(({ owner_email: _o, ...resto }) => ({ secondary_emails: [], whatsapp_phone: null, whatsapp_do_not_contact: false, contact_name: null, domain: null, ...resto }));
+        return ok({ rows, total: rows.length, limit, offset: 0 });
+      }
+      case "list_contact_history": {
+        const limit = Math.min(Math.max(Number(body.limit) || 300, 25), 1000);
+        const todas = this.historialContacto.filter((h) => h.owner_email === u.ownerEmail && (!body.vendor_id || h.vendor_id === body.vendor_id));
+        const rows = todas.slice(0, limit).map(({ owner_email: _o, ...resto }) => ({ ...resto }));
+        return ok({ rows, total: todas.length, offset: 0, limit, has_more: rows.length < todas.length });
       }
       case "list_rateware": {
         // Como list_rateware con column_filters: arreglo = coincidencia exacta;

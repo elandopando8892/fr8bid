@@ -25,6 +25,7 @@ import { candidatosRecordatorio, claveIntento, ETIQUETA_SEGUIMIENTO, intentosPor
 import { crearXlsx } from "../dominio/xlsx";
 import type { CarrierFit } from "../dominio/carrierFit";
 import type { Telefono } from "../dominio/telefonos";
+import type { ContactosCarrier } from "../dominio/contactos";
 import { NOMBRE_FAMILIA, type HistorialSegmento } from "../dominio/segmento";
 import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
 import type { Aviso, Detalle, EntregaLocal, Participacion, Recibo, Ruta } from "../dominio/tipos";
@@ -267,6 +268,7 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
             {[...new Map(audiencia.omitidas.map((o) => [o.p.carrierId, o])).values()].map((o) => (
               <li key={o.p.carrierId}>
                 {o.p.carrier}: {o.motivo} · {o.p.correo || "sin correo en Rateware"}
+                {!o.p.correo && ctx.rol !== "viewer" && <ContactosSugeridos vendorId={o.p.carrierId} />}
                 {ctx.rol === "admin" && o.estado === "sin_revision" && o.p.correo && (
                   <Confirmar
                     etiqueta="Marcar «Revisado»"
@@ -440,6 +442,60 @@ function PanelCarrierFit({ d, ctx, accion }: Props) {
           )}
           <button className="btn-texto" onClick={consultar}>Volver a consultar</button>
         </>
+      )}
+    </div>
+  );
+}
+
+// Contactos que Rateware ya conoce cuando el carrier no tiene uno útil: los del
+// registro y los de otros registros con su mismo dominio, sin rebotes recientes
+// en Gmail ni «no contactar». Solo los muestra: no cambia el contacto del
+// carrier en Rateware ni invita a nadie.
+function ContactosSugeridos({ vendorId, abrir = false }: { vendorId: string; abrir?: boolean }) {
+  const s = useSesion();
+  type Estado = { tipo: "cargando" } | { tipo: "ok"; datos: ContactosCarrier } | { tipo: "error"; mensaje: string };
+  const [c, setC] = useState<Estado | null>(null);
+  const consultar = () => {
+    setC({ tipo: "cargando" });
+    s.api.contactosConocidos(vendorId).then(
+      (datos) => setC({ tipo: "ok", datos }),
+      (e) => setC({ tipo: "error", mensaje: e instanceof Error ? e.message : "Error desconocido" })
+    );
+  };
+  useEffect(() => {
+    if (abrir) consultar();
+  }, [abrir, vendorId]);
+  if (!c || c.tipo === "error")
+    return (
+      <>
+        {c?.tipo === "error" && <span className="error-texto"> No se pudieron consultar los contactos: {c.mensaje}</span>}
+        <button className="btn-texto" onClick={consultar}>{c ? "Reintentar" : "Buscar contactos conocidos"}</button>
+      </>
+    );
+  if (c.tipo === "cargando") return <span className="tenue"> Buscando contactos en Rateware…</span>;
+  const x = c.datos;
+  return (
+    <div className="aviso-caja">
+      <p>
+        <b>Contactos conocidos de {x.nombre}</b>
+        {x.dominio ? ` (dominio ${x.dominio})` : ""}. Fr8Bid solo los sugiere: para usar uno, ponlo como contacto del carrier en Rateware y márcalo «Revisado».
+      </p>
+      {x.avisos.map((a) => <p key={a} className="alerta">{a}</p>)}
+      {!x.sugeridos.length ? (
+        <p className="tenue">Rateware no tiene otro contacto limpio de este carrier.</p>
+      ) : (
+        <ul>
+          {x.sugeridos.map((k) => (
+            <li key={`${k.tipo}:${k.valor}`}>
+              <span className="mono">{k.tipo === "whatsapp" ? `WhatsApp ${k.valor}` : k.valor}</span>
+              {k.nombre ? ` · ${k.nombre}` : ""} · <span className="tenue">{k.origen}{k.ultimoUso ? `; último uso ${k.ultimoUso}` : ""}</span>
+              {k.nota && <span className="tenue"> · {k.nota}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {x.descartados.length > 0 && (
+        <p className="tenue">No se sugieren: {x.descartados.map((k) => `${k.valor} (${k.motivo})`).join(", ")}.</p>
       )}
     </div>
   );
@@ -686,6 +742,11 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                         WhatsApp{whatsappDe.get(x.carrierId)!.telefono.certeza === "dudoso" ? " (por confirmar)" : ""}
                       </a>
                     )}
+                    {(x.estado === "rebote" || (whatsappDe.has(x.carrierId) && !whatsappDe.get(x.carrierId)!.liga)) && ctx.rol !== "viewer" && (
+                      <button className="btn-texto" onClick={() => setAbierto(abierto === `c:${x.carrierId}` ? null : `c:${x.carrierId}`)}>
+                        {abierto === `c:${x.carrierId}` ? "Ocultar" : "Otros contactos"}
+                      </button>
+                    )}
                     {r && ctx.rol !== "viewer" && (
                       <button className="btn-texto" onClick={() => setAbierto(abierto === x.carrierId ? null : x.carrierId)}>
                         {abierto === x.carrierId ? "Ocultar" : "Recordatorio"}
@@ -698,6 +759,13 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                     )}
                   </td>
                 </tr>
+                {abierto === `c:${x.carrierId}` && (
+                  <tr>
+                    <td colSpan={7}>
+                      <ContactosSugeridos vendorId={x.carrierId} abrir />
+                    </td>
+                  </tr>
+                )}
                 {abierto === `r:${x.carrierId}` && (
                   <tr>
                     <td colSpan={7}>

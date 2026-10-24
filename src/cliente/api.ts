@@ -4,6 +4,7 @@
 
 import type { ConsultaTelefono, Telefono } from "../dominio/telefonos";
 import { MAX_TELEFONOS, revisarTelefonos } from "../servidor/telefonos";
+import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier } from "../dominio/contactos";
 import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit";
 import type { EntradaCatalogo } from "../dominio/condiciones-r1";
 import { MAX_PAGINAS, POR_PAGINA, claveSegmento, consultaSegmento, leerHistorialSegmento, segmentoDeRuta, type HistorialSegmento, type Segmento } from "../dominio/segmento";
@@ -167,6 +168,19 @@ export class MesaApi {
       if (e instanceof ErrorApi && e.code === "PASO_EN_RATEWARE") return undefined;
       return null;
     }
+  }
+  // Contactos que Rateware ya conoce del carrier y de otros registros con su
+  // mismo dominio, sin rebotes recientes en Gmail ni «no contactar» (solo lectura).
+  async contactosConocidos(vendorId: string): Promise<ContactosCarrier> {
+    const propio = ((await this.rw({ action: "list_vendors", ids: [vendorId], lightweight: true })).rows || []) as Record<string, any>[];
+    const dominio = propio[0] ? dominioBuscable(propio[0]) : null;
+    const otros = dominio
+      ? (((await this.rw({ action: "list_vendors", search: dominio, lightweight: true, limit: MAX_REGISTROS })).rows || []) as Record<string, any>[]).filter((v) => v.id !== vendorId && dominioBuscable(v) === dominio)
+      : [];
+    const vendors = [...propio, ...otros];
+    const historial: Record<string, any>[] = [];
+    for (const v of vendors.slice(0, 6)) historial.push(...((await this.rw({ action: "list_contact_history", vendor_id: v.id, limit: 300 })).rows || []));
+    return sugerirContactos(vendorId, vendors, historial, this.hoy());
   }
   // «Carrier fit» de Rateware para las rutas del evento (solo lectura).
   async carrierFit(d: Detalle): Promise<CarrierFit> {
