@@ -8,6 +8,7 @@ import { huellaAviso, huellaOferta } from "../dominio/huella.js";
 import { esProtegido } from "../dominio/protegidos.js";
 import { hoyMexico } from "../dominio/recorrido.js";
 import { revisionesVigentes } from "../dominio/revision.js";
+import { leerCierre } from "../dominio/cierre.js";
 import type {
   Aviso,
   CondicionRuta,
@@ -226,7 +227,9 @@ export function aviso(m: Fila): Aviso {
     motivo: m.delivery_error || m.last_error || null,
     enviadoEn: m.sent_at || null,
     whatsapp: vendor.whatsapp_phone ? String(vendor.whatsapp_phone) : null,
-    whatsappNoContactar: vendor.whatsapp_do_not_contact === true
+    whatsappNoContactar: vendor.whatsapp_do_not_contact === true,
+    intento: meta.source === "bid_room_carrier_ask",
+    enHilo: meta.gmail_reply_mode === "thread_reply"
   };
 }
 
@@ -260,7 +263,9 @@ export function detalle(
       shipper: String(e.customer || "—"),
       estado: estadoEvento(e, hoy),
       plazo: e.due_date || null,
-      prueba: esPrueba(e.name)
+      prueba: esPrueba(e.name),
+      // Si en Rateware se reabrió con otro plazo, la marca vieja no aplica.
+      cierre: ["cerrado", "adjudicado", "archivado"].includes(estadoEvento(e, hoy)) ? leerCierre(e.notes) : null
     },
     rutas: (crudo.lanes || []).map((l: Fila) => ruta(l, extra.rubros || [], extra.condiciones || [])).sort((a: Ruta, b: Ruta) => a.numero - b.numero),
     avisos: mensajes.map(aviso),

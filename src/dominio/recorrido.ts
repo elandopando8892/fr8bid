@@ -226,7 +226,7 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
   const pasos: Paso[] = [];
   pasos.push(paso("necesidad", 1, "hecho", `${evento.shipper} · manual`, "Operador"));
   pasos.push(
-    paso("evento", 2, rutas.length ? "hecho" : "actual", rutas.length ? `${rutas.length} ruta(s)${evento.plazo ? ` · plazo ${evento.plazo}` : ""}` : "Agregar al menos una ruta", "Operador")
+    paso("evento", 2, rutas.length ? "hecho" : "actual", rutas.length ? `${rutas.length} ruta(s)${evento.cierre?.plazoOriginal ? ` · plazo original ${evento.cierre.plazoOriginal}` : evento.plazo ? ` · plazo ${evento.plazo}` : ""}` : "Agregar al menos una ruta", "Operador")
   );
   pasos.push(
     paso("carriers", 3, !rutas.length ? "pendiente" : todas.length ? "hecho" : "actual", todas.length ? `${todas.length} carrier(s)` : "Elegir carriers", "Operador")
@@ -259,7 +259,9 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
       "cierre",
       7,
       cerradoOMas ? "hecho" : abierto && respondieron.length ? "actual" : "pendiente",
-      cerradoOMas ? "Cerrado: la liga ya no acepta ofertas" : "Cerrar antes de adjudicar (mitigación C2)",
+      cerradoOMas
+        ? `Cerrado: la liga ya no acepta ofertas${evento.cierre ? ` · el ${evento.cierre.el}, plazo original ${evento.cierre.plazoOriginal ?? "sin plazo"}` : ""}`
+        : "Cerrar antes de adjudicar (mitigación C2)",
       "Administrador"
     )
   );
@@ -295,7 +297,7 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
   );
   const loadsHecho = primarios.length > 0 && visiblesLoads === primarios.length;
   pasos.push(
-    paso("loads", 11, loadsHecho && confirmada ? "hecho" : confirmada ? "actual" : "bloqueado", loadsHecho && confirmada ? "Visible como «adjudicado» (L1)" : confirmada ? "Esperando a Loads" : "Requiere recibo", "Sistema")
+    paso("loads", 11, loadsHecho && confirmada ? "hecho" : confirmada ? "actual" : "bloqueado", loadsHecho && confirmada ? "Inferido del recibo (L1); Loads no lo confirma" : confirmada ? "Esperando a Loads" : "Requiere recibo", "Sistema")
   );
 
   if (evento.estado === "archivado") for (const p of pasos) if (p.estado !== "hecho") p.estado = "pendiente";

@@ -469,11 +469,16 @@ export class RatewareSimulado {
         const lv = this.laneVendors.find((x) => x.id === body.rfx_lane_vendor_id && x.rfx_event_id === event.id);
         if (!lv) throw new Falla(404, "That carrier invitation does not belong to the selected RFx.", "NOT_FOUND");
         const vendor = this.vendors.find((v) => v.id === lv.vendor_id)!;
-        const original = this.mensajes.find((m) => m.rfx_lane_vendor_id === lv.id && m.metadata.notice_type === "rfx_invitation");
-        const m = this.filaMensaje(event, lv, vendor, original ? `Re: ${original.subject}` : `${event.rfx_id} | Question`, texto, {
+        // Como rateware-api: responde en el hilo solo si encuentra un correo
+        // del carrier; si no (el caso de quien no ha respondido), sale como
+        // correo nuevo con asunto en inglés «<folio> | Question about …».
+        const lane = this.lanes.find((l) => l.id === lv.rfx_lane_id);
+        const ruta = [lane?.origin_city, lane?.destination_city].filter(Boolean).join(" -> ") || "this RFx";
+        const m = this.filaMensaje(event, lv, vendor, `${event.rfx_id} | Question about ${ruta}`, texto, {
           source: "bid_room_carrier_ask",
           bid_room_request_key: clave,
-          rfx_lane_vendor_ids: [lv.id]
+          rfx_lane_vendor_ids: [lv.id],
+          gmail_reply_mode: "new_email"
         });
         this.mensajes.push(m);
         this.bitacorar(u.email, "bid_room.carrier_question.draft", "outreach_messages", m.id, null, "drafted", { request_key: clave });
@@ -572,6 +577,7 @@ export class RatewareSimulado {
           event.due_date = patch.due_date || null;
           this.bitacorar(u.email, "rfx.event.due_date", "rfx_events", event.id, antes, event.due_date);
         }
+        if (patch.notes !== undefined) event.notes = String(patch.notes ?? "").trim() || null;
         return ok({ row: { ...event } });
       }
       case "update_rfx_bid": {

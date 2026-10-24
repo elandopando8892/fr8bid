@@ -197,7 +197,8 @@ function PanelEvento({ d, ctx, accion }: Props) {
     <div className="tarjeta">
       <h2>Necesidad y evento</h2>
       <p>
-        {d.evento.nombre} · shipper {d.evento.shipper} · plazo {fecha(d.evento.plazo)}
+        {d.evento.nombre} · shipper {d.evento.shipper} ·{" "}
+        {d.evento.cierre ? `cerrado a ofertas el ${fecha(d.evento.cierre.el)} (plazo original ${fecha(d.evento.cierre.plazoOriginal)})` : `plazo ${fecha(d.evento.plazo)}`}
       </p>
       {d.rutas.map((r) => (
         <div key={r.id} className="ruta-evento">
@@ -225,7 +226,8 @@ const ESTADO_INVITACION: Record<string, string> = {
 function PanelInvitacion({ d, ctx, accion }: Props) {
   const s = useSesion();
   const [avance, setAvance] = useState<AvanceEnvio | null>(null);
-  const invitaciones = d.avisos.filter((a) => a.tipo === "invitacion");
+  // Los intentos de seguimiento se aprueban en «Seguimiento».
+  const invitaciones = d.avisos.filter((a) => a.tipo === "invitacion" && !a.intento);
   const todas = d.rutas.flatMap((r) => r.participaciones);
   const carrierDe = (a: Aviso) => todas.find((x) => x.id === a.participacionId);
   // Solo salen invitaciones de carriers con «Revisado» vigente (el servidor lo
@@ -577,7 +579,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
           {tocan.length > 0 && (
             <p>
               <span className="pill alerta">Ya toca</span> {[...new Set(tocan.map((x) => `${x!.intento}º intento por ${x!.canal === "whatsapp" ? "WhatsApp" : "correo"}`))].join(", ")} a {tocan.length} carrier(s).
-              {tocan.some((x) => x!.canal === "correo") ? "Fr8Bid no envía solo: el correo se aprueba en la Cola." : "Fr8Bid no envía solo."}
+              {tocan.some((x) => x!.canal === "correo") ? "Fr8Bid no envía solo: el correo se prepara y se aprueba aquí abajo." : "Fr8Bid no envía solo."}
             </p>
           )}
           {whatsapp.length > 0 && ctx.rol !== "viewer" && (
@@ -593,13 +595,14 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
           {muestra && ctx.rol !== "viewer" && (
             <>
               <p className="tenue">
-                Texto del {muestra.paso.intento}º intento (va como respuesta en el hilo de la invitación, con el resumen de la ruta y el botón a su liga privada):
+                Texto del {muestra.paso.intento}º intento. Rateware lo pone dentro de su plantilla con el resumen de la ruta y el botón a la liga privada. Va en el hilo solo si el carrier ya
+                escribió; si no, sale como correo nuevo con asunto «{d.evento.folio} | Question about …» (el asunto lo fija Rateware, en inglés):
               </p>
               <p className="texto-aviso">{textoIntento(d, muestra.ruta, muestra.paso)}</p>
               <Confirmar
                 etiqueta={`Preparar ${porPreparar.length} borrador(es) en la Cola`}
                 clase="btn-secundario"
-                advertencia={`Rateware deja ${porPreparar.length} borrador(es) en la Cola, uno por carrier sin respuesta. No se envía nada: el envío lo apruebas en la Cola de Rateware.`}
+                advertencia={`Rateware deja ${porPreparar.length} borrador(es) en la Cola, uno por carrier sin respuesta. No se envía nada: el envío lo apruebas aquí mismo.`}
                 onConfirmar={() =>
                   accion(async () => {
                     let listos = 0;
@@ -608,13 +611,14 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                       listos++;
                     }
                     return listos;
-                  }, (n) => `${n} borrador(es) en la Cola de Rateware. Revísalos y envíalos desde la Cola.`)
+                  }, (n) => `${n} borrador(es) listos. Revísalos y apruébalos abajo.`)
                 }
               />
             </>
           )}
         </div>
       )}
+      <IntentosPorEnviar d={d} ctx={ctx} accion={accion} />
       <div className="tabla-envoltura">
       <table className="tabla">
         <thead>
@@ -640,7 +644,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                     {(() => {
                       const sig = siguiente.get(x.carrierId);
                       if (!sig) return "—";
-                      return <>{sig.intento}º por {sig.canal === "whatsapp" ? "WhatsApp" : "correo"} · {sig.enCola ? "borrador en la Cola" : sig.vencido ? <span className="pill alerta">ya toca</span> : fecha(sig.tocaEn)}</>;
+                      return <>{sig.intento}º por {sig.canal === "whatsapp" ? "WhatsApp" : "correo"} · {sig.enCola ? "borrador por aprobar" : sig.vencido ? <span className="pill alerta">ya toca</span> : fecha(sig.tocaEn)}</>;
                     })()}
                   </td>
                   <td>
@@ -687,6 +691,80 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
         </tbody>
       </table>
       </div>
+    </div>
+  );
+}
+
+// Intentos preparados (borradores de Rateware) que se aprueban aquí con su
+// versión exacta, en tandas: sin pasar por la Cola ni por sus window.confirm.
+// Solo a carriers con «Revisado» vigente (el servidor lo vuelve a comprobar).
+function IntentosPorEnviar({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion: Props["accion"] }) {
+  const s = useSesion();
+  const [avance, setAvance] = useState<AvanceEnvio | null>(null);
+  const [verTextos, setVerTextos] = useState(false);
+  const todas = d.rutas.flatMap((r) => r.participaciones);
+  const carrierDe = (a: Aviso) => todas.find((x) => x.id === a.participacionId);
+  const intentos = d.avisos.filter((a) => a.intento && (a.estado === "borrador" || a.estado === "fallido" || a.estado === "en_cola"));
+  if (!intentos.length && !avance) return null;
+  const revisado = (a: Aviso) => {
+    const p = carrierDe(a);
+    return Boolean(p && estadoRevision(d, p.carrierId) === "revisado");
+  };
+  // Si el carrier ya ofertó, declinó o contestó, el borrador ya no se manda.
+  const vigentes = new Set(seguimiento(d, ctx.hoy).filter((x) => x.estado === "sin_abrir" || x.estado === "abrio").map((x) => x.carrierId));
+  const sigue = (a: Aviso) => vigentes.has(carrierDe(a)?.carrierId ?? "");
+  const porEnviar = intentos.filter((a) => revisado(a) && sigue(a));
+  const detenidos = intentos.filter((a) => !porEnviar.includes(a));
+  const tandas = planearTandas(porEnviar).length;
+  return (
+    <div className="aviso-caja">
+      <p>
+        <b>{intentos.length} intento(s) preparados</b> sin enviar
+        {detenidos.length > 0 && <> · {detenidos.length} no se envían (el carrier ya respondió o no tiene «Revisado» vigente)</>}.
+      </p>
+      <button className="btn-texto" onClick={() => setVerTextos(!verTextos)}>{verTextos ? "Ocultar textos" : "Ver los textos exactos"}</button>
+      {verTextos &&
+        intentos.map((a) => (
+          <div key={a.id} className="aviso-caja">
+            <div className="fila">
+              <b>{carrierDe(a)?.carrier ?? a.destinatario}</b>
+              <span className="pill">{a.enHilo ? "en el hilo del carrier" : "correo nuevo"}</span>
+              {!porEnviar.includes(a) && <span className="pill">no se envía</span>}
+            </div>
+            <p className="tenue">Para: {a.destinatario} · Gmail · versión {fecha(a.version)}</p>
+            <p><b>{a.asunto}</b></p>
+            <p className="texto-aviso">{a.cuerpo}</p>
+          </div>
+        ))}
+      {avance && (
+        <p className={avance.detenido ? "estado estado-error" : "tenue"}>
+          Tanda {avance.hechas} de {avance.tandas}: {avance.enviados} aceptado(s) por Gmail{avance.enCola ? `, ${avance.enCola} en cola` : ""}
+          {avance.inciertos ? `, ${avance.inciertos} incierto(s)` : ""}. {avance.detenido ?? ""}
+        </p>
+      )}
+      {porEnviar.length > 0 && ctx.rol === "admin" && (
+        <Confirmar
+          etiqueta={`Aprobar y enviar ${porEnviar.length} intento(s) con su texto exacto`}
+          advertencia={
+            <>
+              Se envían por Gmail desde sales@heymarksman.com, exactamente la versión que Rateware tiene ahora (ábrelos con «Ver los textos exactos»)
+              {tandas > 1 ? `, en ${tandas} tandas de hasta ${TAMANO_TANDA} con un minuto entre tandas` : ""}. Si alguien edita uno en la Cola antes, Rateware lo rechaza. Si Gmail
+              llega a su cuota diaria, se detiene y lo pendiente queda en cola, sin reintentos automáticos. {ADVERTENCIA_REAL(s, d)}
+            </>
+          }
+          onConfirmar={() =>
+            accion(
+              async () => {
+                const r = await s.api.enviarPorTandas(d.evento.id, porEnviar, { alAvanzar: setAvance });
+                setAvance(r);
+                if (r.detenido) throw new Error(`${r.enviados} de ${porEnviar.length} aceptados por Gmail. ${r.detenido}`);
+                return r;
+              },
+              (r) => `${r.enviados} intento(s) aceptados por Gmail.`
+            )
+          }
+        />
+      )}
     </div>
   );
 }
@@ -1165,6 +1243,9 @@ function PanelEntrega({ d, ctx, accion, entrega, setEntrega, recibo, setRecibo }
         {r.entregaConfirmada && <p className="nota">La tarifa queda en Revisión de Rateware. Fr8Bid no la aprueba (I6).</p>}
         {entrega.error && entrega.estado !== "confirmada" && <div className="estado estado-error">{entrega.error}</div>}
 
+        {!r.entregaConfirmada && decidido && ctx.rol === "admin" && (entrega.estado === "sin_preparar" || entrega.estado === "rechazada") && (
+          <OfrecerRespaldo d={d} ctx={ctx} accion={accion} />
+        )}
         {!r.entregaConfirmada && decidido && ctx.rol === "admin" && (
           <div className="fila-botones">
             {entrega.estado === "sin_preparar" || entrega.estado === "rechazada" ? (
@@ -1193,6 +1274,36 @@ function PanelEntrega({ d, ctx, accion, entrega, setEntrega, recibo, setRecibo }
   );
 }
 
+// Antes de entregar: rutas con primario, sin respaldo y con otra oferta
+// vigente. Se ofrece la siguiente mejor (por all-in) como respaldo; es opcional.
+function OfrecerRespaldo({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion: Props["accion"] }) {
+  const [abierta, setAbierta] = useState<string | null>(null);
+  if (d.evento.estado !== "cerrado") return null;
+  const candidatas = d.rutas.flatMap((ruta) => {
+    const prim = primario(ruta);
+    if (!prim || ruta.participaciones.some((x) => x.rol === "respaldo")) return [];
+    const otra = [...conOferta(ruta)]
+      .filter((p) => !p.rol && p.carrierId !== prim.carrierId)
+      .sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn)[0];
+    return otra ? [{ ruta, p: otra }] : [];
+  });
+  if (!candidatas.length) return null;
+  return (
+    <div className="aviso-caja">
+      <p><b>¿Adjudicar respaldo?</b> Después de entregar ya no se puede agregar. Es opcional: si no lo quieres, prepara la entrega.</p>
+      {candidatas.map(({ ruta, p }) => (
+        <div key={ruta.id}>
+          <p>
+            Ruta {ruta.numero}: siguiente mejor oferta <b>{p.carrier}</b> · {dinero(versionVigente(p)!.tarifaAllIn, versionVigente(p)!.moneda)}{" "}
+            <button className="btn-texto" onClick={() => setAbierta(abierta === p.id ? null : p.id)}>{abierta === p.id ? "Ocultar" : "Adjudicar como respaldo"}</button>
+          </p>
+          {abierta === p.id && <FormAdjudicar d={d} ruta={ruta} sel={p} rol="respaldo" ctx={ctx} accion={accion} />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PanelAviso({ d, ctx, accion }: Props) {
   const s = useSesion();
   const r = recorrido(d, ctx);
@@ -1213,40 +1324,56 @@ function PanelAviso({ d, ctx, accion }: Props) {
       )}
       {prims.map((p) => {
         const a = avisoDe(d, p.id, "adjudicacion");
-        if (!a) return null;
-        const candados = candadosAviso(d, a, ctx);
-        return (
-          <div key={a.id} className="dos-columnas">
-            <div className="aviso-caja">
-              <div className="fila">
-                <b>{p.carrier}</b>
-                <span className="pill">{a.estado}</span>
-              </div>
-              <p className="tenue">Para: {a.destinatario} · Canal: Gmail · sales@heymarksman.com · versión {fecha(a.version)}</p>
-              <p><b>{a.asunto}</b></p>
-              <p className="texto-aviso">{a.cuerpo}</p>
-              {a.reciboProveedor && <p className="tenue">Gmail aceptó el mensaje · id {a.reciboProveedor}</p>}
-              {ctx.rol === "admin" && (a.estado === "borrador" || a.estado === "fallido") && (
-                <Confirmar
-                  etiqueta="Aprobar este texto exacto y enviar por Gmail"
-                  deshabilitado={!candados.every((c) => c.ok)}
-                  advertencia={<>Se envía a {a.destinatario} exactamente esta versión. Si alguien la cambia en la Cola antes, Rateware la rechaza y la vuelves a revisar. {ADVERTENCIA_REAL(s, d)}</>}
-                  onConfirmar={() => accion(() => s.api.enviarAvisos(d.evento.id, [a]), "Aviso aceptado por Gmail.")}
-                />
-              )}
-              <p className="nota">El texto se edita en la Cola de Rateware; al volver, Fr8Bid muestra la versión nueva. Gmail llega hasta «aceptado»; un rebote se muestra aquí.</p>
-            </div>
-            <aside className="lado">
-              <Candados lista={candados} />
-            </aside>
-          </div>
-        );
+        return a ? <TarjetaAviso key={a.id} d={d} a={a} titulo={p.carrier} ctx={ctx} accion={accion} /> : null;
       })}
       {otros.length > 0 && (
-        <p className="nota">
-          Rateware también preparó {otros.length} aviso(s) de no adjudicación o respaldo ({otros.map((a) => a.destinatario).join(", ")}). Se revisan y envían desde la Cola de Rateware.
-        </p>
+        <>
+          <h3>No adjudicados y respaldo</h3>
+          <p className="tenue">Rateware preparó un aviso para cada carrier que participó. Se aprueban aquí igual que el del adjudicado, con su texto exacto.</p>
+          {otros.map((a) => (
+            <TarjetaAviso
+              key={a.id}
+              d={d}
+              a={a}
+              titulo={`${d.rutas.flatMap((r) => r.participaciones).find((x) => x.id === a.participacionId)?.carrier ?? a.destinatario} · ${a.resultado === "respaldo" ? "respaldo" : "no adjudicado"}`}
+              ctx={ctx}
+              accion={accion}
+            />
+          ))}
+        </>
       )}
+    </div>
+  );
+}
+
+// Un aviso con su texto exacto, candados y el botón de enviar esa versión.
+function TarjetaAviso({ d, a, titulo, ctx, accion }: { d: Detalle; a: Aviso; titulo: string; ctx: Contexto; accion: Props["accion"] }) {
+  const s = useSesion();
+  const candados = candadosAviso(d, a, ctx);
+  return (
+    <div className="dos-columnas">
+      <div className="aviso-caja">
+        <div className="fila">
+          <b>{titulo}</b>
+          <span className="pill">{a.estado}</span>
+        </div>
+        <p className="tenue">Para: {a.destinatario} · Canal: Gmail · sales@heymarksman.com · versión {fecha(a.version)}</p>
+        <p><b>{a.asunto}</b></p>
+        <p className="texto-aviso">{a.cuerpo}</p>
+        {a.reciboProveedor && <p className="tenue">Gmail aceptó el mensaje · id {a.reciboProveedor}</p>}
+        {ctx.rol === "admin" && (a.estado === "borrador" || a.estado === "fallido" || a.estado === "en_cola") && (
+          <Confirmar
+            etiqueta="Aprobar este texto exacto y enviar por Gmail"
+            deshabilitado={!candados.every((c) => c.ok)}
+            advertencia={<>Se envía a {a.destinatario} exactamente esta versión. Si alguien la cambia en la Cola antes, Rateware la rechaza y la vuelves a revisar. {ADVERTENCIA_REAL(s, d)}</>}
+            onConfirmar={() => accion(() => s.api.enviarAvisos(d.evento.id, [a]), "Aviso aceptado por Gmail.")}
+          />
+        )}
+        <p className="nota">El texto lo arma Rateware (en Rateware real sale en inglés) y se edita en su Cola; al volver, Fr8Bid muestra la versión nueva. Gmail llega hasta «aceptado»; un rebote se muestra aquí.</p>
+      </div>
+      <aside className="lado">
+        <Candados lista={candados} />
+      </aside>
     </div>
   );
 }
@@ -1255,13 +1382,14 @@ function PanelLoads({ d }: { d: Detalle }) {
   const prims = d.rutas.map(primario).filter(Boolean) as Participacion[];
   return (
     <div className="tarjeta">
-      <h2>Visible en Loads</h2>
+      <h2>Visible en Loads (inferido)</h2>
+      <p className="aviso-caja">Fr8Bid no consulta a Loads: marca este paso con el recibo de Rateware. Confírmalo abriendo Loads hasta que Loads publique el contrato C4 (loads.awarded-opportunity.v1).</p>
       {prims.map((p) => {
         const proy = proyeccionLoads(d, p.id);
         return (
           <div key={p.id}>
             <p>
-              <b>{p.carrier}</b> {proy ? "ve «adjudicado» en su libro de Loads." : "todavía no lo ve: falta el recibo."}
+              <b>{p.carrier}</b> {proy ? "debería ver «adjudicado» en su libro de Loads (Rateware ya tiene el cierre)." : "todavía no lo ve: falta el recibo."}
             </p>
             {proy && <pre className="mono codigo">{JSON.stringify(proy, null, 2)}</pre>}
           </div>
@@ -1288,7 +1416,7 @@ function Cadena({ d, recibo, entrega }: { d: Detalle; recibo: Recibo | null; ent
             <li>adjudicación · {p.motivo} · {p.adjudicada?.por}</li>
             <li>entrega · operación <span className="mono">{(recibo?.operationId ?? entrega.operationId ?? "").slice(0, 8) || "registrada en Rateware"}</span> · recibo {fecha(recibo?.momento ?? p.entregadaEn)}</li>
             <li>aviso · {a ? `${a.estado} · versión ${fecha(a.version)}` : "pendiente"}</li>
-            <li>Loads · {p.entregadaEn ? "visible" : "pendiente"}</li>
+            <li>Loads · {p.entregadaEn ? "inferido del recibo (sin confirmación de Loads)" : "pendiente"}</li>
           </ol>
         );
       })}

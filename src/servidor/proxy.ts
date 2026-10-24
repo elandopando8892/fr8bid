@@ -340,8 +340,8 @@ async function guardaParticipaciones(action: string, body: Record<string, unknow
 // I8 y D3 del lado del servidor: generate_rfx_award_notices de rateware-api no
 // exige el evento «awarded» y send_outreach_messages tampoco distingue avisos.
 // Aquí, con lecturas frescas: avisos solo tras el recibo, solo mensajes de este
-// evento, solo al adjudicado y solo la versión que el Administrador vio. Los
-// avisos de no adjudicación se siguen enviando desde la Cola de Rateware.
+// evento y solo la versión que el Administrador vio. Desde el 24-oct-2026 los
+// avisos de no adjudicación y de respaldo también salen desde la Mesa.
 async function guardaAvisos(action: string, body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
   const eventId = action === "send_outreach_messages" ? body.rfx_event_id : body.event_id;
   if (!eventId) return error(400, "FALTA_EVENTO", "Esta acción necesita el evento.");
@@ -393,8 +393,6 @@ async function guardaAvisos(action: string, body: Record<string, unknown>, autor
       continue;
     }
     if (!adjudicado) return error(409, "RFX_NOT_CLOSED_OUT", "Sin recibo de Rateware no hay aviso de adjudicación.");
-    if (!Number(meta.award_summary?.awarded || 0))
-      return error(409, "SOLO_ADJUDICADO", "Fr8Bid solo envía el aviso al adjudicado; los demás se revisan en la Cola de Rateware.");
     if (String(m.updated_at) !== String(versiones.get(id)))
       return error(409, "OUTREACH_VERSION_CONFLICT", "El texto cambió desde que lo viste. Revísalo otra vez.");
   }

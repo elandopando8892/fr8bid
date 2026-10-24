@@ -174,6 +174,34 @@ describe("§9 recorrido de la rebanada", () => {
     expect(d.avisos.find((a) => a.id === r1.outreach_message.id)?.estado).toBe("borrador");
   });
 
+  it("el intento se reconoce como intento, sale como correo nuevo y se aprueba desde la Mesa con su versión", async () => {
+    const r = await admin.prepararIntento(eventId, ids.A, "Seguimos buscando tarifa para la ruta.", `fr8bid-intento-2-${eventId}-${ids.A}`);
+    let d = await admin.detalle(eventId);
+    const intento = d.avisos.find((a) => a.id === r.outreach_message.id)!;
+    expect(intento).toMatchObject({ tipo: "invitacion", intento: true, enHilo: false, estado: "borrador" });
+    expect(intento.asunto).toMatch(/\| Question about /);
+    // Ya no cuenta como invitación original pendiente.
+    expect(d.avisos.filter((a) => a.tipo === "invitacion" && !a.intento).some((a) => a.id === intento.id)).toBe(false);
+    const p = part(d, ids.A);
+    await admin.marcarRevisado(eventId, p);
+    d = await admin.detalle(eventId);
+    const avance = await admin.enviarPorTandas(eventId, [d.avisos.find((a) => a.id === intento.id)!], { esperar: async () => {} });
+    expect(avance).toMatchObject({ enviados: 1, detenido: null });
+    expect((await admin.detalle(eventId)).avisos.find((a) => a.id === intento.id)?.estado).toBe("aceptado");
+  });
+
+  it("cerrar a ofertas deja el plazo original en las notas y un segundo cierre no lo pisa", async () => {
+    const antes = (await admin.detalle(eventId)).evento.plazo;
+    await admin.cerrarAOfertas(eventId);
+    let d = await admin.detalle(eventId);
+    expect(d.evento.plazo).not.toBe(antes);
+    expect(d.evento.cierre).toEqual({ el: sim.hoy(), plazoOriginal: antes });
+    await admin.cerrarAOfertas(eventId);
+    d = await admin.detalle(eventId);
+    expect(d.evento.cierre?.plazoOriginal).toBe(antes);
+    expect(recorrido(d, ctx()).pasos[6].detalle).toContain(`plazo original ${antes}`);
+  });
+
   it("modo «solo borradores»: pasa el borrador de la Cola; invitar, ofertas, adjudicar y enviar no", async () => {
     expect([modoEscrituras("si"), modoEscrituras("borradores"), modoEscrituras("no"), modoEscrituras(undefined), modoEscrituras("SI")]).toEqual(["si", "borradores", "no", "no", "no"]);
     const op = { enviar: (sv: any, b: any, a: any) => sim.llamar(sv, b, a), permitirEscrituras: false, soloBorradores: true };
@@ -316,7 +344,7 @@ describe("§9 recorrido de la rebanada", () => {
     expect(sim.staging.filter((s) => s.kind === "rfx_award")).toHaveLength(1);
   });
 
-  it("9 · aviso de adjudicación: solo tras el recibo, solo al adjudicado y solo la versión que se vio", async () => {
+  it("9 · aviso de adjudicación: solo tras el recibo y solo la versión que se vio", async () => {
     let d = await cerrarYAdjudicarB();
     await expect(admin.generarAvisosAdjudicacion(eventId)).rejects.toMatchObject({ status: 409, code: "RFX_NOT_CLOSED_OUT" });
     expect(recorrido(d, ctx()).pasos[9].estado).toBe("bloqueado");
@@ -333,7 +361,12 @@ describe("§9 recorrido de la rebanada", () => {
     expect(candadosAviso(d, aviso, ctx("admin", entrega)).every((c) => c.ok)).toBe(true);
     const noAdj = avisoDe(d, ids.A, "adjudicacion")!;
     expect(noAdj.resultado).toBe("no_adjudicado");
-    await expect(admin.enviarAvisos(eventId, [noAdj])).rejects.toMatchObject({ status: 409, code: "SOLO_ADJUDICADO" });
+    // El de no adjudicación también sale desde la Mesa, con su versión exacta.
+    sim.editarMensaje(noAdj.id, { text_body: noAdj.cuerpo + "\nGracias." });
+    await expect(admin.enviarAvisos(eventId, [noAdj])).rejects.toMatchObject({ status: 409, code: "OUTREACH_VERSION_CONFLICT" });
+    const noAdjNuevo = avisoDe(await admin.detalle(eventId), ids.A, "adjudicacion")!;
+    await admin.enviarAvisos(eventId, [noAdjNuevo]);
+    expect(sim.mensajes.find((m) => m.id === noAdj.id)?.status).toBe("sent");
 
     // Alguien edita el texto en la Cola: la versión que se vio ya no sirve.
     sim.editarMensaje(aviso.id, { text_body: aviso.cuerpo + "\nCambio." });
