@@ -134,6 +134,10 @@ export interface Aviso {
   reciboProveedor: string | null; // provider_message_id de Gmail
   motivo: string | null; // delivery_error o last_error de Rateware
   enviadoEn: string | null; // sent_at
+  // vendors(whatsapp_phone, whatsapp_do_not_contact) que list_outreach_messages
+  // trae junto a cada mensaje: con eso se arma el intento por WhatsApp.
+  whatsapp?: string | null;
+  whatsappNoContactar?: boolean;
 }
 
 export interface Recibo {

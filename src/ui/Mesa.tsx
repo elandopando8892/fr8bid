@@ -21,7 +21,7 @@ import {
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
 import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
 import { cambiosComerciales, describirModelo, tarifaVenta } from "../dominio/modelo";
-import { candidatosRecordatorio, claveIntento, ETIQUETA_SEGUIMIENTO, intentosPorPreparar, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
+import { candidatosRecordatorio, claveIntento, ETIQUETA_SEGUIMIENTO, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
 import type { CarrierFit } from "../dominio/carrierFit";
 import { NOMBRE_FAMILIA, type HistorialSegmento } from "../dominio/segmento";
@@ -512,6 +512,9 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
   const tocan = [...siguiente.values()].filter((x) => x?.vencido);
   const porPreparar = intentosPorPreparar(d, ahora, ctx.hoy);
   const muestra = porPreparar[0];
+  const whatsapp = intentosWhatsapp(d, ahora, ctx.hoy);
+  const whatsappDe = new Map(whatsapp.map((w) => [w.s.carrierId, w]));
+  const sinNumero = whatsapp.filter((w) => !w.liga);
   return (
     <div className="tarjeta">
       <h2>Seguimiento</h2>
@@ -535,8 +538,18 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
           {tocan.length > 0 && (
             <p>
               <span className="pill alerta">Ya toca</span> {[...new Set(tocan.map((x) => `${x!.intento}º intento por ${x!.canal === "whatsapp" ? "WhatsApp" : "correo"}`))].join(", ")} a {tocan.length} carrier(s).
-              Fr8Bid no envía solo: el envío se aprueba en la Cola.
+              {tocan.some((x) => x!.canal === "correo") ? "Fr8Bid no envía solo: el correo se aprueba en la Cola." : "Fr8Bid no envía solo."}
             </p>
+          )}
+          {whatsapp.length > 0 && ctx.rol !== "viewer" && (
+            <>
+              <p>
+                <b>WhatsApp:</b> {whatsapp.length - sinNumero.length} con número
+                {sinNumero.length > 0 && <>; sin liga: {sinNumero.map((w) => `${w.s.carrier} (${w.motivo})`).join(", ")}</>}.
+                Usa «WhatsApp» en cada renglón: abre el chat con este texto y lo envías tú desde tu teléfono. Si contesta, márcalo con «Ya respondió».
+              </p>
+              <p className="texto-aviso">{whatsapp[0].texto}</p>
+            </>
           )}
           {muestra && ctx.rol !== "viewer" && (
             <>
@@ -592,6 +605,11 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                     })()}
                   </td>
                   <td>
+                    {whatsappDe.get(x.carrierId)?.liga && ctx.rol !== "viewer" && (
+                      <a className="btn-texto" href={whatsappDe.get(x.carrierId)!.liga!} target="_blank" rel="noreferrer" title={`+${whatsappDe.get(x.carrierId)!.numero}`}>
+                        WhatsApp
+                      </a>
+                    )}
                     {r && ctx.rol !== "viewer" && (
                       <button className="btn-texto" onClick={() => setAbierto(abierto === x.carrierId ? null : x.carrierId)}>
                         {abierto === x.carrierId ? "Ocultar" : "Recordatorio"}

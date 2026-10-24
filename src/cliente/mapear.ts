@@ -209,6 +209,7 @@ export function aviso(m: Fila): Aviso {
   const esAdjudicacion = meta.notice_type === "rfx_award_closeout";
   const conteo: Fila = meta.award_summary || {};
   const resultado = !esAdjudicacion ? null : conteo.awarded ? "adjudicado" : conteo.backup ? "respaldo" : "no_adjudicado";
+  const vendor: Fila = m.vendors && typeof m.vendors === "object" ? m.vendors : {};
   const participaciones = Array.isArray(meta.rfx_lane_vendor_ids) && meta.rfx_lane_vendor_ids.length ? meta.rfx_lane_vendor_ids.map(String) : [String(m.rfx_lane_vendor_id)];
   return {
     id: m.id,
@@ -223,7 +224,9 @@ export function aviso(m: Fila): Aviso {
     estado: ESTADO_AVISO[String(m.status)] || "incierto",
     reciboProveedor: m.provider_message_id || null,
     motivo: m.delivery_error || m.last_error || null,
-    enviadoEn: m.sent_at || null
+    enviadoEn: m.sent_at || null,
+    whatsapp: vendor.whatsapp_phone ? String(vendor.whatsapp_phone) : null,
+    whatsappNoContactar: vendor.whatsapp_do_not_contact === true
   };
 }
 

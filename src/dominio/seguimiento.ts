@@ -26,6 +26,9 @@ export interface SeguimientoCarrier {
   diasSinRespuesta: number | null;
   pendientes: { participacion: Participacion; ruta: Ruta }[];
   invitacion: Aviso | null;
+  // vendors.whatsapp_phone tal como lo tiene Rateware (sin normalizar).
+  whatsapp: string | null;
+  whatsappNoContactar: boolean;
 }
 
 export const ETIQUETA_SEGUIMIENTO: Record<EstadoSeguimiento, string> = {
@@ -95,7 +98,9 @@ export function seguimiento(d: Detalle, hoy: string): SeguimientoCarrier[] {
       respondioPor,
       diasSinRespuesta: invitadaEn && (estado === "sin_abrir" || estado === "abrio") ? diasEntre(invitadaEn, hoy) : null,
       pendientes: filas.filter((f) => f.participacion.estado !== "declino" && !versionVigente(f.participacion)),
-      invitacion: aceptadas[0] ?? suyas[0] ?? null
+      invitacion: aceptadas[0] ?? suyas[0] ?? null,
+      whatsapp: suyas.map((a) => a.whatsapp).find((x): x is string => Boolean(x)) ?? null,
+      whatsappNoContactar: suyas.some((a) => a.whatsappNoContactar === true)
     };
   });
 }
@@ -178,6 +183,55 @@ export function textoIntento(d: Detalle, ruta: Ruta, paso: Pick<PasoCadencia, "i
     "Si no tiene unidad disponible, responda «sin unidad» y no le volvemos a escribir por este evento."
   ].join(" ");
   return texto.length > LIMITE_TEXTO_INTENTO ? texto.slice(0, LIMITE_TEXTO_INTENTO - 1) + "…" : texto;
+}
+
+// Intento por WhatsApp (4º de la cadencia). Rateware no tiene envío por
+// WhatsApp aprobado (Meta sigue pendiente), así que Fr8Bid solo abre WhatsApp
+// con el número y el texto: el Administrador lo envía desde su teléfono. El
+// texto no lleva la liga privada (el proxy nunca la entrega): remite al correo.
+export const numeroWhatsapp = (valor: string | null | undefined): string | null => {
+  // Mismo criterio que normalizeWhatsappPhone de rateware-api: 10 dígitos son
+  // México (+52); 11 que empiezan con 1 son EE. UU. o Canadá.
+  const digitos = String(valor || "").replace(/\D/g, "");
+  if (digitos.length < 10) return null;
+  return digitos.length === 10 ? `52${digitos}` : digitos;
+};
+
+export interface IntentoWhatsapp {
+  s: SeguimientoCarrier;
+  numero: string | null;
+  texto: string;
+  liga: string | null;
+  // Por qué no hay liga: sin número o marcado «no contactar por WhatsApp».
+  motivo: string | null;
+}
+
+export function textoWhatsapp(d: Detalle, s: SeguimientoCarrier): string {
+  const corta = (x: string) => x.split(",")[0].trim();
+  const rutas = [...new Map(s.pendientes.map((f) => [f.ruta.id, f.ruta])).values()];
+  const moneda = rutas[0]?.moneda ?? "USD";
+  return [
+    `Hola, ${s.carrier}. Le escribe Marksman.`,
+    `Le enviamos por correo la invitación a cotizar ${d.evento.folio}: ${rutas.map((r) => `${corta(r.origen)} → ${corta(r.destino)} · ${r.equipo}`).join("; ")}.`,
+    `¿Nos comparte su tarifa all-in en ${moneda}? Puede responder aquí mismo o con el botón «Abrir Private Bid Room» del correo.`,
+    "Si no tiene unidad disponible, responda «sin unidad» y no le volvemos a escribir por este evento.",
+    d.evento.prueba ? "Prueba controlada, sin valor comercial." : ""
+  ].filter(Boolean).join(" ");
+}
+
+// Carriers a los que ya toca el intento por WhatsApp. Sin la revisión de
+// respuestas (R2) no se sabe a quién ya no hay que escribirle: lista vacía.
+export function intentosWhatsapp(d: Detalle, ahora: Date, hoy: string): IntentoWhatsapp[] {
+  if (d.respuestas === null) return [];
+  return seguimiento(d, hoy).flatMap((s) => {
+    const paso = siguienteIntento(d, s, ahora);
+    if (!paso || !paso.vencido || paso.canal !== "whatsapp") return [];
+    const numero = numeroWhatsapp(s.whatsapp);
+    const texto = textoWhatsapp(d, s);
+    const motivo = s.whatsappNoContactar ? "marcado «no contactar por WhatsApp» en Rateware" : !numero ? "sin número de WhatsApp en Rateware" : null;
+    const liga = motivo ? null : `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
+    return [{ s, numero: motivo ? null : numero, texto, liga, motivo }];
+  });
 }
 
 // Misma clave en cada clic: Rateware devuelve el borrador existente en vez de
