@@ -313,7 +313,6 @@ function CarrierFitContent() {
           eventId={eventId}
           event={event}
           title="Carrier fit"
-          tags={<Pill tone="blue">LAUNCH</Pill>}
           info={tr("text013", lanes.length, lanes.length === 1 ? "" : "s", inRfx.size, inRfx.size === 1 ? "" : "s")}
           actions={
             <Link to="/bid-room-board.html" className="btn">

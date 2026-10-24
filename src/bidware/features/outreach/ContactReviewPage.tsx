@@ -1,7 +1,7 @@
 import { words, tr } from "@/i18n/outreach";
 import { useLang, locale } from "@/i18n/language";
 import { useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { useAsync } from "@/components/useAsync";
 import { useAuth } from "@/auth/AuthContext";
 import { NEED_REASON } from "@/lib/roles";
@@ -13,18 +13,23 @@ import { listContactReviews, recordContactReview, type CarrierReview, type Conta
 import { LaunchHeader, LaunchTabs, audienceOf } from "./LaunchShell";
 import type { Vendor } from "@/types/domain";
 
-type State = "pending" | "reviewed" | "no_contact" | "revoked";
+type State = "pending" | "changed" | "reviewed" | "no_contact" | "revoked";
+/** Lo que falta por revisar: nuevos, revocados y los que cambiaron de contacto. */
+const TO_REVIEW: State[] = ["pending", "changed", "revoked"];
 
-const FILTERS = (): [State | "all", string][] => [
-  ["pending", tr("text001")],
+type Filter = "to_review" | "reviewed" | "no_contact" | "all";
+const FILTERS = (): [Filter, string][] => [
+  ["to_review", tr("text274")],
   ["reviewed", tr("text002")],
   ["no_contact", tr("text003")],
-  ["revoked", tr("text004")],
   ["all", tr("text005")],
 ];
+const inFilter = (state: State, filter: Filter) =>
+  filter === "all" || (filter === "to_review" ? TO_REVIEW.includes(state) : state === filter);
 
 const STATE_PILL: Record<State, ["amber" | "green" | "red" | "", string]> = {
   get pending(): ["amber" | "green" | "red" | "", string] { return ["amber", tr("text006")]; },
+  get changed(): ["amber" | "green" | "red" | "", string] { return ["amber", tr("text275")]; },
   get reviewed(): ["amber" | "green" | "red" | "", string] { return ["green", tr("text007")]; },
   get no_contact(): ["amber" | "green" | "red" | "", string] { return ["red", tr("text008")]; },
   get revoked(): ["amber" | "green" | "red" | "", string] { return ["", tr("text009")]; },
@@ -91,8 +96,8 @@ interface Row {
 /**
  * Contact review (wireframe 25): before an invitation goes out, someone
  * confirms the contact is the right one. Each review keeps a snapshot of what
- * was checked and can be revoked. Reviewing is not required to send — it
- * records who vouched for which contact, and when.
+ * was checked and can be revoked. Only reviewed carriers get invited, and a
+ * contact that changed after its review goes back to be reviewed.
  */
 export function ContactReviewPage() {
   useLang();
@@ -112,7 +117,7 @@ export function ContactReviewPage() {
   const reviews = useAsync(() => listContactReviews(id), [id]);
 
   const [latest, setLatest] = useState<Map<string, CarrierReview>>(new Map());
-  const [filter, setFilter] = useState<State | "all">("pending");
+  const [filter, setFilter] = useState<Filter>("to_review");
   const [shown, setShown] = useState(PAGE);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -135,7 +140,15 @@ export function ContactReviewPage() {
           const snap = snapshotOf(v, a.name);
           const review = reviewById.get(a.id);
           const state: State =
-            !snap.email && !snap.phone ? "no_contact" : review?.reviewed ? "reviewed" : review ? "revoked" : "pending";
+            !snap.email && !snap.phone
+              ? "no_contact"
+              : review?.reviewed
+                ? drift(review.contact_snapshot, snap).length
+                  ? "changed"
+                  : "reviewed"
+                : review
+                  ? "revoked"
+                  : "pending";
           return { id: a.id, v, snap, review, state, channel: channelOf(v) };
         })
         .sort((x, y) => (x.snap.vendor_name ?? "").localeCompare(y.snap.vendor_name ?? "")),
@@ -143,11 +156,11 @@ export function ContactReviewPage() {
   );
 
   const counts = useMemo(() => {
-    const map = new Map<State | "all", number>([["all", rows.length]]);
-    for (const r of rows) map.set(r.state, (map.get(r.state) ?? 0) + 1);
+    const map = new Map<Filter, number>();
+    for (const [key] of FILTERS()) map.set(key, rows.filter((r) => inFilter(r.state, key)).length);
     return map;
   }, [rows]);
-  const visible = filter === "all" ? rows : rows.filter((r) => r.state === filter);
+  const visible = rows.filter((r) => inFilter(r.state, filter));
 
   async function review(row: Row, reviewed: boolean) {
     setBusyId(row.id);
@@ -196,7 +209,7 @@ export function ContactReviewPage() {
 
   const event = detail.data?.event;
   const loading = detail.loading || vendors.loading || reviews.loading;
-  const pending = (counts.get("pending") ?? 0) + (counts.get("revoked") ?? 0);
+  const pending = counts.get("to_review") ?? 0;
 
   return (
     <>
@@ -204,18 +217,11 @@ export function ContactReviewPage() {
         eventId={id}
         event={event}
         title={tr("text017")}
-        tags={<Pill tone="blue">LAUNCH</Pill>}
         info={tr("text018", rows.length, rows.length === 1 ? "" : "s")}
       />
       <main className="main launch-main">
         <LaunchTabs eventId={id} active="review" />
-        <p className="rev-intro">
-          {tr("text019")}</p>
-        <div className="rev-contract">
-          <Pill tone="amber">{tr("text020")}</Pill>
-          <span className="mono">
-            {tr("text021")}</span>
-        </div>
+        <p className="rev-intro">{tr("text276")}</p>
 
         {!canWork && (
           <InfoBanner title={tr("text022")}>{tr("text023")}</InfoBanner>
@@ -226,84 +232,59 @@ export function ContactReviewPage() {
         {vendors.error && <ErrorBanner message={vendors.error} />}
         {reviews.error && <ErrorBanner message={reviews.error} />}
 
-        <div className="rev-kpis">
-          {[
-            { label: tr("text024"), value: rows.length },
-            { label: tr("text002"), value: counts.get("reviewed") ?? 0, accent: true },
-            { label: tr("text001"), value: counts.get("pending") ?? 0 },
-            { label: tr("text003"), value: counts.get("no_contact") ?? 0 },
-            { label: tr("text004"), value: counts.get("revoked") ?? 0 },
-          ].map((k) => (
-            <div key={k.label}>
-              <span>{k.label}</span>
-              <strong className={k.accent ? "accent" : undefined}>{loading ? "…" : k.value.toLocaleString(locale())}</strong>
-            </div>
-          ))}
-        </div>
-
-        <div className="rev-grid">
-          <div className="rev-col">
-            <div className="tpl-filters">
-              {FILTERS().map(([key, label]) => (
-                <button
-                  key={key}
-                  className={filter === key ? "on" : undefined}
-                  aria-pressed={filter === key}
-                  onClick={() => {
-                    setFilter(key);
-                    setShown(PAGE);
-                  }}
-                >
-                  {label}
-                  <b>{counts.get(key) ?? 0}</b>
-                </button>
-              ))}
-            </div>
-
-            {loading ? (
-              <Spinner label={tr("text025")} />
-            ) : visible.length ? (
-              <>
-                {visible.slice(0, shown).map((row) => (
-                  <ReviewCard
-                    key={row.id}
-                    row={row}
-                    busy={busyId === row.id}
-                    editing={editing === row.id}
-                    locked={locked}
-                    onEdit={() => setEditing(row.id)}
-                    onCancel={() => setEditing(null)}
-                    onSave={(patch) => saveContact(row, patch)}
-                    onReview={(reviewed) => review(row, reviewed)}
-                  />
-                ))}
-                {visible.length > shown && (
-                  <button className="rev-more" onClick={() => setShown((n) => n + PAGE)}>
-                    {tr("text026")}{Math.min(PAGE, visible.length - shown)}{tr("text027")}{visible.length - shown}
-                  </button>
-                )}
-              </>
-            ) : (
-              <p className="rev-empty">
-                {rows.length ? tr("text028") : tr("text029")}
-              </p>
-            )}
+        <div className="rev-col">
+          <div className="tpl-filters">
+            {FILTERS().map(([key, label]) => (
+              <button
+                key={key}
+                className={filter === key ? "on" : undefined}
+                aria-pressed={filter === key}
+                onClick={() => {
+                  setFilter(key);
+                  setShown(PAGE);
+                }}
+              >
+                {label}
+                <b>{loading ? "…" : (counts.get(key) ?? 0).toLocaleString(locale())}</b>
+              </button>
+            ))}
           </div>
 
-          <aside className="crm-side rev-side">
-            <p className="crm-kicker">{tr("text030")}</p>
-            <p>
-              {tr("text031")}</p>
-            <p>
-              {tr("text032")}</p>
-            <div className="rev-left">
-              <b>
-                {pending.toLocaleString(locale())}{tr("text033")}{pending === 1 ? "" : "s"}{tr("text034")}{rows.length.toLocaleString(locale())}
-              </b>
-              <p>
-                {tr("text035")}</p>
+          {loading ? (
+            <Spinner label={tr("text025")} />
+          ) : visible.length ? (
+            <>
+              {visible.slice(0, shown).map((row) => (
+                <ReviewCard
+                  key={row.id}
+                  row={row}
+                  busy={busyId === row.id}
+                  editing={editing === row.id}
+                  locked={locked}
+                  onEdit={() => setEditing(row.id)}
+                  onCancel={() => setEditing(null)}
+                  onSave={(patch) => saveContact(row, patch)}
+                  onReview={(reviewed) => review(row, reviewed)}
+                />
+              ))}
+              {visible.length > shown && (
+                <button className="rev-more" onClick={() => setShown((n) => n + PAGE)}>
+                  {tr("text026")}{Math.min(PAGE, visible.length - shown)}{tr("text027")}{visible.length - shown}
+                </button>
+              )}
+            </>
+          ) : rows.length && filter === "to_review" && !pending ? (
+            <div className="rev-done">
+              <b>{tr("text277", counts.get("reviewed") ?? 0)}</b>
+              <span>
+                <Link to={`/eventos/${id}`}>{tr("text278")}</Link>
+                {" · "}
+                <Link to={`/rfx/${id}/message`}>{tr("text279")}</Link>
+              </span>
             </div>
-          </aside>
+          ) : (
+            <p className="rev-empty">{rows.length ? tr("text028") : tr("text029")}</p>
+          )}
         </div>
       </main>
     </>
@@ -332,7 +313,7 @@ function ReviewCard({
   useLang();
   const { snap, review, state } = row;
   const [tone, label] = STATE_PILL[state];
-  const changed = state === "reviewed" ? drift(review?.contact_snapshot, snap) : [];
+  const changed = state === "changed" ? drift(review?.contact_snapshot, snap) : [];
 
   return (
     <article className={`rev-card ${state}`}>
@@ -373,7 +354,6 @@ function ReviewCard({
             <>
               <span className="mono rev-by">
                 {tr("text043")}{review?.reviewed_by || "—"} · {when(review?.reviewed_at)}
-                {changed.length > 0 && <em>{tr("text044")}{changed.join(", ")})</em>}
               </span>
               <button disabled={busy || Boolean(locked)} title={locked} onClick={() => onReview(false)}>
                 {tr("text045")}</button>
@@ -392,7 +372,13 @@ function ReviewCard({
                     {tr("text048")}{review?.reviewed_by || "—"} · {when(review?.reviewed_at)} ·{" "}
                   </span>
                 )}
-                {tr("text049")}</span>
+                {state === "changed" && (
+                  <span className="mono rev-by">
+                    {tr("text043")}{review?.reviewed_by || "—"} · {when(review?.reviewed_at)}
+                    <em>{tr("text044")}{changed.join(", ")})</em>{" "}
+                  </span>
+                )}
+</span>
               <button disabled={busy || Boolean(locked)} title={locked} onClick={onEdit}>
                 {tr("text050")}</button>
               <button className="primary" disabled={busy || Boolean(locked)} title={locked} onClick={() => onReview(true)}>

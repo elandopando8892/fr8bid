@@ -359,11 +359,14 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
         </div>
       )}
       {!d.revisiones && (
-        <p className="estado estado-error">No se pudo consultar qué carriers están revisados en Bidware. No se prepara ni envía ninguna invitación hasta poder consultarlo.</p>
+        <p className="estado estado-error">No se pudo consultar qué carriers están revisados. No se prepara ni envía ninguna invitación hasta poder consultarlo.</p>
       )}
       {audiencia.omitidas.length > 0 && d.revisiones && (
         <div className="aviso-caja">
-          <p><b>{resumenOmisiones(audiencia)}</b> Revisa su contacto y márcalos «Revisado» si deben recibirla.</p>
+          <p>
+            <b>{resumenOmisiones(audiencia)}</b> Revisa su contacto y márcalos «Revisado» si deben recibirla.
+            {s.modo === "rateware" && <> <Liga a={`/rfx/${d.evento.id}/review`}>Revisar contactos →</Liga></>}
+          </p>
           <ul>
             {[...new Map(audiencia.omitidas.map((o) => [o.p.carrierId, o])).values()].map((o) => (
               <li key={o.p.carrierId}>
@@ -373,14 +376,14 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
                   <Confirmar
                     etiqueta="Marcar «Revisado»"
                     clase="btn-texto"
-                    advertencia={<>Confirmas que revisaste el contacto de {o.p.carrier} ({o.p.correo}) y que puede recibir la invitación. Queda registrado en Rateware igual que en Bidware. No envía nada. {ADVERTENCIA_REAL(s, d)}</>}
+                    advertencia={<>Confirmas que revisaste el contacto de {o.p.carrier} ({o.p.correo}) y que puede recibir la invitación. Queda registrado en Rateware, igual que en Revisión de contactos. No envía nada. {ADVERTENCIA_REAL(s, d)}</>}
                     onConfirmar={() => accion(() => s.api.marcarRevisado(d.evento.id, o.p), `${o.p.carrier} marcado «Revisado».`)}
                   />
                 )}
               </li>
             ))}
           </ul>
-          {audiencia.omitidas.some((o) => o.estado === "revocada") && <p className="tenue">Una revisión revocada se vuelve a dar en Bidware.</p>}
+          {audiencia.omitidas.some((o) => o.estado === "revocada") && <p className="tenue">Una revisión revocada se vuelve a dar en Revisión de contactos.</p>}
         </div>
       )}
       {!invitaciones.length && !audiencia.aptas.length && !audiencia.omitidas.length && <p className="tenue">El Operador aún no prepara las invitaciones.</p>}

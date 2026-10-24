@@ -30,7 +30,7 @@ export function LaunchHeader({
     <header className="identity launch-head">
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="crumb ellipsis">
-          <Link to="/rfx">RFx / Bid Room</Link>
+          <Link to="/eventos">{tr("text280")}</Link>
           {" › "}
           <Link to={`/rfx/${eventId}`} title={label}>
             {label || tr("text143")}

@@ -92,7 +92,6 @@ export function NewEventPage() {
   const [startDate, setStartDate] = useState("");
   const [currency, setCurrency] = useState("USD");
   const [rfxId, setRfxId] = useState("");
-  const [suggested, setSuggested] = useState("");
   const [segment, setSegment] = useState("crossborder");
   const [visibility, setVisibility] = useState<string>("anonymous_rank");
   // Paso 2
@@ -118,7 +117,6 @@ export function NewEventPage() {
       .then((rows) => {
         if (!live) return;
         const next = suggestRfxId(rows);
-        setSuggested(next);
         setRfxId((current) => current || next);
       })
       .catch(() => undefined);
@@ -233,7 +231,7 @@ export function NewEventPage() {
   async function loadLanes(): Promise<number | null> {
     if (!id) return null;
     const { summary } = lanes;
-    if (!summary.total || !summary.ready) return 0;
+    if (!summary.total) return 0;
     if (summary.searching) {
       setError(tr("text492"));
       return null;
@@ -242,6 +240,7 @@ export function NewEventPage() {
       setError(tr("text493", summary.pending));
       return null;
     }
+    if (!summary.ready) return 0;
     if (summary.ready > IMPORT_ROW_LIMIT) {
       setError(tr("text494", IMPORT_ROW_LIMIT, summary.ready));
       return null;
@@ -298,6 +297,9 @@ export function NewEventPage() {
     }
   }
 
+  // Un aviso de mapeo deja de valer en cuanto cambian las rutas por mapear.
+  useEffect(() => setError(null), [lanes.summary.pending, lanes.summary.total]);
+
   async function toLaunch() {
     const inserted = await loadLanes();
     if (inserted === null) return;
@@ -320,51 +322,75 @@ export function NewEventPage() {
     );
   }
 
-  const steps: { key: Screen | "cedula"; label: string }[] = [
-    { key: "details", label: tr("text506") },
-    { key: "cedula", label: tr("text507") },
+  // Tres pasos, los mismos en cada pantalla: la cédula va con los datos.
+  const steps: { key: Screen; label: string }[] = [
+    { key: "details", label: tr("text774") },
     { key: "lanes", label: tr("text061") },
-    { key: "launch", label: tr("text508") },
+    { key: "launch", label: tr("text775") },
   ];
-  const position = screen === "details" ? 0 : screen === "lanes" ? 2 : 3;
+  const position = steps.findIndex((s) => s.key === screen);
   const coreDone = RUBRICS.slice(0, 3).filter((r) => text(rubrics[r.key])).length;
   const anyRubric = RUBRICS.some((r) => text(rubrics[r.key]));
   const kept = lanes.summary.ready + lanes.summary.pending;
+  const title = event ? name || text(event.name) || tr("text511") : tr("text776");
+
+  const header = (
+    <header className="nev-head">
+      <div>
+        <p className="nev-crumb2">
+          <Link to="/eventos">{tr("text777")}</Link> › {event ? tr("text778", text(event.rfx_id)) : tr("text776")}
+        </p>
+        <div className="nev-title">
+          <h1>{title}</h1>
+          {event && <Pill tone="amber">{tr("text548")}</Pill>}
+          {shipperName && <span className="mono">{shipperName}</span>}
+        </div>
+      </div>
+    </header>
+  );
+
+  // Solo se puede ir a un paso con el borrador ya creado; los de adelante, con lo de atrás listo.
+  const stepper = (
+    <nav className="nev-steps" aria-label={tr("text515")}>
+      {steps.map((s, i) => {
+        const done = i < position;
+        const current = i === position;
+        return (
+          <div key={s.key} className={`nev-step${done ? " done" : ""}${current ? " current" : ""}`}>
+            {i > 0 && <hr />}
+            <button
+              type="button"
+              aria-current={current ? "step" : undefined}
+              disabled={Boolean(busy) || current || !id || i > position}
+              onClick={() => go(s.key)}
+            >
+              <i>{done ? "✓" : i + 1}</i>
+              <span>{s.label}</span>
+            </button>
+          </div>
+        );
+      })}
+    </nav>
+  );
+
+  // Avisos junto a los botones: el que pulsa ve el resultado sin buscarlo arriba.
+  const messages = (
+    <>
+      {error && <ErrorBanner message={error} />}
+      {notice && <InfoBanner>{notice}</InfoBanner>}
+    </>
+  );
 
   if (screen === "details") {
     return (
       <>
-        <header className="nev-top">
-          <p className="nev-crumb">{tr("text509")}{event ? tr("text510", text(event.rfx_id)) : ""}</p>
-          <h1>{event ? name || tr("text511") : tr("text512")}</h1>
-          <p>
-            {event
-              ? tr("text513")
-              : tr("text514")}
-          </p>
-        </header>
-        <nav className="nev-rail" aria-label={tr("text515")}>
-          {[
-            { n: 1, label: tr("text516"), state: tr("text517"), on: true },
-            { n: 2, label: tr("text518"), state: anyRubric ? (coreDone === 3 ? tr("text346") : tr("text517")) : tr("text519"), on: anyRubric },
-            { n: 3, label: tr("text061"), state: draftLanes.length ? tr("text520", draftLanes.length) : tr("text521"), on: false },
-            { n: 4, label: tr("text508"), state: tr("text521"), on: false },
-          ].map((s) => (
-            <div key={s.n} className={`nev-rail-step${s.n === 1 ? " current" : ""}${s.on ? " on" : ""}`}>
-              <span>
-                <i>{s.n}</i>
-                {s.label}
-              </span>
-              <em>{s.state}</em>
-            </div>
-          ))}
-        </nav>
-        <main className="nev-details">
+        {header}
+        <main className="nev-body">
+          {stepper}
           <div className="nev-steps12">
             <section className="nev-card nev-step1">
               <header>
-                <b>{tr("text522")}</b>
-                <Pill tone="amber">{tr("text517")}</Pill>
+                <b>{tr("text779")}</b>
               </header>
               <div className="nev-field">
                 <span>Shipper *</span>
@@ -392,7 +418,7 @@ export function NewEventPage() {
                     </button>
                   ))}
                 </div>
-                <em className="nev-hint">{tr("text527")}</em>
+                <em className="nev-hint">{EVENT_TYPES.find((t) => t.key === eventType)?.hint}</em>
               </div>
               <div className="nev-pair">
                 <label className="nev-field">
@@ -406,12 +432,28 @@ export function NewEventPage() {
               </div>
               <div className="nev-pair">
                 <label className="nev-field">
-                  <span>RFx ID</span>
-                  <div className="nev-auto">
-                    <input className="mono" value={rfxId} onChange={(e) => setRfxId(e.target.value)} placeholder={tr("text409")} />
-                    {rfxId && rfxId === suggested && <em>· auto</em>}
-                  </div>
+                  <span>{tr("text058")}</span>
+                  <select value={visibility} onChange={(e) => setVisibility(e.target.value)}>
+                    {VISIBILITY_MODES.map((m) => (
+                      <option key={m.key} value={m.key}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
                 </label>
+                <label className="nev-field">
+                  <span>{tr("text050")}</span>
+                  <select value={segment} onChange={(e) => setSegment(e.target.value)}>
+                    {SEGMENTS.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s[getLang()]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <em className="nev-hint">{VISIBILITY_MODES.find((m) => m.key === visibility)?.hint}</em>
+              <div className="nev-pair">
                 <label className="nev-field">
                   <span>{tr("text530")}</span>
                   <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
@@ -422,53 +464,32 @@ export function NewEventPage() {
                     ))}
                   </select>
                 </label>
+                <label className="nev-field">
+                  <span>RFx ID</span>
+                  <input className="mono" value={rfxId} onChange={(e) => setRfxId(e.target.value)} placeholder={tr("text409")} />
+                </label>
               </div>
               <em className="nev-hint">
-                {tr("text531")}</em>
-              <div className="nev-pair">
-                <label className="nev-field">
-                  <span>{tr("text050")}</span>
-                  <select value={segment} onChange={(e) => setSegment(e.target.value)}>
-                    {SEGMENTS.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.value} · {s[getLang()]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="nev-field">
-                  <span>{tr("text058")}</span>
-                  <select value={visibility} onChange={(e) => setVisibility(e.target.value)}>
-                    {VISIBILITY_MODES.map((m) => (
-                      <option key={m.key} value={m.key}>
-                        {m.key} · {m.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <em className="nev-hint">{VISIBILITY_MODES.find((m) => m.key === visibility)?.hint}</em>
-              {draftLanes.length > 0 && (
-                <em className="nev-hint">
-                  {tr("text532")}{draftLanes.length} {tr("text533")}</em>
-              )}
+                {tr("text531")}
+                {draftLanes.length > 0 && ` ${tr("text532")}${draftLanes.length}${tr("text533")}`}
+              </em>
             </section>
 
             <section className="nev-card nev-step2">
               <header>
-                <b>{tr("text534")}</b>
-                <Pill tone={coreDone === 3 ? "green" : anyRubric ? "amber" : ""}>
-                  {coreDone === 3 ? tr("text346") : anyRubric ? tr("text517") : tr("text519")}
+                <b>{tr("text780")}</b>
+                <Pill tone={coreDone === 3 ? "green" : ""}>
+                  {coreDone === 3 ? tr("text346") : anyRubric ? tr("text781", coreDone) : tr("text782")}
                 </Pill>
               </header>
-              <p className="nev-info">{tr("text535")}</p>
-              {RUBRICS.map((r) => {
+              <p className="nev-info">{tr("text783")}</p>
+              {RUBRICS.map((r, i) => {
                 const filled = Boolean(text(rubrics[r.key]));
                 return (
                   <label key={r.key} className={`nev-rubric${filled ? " filled" : ""}`}>
                     <span>
                       {r.label}
-                      {filled && <b>✓</b>}
+                      {filled ? <b>✓</b> : i >= 3 && i < 5 && <em>{tr("text789")}</em>}
                     </span>
                     <textarea
                       rows={2}
@@ -479,98 +500,31 @@ export function NewEventPage() {
                   </label>
                 );
               })}
+              {draftLanes.length > 0 && <p className="nev-note">{tr("text542")}{draftLanes.length}{tr("text543")}</p>}
             </section>
           </div>
-
-          <aside className="nev-card nev-balance">
-            <p className="nev-kicker">{tr("text536")}</p>
-            <div className="nev-good">
-              <b>{tr("text537")}</b>
-              <span>
-                {tr("text538")}</span>
-            </div>
-            <div className="nev-cost">
-              <b>{tr("text539")}</b>
-              <span>
-                {tr("text540")}</span>
-            </div>
-            <p>{tr("text541")}</p>
-            {draftLanes.length > 0 && <p className="nev-note">{tr("text542")}{draftLanes.length} {tr("text543")}</p>}
-            {error && <ErrorBanner message={error} />}
-            {notice && <InfoBanner>{notice}</InfoBanner>}
-            <div className="nev-balance-actions">
+          <footer className="nev-foot">
+            {messages}
+            <div className="nev-foot-row">
+              <p>{error || notice ? "" : missingDetails.length ? tr("text413", missingDetails.join(", ")) : tr("text784")}</p>
               <button disabled={Boolean(busy) || !canWork} title={canWork ? undefined : NEED_REASON.operate} onClick={saveDraft}>
-                {tr("text544")}</button>
-              <button
-                className="primary"
-                disabled={Boolean(busy) || !canWork}
-                title={canWork ? (missingDetails.length ? tr("text413", missingDetails.join(", ")) : undefined) : NEED_REASON.operate}
-                onClick={toLanes}
-              >
-                {busy ? (busy === "details" ? tr("text268") : busy) : tr("text545")}
+                {tr("text544")}
+              </button>
+              <button className="primary" disabled={Boolean(busy) || !canWork} title={canWork ? undefined : NEED_REASON.operate} onClick={toLanes}>
+                {busy ? (busy === "details" ? tr("text268") : busy) : tr("text785")}
               </button>
             </div>
-          </aside>
+          </footer>
         </main>
       </>
     );
   }
-
-  const header = (
-    <header className="nev-head">
-      <div>
-        <p className="nev-crumb2">{tr("text546")}</p>
-        <div className="nev-title">
-          <h1>{name || text(event?.name) || tr("text547")}</h1>
-          <Pill tone="amber">{tr("text548")}</Pill>
-          <Pill tone="violet">{tr("text397")}</Pill>
-          <span className="mono">{[shipperName, text(event?.rfx_id)].filter(Boolean).join(" · ")}</span>
-        </div>
-      </div>
-      <span className="spacer" />
-      {screen === "lanes" ? (
-        <>
-          <button disabled={Boolean(busy) || !canWork} title={canWork ? undefined : NEED_REASON.operate} onClick={() => void loadLanes()}>
-            {tr("text544")}</button>
-          <button className="primary" disabled={Boolean(busy) || !canWork} title={canWork ? undefined : NEED_REASON.operate} onClick={toLaunch}>
-            {busy === "lanes" ? tr("text549") : tr("text550")}
-          </button>
-        </>
-      ) : (
-        <button onClick={() => navigate(`/rfx/${id}`)}>{tr("text544")}</button>
-      )}
-    </header>
-  );
-
-  const stepper = (
-    <nav className="nev-steps" aria-label={tr("text515")}>
-      {steps.map((s, i) => {
-        const done = i < position || (s.key === "cedula" && position > 0);
-        const current = i === position;
-        return (
-          <div key={s.key} className={`nev-step${done ? " done" : ""}${current ? " current" : ""}`}>
-            {i > 0 && <hr />}
-            <button
-              type="button"
-              disabled={Boolean(busy) || current}
-              onClick={() => go(s.key === "cedula" ? "details" : (s.key as Screen))}
-            >
-              <i>{done ? "✓" : i + 1}</i>
-              {s.label}
-            </button>
-          </div>
-        );
-      })}
-    </nav>
-  );
 
   return (
     <>
       {header}
       <main className="nev-body">
         {stepper}
-        {error && <ErrorBanner message={error} />}
-        {notice && <InfoBanner>{notice}</InfoBanner>}
 
         {screen === "lanes" && (
           <>
@@ -580,24 +534,35 @@ export function NewEventPage() {
             )}
             <LaneLoader state={lanes} shipperId={shipper?.id ?? null} shipperName={shipperName} currency={currency} />
             <footer className="nev-foot">
-              <p>
-                {lanes.summary.total
-                  ? tr("text553", kept, lanes.summary.total) +
-                    (lanes.summary.pending ? tr("text554", lanes.summary.pending) : ".")
-                  : draftLanes.length
-                    ? tr("text555", draftLanes.length)
-                    : tr("text556")}
-              </p>
-              <button disabled={Boolean(busy)} onClick={() => go("details")}>
-                {tr("text557")}</button>
-              <button className="primary" disabled={Boolean(busy) || !canWork} title={canWork ? undefined : NEED_REASON.operate} onClick={toLaunch}>
-                {tr("text558")}</button>
+              {messages}
+              <div className="nev-foot-row">
+                <p>
+                  {lanes.summary.total
+                    ? tr("text553", kept, lanes.summary.total) +
+                      (lanes.summary.pending ? tr("text554", lanes.summary.pending) : ".")
+                    : draftLanes.length
+                      ? tr("text555", draftLanes.length)
+                      : tr("text556")}
+                </p>
+                <button disabled={Boolean(busy)} onClick={() => go("details")}>
+                  {tr("text557")}
+                </button>
+                {lanes.summary.total > 0 && (
+                  <button disabled={Boolean(busy) || !canWork} title={canWork ? undefined : NEED_REASON.operate} onClick={() => void loadLanes()}>
+                    {tr("text786")}
+                  </button>
+                )}
+                <button className="primary" disabled={Boolean(busy) || !canWork} title={canWork ? undefined : NEED_REASON.operate} onClick={toLaunch}>
+                  {busy === "lanes" ? tr("text549") : tr("text787")}
+                </button>
+              </div>
             </footer>
           </>
         )}
 
         {screen === "launch" && event && (
           <>
+            {notice && <InfoBanner>{notice}</InfoBanner>}
             <NewEventLaunch
               event={event}
               lanes={draftLanes}
@@ -608,10 +573,6 @@ export function NewEventPage() {
               onEditDetails={() => go("details")}
               onEditLanes={() => go("lanes")}
             />
-            <footer className="nev-foot">
-              <p>{tr("text559")}</p>
-              <button onClick={() => go("lanes")}>{tr("text560")}</button>
-            </footer>
           </>
         )}
       </main>

@@ -6341,16 +6341,29 @@ table.data.fit-table .fit-col-sel {
   color: var(--grey);
   overflow-wrap: anywhere;
 }
-.rev-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 330px;
-  align-items: start;
-  gap: 18px;
-}
 .rev-col {
   display: grid;
   gap: 12px;
   min-width: 0;
+  max-width: 980px;
+}
+.rev-card.changed {
+  border-color: var(--amber);
+}
+.rev-done {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  border: 1px solid #dadada;
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 16px 18px;
+  font-size: 13px;
+}
+.rev-done a {
+  font-weight: 600;
 }
 .rev-card {
   background: var(--panel);
@@ -6477,28 +6490,6 @@ table.data.fit-table .fit-col-sel {
   border-radius: var(--radius);
   font-size: 12px;
   color: var(--muted);
-}
-.rev-side p {
-  line-height: 1.45;
-}
-.rev-left {
-  display: grid;
-  gap: 6px;
-  background: var(--amber-light);
-  border-radius: var(--radius);
-  padding: 12px 13px;
-}
-.rev-left b {
-  color: var(--amber);
-}
-.rev-left p {
-  font-size: 11.5px;
-}
-
-@media (max-width: 1100px) {
-  .rev-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 @media (max-width: 900px) {
   .rev-kpis {
@@ -7080,90 +7071,7 @@ table.data.fit-table .fit-col-sel {
   font-size: 12px;
   color: var(--muted);
 }
-
-/* Pasos 1 y 2 (28) */
-.nev-top {
-  display: grid;
-  gap: 6px;
-  border-bottom: 1px solid #dadada;
-  background: var(--panel);
-  padding: 22px 28px 16px;
-}
-.nev-crumb {
-  margin: 0;
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  color: var(--orange);
-}
-.nev-top h1 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-}
-.nev-top > p:last-child {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--grey);
-}
-.nev-rail {
-  display: flex;
-  background: var(--ink);
-  padding: 0 28px;
-}
-.nev-rail-step {
-  display: grid;
-  flex: 1;
-  gap: 5px;
-  padding: 14px 30px 13px 0;
-}
-.nev-rail-step > span {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13.5px;
-  font-weight: 700;
-  color: #828282;
-}
-.nev-rail-step.on > span,
-.nev-rail-step.current > span {
-  color: #fff;
-}
-.nev-rail-step i {
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 10px;
-  background: #3d3d3d;
-  font-size: 10px;
-  font-style: normal;
-  color: #fff;
-}
-.nev-rail-step.current i {
-  background: var(--orange);
-}
-.nev-rail-step em {
-  font-family: var(--mono);
-  font-size: 9px;
-  font-style: normal;
-  letter-spacing: 0.08em;
-  color: #828282;
-}
-.nev-rail-step.current em {
-  color: var(--orange);
-}
-.nev-rail-step.current::after {
-  content: "";
-  height: 3px;
-  background: var(--orange);
-}
-.nev-details {
-  display: flex;
-  align-items: flex-start;
-  gap: 18px;
-  padding: 20px 28px 26px;
-}
+/* Datos y cédula (28) */
 .nev-steps12 {
   display: flex;
   flex: 1;
@@ -7192,9 +7100,6 @@ table.data.fit-table .fit-col-sel {
 .nev-step1,
 .nev-step2 {
   flex: 1;
-}
-.nev-step1 {
-  border-color: var(--orange);
 }
 .nev-step1 .nev-field > span {
   font-size: 10.5px;
@@ -7263,13 +7168,6 @@ table.data.fit-table .fit-col-sel {
 .nev-rubric.filled textarea {
   background: var(--panel);
 }
-.nev-balance {
-  flex: none;
-  gap: 12px;
-  width: 330px;
-  border-color: var(--ink);
-  padding: 18px;
-}
 .nev-kicker {
   margin: 0;
   font-family: var(--mono);
@@ -7278,45 +7176,10 @@ table.data.fit-table .fit-col-sel {
   text-transform: uppercase;
   color: var(--orange);
 }
-.nev-good,
-.nev-cost {
-  display: grid;
-  gap: 6px;
-  border-radius: var(--radius);
-  padding: 12px 13px;
-  font-size: 11.5px;
-  color: var(--grey);
-}
-.nev-good {
-  background: #e5f5eb;
-}
-.nev-good b {
-  font-size: 12px;
-  color: #2e7d5b;
-}
-.nev-cost {
-  background: #fcf0d9;
-}
-.nev-cost b {
-  font-size: 12px;
-  color: #8c540f;
-}
-.nev-balance > p {
-  margin: 0;
-  font-size: 12px;
-  color: var(--grey);
-}
-.nev-balance > p.nev-note,
 .nev-note {
   margin: 0;
   font-size: 10.5px;
   color: var(--muted);
-}
-.nev-balance-actions {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding-top: 4px;
 }
 
 /* Pasos 3 y 4 (14 · 15): cabecera del borrador y pasos */
@@ -7333,6 +7196,19 @@ table.data.fit-table .fit-col-sel {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--muted);
+}
+.nev-crumb2 a {
+  color: inherit;
+}
+.nev-crumb2 a:hover {
+  color: var(--ink);
+}
+.nev-rubric > span em {
+  font-family: var(--font);
+  font-style: normal;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #8c540f;
 }
 .nev-title {
   display: flex;
@@ -7418,7 +7294,19 @@ table.data.fit-table .fit-col-sel {
   background: var(--orange);
   color: #fff;
 }
+/* Los botones del paso siempre a la vista, con sus avisos encima. */
 .nev-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: grid;
+  gap: 10px;
+  margin: 0 -32px -22px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  padding: 12px 32px;
+}
+.nev-foot-row {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -7913,13 +7801,11 @@ table.data.fit-table .fit-col-sel {
 }
 
 @media (max-width: 1100px) {
-  .nev-details,
   .nev-steps12,
   .nev-launch {
     flex-direction: column;
     align-items: stretch;
   }
-  .nev-balance,
   .nev-launch-side {
     width: auto;
   }
@@ -7936,23 +7822,33 @@ table.data.fit-table .fit-col-sel {
   .nev-facts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .nev-rail,
   .nev-steps {
-    overflow-x: auto;
+    padding: 11px 14px;
   }
-  .nev-rail-step {
-    min-width: 140px;
+  /* En el teléfono caben los tres números y solo el nombre del paso actual. */
+  .nev-step:not(.current) button span {
+    display: none;
   }
-  .nev-step {
-    flex: none;
+  .nev-step button {
+    white-space: nowrap;
   }
   .nev-step hr {
-    flex: none;
-    width: 16px;
+    min-width: 12px;
   }
-  .nev-top,
+  .nev-foot {
+    margin: 0 -16px -22px;
+    padding: 10px 16px;
+  }
+  .nev-foot-row {
+    flex-wrap: wrap;
+  }
+  .nev-foot-row p {
+    flex-basis: 100%;
+  }
+  .nev-foot-row button.primary {
+    flex: 1;
+  }
   .nev-head,
-  .nev-details,
   .nev-body {
     padding-right: 16px;
     padding-left: 16px;
@@ -8707,4 +8603,12 @@ table.data.intake-table td {
     display: block;
     overflow-x: auto;
   }
+}
+
+/* Las pestañas de invitación caben en una línea; en el teléfono se desplazan. */
+.launch-tabs {
+  overflow-x: auto;
+}
+.launch-tabs a {
+  white-space: nowrap;
 }
