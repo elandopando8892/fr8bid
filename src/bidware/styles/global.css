@@ -6341,16 +6341,29 @@ table.data.fit-table .fit-col-sel {
   color: var(--grey);
   overflow-wrap: anywhere;
 }
-.rev-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 330px;
-  align-items: start;
-  gap: 18px;
-}
 .rev-col {
   display: grid;
   gap: 12px;
   min-width: 0;
+  max-width: 980px;
+}
+.rev-card.changed {
+  border-color: var(--amber);
+}
+.rev-done {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  border: 1px solid #dadada;
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 16px 18px;
+  font-size: 13px;
+}
+.rev-done a {
+  font-weight: 600;
 }
 .rev-card {
   background: var(--panel);
@@ -6477,28 +6490,6 @@ table.data.fit-table .fit-col-sel {
   border-radius: var(--radius);
   font-size: 12px;
   color: var(--muted);
-}
-.rev-side p {
-  line-height: 1.45;
-}
-.rev-left {
-  display: grid;
-  gap: 6px;
-  background: var(--amber-light);
-  border-radius: var(--radius);
-  padding: 12px 13px;
-}
-.rev-left b {
-  color: var(--amber);
-}
-.rev-left p {
-  font-size: 11.5px;
-}
-
-@media (max-width: 1100px) {
-  .rev-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 @media (max-width: 900px) {
   .rev-kpis {
@@ -8612,4 +8603,12 @@ table.data.intake-table td {
     display: block;
     overflow-x: auto;
   }
+}
+
+/* Las pestañas de invitación caben en una línea; en el teléfono se desplazan. */
+.launch-tabs {
+  overflow-x: auto;
+}
+.launch-tabs a {
+  white-space: nowrap;
 }

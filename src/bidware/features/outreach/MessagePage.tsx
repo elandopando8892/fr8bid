@@ -323,7 +323,6 @@ export function MessagePage() {
         eventId={id}
         event={event}
         title={tr("text145")}
-        tags={<Pill tone="blue">LAUNCH</Pill>}
         info={generationText("reviewedCount", audience.length, draftAudience.selected)}
         actions={
           <>

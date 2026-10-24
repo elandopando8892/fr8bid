@@ -1093,6 +1093,34 @@ export const copy = {
   "text273": {
     "es": "No existe una plantilla activa con ese id (puede estar archivada o borrada).",
     "en": "No active template exists with this ID (it may be archived or deleted)."
+  },
+  "text274": {
+    "es": "Por revisar",
+    "en": "To review"
+  },
+  "text275": {
+    "es": "CAMBIÓ",
+    "en": "CHANGED"
+  },
+  "text276": {
+    "es": "Solo los carriers revisados reciben invitación. Confirma que cada contacto es el correcto; si cambia después, vuelve aquí para revisarlo otra vez.",
+    "en": "Only reviewed carriers get invited. Confirm each contact is the right one; if it changes later, it comes back here to be reviewed again."
+  },
+  "text277": {
+    "es": "Nada por revisar: {0} carrier(s) revisados.",
+    "en": "Nothing to review: {0} carrier(s) reviewed."
+  },
+  "text278": {
+    "es": "Volver a la Mesa",
+    "en": "Back to the event"
+  },
+  "text279": {
+    "es": "Seguir al mensaje →",
+    "en": "Continue to the message →"
+  },
+  "text280": {
+    "es": "Eventos",
+    "en": "Events"
   }
 };
 
