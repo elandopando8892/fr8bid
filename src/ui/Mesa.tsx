@@ -66,7 +66,7 @@ export function Mesa({ id }: { id: string }) {
       const r = await f();
       if (ok) setAvisoMsg({ tipo: "ok", texto: typeof ok === "function" ? ok(r) : ok });
     } catch (e) {
-      const extra = e instanceof ErrorApi && e.code === "ESCRITURA_NO_AUTORIZADA" ? " (FR8BID_ESCRITURAS_REALES no está activo)" : "";
+      const extra = e instanceof ErrorApi && e.code === "ESCRITURA_NO_AUTORIZADA" ? " (FR8BID_ESCRITURAS_REALES no está activo)" : e instanceof ErrorApi && e.code === "SOLO_BORRADORES" ? " (FR8BID_ESCRITURAS_REALES=borradores)" : "";
       setAvisoMsg({ tipo: "error", texto: (e instanceof Error ? e.message : String(e)) + extra });
     }
     await leer();
