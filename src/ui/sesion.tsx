@@ -4,7 +4,7 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { MesaApi, revisorHttp, transporteHttp, transporteSimulado } from "../cliente/api";
+import { MesaApi, apolloHttp, revisorHttp, transporteHttp, transporteSimulado } from "../cliente/api";
 import type { Rol } from "../dominio/tipos";
 import type { RatewareSimulado } from "../simulado/rateware";
 
@@ -79,7 +79,7 @@ export function ProveedorSesion({ children }: { children: ReactNode }) {
   const api = useMemo(() => {
     if (MODO === "simulado") return new MesaApi(sim ? transporteSimulado(sim, () => usuarioSimulado) : async () => ({ status: 503, body: { error: "Cargando", code: "CARGANDO" }, headers: {} }));
     const token = async () => (await supa?.auth.getSession())?.data.session?.access_token ?? null;
-    return new MesaApi(transporteHttp(token), undefined, revisorHttp(token));
+    return new MesaApi(transporteHttp(token), undefined, revisorHttp(token), apolloHttp(token));
   }, [sim, usuarioSimulado, supa]);
 
   const u = USUARIOS_SIMULADOS.find((x) => x.clave === usuarioSimulado)!;
