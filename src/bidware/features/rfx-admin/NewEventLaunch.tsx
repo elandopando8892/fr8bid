@@ -197,7 +197,7 @@ export function NewEventLaunch({
     {
       ok: true,
       title: tr("text058"),
-      detail: `${visibility.key} — ${visibility.hint}`,
+      detail: `${visibility.label} — ${visibility.hint}`,
     },
   ];
   const ready = lanes.length > 0 && Boolean(template) && toAdd.length + inRfx.size > 0 && Boolean(message) && !busy;
@@ -285,9 +285,7 @@ export function NewEventLaunch({
             </div>
             <div>
               <dt>{tr("text082")}</dt>
-              <dd className="mono" title={segmentLabel?.[getLang()]}>
-                {segment || "—"}
-              </dd>
+              <dd>{segmentLabel?.[getLang()] ?? (segment || "—")}</dd>
             </div>
             <div>
               <dt>RFx ID</dt>
@@ -303,7 +301,7 @@ export function NewEventLaunch({
             </div>
             <div>
               <dt>{tr("text450")}</dt>
-              <dd className="mono">{visibility.key}</dd>
+              <dd title={visibility.hint}>{visibility.label}</dd>
             </div>
             <div>
               <dt>{tr("text057")}</dt>
@@ -374,7 +372,7 @@ export function NewEventLaunch({
               {tr("text460")}</Link>
           </header>
           <label className="nev-field">
-            <span className="nev-kicker">Starting set</span>
+            <span className="nev-kicker">{tr("text788")}</span>
             <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
               <option value="">{templates.loading ? tr("text461") : tr("text462")}</option>
               {(templates.data?.rows ?? []).map((t) => (

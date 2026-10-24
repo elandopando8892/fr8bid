@@ -844,14 +844,14 @@ export function LaneLoader({
             <table className="data">
               <thead>
                 <tr>
-                  <th>Lane</th>
+                  <th>#</th>
                   <th>{tr("text077")}</th>
                   <th>{tr("text078")}</th>
                   <th>{tr("text079")}</th>
                   <th>{tr("text080")}</th>
                   <th>{tr("text081")}</th>
-                  <th>Vol</th>
-                  <th>Target</th>
+                  <th>{tr("text280")}</th>
+                  <th>{tr("text790")}</th>
                   <th>{tr("text282")}</th>
                 </tr>
               </thead>

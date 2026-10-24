@@ -1159,7 +1159,7 @@ export const copy = {
     "en": "Enter manually"
   },
   "text287": {
-    "es": "Lane por lane, o pega varias filas.",
+    "es": "Ruta por ruta, o pega varias filas.",
     "en": "Lane by lane, or paste multiple rows."
   },
   "text288": {
@@ -1175,7 +1175,7 @@ export const copy = {
     "en": "From Ratebook"
   },
   "text291": {
-    "es": "Lanes vigentes del shipper.",
+    "es": "Rutas vigentes del shipper.",
     "en": "Current shipper lanes."
   },
   "text292": {
@@ -1219,7 +1219,7 @@ export const copy = {
     "en": "Replace file"
   },
   "text302": {
-    "es": "Sube el template RFI de MARKSMAN tal cual (lee la hoja con rutas y se detiene en «Reglas de negocio»), nuestra plantilla, o cualquier tabla con columnas Origen, Destino, Equipo, Volumen semanal…",
+    "es": "Sube el Excel del shipper (el template RFI de Marksman tal cual), nuestra plantilla o cualquier tabla con Origen, Destino, Equipo y Volumen semanal.",
     "en": "Upload the MARKSMAN RFI template as provided (reads the lane sheet until “Business rules”), our template, or a table with Origin, Destination, Equipment and Weekly volume columns…"
   },
   "text303": {
@@ -1451,7 +1451,7 @@ export const copy = {
     "en": "Skip these lanes"
   },
   "text360": {
-    "es": "Ninguna ruta se descarta automáticamente. Mapea el valor recibido a tu catálogo, guárdalo como alias para futuras cargas, o decide explícitamente omitir la ruta.",
+    "es": "Elige a qué valor del catálogo corresponde cada uno, u omite la ruta. Nada se descarta solo.",
     "en": "No lane is discarded automatically. Map the received value to your catalog, save it as an alias for future imports, or explicitly skip the lane."
   },
   "text361": {
@@ -1459,7 +1459,7 @@ export const copy = {
     "en": "Lane matrix preview"
   },
   "text362": {
-    "es": "valida contra el catálogo de rateware",
+    "es": "validada contra el catálogo",
     "en": "validates against the rateware catalog"
   },
   "text363": {
@@ -1715,15 +1715,15 @@ export const copy = {
     "en": "Load at least one lane in step 3"
   },
   "text426": {
-    "es": "Audiencia seleccionada",
+    "es": "Lista de carriers elegida",
     "en": "Audience selected"
   },
   "text427": {
-    "es": "Audiencia por elegir",
+    "es": "Lista de carriers por elegir",
     "en": "Audience not selected"
   },
   "text428": {
-    "es": "{0} carrier(s) elegible(s) nuevos desde el template{1}",
+    "es": "{0} carrier(s) elegible(s) nuevos de la lista{1}",
     "en": "{0} new eligible carrier(s) from the template{1}"
   },
   "text429": {
@@ -1731,7 +1731,7 @@ export const copy = {
     "en": " · {0} already in the RFx"
   },
   "text430": {
-    "es": "Elige el template de carriers de arranque",
+    "es": "Elige la lista de carriers a invitar",
     "en": "Choose the starting carrier template"
   },
   "text431": {
@@ -1743,7 +1743,7 @@ export const copy = {
     "en": "Choose a template (ES or EN)"
   },
   "text433": {
-    "es": "Se agregarán {0} carrier(s) del template «{1}» a las {2} ruta(s)",
+    "es": "Se agregarán {0} carrier(s) de la lista «{1}» a las {2} ruta(s)",
     "en": "Add {0} carrier(s) from template “{1}” to {2} lane(s)"
   },
   "text434": {
@@ -1763,7 +1763,7 @@ export const copy = {
     "en": "The Bid Room opens: the event appears on the public board and among open lanes visible to other carriers. Continue?"
   },
   "text438": {
-    "es": "Lanzar a Bid Room",
+    "es": "Lanzar evento",
     "en": "Launch to Bid Room"
   },
   "text439": {
@@ -1847,7 +1847,7 @@ export const copy = {
     "en": "REVIEW"
   },
   "text459": {
-    "es": "Audiencia",
+    "es": "Carriers",
     "en": "Audience"
   },
   "text460": {
@@ -1855,15 +1855,15 @@ export const copy = {
     "en": "Adjust in Carrier Fit"
   },
   "text461": {
-    "es": "Cargando templates…",
+    "es": "Cargando listas…",
     "en": "Loading templates…"
   },
   "text462": {
-    "es": "Elige un template de carriers…",
+    "es": "Elige una lista de carriers…",
     "en": "Choose a carrier template…"
   },
   "text463": {
-    "es": "Miembros del template",
+    "es": "Carriers en la lista",
     "en": "Template members"
   },
   "text464": {
@@ -1915,7 +1915,7 @@ export const copy = {
     "en": "Channel"
   },
   "text476": {
-    "es": "Listo para lanzar",
+    "es": "Lanzar",
     "en": "Ready to launch"
   },
   "text477": {
@@ -1927,7 +1927,7 @@ export const copy = {
     "en": "the {0} eligible carriers"
   },
   "text479": {
-    "es": "los carriers del template",
+    "es": "los carriers de la lista",
     "en": "the template's carriers"
   },
   "text480": {
@@ -1939,7 +1939,7 @@ export const copy = {
     "en": " lane(s) and prepares invitation drafts."
   },
   "text482": {
-    "es": "COMPUERTA",
+    "es": "SIN ENVÍOS",
     "en": "GATE"
   },
   "text483": {
@@ -1947,7 +1947,7 @@ export const copy = {
     "en": "Nothing is sent until you approve in the Delivery queue."
   },
   "text484": {
-    "es": "Faltan rutas, el template de carriers o la plantilla de invitación.",
+    "es": "Faltan rutas, la lista de carriers o la plantilla de invitación.",
     "en": "Missing lanes, carrier template or invitation template."
   },
   "text485": {
@@ -1955,7 +1955,7 @@ export const copy = {
     "en": "Launching…"
   },
   "text486": {
-    "es": "Lanzar a Bid Room →",
+    "es": "Lanzar evento →",
     "en": "Launch to Bid Room →"
   },
   "text487": {
@@ -1975,7 +1975,7 @@ export const copy = {
     "en": "Copying project details to lane {0} of {1}…"
   },
   "text491": {
-    "es": "Borrador guardado. Lo encuentras en RFx / Bid Room como BORRADOR.",
+    "es": "Borrador guardado. Lo encuentras en Eventos.",
     "en": "Draft saved. Find it in RFx / Bid Room as DRAFT."
   },
   "text492": {
@@ -2103,7 +2103,7 @@ export const copy = {
     "en": "Step 1 · Who and what"
   },
   "text523": {
-    "es": "Del Shipper CRM. Si no existe, se crea desde aquí.",
+    "es": "Búscalo por nombre; si no existe, créalo aquí.",
     "en": "From Shipper CRM. Create it here if missing."
   },
   "text524": {
@@ -3109,6 +3109,74 @@ export const copy = {
   "text773": {
     "es": "EVENTO ABIERTO PARA REVISIÓN",
     "en": "EVENT OPEN FOR REVIEW"
+  },
+  "text774": {
+    "es": "Datos y cédula",
+    "en": "Details & brief"
+  },
+  "text775": {
+    "es": "Revisar y lanzar",
+    "en": "Review & launch"
+  },
+  "text776": {
+    "es": "Nuevo evento",
+    "en": "New event"
+  },
+  "text777": {
+    "es": "Eventos",
+    "en": "Events"
+  },
+  "text778": {
+    "es": "Borrador {0}",
+    "en": "Draft {0}"
+  },
+  "text779": {
+    "es": "Datos del evento",
+    "en": "Event details"
+  },
+  "text780": {
+    "es": "Cédula del proyecto",
+    "en": "Project brief"
+  },
+  "text781": {
+    "es": "{0} de 3",
+    "en": "{0} of 3"
+  },
+  "text782": {
+    "es": "OPCIONAL",
+    "en": "OPTIONAL"
+  },
+  "text783": {
+    "es": "Cada ruta la hereda y el carrier la confirma rubro por rubro. Los tres primeros rubros atraen mejores carriers; los requisitos extra (especificaciones y perfil) reducen opciones y suben el precio.",
+    "en": "Every lane inherits it and the carrier confirms it item by item. The first three items attract better carriers; extra requirements (specs and profile) narrow the pool and raise the price."
+  },
+  "text784": {
+    "es": "Se guarda como borrador al seguir. Nada se envía hasta lanzar.",
+    "en": "It's saved as a draft when you continue. Nothing is sent until launch."
+  },
+  "text785": {
+    "es": "Seguir a rutas →",
+    "en": "Continue to lanes →"
+  },
+  "text786": {
+    "es": "Guardar rutas",
+    "en": "Save lanes"
+  },
+  "text787": {
+    "es": "Seguir a revisar →",
+    "en": "Continue to review →"
+  },
+  "text788": {
+    "es": "Lista de carriers",
+    "en": "Carrier list"
+  },
+  "text789": {
+    "es": "sube el precio",
+    "en": "raises the price"
+  },
+  "text790": {
+    "es": "Objetivo",
+    "en": "Target"
   }
 };
 
