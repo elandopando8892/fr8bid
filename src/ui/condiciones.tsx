@@ -160,7 +160,7 @@ export function EditorCondiciones({ d, ruta, accion }: { d: Detalle; ruta: Ruta;
         </fieldset>
       ))}
       <div className="fila-botones">
-        <button className="btn-secundario" onClick={guardar}>Guardar {elegidas.length} condición(es)</button>
+        <button className="btn-secundario" onClick={guardar}>Guardar {elegidas.length === 1 ? "1 condición" : `${elegidas.length} condiciones`}</button>
         <button className="btn-texto" onClick={() => { setFilas(inicial); setAbierto(false); }}>Cancelar</button>
       </div>
     </div>

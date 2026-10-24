@@ -77,3 +77,9 @@ export function tarifaVenta(v: Comercial & Pick<OfertaVersion, "tarifaAllIn">): 
   const venta = centavos(v.tarifaAllIn * (1 + pct / 100));
   return { venta, ingreso: centavos(venta - v.tarifaAllIn), pct, porDefecto: declarado === null };
 }
+
+// Versión corta para la tabla: «Fee plus · 3 %»; la larga va en el title.
+export function modeloCorto(v: Comercial): string {
+  const p = porcentajeModelo(v);
+  return `${nombreModelo(String(v.modeloComercial))} · ${pct(p.valor)}`;
+}

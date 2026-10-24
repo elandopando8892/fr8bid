@@ -68,7 +68,6 @@ button, input, select, textarea { font: inherit; }
 .paso-movil { display: none; }
 .mesa { display: grid; grid-template-columns: 250px 1fr; gap: 16px; align-items: start; }
 .riel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 10px; position: sticky; top: 16px; }
-.riel h2 { padding: 0 6px; }
 .riel ol { list-style: none; margin: 0; padding: 0; }
 .riel button { display: flex; gap: 10px; width: 100%; text-align: left; background: none; border: 0; padding: 7px 6px; border-radius: 8px; cursor: pointer; color: inherit; }
 .riel button small { display: block; color: var(--muted); font-size: 11.5px; }
@@ -99,18 +98,53 @@ button, input, select, textarea { font: inherit; }
 .rubro select { max-width: 180px; }
 .entrar { margin-top: 15vh; text-align: center; }
 
+/* Siguiente paso: una sola línea arriba de la vista, en desktop y móvil. */
+.siguiente { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 9px 14px; margin-bottom: 14px; color: var(--grey); }
+.siguiente.te-toca { background: var(--orange-light); border-color: #ea5e2740; color: var(--accent); }
+.accion-principal { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.accion-principal p { margin: 0; }
+.accion-principal .confirmar { flex-basis: 100%; }
+.subpasos { display: flex; flex-wrap: wrap; gap: 2px 8px; margin-top: 4px; }
+.subpaso { font-size: 11px; color: var(--muted2); }
+.subpaso.sub-hecho { color: var(--green); }
+.subpaso.sub-actual { color: var(--accent); font-weight: 700; }
+.candados-ok { color: var(--green); font-size: 13px; margin: 0 0 8px; }
+.acciones-fila { display: flex; gap: 8px; flex-wrap: wrap; font-size: 12.5px; }
+.acciones-fila .btn-texto { padding: 0; }
+.descargas { margin: 0 0 8px; }
+.descargas .btn-texto { padding: 0; }
+.tabla .pill { margin-left: 6px; }
+.fila-liga { cursor: pointer; }
+.fila-liga:hover td { background: var(--subtle); }
+
 @media (max-width: 860px) {
-  .marco { grid-template-columns: 1fr; }
+  .marco { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .lateral { flex-direction: row; align-items: center; padding: 10px 16px; gap: 12px; flex-wrap: wrap; }
   .lateral nav { display: flex; gap: 4px; }
+  .lateral nav a { padding: 6px 10px; }
   .cuenta { margin: 0 0 0 auto; flex-direction: row; align-items: center; }
   .cuenta .campo { margin: 0; flex-direction: row; align-items: center; }
+  .cuenta .ver-como > span, .cuenta .aviso-pill { display: none; }
+  .cuenta select { width: auto; }
   .contenido { padding: 16px; }
   .mesa, .dos-columnas { grid-template-columns: 1fr; }
-  .riel { display: none; }
-  .paso-movil { display: block; background: var(--orange-light); color: var(--accent); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-weight: 600; }
+  /* El riel pasa a una tira horizontal: las etapas siguen a un toque. */
+  .riel { position: static; padding: 6px; overflow-x: auto; }
+  .riel ol { display: flex; gap: 4px; }
+  .riel li { flex: 0 0 auto; }
+  .riel button { padding: 6px 8px; white-space: nowrap; }
+  .riel button small, .riel .subpasos { display: none; }
   .cabecera { flex-direction: column; }
+  .etiquetas { justify-content: flex-start; }
   .rejilla { grid-template-columns: 1fr 1fr; }
+  /* Tablas como tarjetas: cada fila es un bloque con sus etiquetas. */
+  .tabla-tarjetas thead { display: none; }
+  .tabla-tarjetas, .tabla-tarjetas tbody, .tabla-tarjetas tr, .tabla-tarjetas td { display: block; width: 100%; }
+  .tabla-tarjetas tr { border-bottom: 1px solid var(--line); padding: 8px 0; }
+  .tabla-tarjetas td { border: 0; padding: 2px 8px; }
+  .tabla-tarjetas td:empty { display: none; }
+  .tabla-tarjetas td[data-etiqueta]::before { content: attr(data-etiqueta) ": "; color: var(--muted); font-size: 12px; }
+  .tabla-tarjetas td[data-etiqueta] > div { display: inline; margin-left: 6px; }
 }
 
 .contenido, .centro, .dos-columnas > * { min-width: 0; }
@@ -146,3 +180,7 @@ button, input, select, textarea { font: inherit; }
   min-width: 180px;
 }
 a.btn-secundario { display: inline-block; text-decoration: none; }
+.tabla td .mono { white-space: nowrap; }
+.lado h3:not(:first-child) { margin-top: 14px; }
+.lista-compacta { margin: 6px 0; padding-left: 18px; }
+.lista-compacta li { padding: 2px 0; }

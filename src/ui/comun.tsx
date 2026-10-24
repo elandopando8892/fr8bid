@@ -51,7 +51,7 @@ export function Marco({ children }: { children: ReactNode }) {
           {s.modo === "simulado" ? (
             <>
               <span className="pill aviso-pill">Rateware simulado</span>
-              <label className="campo">
+              <label className="campo ver-como">
                 <span>Ver como</span>
                 <select value={s.usuarioSimulado} onChange={(e) => s.cambiarUsuarioSimulado(e.target.value)}>
                   {USUARIOS_SIMULADOS.map((u) => (
@@ -66,7 +66,7 @@ export function Marco({ children }: { children: ReactNode }) {
               <button className="btn-texto" onClick={s.salir}>Salir</button>
             </>
           ) : null}
-          {s.correo && <span className="rol">{NOMBRE_ROL[s.rol]}</span>}
+          {s.modo !== "simulado" && s.correo && <span className="rol">{NOMBRE_ROL[s.rol]}</span>}
         </div>
       </aside>
       <main className="contenido">{children}</main>
@@ -179,3 +179,6 @@ export function Confirmar({
     </div>
   );
 }
+
+// «1 ruta», «3 rutas»: sin «ruta(s)».
+export const plural = (n: number, uno: string, varios = `${uno}s`) => `${n.toLocaleString("es-MX")} ${n === 1 ? uno : varios}`;

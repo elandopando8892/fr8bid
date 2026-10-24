@@ -204,6 +204,14 @@ export function candadosAviso(detalle: Detalle, aviso: Aviso, ctx: Contexto): Ca
   ];
 }
 
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+// «2026-10-31» → «31 oct», igual que el resto de la Mesa.
+export function diaCorto(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${Number(m[3])} ${MESES[Number(m[2]) - 1]}` : iso;
+}
+const cuenta = (n: number, uno: string, varios = `${uno}s`) => `${n} ${n === 1 ? uno : varios}`;
+
 function paso(clave: ClavePaso, n: number, estado: EstadoPaso, detalle: string, quien: Quien): Paso {
   return { n, clave, titulo: TITULOS[clave], estado, detalle, quien };
 }
@@ -226,10 +234,10 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
   const pasos: Paso[] = [];
   pasos.push(paso("necesidad", 1, "hecho", `${evento.shipper} · manual`, "Operador"));
   pasos.push(
-    paso("evento", 2, rutas.length ? "hecho" : "actual", rutas.length ? `${rutas.length} ruta(s)${evento.cierre?.plazoOriginal ? ` · plazo original ${evento.cierre.plazoOriginal}` : evento.plazo ? ` · plazo ${evento.plazo}` : ""}` : "Agregar al menos una ruta", "Operador")
+    paso("evento", 2, rutas.length ? "hecho" : "actual", rutas.length ? `${cuenta(rutas.length, "ruta")}${evento.cierre?.plazoOriginal ? ` · plazo original ${diaCorto(evento.cierre.plazoOriginal)}` : evento.plazo ? ` · plazo ${diaCorto(evento.plazo)}` : ""}` : "Agregar al menos una ruta", "Operador")
   );
   pasos.push(
-    paso("carriers", 3, !rutas.length ? "pendiente" : todas.length ? "hecho" : "actual", todas.length ? `${todas.length} carrier(s)` : "Elegir carriers", "Operador")
+    paso("carriers", 3, !rutas.length ? "pendiente" : todas.length ? "hecho" : "actual", todas.length ? cuenta(todas.length, "carrier") : "Elegir carriers", "Operador")
   );
   // Los carriers sin «Revisado» no se invitan y no detienen el paso; si la
   // revisión no se pudo consultar, nadie cuenta como omitido a propósito.
@@ -243,7 +251,7 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
       "invitacion",
       4,
       !todas.length ? "pendiente" : invitacionHecha ? "hecho" : "actual",
-      (invitacionHecha ? `${invitadas} invitación(es) aceptadas` : `${porInvitar} por aprobar y enviar`) + sinRevision,
+      (invitacionHecha ? `${cuenta(invitadas, "invitación aceptada", "invitaciones aceptadas")}` : `${porInvitar} por aprobar y enviar`) + sinRevision,
       "Administrador"
     )
   );
@@ -260,8 +268,8 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
       7,
       cerradoOMas ? "hecho" : abierto && respondieron.length ? "actual" : "pendiente",
       cerradoOMas
-        ? `Cerrado: la liga ya no acepta ofertas${evento.cierre ? ` · el ${evento.cierre.el}, plazo original ${evento.cierre.plazoOriginal ?? "sin plazo"}` : ""}`
-        : "Cerrar antes de adjudicar (mitigación C2)",
+        ? `Cerrado${evento.cierre ? ` el ${diaCorto(evento.cierre.el)} (plazo original ${evento.cierre.plazoOriginal ? diaCorto(evento.cierre.plazoOriginal) : "sin plazo"})` : ""}`
+        : "Cerrar antes de adjudicar",
       "Administrador"
     )
   );
@@ -270,15 +278,15 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
       "adjudicar",
       8,
       todasDecididas ? "hecho" : evento.estado === "cerrado" ? "actual" : "bloqueado",
-      todasDecididas ? primarios.map((p) => `${p.carrier} · v${p.adjudicada?.numero ?? "?"}`).join(", ") || "Rutas desiertas" : `${decididas} de ${rutas.length} rutas decididas`,
+      todasDecididas ? primarios.map((p) => `${p.carrier} · v${p.adjudicada?.numero ?? "?"}`).join(", ") || "Rutas desiertas" : `${decididas} de ${cuenta(rutas.length, "ruta decidida", "rutas decididas")}`,
       "Administrador"
     )
   );
   const entregaDetalle: Record<string, string> = {
-    sin_preparar: "Lista para preparar",
+    sin_preparar: "Lista para entregar",
     preparada: "Preparada, sin escrituras externas",
     enviada: "Enviada, esperando recibo",
-    confirmada: "Recibo confirmado · pending_review",
+    confirmada: "Recibo confirmado · tarifa en Revisión",
     rechazada: ctx.entrega.error || "Rechazada por Rateware",
     incierta: "Incierta: reintentar con la misma operación"
   };
@@ -287,17 +295,17 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
       "entrega",
       9,
       confirmada ? "hecho" : todasDecididas ? "actual" : "bloqueado",
-      confirmada ? "Recibo confirmado · pending_review" : todasDecididas ? entregaDetalle[ctx.entrega.estado] : "Requiere adjudicación",
+      confirmada ? "Recibo confirmado · tarifa en Revisión" : todasDecididas ? entregaDetalle[ctx.entrega.estado] : "Requiere adjudicación",
       "Administrador"
     )
   );
   const avisoHecho = primarios.length > 0 && avisosAceptados === primarios.length;
   pasos.push(
-    paso("aviso", 10, avisoHecho ? "hecho" : confirmada && primarios.length ? "actual" : "bloqueado", avisoHecho ? "Aviso aceptado por Gmail" : confirmada ? "Aprobar y enviar el texto exacto" : "Requiere recibo", "Administrador")
+    paso("aviso", 10, avisoHecho ? "hecho" : confirmada && primarios.length ? "actual" : "bloqueado", avisoHecho ? "Aviso aceptado por Gmail" : confirmada ? "Aprobar y enviar el texto" : "Requiere recibo", "Administrador")
   );
   const loadsHecho = primarios.length > 0 && visiblesLoads === primarios.length;
   pasos.push(
-    paso("loads", 11, loadsHecho && confirmada ? "hecho" : confirmada ? "actual" : "bloqueado", loadsHecho && confirmada ? "Inferido del recibo (L1); Loads no lo confirma" : confirmada ? "Esperando a Loads" : "Requiere recibo", "Sistema")
+    paso("loads", 11, loadsHecho && confirmada ? "hecho" : confirmada ? "actual" : "bloqueado", loadsHecho && confirmada ? "Inferido del recibo de Rateware" : confirmada ? "Esperando a Loads" : "Requiere recibo", "Sistema")
   );
 
   if (evento.estado === "archivado") for (const p of pasos) if (p.estado !== "hecho") p.estado = "pendiente";
@@ -313,13 +321,13 @@ function siguientePaso(actual: Paso | null, rol: Rol): Recorrido["siguiente"] {
     necesidad: "Registrar la necesidad",
     evento: "Agregar rutas",
     carriers: "Elegir carriers",
-    invitacion: "Aprobar invitaciones",
+    invitacion: "Aprobar y enviar invitaciones",
     ofertas: "Esperar ofertas",
     comparar: "Comparar ofertas",
     cierre: "Cerrar a ofertas",
     adjudicar: "Adjudicar",
     entrega: "Entregar a Rateware",
-    aviso: "Aprobar aviso de adjudicación",
+    aviso: "Avisar a los carriers",
     loads: "Confirmar vista en Loads"
   };
   const teToca =
