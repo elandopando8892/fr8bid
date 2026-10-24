@@ -24,6 +24,7 @@ import { cambiosComerciales, describirModelo, tarifaVenta } from "../dominio/mod
 import { candidatosRecordatorio, claveIntento, ETIQUETA_SEGUIMIENTO, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
 import type { CarrierFit } from "../dominio/carrierFit";
+import type { Telefono } from "../dominio/telefonos";
 import type { ContactosCarrier } from "../dominio/contactos";
 import { NOMBRE_FAMILIA, type HistorialSegmento } from "../dominio/segmento";
 import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
@@ -597,6 +598,8 @@ function PanelHistorialSegmento({ d, ctx, accion }: Props) {
 function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion: Props["accion"] }) {
   const s = useSesion();
   const [abierto, setAbierto] = useState<string | null>(null);
+  const [revisados, setRevisados] = useState<Map<string, Telefono>>(new Map());
+  const [revision, setRevision] = useState<{ tipo: "cargando" } | { tipo: "hecho"; texto: string } | { tipo: "error"; texto: string } | null>(null);
   const filas = seguimiento(d, ctx.hoy);
   if (!filas.length) return null;
   const candidatos = new Set(candidatosRecordatorio(d, ctx.hoy).map((x) => x.carrierId));
@@ -609,9 +612,27 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
   const tocan = [...siguiente.values()].filter((x) => x?.vencido);
   const porPreparar = intentosPorPreparar(d, ahora, ctx.hoy);
   const muestra = porPreparar[0];
-  const whatsapp = intentosWhatsapp(d, ahora, ctx.hoy);
+  const whatsapp = intentosWhatsapp(d, ahora, ctx.hoy, revisados);
   const whatsappDe = new Map(whatsapp.map((w) => [w.s.carrierId, w]));
   const sinNumero = whatsapp.filter((w) => !w.liga);
+  const dudosos = whatsapp.filter((w) => w.telefono.certeza === "dudoso" && w.s.whatsapp && !w.s.whatsappNoContactar);
+  const revisarDudosos = () => {
+    setRevision({ tipo: "cargando" });
+    s.api.revisarTelefonos(dudosos.map((w) => ({ id: w.s.carrierId, valor: String(w.s.whatsapp), carrier: w.s.carrier, dominio: null }))).then(
+      (r) => {
+        setRevisados(new Map([...revisados, ...r.telefonos]));
+        const siguen = [...r.telefonos.values()].filter((t) => t.certeza === "dudoso").length;
+        const texto =
+          r.ia === "no_configurada"
+            ? "La IA todavía no está configurada (falta ANTHROPIC_API_KEY en Vercel): estos números siguen por confirmar."
+            : r.ia === "fallo"
+              ? "La IA no respondió: estos números siguen por confirmar."
+              : `La IA revisó ${r.revisadosPorIa} número(s)${siguen ? `; ${siguen} sigue(n) por confirmar` : ""}.`;
+        setRevision({ tipo: "hecho", texto });
+      },
+      (e) => setRevision({ tipo: "error", texto: e instanceof Error ? e.message : "Error desconocido" })
+    );
+  };
   return (
     <div className="tarjeta">
       <h2>Seguimiento</h2>
@@ -645,6 +666,18 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                 {sinNumero.length > 0 && <>; sin liga: {sinNumero.map((w) => `${w.s.carrier} (${w.motivo})`).join(", ")}</>}.
                 Usa «WhatsApp» en cada renglón: abre el chat con este texto y lo envías tú desde tu teléfono. Si contesta, márcalo con «Ya respondió».
               </p>
+              {dudosos.length > 0 && (
+                <p>
+                  <span className="pill alerta">Por confirmar</span> {dudosos.length} número(s) con lada que existe en México y en EE. UU. o con formato raro:{" "}
+                  {dudosos.map((w) => `${w.s.carrier} (${w.telefono.motivo})`).join(", ")}.{" "}
+                  {revision?.tipo === "cargando" ? (
+                    <span className="tenue">Revisando con IA…</span>
+                  ) : (
+                    <button className="btn-texto" onClick={revisarDudosos}>Revisar con IA</button>
+                  )}
+                </p>
+              )}
+              {revision && revision.tipo !== "cargando" && <p className={revision.tipo === "error" ? "error-texto" : "tenue"}>{revision.texto}</p>}
               <p className="texto-aviso">{whatsapp[0].texto}</p>
             </>
           )}
@@ -705,8 +738,8 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                   </td>
                   <td>
                     {whatsappDe.get(x.carrierId)?.liga && ctx.rol !== "viewer" && (
-                      <a className="btn-texto" href={whatsappDe.get(x.carrierId)!.liga!} target="_blank" rel="noreferrer" title={`+${whatsappDe.get(x.carrierId)!.numero}`}>
-                        WhatsApp
+                      <a className="btn-texto" href={whatsappDe.get(x.carrierId)!.liga!} target="_blank" rel="noreferrer" title={`+${whatsappDe.get(x.carrierId)!.numero} · ${whatsappDe.get(x.carrierId)!.telefono.motivo}`}>
+                        WhatsApp{whatsappDe.get(x.carrierId)!.telefono.certeza === "dudoso" ? " (por confirmar)" : ""}
                       </a>
                     )}
                     {(x.estado === "rebote" || (whatsappDe.has(x.carrierId) && !whatsappDe.get(x.carrierId)!.liga)) && ctx.rol !== "viewer" && (
