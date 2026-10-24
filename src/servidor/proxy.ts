@@ -41,7 +41,7 @@ export interface Respuesta {
 export type Enviar = (servicio: Servicio, body: Record<string, unknown>, autorizacion: string | null) => Promise<Respuesta>;
 
 export const LECTURAS: Record<Servicio, Set<string>> = {
-  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware"]),
+  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware", "list_rfx_carrier_replies"]),
   "rfx-bid-api": new Set(["get_invitation"])
 };
 
@@ -78,7 +78,10 @@ export const SOLO_SIMULADO: Record<Servicio, Set<string>> = {
     "create_rfx_event",
     "import_rfx_lanes",
     "shortlist_rfx_lane_vendors",
-    "generate_outreach_drafts"
+    "generate_outreach_drafts",
+    // Respuestas por correo y chat (parche R2): hasta desplegarlo en
+    // rateware-prod, la Mesa sigue con el botón «Ya respondió».
+    "list_rfx_carrier_replies"
     // Las condiciones de ruta (R1) ya van contra Rateware real: desplegado en
     // rateware-prod el 23-oct-2026 (rateware-api v715, rfx-bid-api v344).
   ]),

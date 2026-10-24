@@ -21,6 +21,8 @@ export interface SeguimientoCarrier {
   ultimoEnvio: string | null;
   borradorEnCola: boolean; // ya hay un intento preparado en la Cola sin enviar
   vistaEn: string | null;
+  // Canales donde Rateware vio su respuesta (correo, chat del Bid Room).
+  respondioPor: ("correo" | "chat")[];
   diasSinRespuesta: number | null;
   pendientes: { participacion: Participacion; ruta: Ruta }[];
   invitacion: Aviso | null;
@@ -62,13 +64,16 @@ export function seguimiento(d: Detalle, hoy: string): SeguimientoCarrier[] {
     const ofertadas = filas.filter((f) => f.participacion.estado !== "declino" && versionVigente(f.participacion)).length;
     const declinadas = filas.filter((f) => f.participacion.estado === "declino").length;
     const vistaEn = minimo(filas.map((f) => f.participacion.vistaEn));
+    const contestadas = filas.map((f) => d.respuestas?.[f.participacion.id]).filter((r): r is NonNullable<typeof r> => Boolean(r));
+    const respondioPor = [...new Set(contestadas.flatMap((r) => r.canales))];
     const vista = Boolean(vistaEn) || filas.some((f) => ["vista", "respondio"].includes(f.participacion.estado));
     const estado: EstadoSeguimiento =
       ofertadas > 0 ? "oferto"
       : declinadas === filas.length ? "declino"
       // Regla de Jose (23-oct-2026): quien ya respondió por correo o WhatsApp
       // (preguntó, rechazó o cotizó fuera de la liga) no recibe más intentos.
-      : filas.some((f) => f.participacion.estado === "respondio") ? "respondio"
+      // Desde R2 (24-oct-2026) el correo y el chat del Bid Room se detectan solos.
+      : filas.some((f) => f.participacion.estado === "respondio") || contestadas.length > 0 ? "respondio"
       : suyas.some((a) => a.estado === "rebotado") && !aceptadas.length ? "rebote"
       : vista ? "abrio"
       : "sin_abrir";
@@ -87,6 +92,7 @@ export function seguimiento(d: Detalle, hoy: string): SeguimientoCarrier[] {
       ultimoEnvio: envios[envios.length - 1] ?? null,
       borradorEnCola: suyas.some((a) => a.estado === "borrador" || a.estado === "en_cola"),
       vistaEn,
+      respondioPor,
       diasSinRespuesta: invitadaEn && (estado === "sin_abrir" || estado === "abrio") ? diasEntre(invitadaEn, hoy) : null,
       pendientes: filas.filter((f) => f.participacion.estado !== "declino" && !versionVigente(f.participacion)),
       invitacion: aceptadas[0] ?? suyas[0] ?? null
@@ -96,7 +102,7 @@ export function seguimiento(d: Detalle, hoy: string): SeguimientoCarrier[] {
 
 // Solo con el evento abierto, a quien no ha ofertado ni declinado y tiene correo.
 export function candidatosRecordatorio(d: Detalle, hoy: string): SeguimientoCarrier[] {
-  if (d.evento.estado !== "abierto") return [];
+  if (d.evento.estado !== "abierto" || d.respuestas === null) return [];
   return seguimiento(d, hoy).filter((s) => (s.estado === "sin_abrir" || s.estado === "abrio") && s.correo);
 }
 
@@ -147,6 +153,8 @@ export function siguienteIntento(d: Detalle, s: SeguimientoCarrier, ahora: Date,
 // Intentos por correo que ya tocan y no tienen borrador en la Cola: lo que
 // «Preparar intento» deja como borrador en Rateware.
 export function intentosPorPreparar(d: Detalle, ahora: Date, hoy: string): { s: SeguimientoCarrier; paso: SiguienteIntento; participacion: Participacion; ruta: Ruta }[] {
+  // Sin la revisión de respuestas no se sabe a quién ya no hay que escribirle.
+  if (d.respuestas === null) return [];
   const flacas = new Set(rutasSinProfundidad(d).map((x) => x.ruta.id));
   return seguimiento(d, hoy).flatMap((s) => {
     const paso = siguienteIntento(d, s, ahora);

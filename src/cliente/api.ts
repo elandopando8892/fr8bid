@@ -86,14 +86,15 @@ export class MesaApi {
   }
 
   async detalle(eventId: string, recibo: Recibo | null = null): Promise<Detalle> {
-    const [crudo, mensajes, rubros, condiciones, revisiones] = await Promise.all([
+    const [crudo, mensajes, rubros, condiciones, revisiones, respuestas] = await Promise.all([
       this.rw({ action: "list_rfx_detail", event_id: eventId }),
       this.rw({ action: "list_outreach_messages", rfx_event_id: eventId }),
       this.rw({ action: "list_rfx_segment_confirmations", event_id: eventId }),
       this.condicionesDe(eventId),
-      this.revisionesDe(eventId)
+      this.revisionesDe(eventId),
+      this.respuestasDe(eventId)
     ]);
-    const d = mapear.detalle(crudo, mensajes.rows || mensajes.messages || [], null, { hoy: this.hoy(), rubros: rubros.rows || [], condiciones, revisiones });
+    const d = mapear.detalle(crudo, mensajes.rows || mensajes.messages || [], null, { hoy: this.hoy(), rubros: rubros.rows || [], condiciones, revisiones, respuestas });
     return { ...d, recibo };
   }
 
@@ -113,6 +114,18 @@ export class MesaApi {
     try {
       return (await this.rw({ action: "list_rfx_invitation_wave_reviews", rfx_event_id: eventId })).rows || [];
     } catch {
+      return null;
+    }
+  }
+  // Quién ya contestó por correo o en el chat del Bid Room (parche R2). Si
+  // Rateware todavía no tiene la acción, no se consultó (undefined) y queda el
+  // botón «Ya respondió»; si falla, null: la Mesa no prepara intentos.
+  private async respuestasDe(eventId: string): Promise<Record<string, unknown>[] | null | undefined> {
+    try {
+      const r = await this.rw({ action: "list_rfx_carrier_replies", event_id: eventId });
+      return r.email_status === "checked" ? r.rows || [] : null;
+    } catch (e) {
+      if (e instanceof ErrorApi && e.code === "PASO_EN_RATEWARE") return undefined;
       return null;
     }
   }

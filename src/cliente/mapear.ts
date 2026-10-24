@@ -18,6 +18,7 @@ import type {
   OfertaVersion,
   Participacion,
   Recibo,
+  RespuestaCarrier,
   ResumenEvento,
   RubroEstado,
   Ruta
@@ -243,7 +244,7 @@ export function detalle(
   crudo: Fila,
   mensajes: Fila[] = [],
   reciboCrudo: Fila | null = null,
-  extra: { hoy?: string; rubros?: Fila[]; condiciones?: Fila[]; revisiones?: Fila[] | null } = {}
+  extra: { hoy?: string; rubros?: Fila[]; condiciones?: Fila[]; revisiones?: Fila[] | null; respuestas?: Fila[] | null } = {}
 ): Detalle {
   const hoy = extra.hoy ?? hoyMexico();
   const e = crudo.event || {};
@@ -261,8 +262,24 @@ export function detalle(
     rutas: (crudo.lanes || []).map((l: Fila) => ruta(l, extra.rubros || [], extra.condiciones || [])).sort((a: Ruta, b: Ruta) => a.numero - b.numero),
     avisos: mensajes.map(aviso),
     recibo: reciboCrudo ? recibo(reciboCrudo) : null,
-    revisiones: extra.revisiones ? revisionesVigentes(extra.revisiones) : null
+    revisiones: extra.revisiones ? revisionesVigentes(extra.revisiones) : null,
+    ...(extra.respuestas === undefined ? {} : { respuestas: extra.respuestas === null ? null : respuestas(extra.respuestas) })
   };
+}
+
+// list_rfx_carrier_replies (R2): un renglón por rfx_lane_vendor con los
+// canales donde el carrier contestó (email, bid_room_chat).
+export function respuestas(filas: Fila[]): Record<string, RespuestaCarrier> {
+  const salida: Record<string, RespuestaCarrier> = {};
+  for (const f of filas) {
+    const id = String(f.rfx_lane_vendor_id || "");
+    if (!id) continue;
+    const canales = (Array.isArray(f.channels) ? f.channels : [])
+      .map((c: string) => (c === "email" ? "correo" : c === "bid_room_chat" ? "chat" : null))
+      .filter((c: string | null): c is "correo" | "chat" => Boolean(c));
+    salida[id] = { participacionId: id, canales, primeraEn: String(f.first_reply_at || ""), ultimaEn: String(f.last_reply_at || f.first_reply_at || "") };
+  }
+  return salida;
 }
 
 export function resumenes(crudo: Fila, hoy: string = hoyMexico()): ResumenEvento[] {

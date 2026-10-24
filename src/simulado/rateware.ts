@@ -91,10 +91,12 @@ export class RatewareSimulado {
   llamadas: { servicio: Servicio; action: string }[] = [];
   // Marca «Revisado» de Bidware (saas_audit_log rfx.invitation_carrier.reviewed).
   revisionesCarrier: Fila[] = [];
+  // Lo que list_rfx_carrier_replies (R2) encontraría en Gmail y en el chat.
+  respuestasCarrier: Fila[] = [];
   // Resultado de send_outreach_messages por operation_id (repetirlo no reenvía).
   operacionesEnvio = new Map<string, Fila>();
   // cuotaGmail: cuántos mensajes más acepta Gmail hoy (null = sin límite).
-  fallas = { perderRespuestaDe: new Set<string>(), sinResponder: new Set<string>(), cuotaGmail: null as number | null, fallarRevisiones: false };
+  fallas = { perderRespuestaDe: new Set<string>(), sinResponder: new Set<string>(), cuotaGmail: null as number | null, fallarRevisiones: false, fallarRespuestas: false };
   hoy: () => string = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(new Date());
   ahora: () => string = () => new Date().toISOString();
 
@@ -258,6 +260,12 @@ export class RatewareSimulado {
         const event = this.evento(u, body.rfx_event_id || body.event_id);
         if (this.fallas.fallarRevisiones) throw new Falla(500, "Review log unavailable", "REVIEWS_UNAVAILABLE");
         return ok({ rows: this.revisionesCarrier.filter((r) => r.rfx_event_id === event.id).map((r) => ({ ...r })) });
+      }
+      case "list_rfx_carrier_replies": {
+        const event = this.evento(u, body.event_id);
+        if (this.fallas.fallarRespuestas) throw new Falla(500, "Gmail reply lookup failed", "REPLIES_UNAVAILABLE");
+        const ids = new Set(this.laneVendors.filter((lv) => lv.rfx_event_id === event.id).map((lv) => lv.id));
+        return ok({ event_id: event.id, checked_at: this.ahora(), email_status: "checked", rows: this.respuestasCarrier.filter((r) => ids.has(r.rfx_lane_vendor_id)).map((r) => ({ ...r })) });
       }
       case "list_rateware": {
         // Como list_rateware con column_filters: arreglo = coincidencia exacta;

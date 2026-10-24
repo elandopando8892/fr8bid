@@ -545,6 +545,22 @@ describe("ya respondió por otro canal", () => {
     expect(llamadas.filter((b) => b.action === "update_rfx_bid")).toHaveLength(1);
     void s;
   });
+
+  it("con R2 la Mesa ve sola las respuestas por correo y chat; si la revisión falla, no hay intentos", async () => {
+    const { s, carriers, adm, eventId: id } = await eventoConTres();
+    const d0 = await adm.detalle(id);
+    expect(d0.respuestas).toEqual({});
+    const pa = d0.rutas[0].participaciones.find((p) => p.carrierId === carriers.A.id)!;
+    s.respuestasCarrier.push({ rfx_lane_vendor_id: pa.id, vendor_id: carriers.A.id, channels: ["email", "bid_room_chat"], count: 2, first_reply_at: "2026-10-23T09:00:00.000Z", last_reply_at: "2026-10-23T12:00:00.000Z" });
+    const d = await adm.detalle(id);
+    expect(d.respuestas?.[pa.id]?.canales).toEqual(["correo", "chat"]);
+    s.fallas.fallarRespuestas = true;
+    expect((await adm.detalle(id)).respuestas).toBeNull();
+
+    // Contra Rateware real sigue fuera hasta desplegar R2: la Mesa no se rompe.
+    const real = await manejar("rateware-api", { action: "list_rfx_carrier_replies", event_id: "e1" }, "Bearer x", { enviar: async () => ({ status: 200, body: {}, headers: {} }), permitirEscrituras: false, real: true });
+    expect(real.body.code).toBe("PASO_EN_RATEWARE");
+  });
 });
 
 // Regla de PRIMA (22-oct): solo se invita a carriers con «Revisado» vigente.

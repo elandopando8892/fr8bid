@@ -165,6 +165,17 @@ export interface Detalle {
   // Marca «Revisado» vigente por carrier (vendor_id). null: no se pudo
   // consultar, y entonces no se invita a nadie.
   revisiones?: Record<string, MarcaRevision> | null;
+  // Respuestas del carrier por correo o en el chat del Bid Room, por
+  // participación (list_rfx_carrier_replies, parche R2). null: no se pudo
+  // revisar, y entonces no se preparan intentos; sin el campo: no se consultó.
+  respuestas?: Record<string, RespuestaCarrier> | null;
+}
+
+export interface RespuestaCarrier {
+  participacionId: string;
+  canales: ("correo" | "chat")[];
+  primeraEn: string;
+  ultimaEn: string;
 }
 
 export type EstadoEntrega = "sin_preparar" | "preparada" | "enviada" | "confirmada" | "rechazada" | "incierta";
