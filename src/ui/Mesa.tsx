@@ -26,6 +26,7 @@ import { crearXlsx } from "../dominio/xlsx";
 import type { CarrierFit } from "../dominio/carrierFit";
 import type { Telefono } from "../dominio/telefonos";
 import type { ContactosCarrier } from "../dominio/contactos";
+import type { CorreoRevelado, PersonaApollo } from "../dominio/apollo";
 import { NOMBRE_FAMILIA, type HistorialSegmento } from "../dominio/segmento";
 import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
 import type { Aviso, Detalle, EntregaLocal, Participacion, Recibo, Ruta } from "../dominio/tipos";
@@ -496,6 +497,76 @@ function ContactosSugeridos({ vendorId, abrir = false }: { vendorId: string; abr
       )}
       {x.descartados.length > 0 && (
         <p className="tenue">No se sugieren: {x.descartados.map((k) => `${k.valor} (${k.motivo})`).join(", ")}.</p>
+      )}
+      {x.dominio && <BuscarEnApollo dominio={x.dominio} />}
+    </div>
+  );
+}
+
+// Contactos nuevos en Apollo por el dominio del carrier: buscar es gratis;
+// revelar un correo cuesta 1 crédito y lo confirma el Administrador. Fr8Bid no
+// guarda el correo: se pone a mano en Rateware.
+function BuscarEnApollo({ dominio }: { dominio: string }) {
+  const s = useSesion();
+  type Estado = { tipo: "cargando" } | { tipo: "ok"; total: number; personas: PersonaApollo[] } | { tipo: "error"; mensaje: string };
+  const [b, setB] = useState<Estado | null>(null);
+  const [revelados, setRevelados] = useState<Record<string, CorreoRevelado | string>>({});
+  const buscar = () => {
+    setB({ tipo: "cargando" });
+    s.api.buscarEnApollo(dominio).then(
+      (r) => setB({ tipo: "ok", ...r }),
+      (e) => setB({ tipo: "error", mensaje: e instanceof Error ? e.message : "Error desconocido" })
+    );
+  };
+  const revelar = async (p: PersonaApollo) => {
+    try {
+      const r = await s.api.revelarCorreoApollo(p.id);
+      setRevelados((v) => ({ ...v, [p.id]: r }));
+    } catch (e) {
+      setRevelados((v) => ({ ...v, [p.id]: e instanceof Error ? e.message : "Error desconocido" }));
+    }
+  };
+  if (!b || b.tipo === "error")
+    return (
+      <p>
+        {b?.tipo === "error" && <span className="error-texto">Apollo: {b.mensaje} </span>}
+        <button className="btn-texto" onClick={buscar}>{b ? "Reintentar en Apollo" : `Buscar personas de ${dominio} en Apollo (gratis)`}</button>
+      </p>
+    );
+  if (b.tipo === "cargando") return <p className="tenue">Buscando en Apollo…</p>;
+  const utiles = b.personas.filter((p) => p.prioridad < 3);
+  const lista = utiles.length ? utiles : b.personas;
+  return (
+    <div>
+      <p>
+        <b>Apollo:</b> {b.total} persona(s) con {dominio}
+        {utiles.length ? `; ${utiles.length} deciden o cotizan` : ""}. Revelar un correo cuesta 1 crédito de Apollo.
+      </p>
+      {!lista.length ? (
+        <p className="tenue">Apollo no tiene personas con este dominio.</p>
+      ) : (
+        <ul>
+          {lista.slice(0, 12).map((p) => {
+            const r = revelados[p.id];
+            return (
+              <li key={p.id}>
+                {p.nombre} · {p.puesto} <span className="tenue">({p.rol})</span>{" "}
+                {typeof r === "object" ? (
+                  r.correo ? <span className="mono">{r.correo}{r.estado ? ` · ${r.estado}` : ""}</span> : <span className="tenue">Apollo no dio correo (no se cobró).</span>
+                ) : !p.tieneCorreo ? (
+                  <span className="tenue">sin correo en Apollo</span>
+                ) : s.rol === "admin" ? (
+                  <>
+                    {typeof r === "string" && <span className="error-texto">{r} </span>}
+                    <Confirmar etiqueta="Revelar correo (1 crédito)" clase="btn-texto" advertencia={`Se gasta 1 crédito de Apollo para ver el correo de ${p.nombre}. Fr8Bid no lo guarda ni le escribe.`} onConfirmar={() => revelar(p)} />
+                  </>
+                ) : (
+                  <span className="tenue">correo disponible (lo revela el Administrador)</span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );

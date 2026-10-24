@@ -4,6 +4,7 @@
 
 import type { ConsultaTelefono, Telefono } from "../dominio/telefonos";
 import { MAX_TELEFONOS, revisarTelefonos } from "../servidor/telefonos";
+import type { CorreoRevelado, PersonaApollo } from "../dominio/apollo";
 import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier } from "../dominio/contactos";
 import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit";
 import type { EntradaCatalogo } from "../dominio/condiciones-r1";
@@ -100,6 +101,31 @@ export function revisorHttp(token: () => Promise<string | null>): RevisorTelefon
 // En el simulado no hay IA: solo reglas (los dudosos siguen dudosos).
 export const revisorSimulado: RevisorTelefonos = async (telefonos) => revisarTelefonos({ telefonos }, true, null);
 
+// Apollo (POST /api/apollo): buscar personas por dominio (gratis) y revelar un
+// correo (1 crédito). En el simulado no hay Apollo.
+export type ConsultaApollo = (body: Record<string, unknown>) => Promise<{ status: number; body: any }>;
+
+export function apolloHttp(token: () => Promise<string | null>): ConsultaApollo {
+  return async (body) => {
+    const t = await token();
+    try {
+      const r = await fetch("/api/apollo", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(t ? { authorization: `Bearer ${t}` } : {}) },
+        body: JSON.stringify(body)
+      });
+      return { status: r.status, body: await r.json().catch(() => ({ error: "Respuesta no válida", code: "RESPUESTA_INVALIDA" })) };
+    } catch {
+      return { status: 504, body: { error: "Sin conexión con Fr8Bid.", code: "SIN_RESPUESTA" } };
+    }
+  };
+}
+
+export const apolloSimulado: ConsultaApollo = async () => ({
+  status: 503,
+  body: { error: "Apollo no está disponible en el modo simulado.", code: "APOLLO_NO_CONFIGURADO" }
+});
+
 export interface RevisionTelefonos {
   telefonos: Map<string, Telefono>;
   ia: "sin_dudosos" | "ok" | "no_configurada" | "fallo";
@@ -107,7 +133,24 @@ export interface RevisionTelefonos {
 }
 
 export class MesaApi {
-  constructor(private t: Transporte, private hoy: () => string = () => hoyMexico(), private revisor: RevisorTelefonos = revisorSimulado) {}
+  constructor(private t: Transporte, private hoy: () => string = () => hoyMexico(), private revisor: RevisorTelefonos = revisorSimulado, private apollo: ConsultaApollo = apolloSimulado) {}
+
+  private async pedirApollo(body: Record<string, unknown>) {
+    const r = await this.apollo(body);
+    if (r.status < 200 || r.status >= 300) throw new ErrorApi(r.status, String(r.body?.code || r.status), String(r.body?.error || "Apollo no respondió"));
+    return r.body;
+  }
+
+  // Gratis: personas que Apollo conoce con ese dominio, primero quien decide.
+  async buscarEnApollo(dominio: string): Promise<{ total: number; personas: PersonaApollo[] }> {
+    const b = await this.pedirApollo({ accion: "buscar", dominio });
+    return { total: Number(b.total || 0), personas: b.personas || [] };
+  }
+
+  // 1 crédito de Apollo: solo después de que el Administrador lo confirma.
+  async revelarCorreoApollo(personaId: string): Promise<CorreoRevelado & { creditos: number }> {
+    return this.pedirApollo({ accion: "revelar", persona_id: personaId, confirmar: true });
+  }
 
   async revisarTelefonos(telefonos: ConsultaTelefono[]): Promise<RevisionTelefonos> {
     const r = await this.revisor(telefonos.slice(0, MAX_TELEFONOS));
