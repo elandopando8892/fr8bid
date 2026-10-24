@@ -15,6 +15,7 @@ import { claveCampana, esPlantillaInvitacion } from "../dominio/invitacion.js";
 import { esProtegido } from "../dominio/protegidos.js";
 import { candadosAdjudicacion, hoyMexico, puedeAdjudicar } from "../dominio/recorrido.js";
 import { revisionesVigentes } from "../dominio/revision.js";
+import { MAX_REGISTROS } from "../dominio/contactos.js";
 import { CAJAS_FAMILIA, POR_PAGINA } from "../dominio/segmento.js";
 import { MAXIMO_POR_LLAMADA } from "../dominio/tandas.js";
 
@@ -32,6 +33,27 @@ function esConsultaSegmento(body: Record<string, unknown>) {
   return Number.isInteger(limit) && limit > 0 && limit <= POR_PAGINA && Number.isInteger(offset) && offset >= 0;
 }
 
+// Forma de uuid (el simulado usa prefijos legibles como «ven00000-…»).
+const UUID = /^[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}$/i;
+const DOMINIO = /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/i;
+
+function esConsultaContactos(body: Record<string, unknown>) {
+  const permitidas = new Set(["action", "ids", "search", "lightweight", "limit"]);
+  if (Object.keys(body).some((k) => !permitidas.has(k)) || body.lightweight !== true) return false;
+  const limit = body.limit === undefined ? null : Number(body.limit);
+  if (Array.isArray(body.ids)) {
+    return body.search === undefined && body.ids.length > 0 && body.ids.length <= MAX_REGISTROS && body.ids.every((x) => UUID.test(String(x))) && (limit === null || (Number.isInteger(limit) && limit >= body.ids.length && limit <= MAX_REGISTROS));
+  }
+  return typeof body.search === "string" && DOMINIO.test(body.search) && Number.isInteger(limit) && limit! > 0 && limit! <= MAX_REGISTROS;
+}
+
+function esHistorialDeCarrier(body: Record<string, unknown>) {
+  const permitidas = new Set(["action", "vendor_id", "limit", "offset"]);
+  if (Object.keys(body).some((k) => !permitidas.has(k)) || !UUID.test(String(body.vendor_id || ""))) return false;
+  const limit = Number(body.limit ?? 300), offset = Number(body.offset ?? 0);
+  return Number.isInteger(limit) && limit >= 25 && limit <= 300 && Number.isInteger(offset) && offset === 0;
+}
+
 export type Servicio = "rateware-api" | "rfx-bid-api";
 
 export interface Respuesta {
@@ -43,7 +65,7 @@ export interface Respuesta {
 export type Enviar = (servicio: Servicio, body: Record<string, unknown>, autorizacion: string | null) => Promise<Respuesta>;
 
 export const LECTURAS: Record<Servicio, Set<string>> = {
-  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware", "list_rfx_carrier_replies", "list_outreach_campaigns", "list_outreach_templates"]),
+  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware", "list_rfx_carrier_replies", "list_outreach_campaigns", "list_outreach_templates", "list_vendors", "list_contact_history"]),
   "rfx-bid-api": new Set(["get_invitation"])
 };
 
@@ -183,6 +205,16 @@ export async function manejar(
     // Solo la consulta del historial del segmento: caja y operación, sin
     // búsqueda libre ni otros filtros (no es una puerta al tarifario).
     return error(400, "SOLO_HISTORIAL_SEGMENTO", "Fr8Bid solo consulta el historial del segmento de una ruta.");
+  }
+
+  if (action === "list_vendors" && !esConsultaContactos(body!)) {
+    // Solo los contactos de carriers concretos (por id) o de su dominio: no es
+    // una puerta al directorio completo de carriers.
+    return error(400, "SOLO_CONTACTOS", "Fr8Bid solo consulta el contacto de carriers concretos o de su dominio.");
+  }
+
+  if (action === "list_contact_history" && !esHistorialDeCarrier(body!)) {
+    return error(400, "SOLO_HISTORIAL_CARRIER", "Fr8Bid solo consulta el historial de contacto de un carrier.");
   }
 
   if (op.real && SOLO_SIMULADO[servicio].has(action)) {
