@@ -2,6 +2,8 @@
 // recorrido usan esta misma capa; solo cambia el transporte (HTTP a /api o el
 // Rateware simulado detrás del mismo proxy).
 
+import type { ConsultaTelefono, Telefono } from "../dominio/telefonos";
+import { MAX_TELEFONOS, revisarTelefonos } from "../servidor/telefonos";
 import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit";
 import type { EntradaCatalogo } from "../dominio/condiciones-r1";
 import { MAX_PAGINAS, POR_PAGINA, claveSegmento, consultaSegmento, leerHistorialSegmento, segmentoDeRuta, type HistorialSegmento, type Segmento } from "../dominio/segmento";
@@ -74,8 +76,43 @@ export function diaAnterior(hoy: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Revisión de números de WhatsApp (POST /api/telefonos): reglas por lada y,
+// para los dudosos, la IA del servidor.
+export type RevisorTelefonos = (telefonos: ConsultaTelefono[]) => Promise<{ status: number; body: any }>;
+
+export function revisorHttp(token: () => Promise<string | null>): RevisorTelefonos {
+  return async (telefonos) => {
+    const t = await token();
+    try {
+      const r = await fetch("/api/telefonos", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(t ? { authorization: `Bearer ${t}` } : {}) },
+        body: JSON.stringify({ telefonos })
+      });
+      return { status: r.status, body: await r.json().catch(() => ({ error: "Respuesta no válida", code: "RESPUESTA_INVALIDA" })) };
+    } catch {
+      return { status: 504, body: { error: "Sin conexión con Fr8Bid.", code: "SIN_RESPUESTA" } };
+    }
+  };
+}
+
+// En el simulado no hay IA: solo reglas (los dudosos siguen dudosos).
+export const revisorSimulado: RevisorTelefonos = async (telefonos) => revisarTelefonos({ telefonos }, true, null);
+
+export interface RevisionTelefonos {
+  telefonos: Map<string, Telefono>;
+  ia: "sin_dudosos" | "ok" | "no_configurada" | "fallo";
+  revisadosPorIa: number;
+}
+
 export class MesaApi {
-  constructor(private t: Transporte, private hoy: () => string = () => hoyMexico()) {}
+  constructor(private t: Transporte, private hoy: () => string = () => hoyMexico(), private revisor: RevisorTelefonos = revisorSimulado) {}
+
+  async revisarTelefonos(telefonos: ConsultaTelefono[]): Promise<RevisionTelefonos> {
+    const r = await this.revisor(telefonos.slice(0, MAX_TELEFONOS));
+    if (r.status < 200 || r.status >= 300) throw new ErrorApi(r.status, String(r.body?.code || r.status), String(r.body?.error || "No se pudieron revisar los números"));
+    return { telefonos: new Map(Object.entries(r.body?.telefonos || {})), ia: r.body?.ia, revisadosPorIa: Number(r.body?.revisados_por_ia || 0) };
+  }
 
   private async rw(body: Record<string, unknown>, servicio: Servicio = "rateware-api") {
     const r = await this.t(servicio, body);

@@ -3,6 +3,7 @@
 // recordatorio para los que no responden. Fr8Bid no envía el recordatorio: lo
 // abre como borrador en Gmail y el Administrador decide si lo manda.
 
+import { clasificarTelefono, type PistaCarrier, type Telefono } from "./telefonos.js";
 import { versionVigente } from "./recorrido.js";
 import type { Aviso, Detalle, Participacion, Ruta } from "./tipos.js";
 
@@ -191,17 +192,15 @@ export function textoIntento(d: Detalle, ruta: Ruta, paso: Pick<PasoCadencia, "i
 // WhatsApp aprobado (Meta sigue pendiente), así que Fr8Bid solo abre WhatsApp
 // con el número y el texto: el Administrador lo envía desde su teléfono. El
 // texto no lleva la liga privada (el proxy nunca la entrega): remite al correo.
-export const numeroWhatsapp = (valor: string | null | undefined): string | null => {
-  // Mismo criterio que normalizeWhatsappPhone de rateware-api: 10 dígitos son
-  // México (+52); 11 que empiezan con 1 son EE. UU. o Canadá.
-  const digitos = String(valor || "").replace(/\D/g, "");
-  if (digitos.length < 10) return null;
-  return digitos.length === 10 ? `52${digitos}` : digitos;
-};
+// Número para wa.me con las reglas por lada de telefonos.ts (Rateware toma
+// cualquier número de 10 dígitos como México; los 956 de Texas salían mal).
+export const numeroWhatsapp = (valor: string | null | undefined, pista: PistaCarrier = {}): string | null => clasificarTelefono(valor, pista).numero;
 
 export interface IntentoWhatsapp {
   s: SeguimientoCarrier;
   numero: string | null;
+  // Cómo se decidió el país: regla por lada, IA o dudoso (por confirmar).
+  telefono: Telefono;
   texto: string;
   liga: string | null;
   // Por qué no hay liga: sin número o marcado «no contactar por WhatsApp».
@@ -223,16 +222,23 @@ export function textoWhatsapp(d: Detalle, s: SeguimientoCarrier): string {
 
 // Carriers a los que ya toca el intento por WhatsApp. Sin la revisión de
 // respuestas (R2) no se sabe a quién ya no hay que escribirle: lista vacía.
-export function intentosWhatsapp(d: Detalle, ahora: Date, hoy: string): IntentoWhatsapp[] {
+export function intentosWhatsapp(d: Detalle, ahora: Date, hoy: string, revisados: Map<string, Telefono> = new Map()): IntentoWhatsapp[] {
   if (d.respuestas === null) return [];
   return seguimiento(d, hoy).flatMap((s) => {
     const paso = siguienteIntento(d, s, ahora);
     if (!paso || !paso.vencido || paso.canal !== "whatsapp") return [];
-    const numero = numeroWhatsapp(s.whatsapp);
+    const telefono = revisados.get(s.carrierId) ?? clasificarTelefono(s.whatsapp, { carrier: s.carrier });
+    const numero = telefono.numero;
     const texto = textoWhatsapp(d, s);
-    const motivo = s.whatsappNoContactar ? "marcado «no contactar por WhatsApp» en Rateware" : !numero ? "sin número de WhatsApp en Rateware" : null;
+    const motivo = s.whatsappNoContactar
+      ? "marcado «no contactar por WhatsApp» en Rateware"
+      : !s.whatsapp
+        ? "sin número de WhatsApp en Rateware"
+        : !numero
+          ? `número no usable: ${telefono.motivo}`
+          : null;
     const liga = motivo ? null : `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
-    return [{ s, numero: motivo ? null : numero, texto, liga, motivo }];
+    return [{ s, numero: motivo ? null : numero, telefono, texto, liga, motivo }];
   });
 }
 
