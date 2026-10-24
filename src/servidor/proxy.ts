@@ -11,6 +11,7 @@
 
 import { detalle } from "../cliente/mapear.js";
 import { UUID_RATEWARE } from "../dominio/operacion.js";
+import { claveCampana, esPlantillaInvitacion } from "../dominio/invitacion.js";
 import { esProtegido } from "../dominio/protegidos.js";
 import { candadosAdjudicacion, hoyMexico, puedeAdjudicar } from "../dominio/recorrido.js";
 import { revisionesVigentes } from "../dominio/revision.js";
@@ -42,7 +43,7 @@ export interface Respuesta {
 export type Enviar = (servicio: Servicio, body: Record<string, unknown>, autorizacion: string | null) => Promise<Respuesta>;
 
 export const LECTURAS: Record<Servicio, Set<string>> = {
-  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware", "list_rfx_carrier_replies"]),
+  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware", "list_rfx_carrier_replies", "list_outreach_campaigns", "list_outreach_templates"]),
   "rfx-bid-api": new Set(["get_invitation"])
 };
 
@@ -62,7 +63,11 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
     "send_outreach_messages",
     "save_rfx_lane_conditions",
     // 2º y 3º intento: solo deja un borrador en la Cola de Rateware (no envía).
-    "draft_bid_room_carrier_message"
+    "draft_bid_room_carrier_message",
+    // Invitar desde la Mesa: campaña propia de Fr8Bid por evento y la marca
+    // «Revisado» que antes se ponía en Bidware.
+    "create_outreach_campaign",
+    "record_rfx_invitation_wave_review"
   ]),
   "rfx-bid-api": new Set(["submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
@@ -90,9 +95,9 @@ export function modoEscrituras(valor: string | undefined): ModoEscrituras {
 export const SOLO_SIMULADO: Record<Servicio, Set<string>> = {
   "rateware-api": new Set([
     "create_rfx_event",
-    "import_rfx_lanes",
-    "shortlist_rfx_lane_vendors",
-    "generate_outreach_drafts"
+    "import_rfx_lanes"
+    // Preseleccionar carriers y preparar invitaciones ya van contra Rateware
+    // real (24-oct-2026): campaña de Fr8Bid con la plantilla en español.
     // Las condiciones de ruta (R1) ya van contra Rateware real: desplegado en
     // rateware-prod el 23-oct-2026 (rateware-api v715, rfx-bid-api v344). Las
     // respuestas por correo y chat (R2) también: rateware-api v716, 24-oct-2026.
@@ -125,7 +130,7 @@ export function sinSecretos(x: any): any {
 
 function filtrarProtegidos(body: any): any {
   for (const k of ["rows", "events"]) {
-    if (body && Array.isArray(body[k])) return { ...body, [k]: body[k].filter((e: any) => !esProtegido(e?.id)) };
+    if (body && Array.isArray(body[k])) return { ...body, [k]: body[k].filter((e: any) => !esProtegido(e?.id) && !esProtegido(e?.rfx_event_id)) };
   }
   if (body?.event && esProtegido(body.event.id)) return null;
   return body;
@@ -210,6 +215,16 @@ export async function manejar(
     if (!String(body?.idempotency_key || "").startsWith("fr8bid-intento-")) return error(400, "FALTA_CLAVE", "El intento necesita su clave para no duplicar borradores.");
   }
 
+  if (action === "shortlist_rfx_lane_vendors" || action === "record_rfx_invitation_wave_review") {
+    const bloqueo = await guardaPreparacion(action, body!, autorizacion, op);
+    if (bloqueo) return bloqueo;
+  }
+
+  if (action === "create_outreach_campaign") {
+    const bloqueo = await guardaCampana(body!, autorizacion, op);
+    if (bloqueo) return bloqueo;
+  }
+
   if (action === "update_rfx_bid" || action === "invite_rfx_lane_vendors" || action === "draft_bid_room_carrier_message") {
     const bloqueo = await guardaParticipaciones(action, body!, autorizacion, op);
     if (bloqueo) return bloqueo;
@@ -226,7 +241,7 @@ export async function manejar(
   }
 
   if (action === "generate_outreach_drafts") {
-    const bloqueo = await guardaRevisados(body!, autorizacion, op);
+    const bloqueo = (await guardaCampanaDeEnvio(body!, autorizacion, op)) ?? (await guardaRevisados(body!, autorizacion, op));
     if (bloqueo) return bloqueo;
   }
 
@@ -325,8 +340,8 @@ async function guardaParticipaciones(action: string, body: Record<string, unknow
 // I8 y D3 del lado del servidor: generate_rfx_award_notices de rateware-api no
 // exige el evento «awarded» y send_outreach_messages tampoco distingue avisos.
 // Aquí, con lecturas frescas: avisos solo tras el recibo, solo mensajes de este
-// evento, solo al adjudicado y solo la versión que el Administrador vio. Contra
-// Rateware real Fr8Bid no envía invitaciones ni avisos de no adjudicación.
+// evento, solo al adjudicado y solo la versión que el Administrador vio. Los
+// avisos de no adjudicación se siguen enviando desde la Cola de Rateware.
 async function guardaAvisos(action: string, body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
   const eventId = action === "send_outreach_messages" ? body.rfx_event_id : body.event_id;
   if (!eventId) return error(400, "FALTA_EVENTO", "Esta acción necesita el evento.");
@@ -371,7 +386,9 @@ async function guardaAvisos(action: string, body: Record<string, unknown>, autor
     if (!m) return error(404, "NOT_FOUND", "El aviso no pertenece a este evento.");
     const meta = m.metadata || {};
     if (meta.notice_type !== "rfx_award_closeout") {
-      if (op.real) return error(501, "PASO_EN_RATEWARE", "Contra Rateware real Fr8Bid solo envía avisos de adjudicación.");
+      // Invitaciones e intentos: solo a carriers con «Revisado» vigente (abajo).
+      // La versión exacta la exige Rateware (expected_versions), y repetir la
+      // misma tanda con su operation_id devuelve el resultado guardado.
       invitaciones.push(m);
       continue;
     }
@@ -387,6 +404,92 @@ async function guardaAvisos(action: string, body: Record<string, unknown>, autor
   for (const l of lectura.body?.lanes || []) for (const lv of l.invitations || []) carrierDe.set(String(lv.id), String(lv.vendor_id));
   const vendorIds = invitaciones.map((m) => carrierDe.get(String(m.rfx_lane_vendor_id)) || String(m.vendor_id || ""));
   return comprobarRevisados(eventId, vendorIds, autorizacion, op, "No se envió nada.");
+}
+
+async function leerDetalle(eventId: unknown, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | "sin_respuesta"> {
+  try {
+    return await conLimite(op.enviar("rateware-api", { action: "list_rfx_detail", event_id: eventId }, autorizacion), op.timeoutMs ?? 25000);
+  } catch {
+    return "sin_respuesta";
+  }
+}
+
+// Sumar un carrier y marcarlo «Revisado»: solo en un evento propio, abierto o
+// en borrador, y sobre rutas o carriers de ese evento.
+async function guardaPreparacion(action: string, body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
+  const eventId = body.event_id || body.rfx_event_id;
+  if (!eventId) {
+    // Las pruebas del simulado preseleccionan antes de tener evento a la vista.
+    if (!op.real && action === "shortlist_rfx_lane_vendors") return null;
+    return error(400, "FALTA_EVENTO", "Esta acción necesita event_id.");
+  }
+  if (action === "shortlist_rfx_lane_vendors") {
+    const ids = body.vendor_ids;
+    if (!Array.isArray(ids) || !ids.length || ids.length > 25 || ids.some((x) => !x)) return error(400, "FALTA_CARRIER", "Indica entre 1 y 25 carriers.");
+  } else {
+    if (!body.vendor_id) return error(400, "FALTA_CARRIER", "Indica el carrier.");
+    if (body.reviewed !== true) return error(400, "SOLO_REVISADO", "Fr8Bid solo marca «Revisado»; revocar se hace en Bidware.");
+    if (body.confirmed !== true || body.confirmation_action !== "record_rfx_invitation_wave_review")
+      return error(400, "SIN_CONFIRMAR", "Marcar «Revisado» requiere confirmación explícita.");
+  }
+  const lectura = await leerDetalle(eventId, autorizacion, op);
+  if (lectura === "sin_respuesta") return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se escribió nada.");
+  if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
+  const d = detalle(lectura.body, [], null, { hoy: op.hoy?.() ?? hoyMexico() });
+  if (!["borrador", "abierto"].includes(d.evento.estado)) return error(409, "EVENTO_CERRADO", "El evento ya no acepta carriers nuevos.");
+  if (action === "shortlist_rfx_lane_vendors") {
+    if (!d.rutas.some((r) => r.id === body.lane_id)) return error(404, "NOT_FOUND", "La ruta no pertenece a este evento.");
+    return null;
+  }
+  if (!d.rutas.some((r) => r.participaciones.some((p) => p.carrierId === body.vendor_id))) return error(404, "NOT_FOUND", "El carrier no está en este evento.");
+  return null;
+}
+
+async function leerPlantillas(autorizacion: string | null, op: OpcionesProxy): Promise<Record<string, any>[] | null> {
+  try {
+    const r = await conLimite(op.enviar("rateware-api", { action: "list_outreach_templates" }, autorizacion), op.timeoutMs ?? 25000);
+    return r.status === 200 ? r.body?.rows || [] : null;
+  } catch {
+    return null;
+  }
+}
+
+// La campaña de Fr8Bid: una por evento, plantilla en español, audiencia «todos
+// los elegibles» (la reduce reviewed_vendor_ids) y canal Gmail.
+async function guardaCampana(body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
+  const c = body.campaign && typeof body.campaign === "object" ? (body.campaign as Record<string, any>) : null;
+  if (!body.event_id || !c || c.rfx_event_id !== body.event_id) return error(400, "FALTA_EVENTO", "La campaña debe ser del evento.");
+  if (c.idempotency_key !== claveCampana(String(body.event_id))) return error(400, "CAMPANA_FR8BID", "Fr8Bid solo crea su propia campaña del evento.");
+  if (String(c.channel) !== "email" || c.audience_policy?.mode !== "all_eligible") return error(400, "CAMPANA_FR8BID", "La campaña de Fr8Bid es por Gmail y para todos los elegibles.");
+  const lectura = await leerDetalle(body.event_id, autorizacion, op);
+  if (lectura === "sin_respuesta") return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se creó nada.");
+  if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
+  const plantillas = await leerPlantillas(autorizacion, op);
+  if (!plantillas) return error(503, "PLANTILLAS_NO_DISPONIBLES", "No se pudieron leer las plantillas. No se creó nada.");
+  if (!esPlantillaInvitacion(plantillas.find((t) => t.id === c.template_id))) return error(409, "PLANTILLA", "La invitación sale solo con la plantilla en español.");
+  return null;
+}
+
+// Preparar invitaciones: la campaña tiene que ser la de Fr8Bid de este evento y
+// la plantilla, la de invitación en español (nunca la de PRUEBA).
+async function guardaCampanaDeEnvio(body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
+  if (!body.campaign_id) return op.real ? error(400, "FALTA_CAMPANA", "Preparar invitaciones necesita la campaña de Fr8Bid del evento.") : null;
+  if (!body.event_id) return error(400, "FALTA_EVENTO", "Esta acción necesita el evento.");
+  if (String(body.channel || "") !== "email") return error(400, "CANAL", "Las invitaciones salen por Gmail.");
+  let campanas: Respuesta;
+  try {
+    campanas = await conLimite(op.enviar("rateware-api", { action: "list_outreach_campaigns" }, autorizacion), op.timeoutMs ?? 25000);
+  } catch {
+    return error(504, "SIN_RESPUESTA", "No se pudo comprobar la campaña. No se preparó nada.");
+  }
+  if (campanas.status !== 200) return { ...campanas, body: sinSecretos(campanas.body) };
+  const c = ((campanas.body?.rows || []) as any[]).find((x) => x.id === body.campaign_id);
+  if (!c || c.rfx_event_id !== body.event_id || c.idempotency_key !== claveCampana(String(body.event_id)))
+    return error(409, "CAMPANA_FR8BID", "La campaña no es la de Fr8Bid para este evento. No se preparó nada.");
+  const plantillas = await leerPlantillas(autorizacion, op);
+  if (!plantillas) return error(503, "PLANTILLAS_NO_DISPONIBLES", "No se pudieron leer las plantillas. No se preparó nada.");
+  if (!esPlantillaInvitacion(plantillas.find((t) => t.id === body.template_id))) return error(409, "PLANTILLA", "La invitación sale solo con la plantilla en español.");
+  return null;
 }
 
 // Solo carriers con la marca «Revisado» vigente reciben invitación. Se lee la

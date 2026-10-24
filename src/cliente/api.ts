@@ -5,6 +5,7 @@
 import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit";
 import type { EntradaCatalogo } from "../dominio/condiciones-r1";
 import { MAX_PAGINAS, POR_PAGINA, claveSegmento, consultaSegmento, leerHistorialSegmento, segmentoDeRuta, type HistorialSegmento, type Segmento } from "../dominio/segmento";
+import { campanaDelEvento, campanaFr8bid, elegirPlantilla } from "../dominio/invitacion";
 import { operacionEntrega } from "../dominio/operacion";
 import { hoyMexico, primario, versionMasReciente, versionVigente } from "../dominio/recorrido";
 import { ESPERA_ENTRE_TANDAS_MS, esCuota, leerResultado, operacionTanda, planearTandas, requiereAtencion, type ResultadoEnvio } from "../dominio/tandas";
@@ -171,13 +172,50 @@ export class MesaApi {
   importarRutas(eventId: string, rows: Record<string, unknown>[]) {
     return this.rw({ action: "import_rfx_lanes", event_id: eventId, rows });
   }
-  preseleccionar(laneId: string, vendorIds: string[]) {
-    return this.rw({ action: "shortlist_rfx_lane_vendors", lane_id: laneId, vendor_ids: vendorIds });
+  preseleccionar(laneId: string, vendorIds: string[], eventId?: string) {
+    return this.rw({ action: "shortlist_rfx_lane_vendors", event_id: eventId, lane_id: laneId, vendor_ids: vendorIds });
+  }
+  // Suma un carrier sugerido a todas las rutas del evento como preseleccionado.
+  // No invita ni envía: queda pendiente de «Revisado».
+  async sumarAlEvento(d: Detalle, vendorId: string) {
+    for (const r of d.rutas) await this.preseleccionar(r.id, [vendorId], d.evento.id);
+  }
+  // La marca «Revisado» que antes se ponía en Bidware: el Administrador vio el
+  // contacto y confirma que puede recibir la invitación.
+  marcarRevisado(eventId: string, c: { carrierId: string; carrier: string; correo: string | null }) {
+    return this.rw({
+      action: "record_rfx_invitation_wave_review",
+      event_id: eventId,
+      rfx_event_id: eventId,
+      vendor_id: c.carrierId,
+      reviewed: true,
+      channel: "email",
+      contact_snapshot: { vendor_name: c.carrier, email: c.correo },
+      confirmed: true,
+      confirmation_action: "record_rfx_invitation_wave_review"
+    });
   }
   // Solo para carriers con la marca «Revisado» vigente (el proxy lo vuelve a
-  // comprobar). Rateware reporta los omitidos en skipped_rows.
-  prepararInvitaciones(eventId: string, revisados: string[]) {
-    return this.rw({ action: "generate_outreach_drafts", event_id: eventId, reviewed_vendor_ids: revisados });
+  // comprobar). Rateware reporta los omitidos en skipped_rows. Usa la campaña
+  // de Fr8Bid del evento (la crea la primera vez) con la plantilla en español.
+  async prepararInvitaciones(eventId: string, revisados: string[], folio = eventId) {
+    const [campanas, plantillas] = await Promise.all([this.rw({ action: "list_outreach_campaigns" }), this.rw({ action: "list_outreach_templates" })]);
+    const plantilla = elegirPlantilla(plantillas.rows || []);
+    if (!plantilla) throw new ErrorApi(409, "SIN_PLANTILLA", "No encontré en Rateware la plantilla «RFx carrier invitation - Spanish». No se preparó nada.");
+    const filas: Record<string, any>[] = campanas.rows || [];
+    let campana = campanaDelEvento(filas, eventId);
+    if (!campana) {
+      const base = filas.find((c) => c.rfx_event_id === eventId && c.sender_email) ?? filas.find((c) => c.channel === "email" && c.sender_email) ?? null;
+      campana = (await this.rw({ action: "create_outreach_campaign", event_id: eventId, campaign: campanaFr8bid(eventId, folio, String(plantilla.id), base) })).row;
+    }
+    return this.rw({
+      action: "generate_outreach_drafts",
+      event_id: eventId,
+      campaign_id: campana!.id,
+      template_id: plantilla.id,
+      channel: "email",
+      reviewed_vendor_ids: revisados
+    });
   }
   publicar(eventId: string) {
     return this.rw({ action: "update_rfx_event", event_id: eventId, patch: { status: "open" } });

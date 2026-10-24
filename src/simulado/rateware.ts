@@ -53,7 +53,9 @@ const WRITE_ACTIONS = new Set([
   "update_rfx_bid",
   "generate_outreach_drafts",
   "save_rfx_lane_conditions",
-  "draft_bid_room_carrier_message"
+  "draft_bid_room_carrier_message",
+  "create_outreach_campaign",
+  "record_rfx_invitation_wave_review"
 ]);
 
 export class ErrorRed extends Error {
@@ -91,6 +93,12 @@ export class RatewareSimulado {
   llamadas: { servicio: Servicio; action: string }[] = [];
   // Marca «Revisado» de Bidware (saas_audit_log rfx.invitation_carrier.reviewed).
   revisionesCarrier: Fila[] = [];
+  // outreach_campaigns y outreach_templates (plantillas globales de Rateware).
+  campanas: Fila[] = [];
+  plantillas: Fila[] = [
+    { id: "tpl00000-0000-4000-8000-000000000001", owner_email: null, name: "SPRINT 15 · RFx carrier invitation (PRUEBA)", channel: "email", is_default: true, active: true },
+    { id: "tpl00000-0000-4000-8000-000000000002", owner_email: null, name: "RFx carrier invitation - Spanish", channel: "email", is_default: false, active: true }
+  ];
   // Lo que list_rfx_carrier_replies (R2) encontraría en Gmail y en el chat.
   respuestasCarrier: Fila[] = [];
   // Resultado de send_outreach_messages por operation_id (repetirlo no reenvía).
@@ -261,6 +269,30 @@ export class RatewareSimulado {
         if (this.fallas.fallarRevisiones) throw new Falla(500, "Review log unavailable", "REVIEWS_UNAVAILABLE");
         return ok({ rows: this.revisionesCarrier.filter((r) => r.rfx_event_id === event.id).map((r) => ({ ...r })) });
       }
+      case "record_rfx_invitation_wave_review": {
+        // Como rateware-api: la marca «Revisado» de Bidware (saas_audit_log).
+        const event = this.evento(u, body.rfx_event_id || body.event_id);
+        const vendorId = String(body.vendor_id || "");
+        if (!this.laneVendors.some((lv) => lv.rfx_event_id === event.id && lv.vendor_id === vendorId))
+          throw new Falla(409, "This carrier is not part of the selected RFx.", "NOT_PARTICIPATING");
+        const fila = { rfx_event_id: event.id, vendor_id: vendorId, reviewed: body.reviewed !== false, reviewed_at: this.ahora(), reviewed_by: u.ownerEmail, channel: body.channel || null, contact_snapshot: body.contact_snapshot || {} };
+        this.revisionesCarrier.push(fila);
+        return ok({ row: { ...fila } });
+      }
+      case "list_outreach_templates":
+        return ok({ rows: this.plantillas.filter((t) => t.active && (!t.owner_email || t.owner_email === u.ownerEmail)).map((t) => ({ ...t })) });
+      case "list_outreach_campaigns":
+        return ok({ rows: this.campanas.filter((c) => c.owner_email === u.ownerEmail && c.status !== "archived").map((c) => ({ ...c })) });
+      case "create_outreach_campaign": {
+        const c: Fila = body.campaign && typeof body.campaign === "object" ? body.campaign : {};
+        if (!c.name) throw new Falla(400, "Campaign name is required.", "NAME_REQUIRED");
+        if (c.rfx_event_id) this.evento(u, c.rfx_event_id);
+        const previa = c.idempotency_key ? this.campanas.find((x) => x.owner_email === u.ownerEmail && x.idempotency_key === c.idempotency_key) : null;
+        if (previa) return ok({ row: { ...previa }, reused: true });
+        const fila = { id: nuevoId("cmp"), owner_email: u.ownerEmail, status: "draft", channel: "email", audience_policy: { mode: "all_eligible" }, ...c };
+        this.campanas.push(fila);
+        return ok({ row: { ...fila } });
+      }
       case "list_rfx_carrier_replies": {
         const event = this.evento(u, body.event_id);
         if (this.fallas.fallarRespuestas) throw new Falla(500, "Gmail reply lookup failed", "REPLIES_UNAVAILABLE");
@@ -362,7 +394,11 @@ export class RatewareSimulado {
         const lane = this.lanes.find((l) => l.id === body.lane_id);
         if (!lane) throw new Falla(404, "Lane not found", "NOT_FOUND");
         this.evento(u, lane.rfx_event_id);
-        const filas = (body.vendor_ids || []).map((vid: string) => {
+        // Como el upsert de rateware-api (ignoreDuplicates por ruta y carrier).
+        const nuevos = [...new Set<string>((body.vendor_ids || []).map(String))].filter(
+          (vid) => this.vendors.some((v) => v.id === vid && v.owner_email === u.ownerEmail) && !this.laneVendors.some((lv) => lv.rfx_lane_id === lane.id && lv.vendor_id === vid)
+        );
+        const filas = nuevos.map((vid: string) => {
           const lv = {
             id: nuevoId("rlv"),
             rfx_event_id: lane.rfx_event_id,
@@ -399,7 +435,11 @@ export class RatewareSimulado {
       case "generate_outreach_drafts": {
         // Con reviewed_vendor_ids (Bidware) solo se preparan esos carriers; el
         // resto se reporta en skipped_rows con su motivo.
-        const event = this.evento(u, body.event_id || body.rfx_event_id);
+        // rateware-api toma el evento de la campaña (campaign_id); el simulado
+        // también acepta event_id para la vista local.
+        const campana = body.campaign_id ? this.campanas.find((c) => c.id === body.campaign_id && c.owner_email === u.ownerEmail) : null;
+        if (body.campaign_id && !campana) throw new Falla(404, "Outreach campaign not found.", "NOT_FOUND");
+        const event = this.evento(u, campana ? campana.rfx_event_id : body.event_id || body.rfx_event_id);
         const revisados = Array.isArray(body.reviewed_vendor_ids) ? new Set(body.reviewed_vendor_ids.map(String)) : null;
         if (revisados && !revisados.size) throw new Falla(409, "Reviewed audience required", "reviewed_audience_required");
         const pendientes = this.laneVendors

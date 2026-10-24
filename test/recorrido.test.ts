@@ -704,6 +704,89 @@ describe("envío por tandas y cuota de Gmail", () => {
   });
 });
 
+// Fricciones 2 y 5 (24-oct-2026): sumar un carrier sugerido, marcarlo
+// «Revisado» e invitarlo sin salir de la Mesa, siempre con la plantilla en español.
+describe("invitar desde la Mesa", () => {
+  it("suma, marca «Revisado», prepara con la campaña de Fr8Bid en español y envía", async () => {
+    const { s, carriers, op, adm, eventId: id } = await eventoConTres();
+    const gena = s.agregarVendor(ORG, "Express Gena", { primary_email: "gena@ejemplo.test" });
+    let d = await adm.detalle(id);
+    await op.sumarAlEvento(d, gena.id);
+    await op.sumarAlEvento(d, gena.id); // repetir no duplica (upsert de Rateware)
+    expect(s.laneVendors.filter((lv) => lv.vendor_id === gena.id)).toHaveLength(1);
+
+    // El Administrador lo marca «Revisado» con el contacto a la vista.
+    d = await adm.detalle(id);
+    const p = d.rutas[0].participaciones.find((x) => x.carrierId === gena.id)!;
+    expect(audienciaInvitacion(d).omitidas.some((o) => o.p.carrierId === gena.id && o.estado === "sin_revision")).toBe(true);
+    await adm.marcarRevisado(id, p);
+    expect(s.revisionesCarrier.at(-1)).toMatchObject({ vendor_id: gena.id, reviewed: true, contact_snapshot: { email: "gena@ejemplo.test" } });
+
+    const r = await op.prepararInvitaciones(id, [gena.id], "RFX-PRBA");
+    expect(r.generated).toBe(1);
+    expect(s.campanas).toHaveLength(1);
+    expect(s.campanas[0]).toMatchObject({ rfx_event_id: id, idempotency_key: `fr8bid-invitacion-${id}`, template_id: "tpl00000-0000-4000-8000-000000000002", audience_policy: { mode: "all_eligible" } });
+    // La segunda vez reutiliza la campaña.
+    s.revisar(id, carriers.A.id);
+    await op.prepararInvitaciones(id, [carriers.A.id]);
+    expect(s.campanas).toHaveLength(1);
+
+    d = await adm.detalle(id);
+    const r2 = await adm.enviarAvisos(id, d.avisos);
+    expect(r2.sent).toBe(2);
+  });
+
+  it("contra Rateware real: sin campaña de Fr8Bid, con otra plantilla o con evento cerrado no se escribe", async () => {
+    const enviados: Record<string, unknown>[] = [];
+    const lanes = [{ id: "l1", invitations: [{ id: "lv1", vendor_id: "v1", invitation_status: "drafted", vendors: { vendor_name: "Gena" } }] }];
+    let estado = "open";
+    const enviar = async (_s: string, b: Record<string, unknown>) => {
+      enviados.push(b);
+      if (b.action === "list_rfx_detail") return { status: 200, body: { event: { id: "e1", status: estado, due_date: "2099-01-01" }, lanes }, headers: {} };
+      if (b.action === "list_outreach_templates")
+        return { status: 200, body: { rows: [{ id: "t-prueba", name: "SPRINT 15 · RFx carrier invitation (PRUEBA)", channel: "email" }, { id: "t-es", name: "RFx carrier invitation - Spanish", channel: "email" }] }, headers: {} };
+      if (b.action === "list_outreach_campaigns")
+        return { status: 200, body: { rows: [{ id: "c-fr8", rfx_event_id: "e1", idempotency_key: "fr8bid-invitacion-e1" }, { id: "c-launch", rfx_event_id: "e1", idempotency_key: null }] }, headers: {} };
+      if (b.action === "list_rfx_invitation_wave_reviews") return { status: 200, body: { rows: [{ vendor_id: "v1", reviewed: true, reviewed_at: "2026-10-24T00:00:00Z" }] }, headers: {} };
+      return { status: 200, body: { ok: true }, headers: {} };
+    };
+    const op = { enviar, permitirEscrituras: true, real: true, hoy: () => "2026-10-24" };
+    const preparar = (extra: Record<string, unknown>) =>
+      manejar("rateware-api", { action: "generate_outreach_drafts", event_id: "e1", channel: "email", reviewed_vendor_ids: ["v1"], ...extra }, "Bearer x", op);
+    expect((await preparar({ template_id: "t-es" })).body.code).toBe("FALTA_CAMPANA");
+    expect((await preparar({ campaign_id: "c-launch", template_id: "t-es" })).body.code).toBe("CAMPANA_FR8BID");
+    expect((await preparar({ campaign_id: "c-fr8", template_id: "t-prueba" })).body.code).toBe("PLANTILLA");
+    expect(enviados.some((b) => b.action === "generate_outreach_drafts")).toBe(false);
+    expect((await preparar({ campaign_id: "c-fr8", template_id: "t-es" })).status).toBe(200);
+
+    const campana = (template_id: string, extra: Record<string, unknown> = {}) =>
+      manejar("rateware-api", { action: "create_outreach_campaign", event_id: "e1", campaign: { rfx_event_id: "e1", template_id, name: "x", channel: "email", idempotency_key: "fr8bid-invitacion-e1", audience_policy: { mode: "all_eligible" }, ...extra } }, "Bearer x", op);
+    expect((await campana("t-prueba")).body.code).toBe("PLANTILLA");
+    expect((await campana("t-es", { idempotency_key: "otra" })).body.code).toBe("CAMPANA_FR8BID");
+    expect((await campana("t-es", { audience_policy: { mode: "explicit", vendor_ids: ["v9"] } })).body.code).toBe("CAMPANA_FR8BID");
+    expect((await campana("t-es")).status).toBe(200);
+
+    const revisar = (extra: Record<string, unknown> = {}) =>
+      manejar("rateware-api", { action: "record_rfx_invitation_wave_review", event_id: "e1", vendor_id: "v1", reviewed: true, confirmed: true, confirmation_action: "record_rfx_invitation_wave_review", ...extra }, "Bearer x", op);
+    expect((await revisar({ reviewed: false })).body.code).toBe("SOLO_REVISADO");
+    expect((await revisar({ confirmed: false })).body.code).toBe("SIN_CONFIRMAR");
+    expect((await revisar({ vendor_id: "v-ajeno" })).status).toBe(404);
+    expect((await revisar()).status).toBe(200);
+
+    const sumar = (extra: Record<string, unknown> = {}) => manejar("rateware-api", { action: "shortlist_rfx_lane_vendors", event_id: "e1", lane_id: "l1", vendor_ids: ["v2"], ...extra }, "Bearer x", op);
+    expect((await sumar({ event_id: undefined })).body.code).toBe("FALTA_EVENTO");
+    expect((await sumar({ lane_id: "l-ajena" })).status).toBe(404);
+    expect((await sumar()).status).toBe(200);
+    estado = "awarded";
+    expect((await sumar()).body.code).toBe("EVENTO_CERRADO");
+    expect((await revisar()).body.code).toBe("EVENTO_CERRADO");
+
+    // Con escrituras apagadas, ninguna de estas pasa.
+    const apagado = { ...op, permitirEscrituras: false };
+    expect((await manejar("rateware-api", { action: "shortlist_rfx_lane_vendors", event_id: "e1", lane_id: "l1", vendor_ids: ["v2"] }, "Bearer x", apagado)).status).toBe(423);
+  });
+});
+
 describe("seguimiento por carrier y recordatorio", () => {
   it("distingue abrió, no abrió, ofertó y declinó; recuerda solo a quien falta", async () => {
     const { s, carriers, op, adm, eventId: id } = await eventoConTres();
@@ -957,7 +1040,7 @@ describe("proxy de /api", () => {
     expect((await api.eventos()).map((e) => [e.id, e.prueba])).toEqual([["e1", true]]);
   });
 
-  it("contra Rateware real, el aviso sale con la versión exacta y solo si es de adjudicación", async () => {
+  it("contra Rateware real, el aviso sale con la versión exacta y la invitación solo a revisados", async () => {
     const enviados: Record<string, unknown>[] = [];
     const mensajes = [
       { id: "m-inv", rfx_event_id: "e1", rfx_lane_vendor_id: "lv1", status: "drafted", updated_at: "v1", metadata: {} },
@@ -979,7 +1062,9 @@ describe("proxy de /api", () => {
 
     const op = { enviar, permitirEscrituras: true, real: true };
     expect((await manejar("rateware-api", enviarAviso("m-adj", "v2", { confirmed: false }), "Bearer x", op)).body.code).toBe("SIN_CONFIRMAR");
-    expect((await manejar("rateware-api", enviarAviso("m-inv", "v1"), "Bearer x", op)).status).toBe(501);
+    // Desde el 24-oct-2026 las invitaciones también salen desde la Mesa, pero
+    // solo a carriers con «Revisado» vigente.
+    expect((await manejar("rateware-api", enviarAviso("m-inv", "v1"), "Bearer x", op)).body.code).toBe("CARRIER_SIN_REVISION");
     expect((await manejar("rateware-api", enviarAviso("m-adj", "v1"), "Bearer x", op)).body.code).toBe("OUTREACH_VERSION_CONFLICT");
     expect(enviados.some((b) => b.action === "send_outreach_messages")).toBe(false);
     expect((await manejar("rateware-api", enviarAviso("m-adj", "v2"), "Bearer x", op)).status).toBe(200);

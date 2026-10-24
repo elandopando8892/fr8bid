@@ -59,6 +59,9 @@ export function Mesa({ id }: { id: string }) {
   const d = carga.datos;
   const r = recorrido(d, ctx);
   const actual = vista ?? r.actual?.clave ?? "loads";
+  // Falta profundidad (o hay carriers sumados por invitar): en el paso Ofertas
+  // también se ven los sugeridos y la invitación, para sumar sin cambiar de paso.
+  const sumarCarriers = d.evento.estado === "abierto" && (rutasSinProfundidad(d).length > 0 || audienciaInvitacion(d).aptas.length + audienciaInvitacion(d).omitidas.length > 0);
 
   const accion = async <T,>(f: () => Promise<T>, ok?: string | ((r: T) => string)) => {
     setAvisoMsg(null);
@@ -117,9 +120,9 @@ export function Mesa({ id }: { id: string }) {
         </nav>
 
         <div className="centro">
-          {(actual === "invitacion" || actual === "carriers") && <PanelInvitacion {...p} />}
-          {(actual === "invitacion" || actual === "carriers") && <PanelCarrierFit d={d} />}
-          {(actual === "invitacion" || actual === "carriers") && <PanelHistorialSegmento d={d} />}
+          {(actual === "invitacion" || actual === "carriers" || (actual === "ofertas" && sumarCarriers)) && <PanelInvitacion {...p} />}
+          {(actual === "invitacion" || actual === "carriers" || (actual === "ofertas" && sumarCarriers)) && <PanelCarrierFit {...p} />}
+          {(actual === "invitacion" || actual === "carriers" || (actual === "ofertas" && sumarCarriers)) && <PanelHistorialSegmento {...p} />}
           {["necesidad", "evento"].includes(actual) && <PanelEvento {...p} />}
           {["invitacion", "ofertas", "comparar", "cierre"].includes(actual) && <PanelSeguimiento d={d} ctx={ctx} accion={accion} />}
           {["ofertas", "comparar", "cierre", "adjudicar"].includes(actual) && <PanelComparar {...p} />}
@@ -256,10 +259,23 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
       )}
       {audiencia.omitidas.length > 0 && d.revisiones && (
         <div className="aviso-caja">
-          <p><b>{resumenOmisiones(audiencia)}</b> Márcalos como «Revisado» en Bidware si deben recibirla.</p>
+          <p><b>{resumenOmisiones(audiencia)}</b> Revisa su contacto y márcalos «Revisado» si deben recibirla.</p>
           <ul>
-            {audiencia.omitidas.map((o) => <li key={o.p.id}>{o.p.carrier}: {o.motivo}</li>)}
+            {[...new Map(audiencia.omitidas.map((o) => [o.p.carrierId, o])).values()].map((o) => (
+              <li key={o.p.carrierId}>
+                {o.p.carrier}: {o.motivo} · {o.p.correo || "sin correo en Rateware"}
+                {ctx.rol === "admin" && o.estado === "sin_revision" && o.p.correo && (
+                  <Confirmar
+                    etiqueta="Marcar «Revisado»"
+                    clase="btn-texto"
+                    advertencia={<>Confirmas que revisaste el contacto de {o.p.carrier} ({o.p.correo}) y que puede recibir la invitación. Queda registrado en Rateware igual que en Bidware. No envía nada. {ADVERTENCIA_REAL(s, d)}</>}
+                    onConfirmar={() => accion(() => s.api.marcarRevisado(d.evento.id, o.p), `${o.p.carrier} marcado «Revisado».`)}
+                  />
+                )}
+              </li>
+            ))}
           </ul>
+          {audiencia.omitidas.some((o) => o.estado === "revocada") && <p className="tenue">Una revisión revocada se vuelve a dar en Bidware.</p>}
         </div>
       )}
       {!invitaciones.length && !audiencia.aptas.length && !audiencia.omitidas.length && <p className="tenue">El Operador aún no prepara las invitaciones.</p>}
@@ -267,10 +283,10 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
         <Confirmar
           etiqueta={`Preparar invitación para ${sinBorrador.length} carrier(s) revisado(s)`}
           clase="btn-secundario"
-          advertencia={<>Crea los borradores en la Cola de Rateware solo para: {sinBorrador.map((x) => x.carrier).join(", ")}. No envía nada. {ADVERTENCIA_REAL(s, d)}</>}
+          advertencia={<>Crea los borradores en la Cola de Rateware con la plantilla «RFx carrier invitation - Spanish», solo para: {[...new Set(sinBorrador.map((x) => x.carrier))].join(", ")}. No envía nada: el envío se aprueba aquí abajo. {ADVERTENCIA_REAL(s, d)}</>}
           onConfirmar={() =>
             accion(
-              () => s.api.prepararInvitaciones(d.evento.id, [...new Set(sinBorrador.map((x) => x.carrierId))]),
+              () => s.api.prepararInvitaciones(d.evento.id, [...new Set(sinBorrador.map((x) => x.carrierId))], d.evento.folio),
               (r: any) => {
                 const n = Number(r?.generated ?? r?.rows?.length ?? 0);
                 const omitidos = Number(r?.skipped ?? r?.skipped_rows?.length ?? 0);
@@ -347,7 +363,22 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
 
 // «Carrier fit» de Rateware: solo lectura. Se consulta a pedido porque
 // Rateware tarda unos segundos en juntar la evidencia.
-function PanelCarrierFit({ d }: { d: Detalle }) {
+// Suma un carrier sugerido a todas las rutas del evento (preseleccionado). No
+// invita ni envía: después se marca «Revisado» y se prepara su invitación.
+function SumarAlEvento({ d, ctx, accion, vendorId, nombre }: { d: Detalle; ctx: Contexto; accion: Props["accion"]; vendorId: string; nombre: string }) {
+  const s = useSesion();
+  if (ctx.rol === "viewer" || !["borrador", "abierto"].includes(d.evento.estado)) return null;
+  return (
+    <Confirmar
+      etiqueta="Sumar al evento"
+      clase="btn-texto"
+      advertencia={<>Agrega a {nombre} como preseleccionado en {d.rutas.length} ruta(s). No lo invita ni le envía nada: después lo marcas «Revisado» y preparas su invitación. {ADVERTENCIA_REAL(s, d)}</>}
+      onConfirmar={() => accion(() => s.api.sumarAlEvento(d, vendorId), `${nombre} sumado al evento. Márcalo «Revisado» en Invitación para invitarlo.`)}
+    />
+  );
+}
+
+function PanelCarrierFit({ d, ctx, accion }: Props) {
   const s = useSesion();
   type Estado = { tipo: "cargando" } | { tipo: "ok"; datos: CarrierFit } | { tipo: "error"; mensaje: string };
   const [fit, setFit] = useState<Estado | null>(null);
@@ -362,7 +393,7 @@ function PanelCarrierFit({ d }: { d: Detalle }) {
     <div className="tarjeta">
       <h2>Carriers sugeridos</h2>
       <p className="tenue">
-        «Carrier fit» de Rateware para las rutas de este evento, según cotizaciones y ofertas anteriores. Fr8Bid solo lo muestra: para sumar un carrier, agrégalo en el Bid Room y márcalo «Revisado» en Bidware.
+        «Carrier fit» de Rateware para las rutas de este evento, según cotizaciones y ofertas anteriores. «Sumar al evento» lo deja preseleccionado; la invitación sale cuando lo marcas «Revisado».
       </p>
       {!fit || fit.tipo === "error" ? (
         <>
@@ -394,7 +425,10 @@ function PanelCarrierFit({ d }: { d: Detalle }) {
                       <td className="mono">{x.puntaje}</td>
                       <td>{x.porque || "—"}</td>
                       <td>{x.huecos.length ? x.huecos.join("; ") : "—"}</td>
-                      <td>{x.yaEnEvento ? <span className="pill ok-pill">Ya invitado</span> : x.revisado ? <span className="pill">Revisado, sin invitar</span> : <span className="pill">No está</span>}</td>
+                      <td>
+                        {x.yaEnEvento ? <span className="pill ok-pill">Ya invitado</span> : x.revisado ? <span className="pill">Revisado, sin invitar</span> : <span className="pill">No está</span>}
+                        {!x.yaEnEvento && !enEvento(d, x.vendorId) && <SumarAlEvento d={d} ctx={ctx} accion={accion} vendorId={x.vendorId} nombre={x.nombre} />}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -411,7 +445,9 @@ function PanelCarrierFit({ d }: { d: Detalle }) {
 // Historial del segmento: carriers con tarifas aprobadas en Rateware de la
 // misma caja, operación D2D y cruce que la ruta. Es evidencia «solo tarifa»:
 // no confirma el equipo y no reemplaza la revisión en Bidware.
-function PanelHistorialSegmento({ d }: { d: Detalle }) {
+const enEvento = (d: Detalle, vendorId: string) => d.rutas.some((r) => r.participaciones.some((p) => p.carrierId === vendorId));
+
+function PanelHistorialSegmento({ d, ctx, accion }: Props) {
   const s = useSesion();
   type Estado = { tipo: "cargando" } | { tipo: "ok"; datos: HistorialSegmento[] } | { tipo: "error"; mensaje: string };
   const [h, setH] = useState<Estado | null>(null);
@@ -426,7 +462,7 @@ function PanelHistorialSegmento({ d }: { d: Detalle }) {
     <div className="tarjeta">
       <h2>Historial del segmento</h2>
       <p className="tenue">
-        Carriers con tarifas aprobadas en Rateware de la misma caja, puerta a puerta y con cruce (sin tramos a frontera ni Intra-Mex). Es solo tarifa: confirma el equipo por correo y márcalo «Revisado» en Bidware antes de invitarlo.
+        Carriers con tarifas aprobadas en Rateware de la misma caja, puerta a puerta y con cruce (sin tramos a frontera ni Intra-Mex). Es solo tarifa: confirma el equipo y el contacto antes de marcarlo «Revisado» e invitarlo.
       </p>
       {!h || h.tipo === "error" ? (
         <>
@@ -467,7 +503,10 @@ function PanelHistorialSegmento({ d }: { d: Detalle }) {
                           <td className="mono">{x.mismoOrigen} / {x.mismoDestino}</td>
                           <td>{x.ejemplos.join("; ")}</td>
                           <td className="mono">{x.ultima || "—"}</td>
-                          <td>{x.yaEnEvento ? <span className="pill ok-pill">Ya invitado</span> : x.revisado ? <span className="pill">Revisado, sin invitar</span> : <span className="pill">No está</span>}</td>
+                          <td>
+                            {x.yaEnEvento ? <span className="pill ok-pill">Ya invitado</span> : x.revisado ? <span className="pill">Revisado, sin invitar</span> : <span className="pill">No está</span>}
+                            {!x.yaEnEvento && x.vendorId && !x.inactivo && !enEvento(d, x.vendorId) && <SumarAlEvento d={d} ctx={ctx} accion={accion} vendorId={x.vendorId} nombre={x.nombre} />}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
