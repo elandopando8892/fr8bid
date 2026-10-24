@@ -34,6 +34,76 @@ export function Liga({ a, children, className }: { a: string; children: ReactNod
   );
 }
 
+// Menú completo. Fr8Bid reemplaza a Bidware módulo por módulo: lo ya portado
+// abre aquí; lo que falta abre el módulo en Bidware (pestaña nueva) mientras tanto.
+export const BIDWARE = "https://bidware.heymarksman.com";
+type Modulo = { etiqueta: string; a: string; bidware?: boolean; activo?: (ruta: string) => boolean };
+export const MENU: { grupo: string; modulos: Modulo[] }[] = [
+  {
+    grupo: "Eventos",
+    modulos: [
+      { etiqueta: "Eventos RFx", a: "/eventos", activo: (r) => r === "/" || r.startsWith("/eventos") },
+      { etiqueta: "QuoteDesk", a: "/quotedesk", bidware: true },
+      { etiqueta: "Shipper intake", a: "/intake", bidware: true }
+    ]
+  },
+  {
+    grupo: "Carriers",
+    modulos: [
+      { etiqueta: "Carrier CRM", a: "/crm", bidware: true },
+      { etiqueta: "Listas de carriers", a: "/templates", bidware: true },
+      { etiqueta: "Carrier fit", a: "/carrier-fit", bidware: true },
+      { etiqueta: "Plantillas de correo", a: "/plantillas", bidware: true }
+    ]
+  },
+  {
+    grupo: "Shippers y tarifas",
+    modulos: [
+      { etiqueta: "Shippers", a: "/shippers", bidware: true },
+      { etiqueta: "Revisión de tarifas", a: "/tarifas", bidware: true },
+      { etiqueta: "Tarifario", a: "/tarifario", bidware: true },
+      { etiqueta: "Archivos de tarifas", a: "/archivos", bidware: true }
+    ]
+  },
+  {
+    grupo: "Más",
+    modulos: [
+      { etiqueta: "Tablero público", a: "/board", bidware: true },
+      { etiqueta: "Integraciones", a: "/integraciones", bidware: true }
+    ]
+  }
+];
+
+function Menu({ ruta }: { ruta: string }) {
+  const [abierto, setAbierto] = useState(false);
+  const actual = MENU.flatMap((g) => g.modulos).find((m) => m.activo?.(ruta));
+  return (
+    <nav className={`menu ${abierto ? "abierto" : ""}`} aria-label="Módulos">
+      <button className="menu-boton" aria-expanded={abierto} onClick={() => setAbierto(!abierto)}>
+        {actual?.etiqueta ?? "Menú"} <span aria-hidden>▾</span>
+      </button>
+      <div className="menu-grupos">
+        {MENU.map((g) => (
+          <div key={g.grupo} className="menu-grupo">
+            <span className="menu-titulo">{g.grupo}</span>
+            {g.modulos.map((m) =>
+              m.bidware ? (
+                <a key={m.a} href={`${BIDWARE}${m.a}`} target="_blank" rel="noreferrer" title="Todavía abre en Bidware">
+                  {m.etiqueta} <span className="externo" aria-label="abre en Bidware">↗</span>
+                </a>
+              ) : (
+                <Liga key={m.a} a={m.a} className={m.activo?.(ruta) ? "activo" : ""}>
+                  {m.etiqueta}
+                </Liga>
+              )
+            )}
+          </div>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
 export function Marco({ children }: { children: ReactNode }) {
   const s = useSesion();
   const ruta = useRuta();
@@ -44,9 +114,7 @@ export function Marco({ children }: { children: ReactNode }) {
           <span className="logo">MARKS<b>MAN</b></span>
           <span className="sub">Bid Room</span>
         </div>
-        <nav>
-          <Liga a="/eventos" className={ruta.startsWith("/eventos") || ruta === "/" ? "activo" : ""}>Eventos</Liga>
-        </nav>
+        <Menu ruta={ruta} />
         <div className="cuenta">
           {s.modo === "simulado" ? (
             <>
