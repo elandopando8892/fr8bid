@@ -7,6 +7,7 @@ import type { EntradaCatalogo } from "../dominio/condiciones-r1";
 import { MAX_PAGINAS, POR_PAGINA, claveSegmento, consultaSegmento, leerHistorialSegmento, segmentoDeRuta, type HistorialSegmento, type Segmento } from "../dominio/segmento";
 import { campanaDelEvento, campanaFr8bid, elegirPlantilla } from "../dominio/invitacion";
 import { operacionEntrega } from "../dominio/operacion";
+import { notasConCierre } from "../dominio/cierre";
 import { hoyMexico, primario, versionMasReciente, versionVigente } from "../dominio/recorrido";
 import { ESPERA_ENTRE_TANDAS_MS, esCuota, leerResultado, operacionTanda, planearTandas, requiereAtencion, type ResultadoEnvio } from "../dominio/tandas";
 import type { Aviso, Detalle, EntregaLocal, Recibo, ResumenEvento } from "../dominio/tipos";
@@ -289,8 +290,12 @@ export class MesaApi {
   // En Rateware «closed» es la entrega, no el cierre a ofertas. Cerrar a ofertas
   // es mover el plazo a ayer: la liga responde 409 y el evento sigue abierto
   // para adjudicar y entregar con operation_id.
-  cerrarAOfertas(eventId: string) {
-    return this.rw({ action: "update_rfx_event", event_id: eventId, patch: { due_date: diaAnterior(this.hoy()) } });
+  // El plazo original queda en las notas del evento (fricción 9).
+  async cerrarAOfertas(eventId: string) {
+    const actual = await this.rw({ action: "list_rfx_detail", event_id: eventId });
+    const e = actual?.event || {};
+    const notes = notasConCierre(e.notes, this.hoy(), e.due_date || null);
+    return this.rw({ action: "update_rfx_event", event_id: eventId, patch: { due_date: diaAnterior(this.hoy()), notes } });
   }
 
   adjudicar(a: { eventId: string; participacionId: string; rol: "primario" | "respaldo"; motivo: string; operationId: string; confirmaSinVigencia: boolean }) {

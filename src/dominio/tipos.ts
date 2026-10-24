@@ -138,6 +138,12 @@ export interface Aviso {
   // trae junto a cada mensaje: con eso se arma el intento por WhatsApp.
   whatsapp?: string | null;
   whatsappNoContactar?: boolean;
+  // Intento de seguimiento (draft_bid_room_carrier_message, metadata.source
+  // «bid_room_carrier_ask»), no la invitación original.
+  intento?: boolean;
+  // Rateware responde en el hilo solo si encuentra un correo del carrier; si
+  // no, el intento sale como correo nuevo (gmail_reply_mode «new_email»).
+  enHilo?: boolean;
 }
 
 export interface Recibo {
@@ -159,6 +165,9 @@ export interface Evento {
   estado: EstadoEvento;
   plazo: string | null;
   prueba: boolean; // «PRUEBA CONTROLADA» (D5)
+  // Cerrar a ofertas mueve due_date a ayer; Fr8Bid deja el plazo original en
+  // las notas del evento para no perderlo.
+  cierre?: { el: string; plazoOriginal: string | null } | null;
 }
 
 export interface Detalle {
