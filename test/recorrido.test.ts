@@ -557,9 +557,9 @@ describe("ya respondió por otro canal", () => {
     s.fallas.fallarRespuestas = true;
     expect((await adm.detalle(id)).respuestas).toBeNull();
 
-    // Contra Rateware real sigue fuera hasta desplegar R2: la Mesa no se rompe.
-    const real = await manejar("rateware-api", { action: "list_rfx_carrier_replies", event_id: "e1" }, "Bearer x", { enviar: async () => ({ status: 200, body: {}, headers: {} }), permitirEscrituras: false, real: true });
-    expect(real.body.code).toBe("PASO_EN_RATEWARE");
+    // R2 está en rateware-prod (v716): la lectura pasa también contra Rateware real.
+    const real = await manejar("rateware-api", { action: "list_rfx_carrier_replies", event_id: "e1" }, "Bearer x", { enviar: async () => ({ status: 200, body: { email_status: "checked", rows: [] }, headers: {} }), permitirEscrituras: false, real: true });
+    expect(real.status).toBe(200);
   });
 });
 

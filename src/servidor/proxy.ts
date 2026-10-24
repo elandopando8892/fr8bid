@@ -78,12 +78,10 @@ export const SOLO_SIMULADO: Record<Servicio, Set<string>> = {
     "create_rfx_event",
     "import_rfx_lanes",
     "shortlist_rfx_lane_vendors",
-    "generate_outreach_drafts",
-    // Respuestas por correo y chat (parche R2): hasta desplegarlo en
-    // rateware-prod, la Mesa sigue con el botón «Ya respondió».
-    "list_rfx_carrier_replies"
+    "generate_outreach_drafts"
     // Las condiciones de ruta (R1) ya van contra Rateware real: desplegado en
-    // rateware-prod el 23-oct-2026 (rateware-api v715, rfx-bid-api v344).
+    // rateware-prod el 23-oct-2026 (rateware-api v715, rfx-bid-api v344). Las
+    // respuestas por correo y chat (R2) también: rateware-api v716, 24-oct-2026.
   ]),
   "rfx-bid-api": new Set(["get_invitation", "submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
