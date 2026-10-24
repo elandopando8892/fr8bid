@@ -187,8 +187,9 @@ button, input, select, textarea { font: inherit; }
 .matriz-condiciones td:first-child {
   min-width: 180px;
 }
-a.btn-secundario { display: inline-block; text-decoration: none; }
+a.btn-secundario, a.btn-primario, a.btn-secundario:hover, a.btn-primario:hover { display: inline-block; text-decoration: none; }
 .tabla td .mono { white-space: nowrap; }
 .lado h3:not(:first-child) { margin-top: 14px; }
 .lista-compacta { margin: 6px 0; padding-left: 18px; }
 .lista-compacta li { padding: 2px 0; }
+.mas-del-evento { margin-top: 18px; font-size: 12.5px; }

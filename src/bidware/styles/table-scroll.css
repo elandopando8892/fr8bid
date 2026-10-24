@@ -1,0 +1,6 @@
+/* Neutral horizontal scroll for wide tables; the table keeps its own layout and borders. */
+.data-table-scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}

@@ -1,0 +1,13 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {transformSync} from 'esbuild';
+const {code}=transformSync(readFileSync('src/bidware/features/rfx-admin/offer-presentation.ts','utf8'),{loader:'ts',format:'esm'});
+const {offerRevisions,currentOfferFinal}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
+const offer={id:'a',bid_rate:120,currency:'USD',responded_at:'2026-10-08T14:29:03.436Z'};
+const row={id:'r',occurred_at:'2026-10-08T14:29:04.174Z',metadata:{rfx_lane_vendor_id:'a',best_final:true,before:{bid_rate:100,currency:'USD'},after:{...offer}}};
+test('exact invitation and price snapshot only; malformed data excluded',()=>{assert.equal(offerRevisions([null,[],{metadata:[]},{metadata:{rfx_lane_vendor_id:'a'}},{...row,metadata:{...row.metadata,rfx_lane_vendor_id:'b'}},row],'a').length,1);assert.deepEqual(offerRevisions({},'a'),[]);assert.deepEqual(offerRevisions([row],null),[]);});
+test('final matches response version not later history timestamp',()=>assert.equal(currentOfferFinal([row],offer),true));
+test('stale or mismatched snapshot never proves current final',()=>{for(const patch of [{bid_rate:100},{currency:'MXN'},{responded_at:'2026-10-08T14:29:05Z'},{bid_rate:null},{currency:null}])assert.equal(currentOfferFinal([row],{...offer,...patch}),undefined);});
+test('latest unconfirmed revision prevents fallback to old final',()=>{const later={...row,occurred_at:'2026-10-09T00:00:00Z',metadata:{...row.metadata,best_final:undefined}};assert.equal(currentOfferFinal([row,later],offer),undefined);});
+test('explicit false and missing before amount preserved',()=>{assert.equal(currentOfferFinal([{...row,metadata:{...row.metadata,best_final:false}}],offer),false);assert.equal(offerRevisions([{...row,metadata:{...row.metadata,before:{}}}],'a')[0].before.bid_rate,undefined);});

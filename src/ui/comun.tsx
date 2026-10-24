@@ -1,82 +1,87 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ErrorApi } from "../cliente/api";
 import { NOMBRE_ROL, USUARIOS_SIMULADOS, useSesion } from "./sesion";
 
-// ——— Router mínimo: tres rutas, sin dependencia ———
+// ——— Rutas: react-router (las comparten la Mesa y los módulos de Bidware) ———
 export function useRuta(): string {
-  const [ruta, setRuta] = useState(window.location.pathname);
+  return useLocation().pathname;
+}
+
+let navegar: ((ruta: string) => void) | null = null;
+
+// Deja ir() disponible fuera de los componentes (p. ej. tras guardar).
+export function NavegadorGlobal() {
+  const n = useNavigate();
   useEffect(() => {
-    const f = () => setRuta(window.location.pathname);
-    window.addEventListener("popstate", f);
-    return () => window.removeEventListener("popstate", f);
-  }, []);
-  return ruta;
+    navegar = (ruta) => n(ruta);
+    return () => {
+      navegar = null;
+    };
+  }, [n]);
+  return null;
 }
 
 export function ir(ruta: string) {
-  window.history.pushState(null, "", ruta);
-  window.dispatchEvent(new PopStateEvent("popstate"));
+  if (navegar) navegar(ruta);
+  else window.location.assign(ruta);
 }
 
 export function Liga({ a, children, className }: { a: string; children: ReactNode; className?: string }) {
   return (
-    <a
-      href={a}
-      className={className}
-      onClick={(e) => {
-        if (e.metaKey || e.ctrlKey) return;
-        e.preventDefault();
-        ir(a);
-      }}
-    >
+    <Link to={a} className={className}>
       {children}
-    </a>
+    </Link>
   );
 }
 
-// Menú completo. Fr8Bid reemplaza a Bidware módulo por módulo: lo ya portado
-// abre aquí; lo que falta abre el módulo en Bidware (pestaña nueva) mientras tanto.
-export const BIDWARE = "https://bidware.heymarksman.com";
-type Modulo = { etiqueta: string; a: string; bidware?: boolean; activo?: (ruta: string) => boolean };
+// Menú completo: la Mesa y los módulos traídos de Bidware, todos aquí.
+type Modulo = { etiqueta: string; a: string; publica?: boolean; activo?: (ruta: string) => boolean };
+const bajo = (a: string) => (ruta: string) => ruta === a || ruta.startsWith(`${a}/`);
 export const MENU: { grupo: string; modulos: Modulo[] }[] = [
   {
     grupo: "Eventos",
     modulos: [
-      { etiqueta: "Eventos RFx", a: "/eventos", activo: (r) => r === "/" || r.startsWith("/eventos") },
-      { etiqueta: "QuoteDesk", a: "/quotedesk", bidware: true },
-      { etiqueta: "Shipper intake", a: "/intake", bidware: true }
+      { etiqueta: "Eventos RFx", a: "/eventos", activo: (r) => r === "/" || bajo("/eventos")(r) || bajo("/rfx")(r) },
+      { etiqueta: "QuoteDesk", a: "/quotedesk" },
+      { etiqueta: "Shipper intake", a: "/intake" }
     ]
   },
   {
     grupo: "Carriers",
     modulos: [
-      { etiqueta: "Carrier CRM", a: "/crm", bidware: true },
-      { etiqueta: "Listas de carriers", a: "/templates", bidware: true },
-      { etiqueta: "Carrier fit", a: "/carrier-fit", bidware: true },
-      { etiqueta: "Plantillas de correo", a: "/plantillas", bidware: true }
+      { etiqueta: "Carrier CRM", a: "/crm" },
+      { etiqueta: "Listas de carriers", a: "/templates" },
+      { etiqueta: "Carrier fit", a: "/carrier-fit" },
+      { etiqueta: "Plantillas de correo", a: "/plantillas" }
     ]
   },
   {
     grupo: "Shippers y tarifas",
     modulos: [
-      { etiqueta: "Shippers", a: "/shippers", bidware: true },
-      { etiqueta: "Revisión de tarifas", a: "/tarifas", bidware: true },
-      { etiqueta: "Tarifario", a: "/tarifario", bidware: true },
-      { etiqueta: "Archivos de tarifas", a: "/archivos", bidware: true }
+      { etiqueta: "Shippers", a: "/shippers" },
+      { etiqueta: "Revisión de tarifas", a: "/tarifas" },
+      { etiqueta: "Tarifario", a: "/tarifario" },
+      { etiqueta: "Archivos de tarifas", a: "/archivos" }
     ]
   },
   {
     grupo: "Más",
     modulos: [
-      { etiqueta: "Tablero público", a: "/board", bidware: true },
-      { etiqueta: "Integraciones", a: "/integraciones", bidware: true }
+      { etiqueta: "Panel", a: "/panel" },
+      { etiqueta: "Integraciones", a: "/integraciones" },
+      // La vista que ven los carriers: se abre aparte, sin el marco del equipo.
+      { etiqueta: "Tablero público", a: "/board", publica: true }
     ]
   }
 ];
 
+const esActivo = (m: Modulo, ruta: string) => (m.activo ?? bajo(m.a))(ruta);
+
 function Menu({ ruta }: { ruta: string }) {
   const [abierto, setAbierto] = useState(false);
-  const actual = MENU.flatMap((g) => g.modulos).find((m) => m.activo?.(ruta));
+  const actual = MENU.flatMap((g) => g.modulos).find((m) => !m.publica && esActivo(m, ruta));
+  useEffect(() => setAbierto(false), [ruta]);
   return (
     <nav className={`menu ${abierto ? "abierto" : ""}`} aria-label="Módulos">
       <button className="menu-boton" aria-expanded={abierto} onClick={() => setAbierto(!abierto)}>
@@ -87,12 +92,12 @@ function Menu({ ruta }: { ruta: string }) {
           <div key={g.grupo} className="menu-grupo">
             <span className="menu-titulo">{g.grupo}</span>
             {g.modulos.map((m) =>
-              m.bidware ? (
-                <a key={m.a} href={`${BIDWARE}${m.a}`} target="_blank" rel="noreferrer" title="Todavía abre en Bidware">
-                  {m.etiqueta} <span className="externo" aria-label="abre en Bidware">↗</span>
+              m.publica ? (
+                <a key={m.a} href={m.a} target="_blank" rel="noreferrer" title="La vista pública, en otra pestaña">
+                  {m.etiqueta} <span className="externo" aria-label="abre en otra pestaña">↗</span>
                 </a>
               ) : (
-                <Liga key={m.a} a={m.a} className={m.activo?.(ruta) ? "activo" : ""}>
+                <Liga key={m.a} a={m.a} className={esActivo(m, ruta) ? "activo" : ""}>
                   {m.etiqueta}
                 </Liga>
               )

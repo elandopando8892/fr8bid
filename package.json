@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:bidware": "node --test \"test/bidware/*.test.mjs\" \"test/bidware/*.test.cjs\""
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
@@ -23,6 +24,8 @@
     "@anthropic-ai/sdk": "^1.3.0",
     "@supabase/supabase-js": "^2.46.1",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.18.4",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
 }

@@ -182,9 +182,33 @@ export function Mesa({ id }: { id: string }) {
           {actual === "aviso" && <PanelAviso {...p} />}
           {actual === "loads" && <PanelLoads d={d} />}
           {r.entregaConfirmada && (actual === "entrega" || actual === "loads") && <Cadena d={d} recibo={recibo} entrega={entrega} />}
+          {s.modo === "rateware" && <MasDelEvento id={id} borrador={d.evento.estado === "borrador"} />}
         </div>
       </div>
     </section>
+  );
+}
+
+// Las pantallas de Bidware del mismo evento, mientras se integran a la Mesa.
+function MasDelEvento({ id, borrador }: { id: string; borrador: boolean }) {
+  const ligas: [string, string][] = [
+    ...(borrador ? ([[`/rfx/new/${id}`, "Editar el borrador"]] as [string, string][]) : []),
+    [`/rfx/${id}/review`, "Revisión de contactos"],
+    [`/rfx/${id}/message`, "Mensaje a carriers"],
+    [`/rfx/${id}/delivery`, "Cola de envío"],
+    [`/rfx/${id}/chat`, "Chat del Bid Room"],
+    [`/rfx/${id}/detalle`, "Detalle completo"]
+  ];
+  return (
+    <p className="mas-del-evento tenue">
+      Más del evento:{" "}
+      {ligas.map(([a, t], i) => (
+        <span key={a}>
+          {i > 0 && " · "}
+          <Liga a={a}>{t}</Liga>
+        </span>
+      ))}
+    </p>
   );
 }
 
