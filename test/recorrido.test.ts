@@ -11,6 +11,7 @@ import {
   avisoDe,
   candadosAdjudicacion,
   candadosAviso,
+  diaCorto,
   primario,
   puedeAdjudicar,
   recorrido,
@@ -199,7 +200,7 @@ describe("§9 recorrido de la rebanada", () => {
     await admin.cerrarAOfertas(eventId);
     d = await admin.detalle(eventId);
     expect(d.evento.cierre?.plazoOriginal).toBe(antes);
-    expect(recorrido(d, ctx()).pasos[6].detalle).toContain(`plazo original ${antes}`);
+    expect(recorrido(d, ctx()).pasos[6].detalle).toContain(`plazo original ${diaCorto(antes!)}`);
   });
 
   it("modo «solo borradores»: pasa el borrador de la Cola; invitar, ofertas, adjudicar y enviar no", async () => {

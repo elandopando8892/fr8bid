@@ -3,8 +3,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ErrorApi } from "../cliente/api";
-import { describirModelo } from "../dominio/modelo";
-import { aCarga, dinero, EstadoVista, fecha, Prueba, type Carga } from "./comun";
+import { describirModelo, nombreModelo } from "../dominio/modelo";
+import { aCarga, Confirmar, dinero, EstadoVista, fecha, Prueba, type Carga } from "./comun";
 import { textoObjetivo } from "./condiciones";
 import { useSesion } from "./sesion";
 
@@ -40,6 +40,18 @@ export function LigaCarrier({ token }: { token: string }) {
         }
         setRubros(r);
         setConds(cs);
+        // Corregir parte de la oferta vigente: solo se cambia lo que cambió.
+        const v = datos.invitation;
+        if (v?.bid_rate !== null && v?.bid_rate !== undefined)
+          setForm((f) => (f.bid_rate ? f : {
+            bid_rate: String(v.bid_rate),
+            currency: v.currency || "USD",
+            commercial_model: v.commercial_model || "fee_plus",
+            weekly_capacity: v.weekly_capacity == null ? "" : String(v.weekly_capacity),
+            transit_days: v.transit_days == null ? "" : String(v.transit_days),
+            valid_through: v.valid_through || "",
+            notes: ""
+          }));
       },
       (e) => setCarga(aCarga(e))
     );
@@ -83,7 +95,7 @@ export function LigaCarrier({ token }: { token: string }) {
         <div className="tarjeta">
           <h2>Tu oferta vigente</h2>
           <p>
-            {dinero(inv.bid_rate, inv.currency)} all-in · {describirModelo({ modeloComercial: String(inv.commercial_model || "cost_plus"), carrierSharePct: inv.carrier_share_pct ?? null, margenPct: inv.marksman_margin_pct ?? null })} · vigencia {inv.valid_through ? fecha(inv.valid_through) : "sin vigencia"}
+            {dinero(inv.bid_rate, inv.currency)} all-in · {describirModelo({ modeloComercial: String(inv.commercial_model || "cost_plus"), carrierSharePct: inv.carrier_share_pct ?? null, margenPct: inv.marksman_margin_pct ?? null })} · {inv.valid_through ? `vigente hasta ${fecha(inv.valid_through)}` : "sin vigencia"}
           </p>
           {inv.award_role && <p><b>Adjudicada como {inv.award_role === "primary" ? "primario" : "respaldo"}.</b></p>}
         </div>
@@ -113,15 +125,15 @@ export function LigaCarrier({ token }: { token: string }) {
           <div className="rejilla">
             <label className="campo"><span>Tarifa all-in</span><input required inputMode="decimal" value={form.bid_rate} onChange={(e) => setForm({ ...form, bid_rate: e.target.value })} /></label>
             <label className="campo"><span>Moneda</span><select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}><option>USD</option><option>MXN</option></select></label>
-            <label className="campo"><span>Modelo comercial</span><select value={form.commercial_model} onChange={(e) => setForm({ ...form, commercial_model: e.target.value })}><option value="fee_plus">fee_plus</option><option value="cost_plus">cost_plus</option><option value="sell_share">sell_share</option><option value="brokerage">brokerage</option></select></label>
+            <label className="campo"><span>Modelo comercial</span><select value={form.commercial_model} onChange={(e) => setForm({ ...form, commercial_model: e.target.value })}>{["fee_plus", "cost_plus", "sell_share", "brokerage"].map((m) => <option key={m} value={m}>{nombreModelo(m)}</option>)}</select></label>
             <label className="campo"><span>Capacidad semanal</span><input inputMode="numeric" value={form.weekly_capacity} onChange={(e) => setForm({ ...form, weekly_capacity: e.target.value })} /></label>
             <label className="campo"><span>Tránsito (días)</span><input inputMode="numeric" value={form.transit_days} onChange={(e) => setForm({ ...form, transit_days: e.target.value })} /></label>
             <label className="campo"><span>Vigente hasta</span><input type="date" value={form.valid_through} onChange={(e) => setForm({ ...form, valid_through: e.target.value })} /></label>
           </div>
           <label className="campo"><span>Nota (sin valor comercial)</span><input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
           <div className="fila-botones">
-            <button className="btn-primario" type="submit">Enviar oferta</button>
-            <button className="btn-texto" type="button" onClick={() => hacer(() => api.declinar(token), "Invitación declinada.")}>Declinar invitación</button>
+            <button className="btn-primario" type="submit">{inv.bid_rate === null ? "Enviar oferta" : "Enviar corrección"}</button>
+            <Confirmar etiqueta="Declinar invitación" clase="btn-texto" advertencia="Ya no podrás ofertar en esta ruta." onConfirmar={() => hacer(() => api.declinar(token), "Invitación declinada.")} />
           </div>
         </form>
       )}

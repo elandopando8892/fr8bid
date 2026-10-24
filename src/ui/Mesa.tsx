@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ErrorApi, type AvanceEnvio } from "../cliente/api";
 import { proyeccionLoads } from "../dominio/loads";
 import { operacionAdjudicacion } from "../dominio/operacion";
@@ -20,7 +20,7 @@ import {
 } from "../dominio/recorrido";
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
 import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
-import { cambiosComerciales, describirModelo, tarifaVenta } from "../dominio/modelo";
+import { cambiosComerciales, describirModelo, modeloCorto, tarifaVenta } from "../dominio/modelo";
 import { candidatosRecordatorio, claveIntento, ETIQUETA_SEGUIMIENTO, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
 import type { CarrierFit } from "../dominio/carrierFit";
@@ -31,18 +31,32 @@ import { NOMBRE_FAMILIA, type HistorialSegmento } from "../dominio/segmento";
 import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
 import type { Aviso, Detalle, EntregaLocal, Participacion, Recibo, Ruta } from "../dominio/tipos";
 import { EditorCondiciones, ListaCondiciones, MatrizCondiciones } from "./condiciones";
-import { aCarga, Confirmar, Desactualizado, dinero, EstadoVista, fecha, Liga, Prueba, type Carga } from "./comun";
+import { aCarga, Confirmar, Desactualizado, dinero, EstadoVista, fecha, Liga, plural, Prueba, type Carga } from "./comun";
 import { useSesion } from "./sesion";
 
 const SIN_ENTREGA: EntregaLocal = { estado: "sin_preparar", operationId: null, error: null };
+
+// Los 11 pasos se agrupan en seis etapas: cada etapa es una vista. Así cada
+// clic en el riel cambia lo que se ve y no hay pasos que muestren lo mismo.
+type ClaveEtapa = "evento" | "carriers" | "ofertas" | "entrega" | "aviso" | "loads";
+const ETAPAS: { clave: ClaveEtapa; titulo: string; pasos: ClavePaso[] }[] = [
+  { clave: "evento", titulo: "Necesidad y evento", pasos: ["necesidad", "evento"] },
+  { clave: "carriers", titulo: "Carriers e invitación", pasos: ["carriers", "invitacion"] },
+  { clave: "ofertas", titulo: "Ofertas y adjudicación", pasos: ["ofertas", "comparar", "cierre", "adjudicar"] },
+  { clave: "entrega", titulo: "Entrega a Rateware", pasos: ["entrega"] },
+  { clave: "aviso", titulo: "Aviso al carrier", pasos: ["aviso"] },
+  { clave: "loads", titulo: "Visible en Loads", pasos: ["loads"] }
+];
+const etapaDe = (clave: ClavePaso): ClaveEtapa => ETAPAS.find((e) => e.pasos.includes(clave))!.clave;
 
 export function Mesa({ id }: { id: string }) {
   const s = useSesion();
   const [carga, setCarga] = useState<Carga<Detalle>>({ tipo: "cargando" });
   const [entrega, setEntrega] = useState<EntregaLocal>(SIN_ENTREGA);
   const [recibo, setRecibo] = useState<Recibo | null>(null);
-  const [vista, setVista] = useState<ClavePaso | null>(null);
+  const [vista, setVista] = useState<ClaveEtapa | null>(null);
   const [aviso, setAvisoMsg] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+  const actualPrevio = useRef<string | null>(null);
 
   const leer = useCallback(async () => {
     try {
@@ -57,14 +71,30 @@ export function Mesa({ id }: { id: string }) {
   }, [s.listo, leer]);
 
   const ctx: Contexto = useMemo(() => ({ rol: s.rol, hoy: hoyMexico(), entrega }), [s.rol, entrega]);
+  const r = carga.tipo === "ok" ? recorrido(carga.datos, ctx) : null;
+  const claveActual = r ? (r.actual?.clave ?? "fin") : null;
+  // Cuando el recorrido avanza (se cerró, se adjudicó, llegó el recibo…), la
+  // Mesa sigue al paso nuevo aunque antes se haya elegido otra etapa a mano.
+  useEffect(() => {
+    if (claveActual === null) return;
+    if (actualPrevio.current !== null && actualPrevio.current !== claveActual) setVista(null);
+    actualPrevio.current = claveActual;
+  }, [claveActual]);
 
-  if (carga.tipo !== "ok") return <EstadoVista carga={carga} reintentar={leer} />;
+  // En móvil el riel es una tira horizontal: que la etapa a la vista no quede fuera.
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 860px)").matches) document.querySelector(".riel .visto")?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [vista, claveActual]);
+
+  if (carga.tipo !== "ok" || !r) return <EstadoVista carga={carga} reintentar={leer} />;
   const d = carga.datos;
-  const r = recorrido(d, ctx);
-  const actual = vista ?? r.actual?.clave ?? "loads";
-  // Falta profundidad (o hay carriers sumados por invitar): en el paso Ofertas
-  // también se ven los sugeridos y la invitación, para sumar sin cambiar de paso.
-  const sumarCarriers = d.evento.estado === "abierto" && (rutasSinProfundidad(d).length > 0 || audienciaInvitacion(d).aptas.length + audienciaInvitacion(d).omitidas.length > 0);
+  const etapaActual: ClaveEtapa = r.actual ? etapaDe(r.actual.clave) : "loads";
+  const actual = vista ?? etapaActual;
+  // Falta profundidad (o hay carriers sumados por invitar): en Ofertas también
+  // se ven los sugeridos y la invitación, para sumar sin cambiar de etapa.
+  const audiencia = audienciaInvitacion(d);
+  const sumarCarriers = d.evento.estado === "abierto" && (rutasSinProfundidad(d).length > 0 || audiencia.aptas.length + audiencia.omitidas.length > 0);
+  const verInvitacion = actual === "carriers" || (actual === "ofertas" && sumarCarriers);
 
   const accion = async <T,>(f: () => Promise<T>, ok?: string | ((r: T) => string)) => {
     setAvisoMsg(null);
@@ -78,6 +108,14 @@ export function Mesa({ id }: { id: string }) {
     await leer();
   };
 
+  const etapas = ETAPAS.map((e) => {
+    const pasos = r.pasos.filter((x) => e.pasos.includes(x.clave));
+    const enCurso = pasos.find((x) => x.estado === "actual");
+    const estado = enCurso ? "actual" : pasos.every((x) => x.estado === "hecho") ? "hecho" : pasos.find((x) => x.estado !== "hecho")!.estado;
+    const foco = enCurso ?? pasos.find((x) => x.estado !== "hecho") ?? pasos[pasos.length - 1];
+    return { ...e, n: ETAPAS.indexOf(e) + 1, pasos, estado, foco };
+  });
+
   const p = { d, ctx, accion, entrega, setEntrega, recibo, setRecibo };
   return (
     <section>
@@ -88,7 +126,7 @@ export function Mesa({ id }: { id: string }) {
           </p>
           <h1>{d.rutas.map((x) => `${x.origen} → ${x.destino}`).join(" · ") || d.evento.nombre}</h1>
           <p className="tenue">
-            {d.rutas[0]?.equipo} · {d.rutas.length} ruta(s) · {d.evento.shipper}
+            {[...new Set(d.rutas.map((x) => x.equipo))].join(", ")} · {plural(d.rutas.length, "ruta")} · {d.evento.shipper} · plazo {fecha(d.evento.cierre?.plazoOriginal ?? d.evento.plazo)}
           </p>
         </div>
         <div className="etiquetas">
@@ -99,22 +137,23 @@ export function Mesa({ id }: { id: string }) {
       <Desactualizado leidoEn={carga.leidoEn} actualizar={leer} />
       {aviso && <div className={aviso.tipo === "ok" ? "estado estado-ok" : "estado estado-error"} role="status">{aviso.texto}</div>}
 
-      <div className="paso-movil">
-        Paso {r.actual?.n ?? 11} de 11 · {r.siguiente.accion}
-        {r.siguiente.teToca && <b> · te toca</b>}
-      </div>
-
       <div className="mesa">
         <nav className="riel" aria-label="Recorrido">
-          <h2>Recorrido</h2>
           <ol>
-            {r.pasos.map((x) => (
-              <li key={x.clave} className={`paso paso-${x.estado} ${actual === x.clave ? "visto" : ""}`}>
-                <button onClick={() => setVista(x.clave)}>
-                  <span className="marca-paso">{x.estado === "hecho" ? "✓" : x.n}</span>
+            {etapas.map((e) => (
+              <li key={e.clave} className={`paso paso-${e.estado} ${actual === e.clave ? "visto" : ""}`}>
+                <button onClick={() => setVista(e.clave)} aria-current={actual === e.clave ? "step" : undefined}>
+                  <span className="marca-paso">{e.estado === "hecho" ? "✓" : e.n}</span>
                   <span>
-                    <b>{x.titulo}</b>
-                    <small>{x.estado === "actual" && r.siguiente.teToca ? `Te toca · ${x.quien}` : x.detalle}</small>
+                    <b>{e.titulo}</b>
+                    <small>{e.foco.detalle}</small>
+                    {e.pasos.length > 1 && e.estado === "actual" && (
+                      <span className="subpasos">
+                        {e.pasos.map((x) => (
+                          <span key={x.clave} className={`subpaso sub-${x.estado}`}>{x.estado === "hecho" ? "✓ " : ""}{x.titulo}</span>
+                        ))}
+                      </span>
+                    )}
                   </span>
                 </button>
               </li>
@@ -123,16 +162,26 @@ export function Mesa({ id }: { id: string }) {
         </nav>
 
         <div className="centro">
-          {(actual === "invitacion" || actual === "carriers" || (actual === "ofertas" && sumarCarriers)) && <PanelInvitacion {...p} />}
-          {(actual === "invitacion" || actual === "carriers" || (actual === "ofertas" && sumarCarriers)) && <PanelCarrierFit {...p} />}
-          {(actual === "invitacion" || actual === "carriers" || (actual === "ofertas" && sumarCarriers)) && <PanelHistorialSegmento {...p} />}
-          {["necesidad", "evento"].includes(actual) && <PanelEvento {...p} />}
-          {["invitacion", "ofertas", "comparar", "cierre"].includes(actual) && <PanelSeguimiento d={d} ctx={ctx} accion={accion} />}
-          {["ofertas", "comparar", "cierre", "adjudicar"].includes(actual) && <PanelComparar {...p} />}
+          <div className={`siguiente ${r.siguiente.teToca ? "te-toca" : ""}`}>
+            {r.actual ? (
+              <span>
+                Siguiente: <b>{r.siguiente.accion}</b> · {r.siguiente.teToca ? "te toca a ti" : `le toca ${r.siguiente.quien === "Carriers" ? "a los carriers" : r.siguiente.quien === "Sistema" ? "a Loads" : `al ${r.siguiente.quien}`}`}
+              </span>
+            ) : (
+              <span>✓ Recorrido completo</span>
+            )}
+            {actual !== etapaActual && r.actual && <button className="btn-texto" onClick={() => setVista(null)}>Ir al paso actual →</button>}
+          </div>
+          {verInvitacion && <PanelInvitacion {...p} />}
+          {verInvitacion && <PanelCarrierFit {...p} />}
+          {verInvitacion && <PanelHistorialSegmento {...p} />}
+          {actual === "evento" && <PanelEvento {...p} />}
+          {actual === "ofertas" && d.evento.estado === "abierto" && <PanelSeguimiento d={d} ctx={ctx} accion={accion} />}
+          {actual === "ofertas" && <PanelComparar {...p} />}
           {actual === "entrega" && <PanelEntrega {...p} />}
           {actual === "aviso" && <PanelAviso {...p} />}
           {actual === "loads" && <PanelLoads d={d} />}
-          {r.entregaConfirmada && <Cadena d={d} recibo={recibo} entrega={entrega} />}
+          {r.entregaConfirmada && (actual === "entrega" || actual === "loads") && <Cadena d={d} recibo={recibo} entrega={entrega} />}
         </div>
       </div>
     </section>
@@ -157,17 +206,31 @@ type Props = {
   setRecibo: (r: Recibo | null) => void;
 };
 
+// Cuando todos los candados están en orden basta una línea; se listan los que
+// fallan o faltan por confirmar, y el resto se abre a pedido.
 function Candados({ lista, titulo = "Candados" }: { lista: Candado[]; titulo?: string }) {
+  const [ver, setVer] = useState(false);
+  const pendientes = lista.filter((c) => !c.ok);
+  const enOrden = lista.length - pendientes.length;
+  const visibles = ver ? lista : pendientes;
   return (
     <div className="candados">
-      <h3>{titulo}</h3>
-      <ul>
-        {lista.map((c, i) => (
-          <li key={i} className={c.ok ? "ok" : c.confirmable ? "confirmable" : "no"}>
-            <span aria-hidden>{c.ok ? "✓" : c.confirmable ? "!" : "✕"}</span> {c.texto}
-          </li>
-        ))}
-      </ul>
+      {visibles.length > 0 && <h3>{titulo}</h3>}
+      {visibles.length > 0 && (
+        <ul>
+          {visibles.map((c, i) => (
+            <li key={i} className={c.ok ? "ok" : c.confirmable ? "confirmable" : "no"}>
+              <span aria-hidden>{c.ok ? "✓" : c.confirmable ? "!" : "✕"}</span> {c.texto}
+            </li>
+          ))}
+        </ul>
+      )}
+      {enOrden > 0 && (
+        <p className="candados-ok">
+          {!ver && <>✓ {pendientes.length ? `Los otros ${enOrden} candados` : `${enOrden} candados`} en orden </>}
+          <button className="btn-texto" onClick={() => setVer(!ver)}>{ver ? "Ocultar los que están en orden" : "Ver"}</button>
+        </p>
+      )}
     </div>
   );
 }
@@ -226,6 +289,12 @@ const ESTADO_INVITACION: Record<string, string> = {
   incierto: "incierta"
 };
 
+const ESTADO_ENVIADAS: Record<string, string> = {
+  aceptado: "aceptadas por Gmail",
+  rebotado: "rebotadas",
+  incierto: "inciertas"
+};
+
 function PanelInvitacion({ d, ctx, accion }: Props) {
   const s = useSesion();
   const [avance, setAvance] = useState<AvanceEnvio | null>(null);
@@ -245,6 +314,12 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
   const audiencia = audienciaInvitacion(d);
   const sinBorrador = audiencia.aptas.filter((p) => !invitaciones.some((a) => a.participaciones.includes(p.id)));
   const tandas = planearTandas(porEnviar).length;
+  const [verEnviadas, setVerEnviadas] = useState(false);
+  const [verTextos, setVerTextos] = useState(false);
+  // Lo ya enviado se resume en una línea; el texto completo solo importa en lo
+  // que falta aprobar (un texto de muestra y los demás a pedido).
+  const enviadas = invitaciones.filter((a) => !enviables.includes(a));
+  const porEstado = [...new Set(enviadas.map((a) => a.estado))].map((e) => `${enviadas.filter((a) => a.estado === e).length} ${ESTADO_ENVIADAS[e] ?? e}`).join(", ");
   return (
     <div className="tarjeta">
       <h2>Invitación</h2>
@@ -287,7 +362,7 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
       {!invitaciones.length && !audiencia.aptas.length && !audiencia.omitidas.length && <p className="tenue">El Operador aún no prepara las invitaciones.</p>}
       {sinBorrador.length > 0 && ctx.rol !== "viewer" && (
         <Confirmar
-          etiqueta={`Preparar invitación para ${sinBorrador.length} carrier(s) revisado(s)`}
+          etiqueta={`Preparar invitación para ${plural(new Set(sinBorrador.map((x) => x.carrierId)).size, "carrier revisado", "carriers revisados")}`}
           clase="btn-secundario"
           advertencia={<>Crea los borradores en la Cola de Rateware con la plantilla «RFx carrier invitation - Spanish», solo para: {[...new Set(sinBorrador.map((x) => x.carrier))].join(", ")}. No envía nada: el envío se aprueba aquí abajo. {ADVERTENCIA_REAL(s, d)}</>}
           onConfirmar={() =>
@@ -297,32 +372,55 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
                 const n = Number(r?.generated ?? r?.rows?.length ?? 0);
                 const omitidos = Number(r?.skipped ?? r?.skipped_rows?.length ?? 0);
                 if (!n) return `No se preparó ningún borrador${omitidos ? `: Rateware omitió ${omitidos}` : ""}. Revisa la Cola de Rateware.`;
-                return `${n} borrador(es) preparados${omitidos ? `; ${omitidos} omitido(s) por Rateware` : ""}.`;
+                return `${plural(n, "borrador preparado", "borradores preparados")}${omitidos ? `; ${plural(omitidos, "omitido", "omitidos")} por Rateware` : ""}.`;
               }
             )
           }
         />
       )}
-      {invitaciones.map((a) => {
-        const p = carrierDe(a);
-        return (
-          <div key={a.id} className="aviso-caja">
-            <div className="fila">
-              <b>{p?.carrier}</b>
-              <span className="pill">{ESTADO_INVITACION[a.estado] ?? a.estado}</span>
-              {p && enviables.includes(a) && !revisada(a) && <span className="pill">{MOTIVO_OMISION[estadoRevision(d, p.carrierId) as keyof typeof MOTIVO_OMISION]}</span>}
-            </div>
-            <p className="tenue">Para: {a.destinatario} · Gmail</p>
-            {a.estado === "en_cola" && (
-              <p className="tenue">Rateware la tiene en cola{a.motivo ? ` (${/dailyLimit|daily_cap|quota/i.test(a.motivo) ? "cuota diaria de Gmail" : a.motivo})` : ""}. Todavía no salió.</p>
-            )}
-            <p><b>{a.asunto}</b></p>
-            <p className="texto-aviso">{a.cuerpo}</p>
-          </div>
-        );
-      })}
+      {enviadas.length > 0 && (
+        <p>
+          {plural(enviadas.length, "invitación enviada", "invitaciones enviadas")}: {porEstado}.{" "}
+          <button className="btn-texto" onClick={() => setVerEnviadas(!verEnviadas)}>{verEnviadas ? "Ocultar" : "Ver a quién"}</button>
+        </p>
+      )}
+      {verEnviadas && (
+        <ul className="lista-compacta">
+          {enviadas.map((a) => (
+            <li key={a.id}>
+              <b>{carrierDe(a)?.carrier}</b> · {a.destinatario} · <span className="tenue">{ESTADO_INVITACION[a.estado] ?? a.estado}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {enviables.length > 0 && (
+        <div className="aviso-caja">
+          <p><b>{plural(enviables.length, "invitación por enviar", "invitaciones por enviar")}</b> · Gmail desde sales@heymarksman.com</p>
+          <ul className="lista-compacta">
+            {enviables.map((a) => {
+              const p = carrierDe(a);
+              return (
+                <li key={a.id}>
+                  <b>{p?.carrier}</b> · {a.destinatario} · <span className="tenue">{ESTADO_INVITACION[a.estado] ?? a.estado}</span>
+                  {a.estado === "en_cola" && <span className="tenue"> ({a.motivo && /dailyLimit|daily_cap|quota/i.test(a.motivo) ? "cuota diaria de Gmail" : a.motivo || "todavía no sale"})</span>}
+                  {p && !revisada(a) && <span className="pill">{MOTIVO_OMISION[estadoRevision(d, p.carrierId) as keyof typeof MOTIVO_OMISION]}</span>}
+                </li>
+              );
+            })}
+          </ul>
+          <button className="btn-texto" onClick={() => setVerTextos(!verTextos)}>{verTextos ? "Ocultar textos" : enviables.length > 1 ? "Ver los textos exactos" : "Ver el texto exacto"}</button>
+          {verTextos &&
+            enviables.map((a) => (
+              <div key={a.id} className="aviso-caja">
+                <p className="tenue">Para: {carrierDe(a)?.carrier} · {a.destinatario}</p>
+                <p><b>{a.asunto}</b></p>
+                <p className="texto-aviso">{a.cuerpo}</p>
+              </div>
+            ))}
+        </div>
+      )}
       {detenidas.length > 0 && (
-        <p className="tenue">{detenidas.length} borrador(es) no se envían porque su carrier no tiene «Revisado» vigente.</p>
+        <p className="tenue">{plural(detenidas.length, "borrador", "borradores")} no se envían porque su carrier no tiene «Revisado» vigente.</p>
       )}
       {avance && (
         <p className={avance.detenido ? "estado estado-error" : "tenue"}>
@@ -332,10 +430,10 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
       )}
       {porEnviar.length > 0 && ctx.rol === "admin" && (
         <Confirmar
-          etiqueta={`Aprobar y enviar ${porEnviar.length} invitación(es) con este texto exacto`}
+          etiqueta={`Aprobar y enviar ${plural(porEnviar.length, "invitación", "invitaciones")}`}
           advertencia={
             <>
-              Se envían por Gmail desde sales@heymarksman.com, exactamente como se ven arriba
+              Se envían por Gmail desde sales@heymarksman.com, exactamente con el texto de «Ver los textos exactos»
               {tandas > 1 ? `, en ${tandas} tandas de hasta ${TAMANO_TANDA} con un minuto entre tandas` : ""}. Si Gmail llega a su cuota diaria, el envío se detiene y lo pendiente queda en cola, sin reintentos automáticos. {ADVERTENCIA_REAL(s, d)}
             </>
           }
@@ -347,7 +445,7 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
                 if (r.detenido) throw new Error(`${r.enviados} de ${porEnviar.length} aceptadas por Gmail. ${r.detenido}`);
                 return r;
               },
-              (r) => `${r.enviados} invitación(es) aceptadas por Gmail.`
+              (r) => `${plural(r.enviados, "invitación aceptada", "invitaciones aceptadas")} por Gmail.`
             )
           }
         />
@@ -356,7 +454,7 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
         <div className="aviso-caja">
           <p>¿La invitación ya salió por otro canal (correo propio, WhatsApp, llamada)? Márcalos como invitados para poder capturar sus ofertas. Solo aparecen los carriers revisados.</p>
           <Confirmar
-            etiqueta={`Marcar ${audiencia.aptas.length} como invitado(s) sin enviar`}
+            etiqueta={`Marcar ${plural(audiencia.aptas.length, "carrier", "carriers")} como invitados sin enviar`}
             clase="btn-secundario"
             advertencia={<>Solo cambia el estado en Rateware: {audiencia.aptas.map((x) => x.carrier).join(", ")}. Fr8Bid no envía nada. {ADVERTENCIA_REAL(s, d)}</>}
             onConfirmar={() => accion(() => s.api.marcarInvitadas(d.evento.id, audiencia.aptas.map((x) => x.id)), "Marcados como invitados.")}
@@ -378,7 +476,7 @@ function SumarAlEvento({ d, ctx, accion, vendorId, nombre }: { d: Detalle; ctx: 
     <Confirmar
       etiqueta="Sumar al evento"
       clase="btn-texto"
-      advertencia={<>Agrega a {nombre} como preseleccionado en {d.rutas.length} ruta(s). No lo invita ni le envía nada: después lo marcas «Revisado» y preparas su invitación. {ADVERTENCIA_REAL(s, d)}</>}
+      advertencia={<>Agrega a {nombre} como preseleccionado en {plural(d.rutas.length, "ruta")}. No lo invita ni le envía nada: después lo marcas «Revisado» y preparas su invitación. {ADVERTENCIA_REAL(s, d)}</>}
       onConfirmar={() => accion(() => s.api.sumarAlEvento(d, vendorId), `${nombre} sumado al evento. Márcalo «Revisado» en Invitación para invitarlo.`)}
     />
   );
@@ -399,7 +497,7 @@ function PanelCarrierFit({ d, ctx, accion }: Props) {
     <div className="tarjeta">
       <h2>Carriers sugeridos</h2>
       <p className="tenue">
-        «Carrier fit» de Rateware para las rutas de este evento, según cotizaciones y ofertas anteriores. «Sumar al evento» lo deja preseleccionado; la invitación sale cuando lo marcas «Revisado».
+        Carriers con cotizaciones u ofertas anteriores en estas rutas («Carrier fit» de Rateware).
       </p>
       {!fit || fit.tipo === "error" ? (
         <>
@@ -426,7 +524,7 @@ function PanelCarrierFit({ d, ctx, accion }: Props) {
                     <tr key={x.vendorId}>
                       <td>
                         <b>{x.nombre}</b>
-                        {x.cotizaciones > 0 && <div className="tenue">{x.cotizaciones} cotización(es) ligadas</div>}
+                        {x.cotizaciones > 0 && <div className="tenue">{plural(x.cotizaciones, "cotización ligada", "cotizaciones ligadas")}</div>}
                       </td>
                       <td className="mono">{x.puntaje}</td>
                       <td>{x.porque || "—"}</td>
@@ -539,7 +637,7 @@ function BuscarEnApollo({ dominio }: { dominio: string }) {
   return (
     <div>
       <p>
-        <b>Apollo:</b> {b.total} persona(s) con {dominio}
+        <b>Apollo:</b> {plural(b.total, "persona")} con {dominio}
         {utiles.length ? `; ${utiles.length} deciden o cotizan` : ""}. Revelar un correo cuesta 1 crédito de Apollo.
       </p>
       {!lista.length ? (
@@ -592,7 +690,7 @@ function PanelHistorialSegmento({ d, ctx, accion }: Props) {
     <div className="tarjeta">
       <h2>Historial del segmento</h2>
       <p className="tenue">
-        Carriers con tarifas aprobadas en Rateware de la misma caja, puerta a puerta y con cruce (sin tramos a frontera ni Intra-Mex). Es solo tarifa: confirma el equipo y el contacto antes de marcarlo «Revisado» e invitarlo.
+        Carriers con tarifas aprobadas de la misma caja, puerta a puerta y con cruce. Es solo tarifa: confirma equipo y contacto antes de invitarlo.
       </p>
       {!h || h.tipo === "error" ? (
         <>
@@ -609,7 +707,7 @@ function PanelHistorialSegmento({ d, ctx, accion }: Props) {
           {h.datos.map((g) => (
             <div key={`${g.segmento.familia}|${g.segmento.operacion}`}>
               <h3>
-                {NOMBRE_FAMILIA[g.segmento.familia]} · {g.segmento.operacion} · ruta(s) {g.rutas.join(", ")}
+                {NOMBRE_FAMILIA[g.segmento.familia]} · {g.segmento.operacion} · {g.rutas.length === 1 ? "ruta" : "rutas"} {g.rutas.join(", ")}
               </h3>
               {g.truncado && <p className="alerta">Se leyeron las primeras {g.filasLeidas} tarifas; puede haber más.</p>}
               {!g.sugerencias.length ? (
@@ -645,7 +743,7 @@ function PanelHistorialSegmento({ d, ctx, accion }: Props) {
               )}
               {g.descartados.length > 0 && (
                 <details>
-                  <summary className="tenue">{g.descartados.length} carrier(s) con tarifas de este segmento que Jose descartó</summary>
+                  <summary className="tenue">{plural(g.descartados.length, "carrier", "carriers")} con tarifas de este segmento que Jose descartó</summary>
                   <ul>
                     {g.descartados.map((x) => (
                       <li key={x.clave}>
@@ -671,8 +769,11 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
   const [abierto, setAbierto] = useState<string | null>(null);
   const [revisados, setRevisados] = useState<Map<string, Telefono>>(new Map());
   const [revision, setRevision] = useState<{ tipo: "cargando" } | { tipo: "hecho"; texto: string } | { tipo: "error"; texto: string } | null>(null);
+  const [verTabla, setVerTabla] = useState(false);
   const filas = seguimiento(d, ctx.hoy);
   if (!filas.length) return null;
+  // Si nadie está pendiente, la tabla por carrier no pide nada: se abre a pedido.
+  const hayPendientes = filas.some((x) => x.estado === "sin_abrir" || x.estado === "abrio" || x.estado === "rebote");
   const candidatos = new Set(candidatosRecordatorio(d, ctx.hoy).map((x) => x.carrierId));
   const conteo = (e: EstadoSeguimiento) => filas.filter((x) => x.estado === e).length;
   const orden: EstadoSeguimiento[] = ["sin_abrir", "abrio", "rebote", "respondio", "declino", "oferto"];
@@ -708,10 +809,15 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
     <div className="tarjeta">
       <h2>Seguimiento</h2>
       <p className="tenue">
-        {filas.length} invitado(s): {conteo("oferto")} ofertaron, {conteo("abrio")} abrieron sin ofertar, {conteo("sin_abrir")} no han abierto la liga
+        {plural(filas.length, "invitado")}: {conteo("oferto")} ofertaron
+        {conteo("abrio") ? `, ${conteo("abrio")} abrieron sin ofertar` : ""}
+        {conteo("sin_abrir") ? `, ${conteo("sin_abrir")} no han abierto la liga` : ""}
         {conteo("respondio") ? `, ${conteo("respondio")} respondieron por otro canal` : ""}
         {conteo("declino") ? `, ${conteo("declino")} declinaron` : ""}
         {conteo("rebote") ? `, ${conteo("rebote")} rebotaron` : ""}.
+        {!hayPendientes && (
+          <> <button className="btn-texto" onClick={() => setVerTabla(!verTabla)}>{verTabla ? "Ocultar detalle" : "Ver por carrier"}</button></>
+        )}
       </p>
       {d.respuestas === null && (
         <p className="aviso-caja">
@@ -721,7 +827,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
       {flacas.length > 0 && (
         <div className="aviso-caja">
           <p>
-            <b>Falta profundidad:</b> {flacas.map((x) => `ruta ${x.ruta.numero} con ${x.ofertas} oferta(s)`).join(", ")} de {PROFUNDIDAD_MINIMA} mínimas.
+            <b>Falta profundidad:</b> {flacas.map((x) => `ruta ${x.ruta.numero} con ${plural(x.ofertas, "oferta")}`).join(", ")} de {PROFUNDIDAD_MINIMA} mínimas.
             Cadencia: 2º intento a las 8 h del envío, 3º 12 h después del 2º y luego WhatsApp.
           </p>
           {tocan.length > 0 && (
@@ -739,7 +845,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
               </p>
               {dudosos.length > 0 && (
                 <p>
-                  <span className="pill alerta">Por confirmar</span> {dudosos.length} número(s) con lada que existe en México y en EE. UU. o con formato raro:{" "}
+                  <span className="pill alerta">Por confirmar</span> {plural(dudosos.length, "número", "números")} con lada que existe en México y en EE. UU. o con formato raro:{" "}
                   {dudosos.map((w) => `${w.s.carrier} (${w.telefono.motivo})`).join(", ")}.{" "}
                   {revision?.tipo === "cargando" ? (
                     <span className="tenue">Revisando con IA…</span>
@@ -760,7 +866,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
               </p>
               <p className="texto-aviso">{textoIntento(d, muestra.ruta, muestra.paso)}</p>
               <Confirmar
-                etiqueta={`Preparar ${porPreparar.length} borrador(es) en la Cola`}
+                etiqueta={`Preparar ${plural(porPreparar.length, "intento", "intentos")}`}
                 clase="btn-secundario"
                 advertencia={`Rateware deja ${porPreparar.length} borrador(es) en la Cola, uno por carrier sin respuesta. No se envía nada: el envío lo apruebas aquí mismo.`}
                 onConfirmar={() =>
@@ -771,7 +877,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                       listos++;
                     }
                     return listos;
-                  }, (n) => `${n} borrador(es) listos. Revísalos y apruébalos abajo.`)
+                  }, (n) => `${plural(n, "intento listo", "intentos listos")}. Revísalos y apruébalos abajo.`)
                 }
               />
             </>
@@ -779,8 +885,9 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
         </div>
       )}
       <IntentosPorEnviar d={d} ctx={ctx} accion={accion} />
+      {(hayPendientes || verTabla) && (
       <div className="tabla-envoltura">
-      <table className="tabla">
+      <table className="tabla tabla-tarjetas">
         <thead>
           <tr><th>Carrier</th><th>Estado</th><th>Rutas</th><th>Invitado</th><th>Abrió</th><th>Siguiente intento</th><th></th></tr>
         </thead>
@@ -790,17 +897,17 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
             return (
               <Fragment key={x.carrierId}>
                 <tr>
-                  <td>{x.carrier}</td>
-                  <td>
+                  <td><b>{x.carrier}</b></td>
+                  <td data-etiqueta="Estado">
                     {x.estado === "respondio" && x.respondioPor.length
                       ? `respondió por ${x.respondioPor.map((c) => (c === "correo" ? "correo" : "chat del Bid Room")).join(" y ")}`
                       : ETIQUETA_SEGUIMIENTO[x.estado]}
-                    {x.diasSinRespuesta !== null ? ` · ${x.diasSinRespuesta} día(s)` : ""}
+                    {x.diasSinRespuesta !== null ? ` · ${plural(x.diasSinRespuesta, "día")}` : ""}
                   </td>
-                  <td>{x.estado === "oferto" && x.ofertadas < x.rutas ? `${x.ofertadas} de ${x.rutas}` : x.rutas}</td>
-                  <td>{fecha(x.invitadaEn)}</td>
-                  <td>{fecha(x.vistaEn)}</td>
-                  <td>
+                  <td data-etiqueta="Rutas">{x.estado === "oferto" && x.ofertadas < x.rutas ? `${x.ofertadas} de ${x.rutas}` : x.rutas}</td>
+                  <td data-etiqueta="Invitado">{fecha(x.invitadaEn)}</td>
+                  <td data-etiqueta="Abrió">{fecha(x.vistaEn)}</td>
+                  <td data-etiqueta="Siguiente intento">
                     {(() => {
                       const sig = siguiente.get(x.carrierId);
                       if (!sig) return "—";
@@ -863,6 +970,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
         </tbody>
       </table>
       </div>
+      )}
     </div>
   );
 }
@@ -891,7 +999,7 @@ function IntentosPorEnviar({ d, ctx, accion }: { d: Detalle; ctx: Contexto; acci
   return (
     <div className="aviso-caja">
       <p>
-        <b>{intentos.length} intento(s) preparados</b> sin enviar
+        <b>{plural(intentos.length, "intento preparado", "intentos preparados")}</b> sin enviar
         {detenidos.length > 0 && <> · {detenidos.length} no se envían (el carrier ya respondió o no tiene «Revisado» vigente)</>}.
       </p>
       <button className="btn-texto" onClick={() => setVerTextos(!verTextos)}>{verTextos ? "Ocultar textos" : "Ver los textos exactos"}</button>
@@ -916,7 +1024,7 @@ function IntentosPorEnviar({ d, ctx, accion }: { d: Detalle; ctx: Contexto; acci
       )}
       {porEnviar.length > 0 && ctx.rol === "admin" && (
         <Confirmar
-          etiqueta={`Aprobar y enviar ${porEnviar.length} intento(s) con su texto exacto`}
+          etiqueta={`Aprobar y enviar ${plural(porEnviar.length, "intento", "intentos")}`}
           advertencia={
             <>
               Se envían por Gmail desde sales@heymarksman.com, exactamente la versión que Rateware tiene ahora (ábrelos con «Ver los textos exactos»)
@@ -932,7 +1040,7 @@ function IntentosPorEnviar({ d, ctx, accion }: { d: Detalle; ctx: Contexto; acci
                 if (r.detenido) throw new Error(`${r.enviados} de ${porEnviar.length} aceptados por Gmail. ${r.detenido}`);
                 return r;
               },
-              (r) => `${r.enviados} intento(s) aceptados por Gmail.`
+              (r) => `${plural(r.enviados, "intento aceptado", "intentos aceptados")} por Gmail.`
             )
           }
         />
@@ -968,7 +1076,7 @@ function YaRespondio({ d, s: x, accion }: { d: Detalle; s: ReturnType<typeof seg
       <Confirmar
         etiqueta={rechazo ? "Marcar que rechazó" : "Marcar que respondió"}
         clase="btn-secundario"
-        advertencia={`${x.carrier} queda como ${rechazo ? "«declinó»" : "«respondió»"} en Rateware en ${ids.length} ruta(s) y ya no recibe intentos. No se envía nada.`}
+        advertencia={`${x.carrier} queda como ${rechazo ? "«declinó»" : "«respondió»"} en Rateware en ${plural(ids.length, "ruta")} y ya no recibe intentos. No se envía nada.`}
         deshabilitado={!ids.length}
         onConfirmar={() =>
           accion(async () => {
@@ -989,7 +1097,7 @@ function CapturaEquipo({ d, ruta, accion }: { d: Detalle; ruta: Ruta; accion: Pr
   const vacio = { id: "", tarifa: "", moneda: "USD", vigencia: "", capacidad: "", transito: "", canal: "email" as const, notas: "" };
   const [f, setF] = useState<{ id: string; tarifa: string; moneda: string; vigencia: string; capacidad: string; transito: string; canal: "email" | "phone" | "whatsapp" | "other"; notas: string }>(vacio);
   const [abierto, setAbierto] = useState(false);
-  if (!candidatas.length || d.evento.estado === "adjudicado" || d.evento.estado === "archivado") return null;
+  if (s.rol === "viewer" || !candidatas.length || d.evento.estado === "adjudicado" || d.evento.estado === "archivado") return null;
   if (!abierto) return <button className="btn-texto" onClick={() => setAbierto(true)}>Capturar oferta recibida por otro canal</button>;
   const tarifa = Number(f.tarifa.replace(/,/g, ""));
   const num = (x: string) => (x.trim() === "" ? null : Number(x));
@@ -1054,18 +1162,27 @@ function PanelComparar({ d, ctx, accion }: Props) {
   const [historial, setHistorial] = useState<string | null>(null);
   const [preguntaA, setPreguntaA] = useState<string | null>(null);
   const hayOfertas = d.rutas.some((r) => conOferta(r).length > 0);
+  const abierto = d.evento.estado === "abierto";
+  const pendientes = seguimiento(d, ctx.hoy).filter((x) => x.estado === "sin_abrir" || x.estado === "abrio").length;
 
   return (
     <>
-      {hayOfertas && (
-        <div className="fila-botones">
-          <button className="btn-secundario" onClick={() => descargarComparativo(d, false)}>Descargar Excel interno</button>
-          <button className="btn-secundario" onClick={() => descargarComparativo(d, true)} title="Sin nombres de carrier, modelo comercial ni porcentajes">
-            Descargar Excel para el shipper (anónimo)
-          </button>
+      {abierto && ctx.rol === "admin" && hayOfertas && (
+        <div className="tarjeta accion-principal">
+          <p>
+            {pendientes
+              ? `${plural(pendientes, "carrier")} sin ofertar todavía. Puedes esperar o cerrar ya para adjudicar.`
+              : "Ya respondieron todos los invitados. Cierra a ofertas para adjudicar."}
+          </p>
+          <Confirmar
+            etiqueta="Cerrar a ofertas"
+            clase={pendientes ? "btn-secundario" : "btn-primario"}
+            advertencia={<>La liga de cada carrier dejará de aceptar ofertas en todas las rutas. Así el importe que adjudiques no cambia sin otra decisión. {ADVERTENCIA_REAL(s, d)}</>}
+            onConfirmar={() => accion(() => s.api.cerrarAOfertas(d.evento.id), "Evento cerrado a ofertas.")}
+          />
         </div>
       )}
-      {d.rutas.map((ruta) => {
+      {d.rutas.map((ruta, i) => {
         const filas = [...conOferta(ruta)].sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
         const sel = ruta.participaciones.find((x) => x.id === elegido) ?? null;
         const prim = primario(ruta);
@@ -1073,25 +1190,33 @@ function PanelComparar({ d, ctx, accion }: Props) {
         // Sin primario se elige primario; con primario y antes de entregar, respaldo.
         const puedeElegir = d.evento.estado === "cerrado" && ctx.rol === "admin" && !(prim && prim.entregadaEn);
         const totalRubros = new Set(ruta.participaciones.flatMap((x) => Object.keys(x.rubros))).size;
-        return (
-          <div key={ruta.id} className="dos-columnas">
-            <div className="tarjeta">
-              <div className="fila">
-                <h2>Ruta {ruta.numero} · ofertas vigentes</h2>
-                <span className="tenue">Objetivo {dinero(ruta.objetivo, ruta.moneda)} · ordenado por all-in (el % del modelo comercial no cambia el all-in)</span>
-              </div>
+        const declinaron = ruta.participaciones.filter((p) => p.estado === "declino").map((p) => p.carrier);
+        const tabla = (
+          <div className="tarjeta">
+            <div className="fila">
+              <h2>Ruta {ruta.numero}{d.rutas.length > 1 ? ` · ${ruta.origen} → ${ruta.destino}` : ""}</h2>
+              <span className="tenue">Objetivo {dinero(ruta.objetivo, ruta.moneda)}</span>
+            </div>
+            {i === 0 && hayOfertas && (
+              <p className="tenue descargas">
+                Comparativo en Excel:{" "}
+                <button className="btn-texto" onClick={() => descargarComparativo(d, false)}>interno</button> ·{" "}
+                <button className="btn-texto" onClick={() => descargarComparativo(d, true)} title="Sin nombres de carrier, modelo comercial ni porcentajes">para el shipper (anónimo)</button>
+              </p>
+            )}
+            {filas.length > 0 && (
               <div className="tabla-envoltura">
-                <table className="tabla">
+                <table className="tabla tabla-tarjetas">
                   <thead>
                     <tr>
-                      <th></th>
+                      {puedeElegir && <th aria-label="Elegir"></th>}
                       <th>Carrier</th>
                       <th>All-in</th>
+                      <th>Venta al shipper</th>
                       <th>Cap./sem</th>
                       <th>Tránsito</th>
                       <th>Vigencia</th>
                       <th>{ruta.condiciones.length ? "Condiciones" : "Rubros"}</th>
-                      <th>Versión</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1102,37 +1227,38 @@ function PanelComparar({ d, ctx, accion }: Props) {
                         ruta={ruta}
                         totalRubros={totalRubros}
                         elegido={elegido === p.id}
+                        columnaElegir={puedeElegir}
                         elegible={puedeElegir && !p.rol}
                         onElegir={() => setElegido(p.id)}
                         onHistorial={() => setHistorial(historial === p.id ? null : p.id)}
-                        onPreguntar={ctx.rol !== "viewer" && p.correo ? () => setPreguntaA(preguntaA === p.id ? null : p.id) : undefined}
+                        onPreguntar={ctx.rol !== "viewer" && p.correo && d.evento.estado !== "adjudicado" ? () => setPreguntaA(preguntaA === p.id ? null : p.id) : undefined}
                       />
                     ))}
                   </tbody>
                 </table>
               </div>
-              {!filas.length && <p className="tenue">Aún no llegan ofertas.</p>}
-              <MatrizCondiciones ruta={ruta} carriers={filas} />
-              {!prim && <CapturaEquipo d={d} ruta={ruta} accion={accion} />}
-              <LigasSimuladas d={d} />
-              {historial && ruta.participaciones.some((x) => x.id === historial) && <Historial p={ruta.participaciones.find((x) => x.id === historial)!} />}
-              {preguntaA && ruta.participaciones.some((x) => x.id === preguntaA) && (
-                <PreguntaCarrier d={d} ruta={ruta} p={ruta.participaciones.find((x) => x.id === preguntaA)!} onCerrar={() => setPreguntaA(null)} />
-              )}
-              {ruta.participaciones.filter((p) => p.estado === "declino").map((p) => (
-                <p key={p.id} className="tenue">{p.carrier} declinó.</p>
-              ))}
-              {d.evento.estado === "abierto" && ctx.rol === "admin" && (
-                <Confirmar
-                  etiqueta="Cerrar a ofertas"
-                  clase="btn-secundario"
-                  advertencia={<>La liga de cada carrier dejará de aceptar ofertas (409). Así el importe que adjudiques no cambia sin otra decisión. {ADVERTENCIA_REAL(s, d)}</>}
-                  onConfirmar={() => accion(() => s.api.cerrarAOfertas(d.evento.id), "Evento cerrado a ofertas.")}
-                />
-              )}
-            </div>
-
-            <aside className="tarjeta lado">
+            )}
+            {!filas.length && <p className="tenue">Aún no llegan ofertas en esta ruta.</p>}
+            {!abierto && !prim && !sel && filas.length > 0 && (
+              <p className="tenue">{puedeElegir ? "Elige la oferta a adjudicar como primario: sus candados y el motivo aparecen abajo." : ctx.rol !== "admin" ? "Solo el Administrador adjudica." : ""}</p>
+            )}
+            {declinaron.length > 0 && <p className="tenue">Declinaron: {declinaron.join(", ")}.</p>}
+            <MatrizCondiciones ruta={ruta} carriers={filas} />
+            {historial && ruta.participaciones.some((x) => x.id === historial) && <Historial p={ruta.participaciones.find((x) => x.id === historial)!} />}
+            {preguntaA && ruta.participaciones.some((x) => x.id === preguntaA) && (
+              <PreguntaCarrier d={d} ruta={ruta} p={ruta.participaciones.find((x) => x.id === preguntaA)!} onCerrar={() => setPreguntaA(null)} />
+            )}
+            {!prim && <CapturaEquipo d={d} ruta={ruta} accion={accion} />}
+            <LigasSimuladas d={d} />
+          </div>
+        );
+        // La tabla siempre a todo el ancho; lo que se decide va debajo, en la
+        // misma columna, para no apretar el comparativo.
+        if (abierto || (!prim && !sel)) return <Fragment key={ruta.id}>{tabla}</Fragment>;
+        return (
+          <Fragment key={ruta.id}>
+            {tabla}
+            <div className="tarjeta lado">
               {prim ? (
                 <>
                   <PrimarioActual d={d} ruta={ruta} p={prim} ctx={ctx} accion={accion} />
@@ -1142,25 +1268,14 @@ function PanelComparar({ d, ctx, accion }: Props) {
                   {sel && !sel.rol ? (
                     <FormAdjudicar key={sel.id} d={d} ruta={ruta} sel={sel} rol="respaldo" ctx={ctx} accion={accion} />
                   ) : (
-                    puedeElegir && <p className="tenue">Elige otra oferta para adjudicarla como respaldo (opcional).</p>
+                    puedeElegir && <p className="tenue">Opcional: elige otra oferta para adjudicarla como respaldo.</p>
                   )}
                 </>
-              ) : sel ? (
-                <FormAdjudicar key={sel.id} d={d} ruta={ruta} sel={sel} rol="primario" ctx={ctx} accion={accion} />
               ) : (
-                <>
-                  <h3>Adjudicar</h3>
-                  <p className="tenue">
-                    {d.evento.estado === "abierto"
-                      ? "Primero cierra a ofertas. Puedes revisar el comparativo mientras tanto."
-                      : ctx.rol !== "admin"
-                        ? "Solo el Administrador adjudica."
-                        : "Elige una oferta para ver sus candados."}
-                  </p>
-                </>
+                sel && <FormAdjudicar key={sel.id} d={d} ruta={ruta} sel={sel} rol="primario" ctx={ctx} accion={accion} />
               )}
-            </aside>
-          </div>
+            </div>
+          </Fragment>
         );
       })}
     </>
@@ -1173,39 +1288,40 @@ function ResumenCondiciones({ ruta, p }: { ruta: Ruta; p: Participacion }) {
   return <span title={r.marcadas.join(", ")}>{r.cumplidas}/{r.total}{r.marcadas.length ? ` · ${r.marcadas.length} con nota` : ""}</span>;
 }
 
-function FilaOferta({ p, ruta, totalRubros, elegido, elegible, onElegir, onHistorial, onPreguntar }: { p: Participacion; ruta: Ruta; totalRubros: number; elegido: boolean; elegible: boolean; onElegir: () => void; onHistorial: () => void; onPreguntar?: () => void }) {
+function FilaOferta({ p, ruta, totalRubros, elegido, columnaElegir, elegible, onElegir, onHistorial, onPreguntar }: { p: Participacion; ruta: Ruta; totalRubros: number; elegido: boolean; columnaElegir: boolean; elegible: boolean; onElegir: () => void; onHistorial: () => void; onPreguntar?: () => void }) {
   const v = versionVigente(p)!;
   const rubros = Object.values(p.rubros);
   const negativa = rubros.includes("no_puedo");
   const deAcuerdo = rubros.filter((x) => x === "de_acuerdo").length;
   const anterior = p.versiones.find((x) => x.numero === v.numero - 1);
+  const venta = tarifaVenta(v);
   return (
-    <tr className={elegido ? "elegida" : ""}>
-      <td>{elegible && <input type="radio" name="oferta" aria-label={`Elegir ${p.carrier}`} checked={elegido} onChange={onElegir} />}</td>
+    <tr className={elegido ? "elegida" : ""} onClick={elegible ? onElegir : undefined} style={elegible ? { cursor: "pointer" } : undefined}>
+      {columnaElegir && <td>{elegible && <input type="radio" name={`oferta-${ruta.id}`} aria-label={`Elegir ${p.carrier}`} checked={elegido} onChange={onElegir} />}</td>}
       <td>
         <b>{p.carrier}</b>
-        {p.rol && <span className="pill ok-pill"> {p.rol}</span>}
-      </td>
-      <td>
-        <span className="mono">{dinero(v.tarifaAllIn, v.moneda)}</span>
-        <div className="tenue">{describirModelo(v)}</div>
-        <div className="tenue">Venta al shipper {dinero(tarifaVenta(v).venta, v.moneda)}{tarifaVenta(v).porDefecto ? " (% por defecto)" : ""}</div>
-      </td>
-      <td>{v.capacidadSemanal ?? "—"}</td>
-      <td>{v.transitoDias !== null ? `${v.transitoDias} d` : "—"}</td>
-      <td>{v.vigenteHasta ? fecha(v.vigenteHasta) : <span className="alerta">Sin vigencia</span>}</td>
-      <td>{ruta.condiciones.length ? <ResumenCondiciones ruta={ruta} p={p} /> : negativa ? <span className="error-texto">No puedo</span> : `${deAcuerdo}/${totalRubros}`}</td>
-      <td>
-        <button className="btn-texto" onClick={onHistorial}>
-          v{v.numero}
-          {anterior ? ` · antes ${anterior.tarifaAllIn.toLocaleString("es-MX")}` : ""}
-        </button>
-        {onPreguntar && (
-          <button className="btn-texto" onClick={onPreguntar}>
-            Preguntar
+        {p.rol && <span className="pill ok-pill">{p.rol}</span>}
+        <div className="acciones-fila">
+          <button className="btn-texto" onClick={(e) => { e.stopPropagation(); onHistorial(); }} title="Historial de versiones">
+            v{v.numero}{anterior ? ` · antes ${anterior.tarifaAllIn.toLocaleString("es-MX")}` : ""}
           </button>
-        )}
+          {onPreguntar && (
+            <button className="btn-texto" onClick={(e) => { e.stopPropagation(); onPreguntar(); }}>Preguntar</button>
+          )}
+        </div>
       </td>
+      <td data-etiqueta="All-in">
+        <span className="mono">{dinero(v.tarifaAllIn, v.moneda)}</span>
+        <div className="tenue" title={describirModelo(v)}>{modeloCorto(v)}</div>
+      </td>
+      <td data-etiqueta="Venta">
+        <span className="mono">{dinero(venta.venta, v.moneda)}</span>
+        {venta.porDefecto && <div className="tenue">% por defecto</div>}
+      </td>
+      <td data-etiqueta="Cap./sem">{v.capacidadSemanal ?? "—"}</td>
+      <td data-etiqueta="Tránsito">{v.transitoDias !== null ? `${v.transitoDias} d` : "—"}</td>
+      <td data-etiqueta="Vigencia">{v.vigenteHasta ? fecha(v.vigenteHasta) : <span className="alerta">Sin vigencia</span>}</td>
+      <td data-etiqueta={ruta.condiciones.length ? "Condiciones" : "Rubros"}>{ruta.condiciones.length ? <ResumenCondiciones ruta={ruta} p={p} /> : negativa ? <span className="error-texto">No puedo</span> : `${deAcuerdo}/${totalRubros}`}</td>
     </tr>
   );
 }
@@ -1393,22 +1509,27 @@ function PanelEntrega({ d, ctx, accion, entrega, setEntrega, recibo, setRecibo }
           <h2>Entrega a Rateware</h2>
           <span className="pill">{r.entregaConfirmada ? "confirmada" : entrega.estado.replace("_", " ")}</span>
         </div>
-        <p className="tenue">preparada → enviada → confirmada · otras salidas: rechazada, incierta</p>
-        {prims.map((p) => (
-          <p key={p.id}>
-            {d.rutas.find((x) => x.participaciones.includes(p))?.origen} → … · <b>{p.carrier}</b> · primario · v{p.adjudicada?.numero} ·{" "}
-            {dinero(p.versiones.find((v) => v.numero === p.adjudicada?.numero)?.tarifaAllIn)} · <span className="mono">#{p.adjudicada?.huella.slice(0, 8)}</span>
-          </p>
-        ))}
+        {d.rutas.map((ruta) => {
+          const p = primario(ruta);
+          const resp = ruta.participaciones.filter((x) => x.rol === "respaldo");
+          const monto = (x: Participacion) => dinero(x.versiones.find((v) => v.numero === x.adjudicada?.numero)?.tarifaAllIn, ruta.moneda);
+          return (
+            <p key={ruta.id}>
+              Ruta {ruta.numero} · {ruta.origen} → {ruta.destino}:{" "}
+              {p ? <><b>{p.carrier}</b> {monto(p)} (v{p.adjudicada?.numero})</> : <span className="tenue">{ruta.desiertaMotivo ? "desierta" : "sin primario"}</span>}
+              {resp.map((x) => <span key={x.id} className="tenue"> · respaldo {x.carrier} {monto(x)}</span>)}
+            </p>
+          );
+        })}
         {(entrega.operationId || recibo) && (
-          <p>
-            Operación <span className="mono">{(recibo?.operationId ?? entrega.operationId)?.slice(0, 8)}…</span> · se reutiliza en cada reintento
+          <p className="tenue">
+            Operación <span className="mono">{(recibo?.operationId ?? entrega.operationId)?.slice(0, 8)}…</span> · la misma en cada reintento
           </p>
         )}
         {recibo && (
           <p>
-            Recibo {fecha(recibo.momento)} · {recibo.insertados} fila(s) insertada(s) · {recibo.enRevision} en <span className="mono">pending_review</span>
-            {recibo.conservadosAprobados > 0 && <> · {recibo.conservadosAprobados} conservada(s) como aprobada(s)</>}
+            Recibo {fecha(recibo.momento)} · {plural(recibo.insertados, "tarifa insertada", "tarifas insertadas")} · {recibo.enRevision} en Revisión
+            {recibo.conservadosAprobados > 0 && <> · {plural(recibo.conservadosAprobados, "conservada como aprobada", "conservadas como aprobadas")}</>}
           </p>
         )}
         {r.entregaConfirmada && !recibo && <p>Rateware ya tiene esta entrega (evento entregado y primarios con cierre registrado).</p>}
@@ -1421,7 +1542,16 @@ function PanelEntrega({ d, ctx, accion, entrega, setEntrega, recibo, setRecibo }
         {!r.entregaConfirmada && decidido && ctx.rol === "admin" && (
           <div className="fila-botones">
             {entrega.estado === "sin_preparar" || entrega.estado === "rechazada" ? (
-              <button className="btn-secundario" onClick={() => setEntrega(s.api.prepararEntrega(d))}>Preparar entrega</button>
+              <Confirmar
+                etiqueta="Entregar a Rateware"
+                advertencia={<>Rateware guarda {plural(prims.length, "tarifa")} en Revisión (pending_review) y devuelve el recibo. {ADVERTENCIA_REAL(s, d)}</>}
+                onConfirmar={() => {
+                  // Comprobación local (versión adjudicada = vigente) y, si pasa, la entrega.
+                  const preparada = s.api.prepararEntrega(d);
+                  setEntrega(preparada);
+                  if (preparada.estado === "preparada") return confirmar(preparada.operationId!);
+                }}
+              />
             ) : entrega.estado === "incierta" ? (
               <Confirmar etiqueta="Reintentar con la misma operación" advertencia={<>Mismo operation_id: si Rateware ya la guardó, devuelve el recibo original. {ADVERTENCIA_REAL(s, d)}</>} onConfirmar={() => confirmar(entrega.operationId!)} />
             ) : entrega.estado === "preparada" ? (
@@ -1429,7 +1559,7 @@ function PanelEntrega({ d, ctx, accion, entrega, setEntrega, recibo, setRecibo }
             ) : null}
           </div>
         )}
-        {!decidido && <p className="tenue">Requiere adjudicación de todas las rutas.</p>}
+        {!decidido && <p className="tenue">Primero adjudica todas las rutas.</p>}
       </div>
       <aside className="tarjeta lado">
         <Candados
@@ -1462,7 +1592,7 @@ function OfrecerRespaldo({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion
   if (!candidatas.length) return null;
   return (
     <div className="aviso-caja">
-      <p><b>¿Adjudicar respaldo?</b> Después de entregar ya no se puede agregar. Es opcional: si no lo quieres, prepara la entrega.</p>
+      <p><b>¿Adjudicar respaldo?</b> Es opcional, pero después de entregar ya no se puede agregar. Si no lo quieres, entrega sin respaldo.</p>
       {candidatas.map(({ ruta, p }) => (
         <div key={ruta.id}>
           <p>
@@ -1488,11 +1618,14 @@ function PanelAviso({ d, ctx, accion }: Props) {
       {!r.entregaConfirmada && <p className="tenue">Requiere el recibo de Rateware (I8). El carrier no se entera de algo que Rateware no tiene.</p>}
       {r.entregaConfirmada && faltan.length > 0 && ctx.rol === "admin" && (
         <Confirmar
-          etiqueta="Generar borradores en la Cola de Rateware"
-          clase="btn-secundario"
+          etiqueta="Preparar los avisos"
+          clase="btn-primario"
           advertencia={<>Rateware prepara un borrador por carrier que participó (adjudicado o no). No envía nada. {ADVERTENCIA_REAL(s, d)}</>}
-          onConfirmar={() => accion(() => s.api.generarAvisosAdjudicacion(d.evento.id), "Borradores generados en la Cola de Rateware.")}
+          onConfirmar={() => accion(() => s.api.generarAvisosAdjudicacion(d.evento.id), "Avisos preparados. Revisa cada texto y apruébalo aquí.")}
         />
+      )}
+      {d.avisos.some((a) => a.tipo === "adjudicacion") && (
+        <p className="nota">El texto lo arma Rateware (en Rateware real sale en inglés) y se edita en su Cola; al volver, Fr8Bid muestra la versión nueva. Se envían desde sales@heymarksman.com por Gmail, que llega hasta «aceptado»; un rebote se muestra aquí.</p>
       )}
       {prims.map((p) => {
         const a = avisoDe(d, p.id, "adjudicacion");
@@ -1501,7 +1634,6 @@ function PanelAviso({ d, ctx, accion }: Props) {
       {otros.length > 0 && (
         <>
           <h3>No adjudicados y respaldo</h3>
-          <p className="tenue">Rateware preparó un aviso para cada carrier que participó. Se aprueban aquí igual que el del adjudicado, con su texto exacto.</p>
           {otros.map((a) => (
             <TarjetaAviso
               key={a.id}
@@ -1522,30 +1654,26 @@ function PanelAviso({ d, ctx, accion }: Props) {
 function TarjetaAviso({ d, a, titulo, ctx, accion }: { d: Detalle; a: Aviso; titulo: string; ctx: Contexto; accion: Props["accion"] }) {
   const s = useSesion();
   const candados = candadosAviso(d, a, ctx);
+  const enviable = ctx.rol === "admin" && (a.estado === "borrador" || a.estado === "fallido" || a.estado === "en_cola");
   return (
-    <div className="dos-columnas">
-      <div className="aviso-caja">
-        <div className="fila">
-          <b>{titulo}</b>
-          <span className="pill">{a.estado}</span>
-        </div>
-        <p className="tenue">Para: {a.destinatario} · Canal: Gmail · sales@heymarksman.com · versión {fecha(a.version)}</p>
-        <p><b>{a.asunto}</b></p>
-        <p className="texto-aviso">{a.cuerpo}</p>
-        {a.reciboProveedor && <p className="tenue">Gmail aceptó el mensaje · id {a.reciboProveedor}</p>}
-        {ctx.rol === "admin" && (a.estado === "borrador" || a.estado === "fallido" || a.estado === "en_cola") && (
-          <Confirmar
-            etiqueta="Aprobar este texto exacto y enviar por Gmail"
-            deshabilitado={!candados.every((c) => c.ok)}
-            advertencia={<>Se envía a {a.destinatario} exactamente esta versión. Si alguien la cambia en la Cola antes, Rateware la rechaza y la vuelves a revisar. {ADVERTENCIA_REAL(s, d)}</>}
-            onConfirmar={() => accion(() => s.api.enviarAvisos(d.evento.id, [a]), "Aviso aceptado por Gmail.")}
-          />
-        )}
-        <p className="nota">El texto lo arma Rateware (en Rateware real sale en inglés) y se edita en su Cola; al volver, Fr8Bid muestra la versión nueva. Gmail llega hasta «aceptado»; un rebote se muestra aquí.</p>
+    <div className="aviso-caja">
+      <div className="fila">
+        <b>{titulo}</b>
+        <span className="pill">{ESTADO_INVITACION[a.estado] ?? a.estado}</span>
       </div>
-      <aside className="lado">
-        <Candados lista={candados} />
-      </aside>
+      <p className="tenue">Para: {a.destinatario} · versión {fecha(a.version)}</p>
+      <p><b>{a.asunto}</b></p>
+      <p className="texto-aviso">{a.cuerpo}</p>
+      {a.reciboProveedor && <p className="tenue">Gmail aceptó el mensaje · id {a.reciboProveedor}</p>}
+      {enviable && <Candados lista={candados} />}
+      {enviable && (
+        <Confirmar
+          etiqueta="Aprobar este texto y enviar"
+          deshabilitado={!candados.every((c) => c.ok)}
+          advertencia={<>Se envía por Gmail a {a.destinatario} exactamente esta versión. Si alguien la cambia en la Cola antes, Rateware la rechaza y la vuelves a revisar. {ADVERTENCIA_REAL(s, d)}</>}
+          onConfirmar={() => accion(() => s.api.enviarAvisos(d.evento.id, [a]), "Aviso aceptado por Gmail.")}
+        />
+      )}
     </div>
   );
 }
@@ -1554,21 +1682,25 @@ function PanelLoads({ d }: { d: Detalle }) {
   const prims = d.rutas.map(primario).filter(Boolean) as Participacion[];
   return (
     <div className="tarjeta">
-      <h2>Visible en Loads (inferido)</h2>
-      <p className="aviso-caja">Fr8Bid no consulta a Loads: marca este paso con el recibo de Rateware. Confírmalo abriendo Loads hasta que Loads publique el contrato C4 (loads.awarded-opportunity.v1).</p>
+      <h2>Visible en Loads</h2>
+      <p className="tenue">Fr8Bid no consulta a Loads: este paso se deduce del recibo de Rateware. Confírmalo abriendo Loads.</p>
       {prims.map((p) => {
         const proy = proyeccionLoads(d, p.id);
         return (
           <div key={p.id}>
             <p>
-              <b>{p.carrier}</b> {proy ? "debería ver «adjudicado» en su libro de Loads (Rateware ya tiene el cierre)." : "todavía no lo ve: falta el recibo."}
+              <b>{p.carrier}</b> {proy ? "debería verse «adjudicado» en Loads." : "todavía no: falta el recibo de Rateware."}
             </p>
-            {proy && <pre className="mono codigo">{JSON.stringify(proy, null, 2)}</pre>}
+            {proy && (
+              <details>
+                <summary className="tenue">Datos que Loads puede mostrar</summary>
+                <pre className="mono codigo">{JSON.stringify(proy, null, 2)}</pre>
+              </details>
+            )}
           </div>
         );
       })}
       {!prims.length && <p className="tenue">Sin primario todavía.</p>}
-      <p className="nota">Requiere L1 en Loads: mostrar «adjudicado» solo con rateware_closeout_at. Hoy Loads lee las mismas filas de Rateware; esta proyección es lo que es seguro mostrar.</p>
     </div>
   );
 }
