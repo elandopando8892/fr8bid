@@ -1,0 +1,625 @@
+diff --git a/supabase/functions/_shared/rfx-lane-conditions.mjs b/supabase/functions/_shared/rfx-lane-conditions.mjs
+new file mode 100644
+index 0000000..7da3a40
+--- /dev/null
++++ b/supabase/functions/_shared/rfx-lane-conditions.mjs
+@@ -0,0 +1,230 @@
++// Route conditions of an RFx (decided 2026-10-22): concrete, verifiable
++// requirements the team picks per lane, each required or preferred, that the
++// carrier answers with a datum. They replace the six generic rubrics for new
++// work; the six keys stay valid so existing events keep their answers.
++//
++// Shared by rateware-api (the team sets them) and rfx-bid-api (the carrier
++// answers them). Pure module: no database, no Deno globals.
++
++export const RFX_CONDITION_CATALOG_VERSION = 1;
++
++/** Answers stay the ones rfx_segment_confirmations already allows. */
++export const RFX_CONDITION_ANSWERS = new Set(["pending", "agree", "exception", "disagree", "not_applicable"]);
++
++/** Six legacy rubric keys; still accepted for events created before the catalog. */
++export const LEGACY_RUBRIC_KEYS = new Set([
++  "logistics_model", "operation_criteria", "business_rules",
++  "service_specifications", "carrier_requirements", "other_notes"
++]);
++
++/** A carrier answer to a lane condition travels as rubric_key "cond.<key>" under this segment key. */
++export const CONDITION_SEGMENT_KEY = "lane";
++export const CONDITION_RUBRIC_PREFIX = "cond.";
++
++// kind: what the carrier gives back. comparator: how a target is read
++// ("min" = at least, "max" = at most, "eq" = exactly). scope "cross_border"
++// only makes sense on MX <-> US lanes; the team may still pick it elsewhere.
++export const RFX_CONDITION_CATALOG = Object.freeze([
++  // 1. Equipo
++  { key: "trailer_spec", group: "equipment", kind: "text", es: "Tipo y medida de caja", en: "Trailer type and size" },
++  { key: "reefer_temp_range", group: "equipment", kind: "text", es: "Rango de temperatura (refrigerado)", en: "Reefer temperature range" },
++  { key: "equipment_max_age_years", group: "equipment", kind: "number", unit: "years", comparator: "max", es: "Antigüedad máxima de tractor y caja", en: "Max tractor and trailer age" },
++  { key: "special_equipment", group: "equipment", kind: "text", es: "Equipo especial (rampas, bandas, sensores)", en: "Special equipment (ramps, straps, sensors)" },
++  // 2. Capacidad y tiempos
++  { key: "weekly_capacity_loads", group: "capacity", kind: "number", unit: "loads_per_week", comparator: "min", es: "Cargas por semana para esta ruta", en: "Loads per week on this lane" },
++  { key: "assignment_lead_hours", group: "capacity", kind: "number", unit: "hours", comparator: "max", es: "Anticipación para asignar unidad", en: "Lead time to assign a unit" },
++  { key: "appointment_windows", group: "capacity", kind: "text", es: "Recolección y entrega con cita", en: "Pickup and delivery appointments" },
++  { key: "transit_days", group: "capacity", kind: "number", unit: "days", comparator: "max", es: "Tránsito puerta a puerta", en: "Door-to-door transit" },
++  // 3. Cruce fronterizo
++  { key: "crossing_model", group: "cross_border", scope: "cross_border", kind: "choice", choices: ["direct", "transfer"], es: "Modelo de cruce (directo o transfer)", en: "Crossing model (direct or transfer)" },
++  { key: "crossing_port", group: "cross_border", scope: "cross_border", kind: "text", es: "Puerto de cruce", en: "Crossing port" },
++  { key: "ctpat_oea", group: "cross_border", scope: "cross_border", kind: "boolean", es: "Certificación C-TPAT u OEA", en: "C-TPAT or OEA certified" },
++  { key: "fast_drivers", group: "cross_border", scope: "cross_border", kind: "boolean", es: "Operadores con FAST", en: "FAST card drivers" },
++  { key: "scac_caat", group: "cross_border", scope: "cross_border", kind: "text", es: "SCAC y CAAT", en: "SCAC and CAAT" },
++  { key: "in_bond", group: "cross_border", scope: "cross_border", kind: "boolean", es: "Capacidad in-bond", en: "In-bond capable" },
++  // 4. Seguro y cumplimiento
++  { key: "cargo_insurance_usd", group: "compliance", kind: "money", unit: "USD", comparator: "min", es: "Póliza de carga", en: "Cargo insurance" },
++  { key: "liability_insurance_usd", group: "compliance", kind: "money", unit: "USD", comparator: "min", es: "Responsabilidad civil", en: "Liability insurance" },
++  { key: "us_authority", group: "compliance", kind: "text", es: "Autoridad MC/DOT (US)", en: "MC/DOT authority (US)" },
++  { key: "mx_sct_permit", group: "compliance", kind: "text", es: "Permiso SCT (MX)", en: "SCT permit (MX)" },
++  { key: "carta_porte_cfdi", group: "compliance", kind: "boolean", es: "Carta Porte con complemento CFDI", en: "Carta Porte CFDI complement" },
++  { key: "hazmat", group: "compliance", kind: "boolean", es: "Materiales peligrosos", en: "Hazmat" },
++  // 5. Tarifa y accesoriales
++  { key: "allin_inclusions", group: "pricing", kind: "text", es: "Qué incluye el all-in (combustible, cruce, transfer, casetas)", en: "All-in inclusions (fuel, crossing, transfer, tolls)" },
++  { key: "detention_free_hours", group: "pricing", kind: "number", unit: "hours", comparator: "min", es: "Tiempo libre antes de detention", en: "Free time before detention" },
++  { key: "detention_rate_usd_hour", group: "pricing", kind: "money", unit: "USD_per_hour", comparator: "max", es: "Detention por hora", en: "Detention per hour" },
++  { key: "accessorials", group: "pricing", kind: "text", es: "Layover, TONU y parada adicional", en: "Layover, TONU and extra stop" },
++  // 6. Servicio y seguridad
++  { key: "tracking_link", group: "service", kind: "boolean", es: "Rastreo GPS/ELD con liga para el shipper", en: "GPS/ELD tracking link for the shipper" },
++  { key: "pod_hours", group: "service", kind: "number", unit: "hours", comparator: "max", es: "Prueba de entrega (POD)", en: "Proof of delivery (POD)" },
++  { key: "mx_security", group: "service", kind: "text", es: "Seguridad en México (custodia, candado, GPS en caja)", en: "Mexico security (escort, lock, trailer GPS)" },
++  // 7. Pago
++  { key: "payment_terms_days", group: "payment", kind: "number", unit: "days", comparator: "min", es: "Días de crédito aceptados", en: "Accepted payment terms" },
++  { key: "factoring", group: "payment", kind: "boolean", es: "Usa factoraje", en: "Uses factoring" }
++].map((entry) => Object.freeze(entry)));
++
++/**
++ * Whether the event no longer takes bids: a closing status, or its deadline
++ * passed (end of due_date at the given UTC offset, Mexico City "-06:00" like
++ * rfx-bid-api's dueState). Fr8Bid closes bids by moving due_date while the
++ * status stays "open", so the date alone must also freeze route conditions.
++ */
++export function biddingClosed(event, now = new Date(), utcOffset = "-06:00") {
++  const status = String(event?.status ?? "").trim().toLowerCase();
++  if (["closed", "awarded", "archived"].includes(status)) return true;
++  const due = String(event?.due_date ?? "").trim().slice(0, 10);
++  if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) return false;
++  const dueAt = new Date(`${due}T23:59:59${utcOffset}`);
++  return !Number.isNaN(dueAt.getTime()) && now.getTime() > dueAt.getTime();
++}
++
++const BY_KEY = new Map(RFX_CONDITION_CATALOG.map((entry) => [entry.key, entry]));
++const IMPORTANCE = new Set(["required", "preferred"]);
++const MAX_CONDITIONS_PER_LANE = 30;
++
++export function catalogEntry(key) {
++  return BY_KEY.get(String(key ?? "").trim()) || null;
++}
++
++export function conditionRubricKey(key) {
++  return `${CONDITION_RUBRIC_PREFIX}${key}`;
++}
++
++/** "cond.cargo_insurance_usd" -> "cargo_insurance_usd"; anything else -> null. */
++export function conditionKeyFromRubric(rubricKey) {
++  const text = String(rubricKey ?? "").trim();
++  return text.startsWith(CONDITION_RUBRIC_PREFIX) ? text.slice(CONDITION_RUBRIC_PREFIX.length) || null : null;
++}
++
++const text = (value, max) => {
++  if (value === null || value === undefined) return null;
++  const clean = String(value).trim();
++  return clean ? clean.slice(0, max) : null;
++};
++
++/**
++ * A datum for one condition, checked against its kind. Returns { value } or
++ * { error }. An empty datum is null (the carrier may answer without one).
++ */
++export function cleanConditionValue(entry, raw) {
++  if (raw === null || raw === undefined || raw === "") return { value: null };
++  switch (entry.kind) {
++    case "boolean": {
++      if (typeof raw === "boolean") return { value: raw };
++      const word = String(raw).trim().toLowerCase();
++      if (["true", "yes", "si", "sí", "1"].includes(word)) return { value: true };
++      if (["false", "no", "0"].includes(word)) return { value: false };
++      return { error: `${entry.key} expects yes or no.` };
++    }
++    case "number":
++    case "money": {
++      const number = typeof raw === "number" ? raw : Number(String(raw).replace(/[,\s$]/g, ""));
++      if (!Number.isFinite(number) || number < 0) return { error: `${entry.key} expects a non-negative number.` };
++      return { value: number };
++    }
++    case "choice": {
++      const word = String(raw).trim().toLowerCase();
++      return entry.choices.includes(word) ? { value: word } : { error: `${entry.key} expects one of ${entry.choices.join(", ")}.` };
++    }
++    default: {
++      const clean = text(raw, 400);
++      return { value: clean };
++    }
++  }
++}
++
++/** Whether a datum meets the team's target; null when there is nothing to compare. */
++export function meetsTarget(entry, target, value) {
++  if (target === null || target === undefined || value === null || value === undefined) return null;
++  if (entry.kind === "number" || entry.kind === "money") {
++    if (entry.comparator === "min") return value >= target;
++    if (entry.comparator === "max") return value <= target;
++    return value === target;
++  }
++  if (entry.kind === "boolean" || entry.kind === "choice") return value === target;
++  return null;
++}
++
++/**
++ * The team's set for one lane, as rows for rfx_lane_conditions (without ids).
++ * Throws on an unknown key, a bad importance or a target of the wrong kind,
++ * so a typo never reaches the carrier.
++ */
++export function normalizeLaneConditions(input) {
++  const list = Array.isArray(input) ? input : [];
++  if (list.length > MAX_CONDITIONS_PER_LANE) throw new Error(`At most ${MAX_CONDITIONS_PER_LANE} conditions per lane.`);
++  const seen = new Set();
++  return list.map((item, index) => {
++    const record = item && typeof item === "object" ? item : {};
++    const entry = catalogEntry(record.condition_key ?? record.key);
++    if (!entry) throw new Error(`Unknown route condition: ${String(record.condition_key ?? record.key ?? "")}.`);
++    if (seen.has(entry.key)) throw new Error(`Route condition ${entry.key} is listed twice.`);
++    seen.add(entry.key);
++    const importance = String(record.importance ?? "required").trim().toLowerCase();
++    if (!IMPORTANCE.has(importance)) throw new Error(`Importance must be required or preferred (${entry.key}).`);
++    const target = cleanConditionValue(entry, record.target);
++    if (target.error) throw new Error(target.error);
++    return {
++      condition_key: entry.key,
++      importance,
++      target: target.value,
++      note: text(record.note, 600),
++      sort_order: Number.isInteger(record.sort_order) ? record.sort_order : index + 1
++    };
++  });
++}
++
++/** Same requirement means same revision; any change asks carriers to confirm again. */
++export function sameRequirement(row, next) {
++  return row.importance === next.importance
++    && JSON.stringify(row.target ?? null) === JSON.stringify(next.target ?? null)
++    && (row.note ?? null) === (next.note ?? null);
++}
++
++/** What the carrier sees of a lane condition: the catalog wording plus the team's requirement. */
++export function publicLaneCondition(row) {
++  const entry = catalogEntry(row.condition_key);
++  if (!entry) return null;
++  return {
++    condition_key: entry.key,
++    rubric_key: conditionRubricKey(entry.key),
++    segment_key: CONDITION_SEGMENT_KEY,
++    group: entry.group,
++    kind: entry.kind,
++    unit: entry.unit ?? null,
++    comparator: entry.comparator ?? null,
++    choices: entry.choices ?? null,
++    label_es: entry.es,
++    label_en: entry.en,
++    importance: row.importance,
++    target: row.target ?? null,
++    note: row.note ?? null,
++    revision: row.revision ?? 1,
++    sort_order: row.sort_order ?? 0
++  };
++}
++
++/**
++ * Checks one carrier answer to a lane condition. Returns the cleaned value or
++ * throws. A numeric condition needs its number; "agree" with a datum that
++ * misses the target is a contradiction and is refused: the carrier answers
++ * exception (with a comment) or disagree.
++ */
++export function checkConditionAnswer(condition, answer, rawValue, comment) {
++  const entry = catalogEntry(condition.condition_key);
++  if (!entry) throw new Error("Invalid segment rubric.");
++  if (!RFX_CONDITION_ANSWERS.has(answer)) throw new Error("Invalid segment confirmation answer.");
++  const cleaned = cleanConditionValue(entry, rawValue);
++  if (cleaned.error) throw new Error(cleaned.error);
++  // A number is the point of a numeric condition: "agree" or "exception" without one commits to nothing.
++  if ((answer === "agree" || answer === "exception") && (entry.kind === "number" || entry.kind === "money") && cleaned.value === null) {
++    throw new Error(`${entry.key}: give the value.`);
++  }
++  if (answer === "exception" && !text(comment, 1200)) {
++    throw new Error(`Explain the exception for ${entry.key}.`);
++  }
++  if (answer === "agree" && meetsTarget(entry, condition.target, cleaned.value) === false) {
++    throw new Error(`${entry.key}: the value does not meet the requirement; answer exception or disagree.`);
++  }
++  return cleaned.value;
++}
+diff --git a/supabase/functions/_shared/rfx-lane-conditions.test.mjs b/supabase/functions/_shared/rfx-lane-conditions.test.mjs
+new file mode 100644
+index 0000000..fc38a87
+--- /dev/null
++++ b/supabase/functions/_shared/rfx-lane-conditions.test.mjs
+@@ -0,0 +1,88 @@
++import assert from "node:assert/strict";
++import test from "node:test";
++import {
++  biddingClosed,
++  checkConditionAnswer,
++  conditionKeyFromRubric,
++  conditionRubricKey,
++  LEGACY_RUBRIC_KEYS,
++  normalizeLaneConditions,
++  publicLaneCondition,
++  RFX_CONDITION_CATALOG,
++  sameRequirement
++} from "./rfx-lane-conditions.mjs";
++
++test("catalog keys are unique and never collide with the legacy rubrics", () => {
++  const keys = RFX_CONDITION_CATALOG.map((entry) => entry.key);
++  assert.equal(new Set(keys).size, keys.length);
++  for (const key of keys) {
++    assert.match(key, /^[a-z0-9_]{2,60}$/);
++    assert.equal(LEGACY_RUBRIC_KEYS.has(key), false);
++  }
++});
++
++test("a condition travels as cond.<key> and back", () => {
++  assert.equal(conditionRubricKey("cargo_insurance_usd"), "cond.cargo_insurance_usd");
++  assert.equal(conditionKeyFromRubric("cond.cargo_insurance_usd"), "cargo_insurance_usd");
++  assert.equal(conditionKeyFromRubric("business_rules"), null);
++  assert.equal(conditionKeyFromRubric("cond."), null);
++});
++
++test("the team's set is checked before it reaches the carrier", () => {
++  const rows = normalizeLaneConditions([
++    { condition_key: "cargo_insurance_usd", importance: "required", target: "100,000" },
++    { key: "ctpat_oea", importance: "preferred", target: "sí" },
++    { condition_key: "crossing_model", target: "Direct" }
++  ]);
++  assert.deepEqual(rows.map((row) => [row.condition_key, row.importance, row.target]), [
++    ["cargo_insurance_usd", "required", 100000],
++    ["ctpat_oea", "preferred", true],
++    ["crossing_model", "required", "direct"]
++  ]);
++  assert.throws(() => normalizeLaneConditions([{ condition_key: "made_up" }]), /Unknown route condition/);
++  assert.throws(() => normalizeLaneConditions([{ condition_key: "hazmat" }, { condition_key: "hazmat" }]), /twice/);
++  assert.throws(() => normalizeLaneConditions([{ condition_key: "hazmat", importance: "nice" }]), /required or preferred/);
++  assert.throws(() => normalizeLaneConditions([{ condition_key: "transit_days", target: "two" }]), /number/);
++  assert.throws(() => normalizeLaneConditions([{ condition_key: "crossing_model", target: "air" }]), /one of/);
++});
++
++test("a changed requirement is a new revision; the same one is not", () => {
++  const before = { importance: "required", target: 100000, note: null };
++  assert.equal(sameRequirement(before, { importance: "required", target: 100000, note: null }), true);
++  assert.equal(sameRequirement(before, { importance: "preferred", target: 100000, note: null }), false);
++  assert.equal(sameRequirement(before, { importance: "required", target: 250000, note: null }), false);
++});
++
++test("carrier answers carry a datum of the right kind and cannot contradict the target", () => {
++  const insurance = { condition_key: "cargo_insurance_usd", importance: "required", target: 100000, revision: 2 };
++  assert.equal(checkConditionAnswer(insurance, "agree", "150000", ""), 150000);
++  assert.throws(() => checkConditionAnswer(insurance, "agree", null, ""), /give the value/);
++  assert.equal(checkConditionAnswer({ condition_key: "ctpat_oea", target: true }, "agree", null, ""), null);
++  assert.equal(checkConditionAnswer(insurance, "not_applicable", null, ""), null);
++  assert.throws(() => checkConditionAnswer(insurance, "agree", 50000, ""), /does not meet/);
++  assert.equal(checkConditionAnswer(insurance, "exception", 50000, "Raise to 100k in 30 days"), 50000);
++  assert.throws(() => checkConditionAnswer(insurance, "exception", 50000, "  "), /Explain the exception/);
++  assert.equal(checkConditionAnswer(insurance, "disagree", 50000, ""), 50000);
++  assert.throws(() => checkConditionAnswer(insurance, "agree", "lots", ""), /number/);
++  const transit = { condition_key: "transit_days", target: 2 };
++  assert.throws(() => checkConditionAnswer(transit, "agree", 3, ""), /does not meet/);
++  assert.equal(checkConditionAnswer(transit, "agree", 1, ""), 1);
++});
++
++test("the carrier sees the catalog wording plus the team's requirement", () => {
++  const shown = publicLaneCondition({ condition_key: "detention_rate_usd_hour", importance: "preferred", target: 50, note: null, revision: 3 });
++  assert.equal(shown.rubric_key, "cond.detention_rate_usd_hour");
++  assert.equal(shown.segment_key, "lane");
++  assert.equal(shown.comparator, "max");
++  assert.equal(shown.revision, 3);
++  assert.equal(publicLaneCondition({ condition_key: "gone" }), null);
++});
++
++test("bidding closes by status or by a passed deadline in Mexico City time", () => {
++  const at = new Date("2026-10-22T05:00:00Z"); // 21-oct 23:00 in Mexico City
++  assert.equal(biddingClosed({ status: "awarded", due_date: "2026-12-01" }, at), true);
++  assert.equal(biddingClosed({ status: "open", due_date: "2026-10-21" }, at), false);
++  assert.equal(biddingClosed({ status: "open", due_date: "2026-10-20" }, at), true);
++  assert.equal(biddingClosed({ status: "open", due_date: null }, at), false);
++  assert.equal(biddingClosed({ status: "draft", due_date: "2026-10-21" }, new Date("2026-10-22T06:00:00Z")), true);
++});
+diff --git a/supabase/functions/_shared/team-roles.ts b/supabase/functions/_shared/team-roles.ts
+index 512a5d0..3ae8550 100644
+--- a/supabase/functions/_shared/team-roles.ts
++++ b/supabase/functions/_shared/team-roles.ts
+@@ -47,6 +47,8 @@ const READS: Record<string, ReadonlySet<string>> = {
+     "list_rateware_versions", "list_rfx_detail", "list_rfx_event_context", "list_rfx_events",
+     // The carrier contact reviews; the contract declares them in an extension file (added 2026-09-29).
+     "list_rfx_invitation_wave_reviews", "list_rfx_segment_confirmations",
++    // Route conditions per lane (added 2026-10-22).
++    "list_rfx_condition_catalog", "list_rfx_lane_conditions",
+     "list_rfx_process_projects", "list_rfx_response_vendor_ids", "list_saas_audit_log",
+     "list_shipper_duplicates", "list_shippers", "list_staging", "list_staging_filter_values",
+     "list_staging_options", "list_upload_staged_rows", "list_uploads", "list_vendor_improvement_cases",
+diff --git a/supabase/functions/rateware-api/index.ts b/supabase/functions/rateware-api/index.ts
+index 6327e9a..c658bb6 100644
+--- a/supabase/functions/rateware-api/index.ts
++++ b/supabase/functions/rateware-api/index.ts
+@@ -25,6 +25,14 @@ import { forwardSourceDownload, forwardSourceRemoval } from "../_shared/source-d
+ import type { WorkspaceUser } from "../_shared/workspace.ts";
+ import { requireEligibleRfxCloseout } from "./rfx-closeout-guards.ts";
+ import { rfxDemandOperation, rfxDemandService } from "./rfx-demand-values.ts";
++import {
++  biddingClosed,
++  normalizeLaneConditions,
++  publicLaneCondition,
++  RFX_CONDITION_CATALOG,
++  RFX_CONDITION_CATALOG_VERSION,
++  sameRequirement
++} from "../_shared/rfx-lane-conditions.mjs";
+ import {
+   CARRIER_TEMPLATE_IMPORT_MAX_ROWS,
+   carrierTemplateNameKey,
+@@ -10584,7 +10592,7 @@ async function fetchRfxSegmentConfirmations(supabase: RatewareSupabaseClient, ev
+   for (let offset = 0; ; offset += pageSize) {
+     const result = await supabase
+       .from("rfx_segment_confirmations")
+-      .select("rfx_lane_vendor_id,vendor_id,segment_key,rubric_key,answer,comment,updated_at")
++      .select("rfx_lane_vendor_id,vendor_id,segment_key,rubric_key,answer,comment,value,condition_revision,updated_at")
+       .eq("rfx_event_id", eventId)
+       .order("updated_at", { ascending: false })
+       .order("id", { ascending: true })
+@@ -28824,6 +28832,89 @@ export function createRatewareApiHandler(
+       return jsonResponse({ no_award: declare, updated: rows.length, unchanged: lanes.length - changing.length, rows });
+     }
+ 
++    if (body.action === "list_rfx_condition_catalog") {
++      return jsonResponse({ version: RFX_CONDITION_CATALOG_VERSION, conditions: RFX_CONDITION_CATALOG });
++    }
++
++    if (body.action === "list_rfx_lane_conditions") {
++      const event = await requireOwnedRfxEvent(supabase, user, body.event_id);
++      const result = await supabase
++        .from("rfx_lane_conditions")
++        .select("rfx_lane_id,condition_key,importance,target,note,sort_order,revision,updated_at")
++        .eq("rfx_event_id", event.id)
++        .order("sort_order", { ascending: true });
++      if (result.error) throw result.error;
++      const rows = (result.data || []).map((row) => {
++        const shown = publicLaneCondition(row);
++        return shown ? { rfx_lane_id: row.rfx_lane_id, updated_at: row.updated_at, ...shown } : null;
++      }).filter(Boolean);
++      return jsonResponse({ version: RFX_CONDITION_CATALOG_VERSION, rows });
++    }
++
++    if (body.action === "save_rfx_lane_conditions") {
++      // Replaces one lane's route conditions. A condition whose importance,
++      // target or note changes gets a new revision, so the carriers' earlier
++      // answers read as stale instead of being rewritten (decided 2026-10-22).
++      const event = await requireOwnedRfxEvent(supabase, user, body.event_id);
++      // Closed by status or by a passed deadline (Fr8Bid closes bids by moving due_date).
++      if (biddingClosed(event, new Date(), (Deno.env.get("BID_DEADLINE_UTC_OFFSET") || "-06:00").trim())) {
++        return jsonResponse({ error: "Bidding on this event is closed. Route conditions cannot change." }, 409);
++      }
++      const laneId = cleanText(body.lane_id);
++      if (!laneId) return jsonResponse({ error: "RFx lane id is required." }, 400);
++      const lane = await supabase.from("rfx_lanes").select("id").eq("id", laneId).eq("rfx_event_id", event.id).maybeSingle();
++      if (lane.error) throw lane.error;
++      if (!lane.data) return jsonResponse({ error: "RFx lane not found in this event." }, 404);
++      let next: ReturnType<typeof normalizeLaneConditions>;
++      try {
++        next = normalizeLaneConditions(body.conditions);
++      } catch (error) {
++        return jsonResponse({ error: error instanceof Error ? error.message : "Invalid route conditions." }, 400);
++      }
++      const current = await supabase.from("rfx_lane_conditions").select("*").eq("rfx_lane_id", laneId);
++      if (current.error) throw current.error;
++      const byKey = new Map((current.data || []).map((row) => [String(row.condition_key), row]));
++      const now = new Date().toISOString();
++      const upserts = next.map((row) => {
++        const previous = byKey.get(row.condition_key);
++        const revision = !previous ? 1 : sameRequirement(previous, row) ? previous.revision : previous.revision + 1;
++        return {
++          ...row,
++          owner_user_id: cleanText(event.owner_user_id) || null,
++          owner_email: cleanText(event.owner_email) || null,
++          rfx_event_id: event.id,
++          rfx_lane_id: laneId,
++          revision,
++          updated_at: now
++        };
++      });
++      const removed = [...byKey.keys()].filter((key) => !next.some((row) => row.condition_key === key));
++      if (removed.length) {
++        const deleted = await supabase.from("rfx_lane_conditions").delete().eq("rfx_lane_id", laneId).in("condition_key", removed);
++        if (deleted.error) throw deleted.error;
++      }
++      const saved = upserts.length
++        ? await supabase.from("rfx_lane_conditions").upsert(upserts, { onConflict: "rfx_lane_id,condition_key" }).select("*")
++        : { data: [], error: null };
++      if (saved.error) throw saved.error;
++      await writeAuditLog(
++        supabase,
++        user,
++        "bid_room.lane.conditions",
++        "rfx_lanes",
++        laneId,
++        `Set ${upserts.length} route condition(s)`,
++        {
++          rfx_event_id: event.id,
++          keys: upserts.map((row) => row.condition_key),
++          removed,
++          revised: upserts.filter((row) => byKey.has(row.condition_key) && byKey.get(row.condition_key)?.revision !== row.revision).map((row) => row.condition_key)
++        }
++      );
++      const rows = (saved.data || []).map((row) => ({ rfx_lane_id: row.rfx_lane_id, ...publicLaneCondition(row) }));
++      return jsonResponse({ version: RFX_CONDITION_CATALOG_VERSION, rows, removed });
++    }
++
+     if (body.action === "list_rfx_segment_confirmations") {
+       // The event owns the scope; never trust owner_email supplied by the caller.
+       const event = await requireOwnedRfxEvent(supabase, user, body.event_id);
+diff --git a/supabase/functions/rfx-bid-api/index.ts b/supabase/functions/rfx-bid-api/index.ts
+index 57f9536..036601f 100644
+--- a/supabase/functions/rfx-bid-api/index.ts
++++ b/supabase/functions/rfx-bid-api/index.ts
+@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+ import { corsHeaders, jsonResponse as baseJsonResponse } from "../_shared/kinde.ts";
+ import { bidRoomGoogleThreadKey, googleChatAccessToken, syncBidRoomMessageToGoogleChat } from "../_shared/bid-room-google-chat.ts";
+ import { belongsToThread, carrierChatMessage, carrierChatThread } from "../_shared/carrier-chat-view.mjs";
++import { biddingClosed, checkConditionAnswer, conditionKeyFromRubric, LEGACY_RUBRIC_KEYS, publicLaneCondition } from "../_shared/rfx-lane-conditions.mjs";
+ 
+ const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("RATEWARE_SUPABASE_SERVICE_ROLE_KEY");
+@@ -1075,7 +1076,9 @@ async function currentInvitationContext(supabase: RfxBidSupabaseClient, token: s
+ }
+ 
+ const SEGMENT_CONFIRMATION_ANSWERS = new Set(["pending", "agree", "exception", "disagree", "not_applicable"]);
+-const SEGMENT_CONFIRMATION_RUBRICS = new Set(["logistics_model", "operation_criteria", "business_rules", "service_specifications", "carrier_requirements", "other_notes"]);
++// The six legacy rubrics stay valid; a route condition arrives as "cond.<key>"
++// and is checked against the lane's own conditions when saved (2026-10-22).
++const SEGMENT_CONFIRMATION_RUBRICS = LEGACY_RUBRIC_KEYS;
+ 
+ function normalizeSegmentConfirmationRows(input: unknown) {
+   const rows = Array.isArray(input) ? input : [];
+@@ -1085,11 +1088,14 @@ function normalizeSegmentConfirmationRows(input: unknown) {
+     const rubricKey = cleanText(record.rubric_key);
+     const answer = cleanText(record.answer)?.toLowerCase() || "pending";
+     if (!segmentKey) throw new Error("Segment key is required.");
+-    if (!rubricKey || !SEGMENT_CONFIRMATION_RUBRICS.has(rubricKey)) throw new Error("Invalid segment rubric.");
++    const conditionKey = conditionKeyFromRubric(rubricKey);
++    if (!rubricKey || (!conditionKey && !SEGMENT_CONFIRMATION_RUBRICS.has(rubricKey))) throw new Error("Invalid segment rubric.");
+     if (!SEGMENT_CONFIRMATION_ANSWERS.has(answer)) throw new Error("Invalid segment confirmation answer.");
+     return {
+       segment_key: segmentKey,
+       rubric_key: rubricKey,
++      condition_key: conditionKey,
++      raw_value: record.value,
+       answer,
+       // A blank textarea can arrive as null from a carrier portal submission.
+       // Keep the checklist save path valid when no exception note is needed.
+@@ -1098,6 +1104,49 @@ function normalizeSegmentConfirmationRows(input: unknown) {
+   });
+ }
+ 
++async function listLaneConditions(supabase: RfxBidSupabaseClient, laneId: unknown) {
++  const id = cleanText(laneId);
++  if (!id) return [];
++  const result = await supabase
++    .from("rfx_lane_conditions")
++    .select("condition_key,importance,target,note,sort_order,revision")
++    .eq("rfx_lane_id", id)
++    .order("sort_order", { ascending: true });
++  if (result.error) throw result.error;
++  return result.data || [];
++}
++
++/**
++ * A route condition answer must name a condition the team set on this
++ * invitation's own lane, carry a datum of the right kind, explain an
++ * exception, and not claim "agree" with a datum that misses the target. Once
++ * the event stops taking bids (status or passed deadline) the answers are
++ * frozen like the bid itself.
++ */
++async function checkLaneConditionAnswers(
++  supabase: RfxBidSupabaseClient,
++  invitation: Record<string, unknown>,
++  event: Record<string, unknown>,
++  rows: ReturnType<typeof normalizeSegmentConfirmationRows>
++) {
++  const checks = new Map<string, { value: unknown; revision: number }>();
++  const conditionRows = rows.filter((row) => row.condition_key);
++  if (!conditionRows.length) return checks;
++  if (biddingClosed(event, new Date(), BID_DEADLINE_UTC_OFFSET)) {
++    throw new Error("This bid event is closed. Route conditions can no longer be answered.");
++  }
++  const conditions = new Map(
++    (await listLaneConditions(supabase, invitation.rfx_lane_id)).map((row) => [String(row.condition_key), row])
++  );
++  for (const row of conditionRows) {
++    const condition = conditions.get(String(row.condition_key));
++    if (!condition) throw new Error("Invalid segment rubric.");
++    const value = checkConditionAnswer(condition, row.answer, row.raw_value, row.comment);
++    checks.set(row.rubric_key, { value, revision: Number(condition.revision) || 1 });
++  }
++  return checks;
++}
++
+ async function listSegmentConfirmations(
+   supabase: RfxBidSupabaseClient,
+   invitationIds: string[]
+@@ -1122,6 +1171,7 @@ async function saveSegmentConfirmations(
+   const event = relationRecord(invitation.rfx_events);
+   const rows = normalizeSegmentConfirmationRows(input.confirmations);
+   if (!rows.length) return { rows: [] };
++  const conditionChecks = await checkLaneConditionAnswers(supabase, invitation, event, rows);
+   const now = new Date().toISOString();
+   const payload = rows.map((row) => ({
+     owner_user_id: cleanText(event.owner_user_id) || null,
+@@ -1133,6 +1183,8 @@ async function saveSegmentConfirmations(
+     rubric_key: row.rubric_key,
+     answer: row.answer,
+     comment: row.comment,
++    value: row.condition_key ? conditionChecks.get(row.rubric_key)?.value ?? null : null,
++    condition_revision: row.condition_key ? conditionChecks.get(row.rubric_key)?.revision ?? null : null,
+     source: "carrier_portal",
+     metadata: {
+       source: "rfx_lane_fit",
+@@ -5051,7 +5103,12 @@ Deno.serve(async (request) => {
+         live_board: readOnlyPeek ? { ...liveBoard, current_invitation_token: undefined } : liveBoard,
+         carrier_book: readOnlyPeek ? { ...book, invited: book.invited.map(invitationWithoutToken),
+           quoted: book.quoted.map(invitationWithoutToken) } : book,
+-        ...(!readOnlyPeek ? { bid_history: bidHistory, segment_confirmations: segmentConfirmations } : {})
++        ...(!readOnlyPeek ? {
++          bid_history: bidHistory,
++          segment_confirmations: segmentConfirmations,
++          // The route conditions of this invitation's lane, as the carrier answers them.
++          lane_conditions: (await listLaneConditions(supabase, result.data.rfx_lane_id)).map(publicLaneCondition).filter(Boolean)
++        } : {})
+       });
+       if (readOnlyPeek) response.headers.set("Cache-Control", "private, no-store, max-age=0");
+       return response;
+diff --git a/supabase/migrations/20261022120000_rfx_lane_conditions.sql b/supabase/migrations/20261022120000_rfx_lane_conditions.sql
+new file mode 100644
+index 0000000..34c6c4f
+--- /dev/null
++++ b/supabase/migrations/20261022120000_rfx_lane_conditions.sql
+@@ -0,0 +1,38 @@
++-- Route conditions per RFx lane (decided 2026-10-22). The team picks concrete
++-- requirements from the catalog in _shared/rfx-lane-conditions.mjs, marks each
++-- required or preferred, and the carrier answers each with a datum through the
++-- existing rfx_segment_confirmations rows (rubric_key "cond.<key>",
++-- segment_key "lane"). Additive only: the six legacy rubrics and their answers
++-- are untouched, and an event without conditions behaves exactly as before.
++
++create table if not exists public.rfx_lane_conditions (
++  id uuid primary key default gen_random_uuid(),
++  created_at timestamptz not null default now(),
++  updated_at timestamptz not null default now(),
++  owner_user_id text,
++  owner_email text,
++  rfx_event_id uuid not null references public.rfx_events(id) on delete cascade,
++  rfx_lane_id uuid not null references public.rfx_lanes(id) on delete cascade,
++  condition_key text not null check (condition_key ~ '^[a-z0-9_]{2,60}$'),
++  importance text not null default 'required' check (importance in ('required', 'preferred')),
++  -- The team's target, of the catalog entry's kind (number, boolean, text or choice).
++  target jsonb,
++  note text check (note is null or char_length(note) <= 600),
++  sort_order integer not null default 0,
++  -- Grows when importance, target or note change, so an earlier answer reads as stale.
++  revision integer not null default 1 check (revision >= 1),
++  constraint rfx_lane_conditions_unique unique (rfx_lane_id, condition_key)
++);
++
++create index if not exists rfx_lane_conditions_event_idx on public.rfx_lane_conditions(rfx_event_id);
++
++-- The carrier's datum and the revision it answered.
++alter table public.rfx_segment_confirmations
++  add column if not exists value jsonb,
++  add column if not exists condition_revision integer;
++
++-- Server-only, like the rest of the Bid Room writes since 20260803: the edge
++-- functions use the service role; browsers never read or write this table.
++alter table public.rfx_lane_conditions enable row level security;
++revoke all on public.rfx_lane_conditions from anon, authenticated;
++grant select, insert, update, delete on public.rfx_lane_conditions to service_role;

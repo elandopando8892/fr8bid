@@ -75,6 +75,17 @@ describe("cadencia por falta de profundidad", () => {
     expect(intentosPorPreparar(d, horas(8), "2026-10-23").map((x) => x.participacion.id).sort()).toEqual(["a", "b"]);
   });
 
+  it("la respuesta por correo o chat del Bid Room que ve Rateware (R2) corta los intentos sola", () => {
+    const base = detalle(parts, avisos);
+    const d: Detalle = { ...base, respuestas: { a: { participacionId: "a", canales: ["correo"], primeraEn: "2026-10-22T20:00:00.000Z", ultimaEn: "2026-10-22T20:00:00.000Z" } } };
+    const a = seguimiento(d, "2026-10-23").find((x) => x.carrierId === "c-a");
+    expect(a?.estado).toBe("respondio");
+    expect(a?.respondioPor).toEqual(["correo"]);
+    expect(intentosPorPreparar(d, horas(8), "2026-10-23").map((x) => x.participacion.id)).toEqual(["b"]);
+    // Si no se pudo revisar, no se prepara nada.
+    expect(intentosPorPreparar({ ...base, respuestas: null }, horas(8), "2026-10-23")).toEqual([]);
+  });
+
   it("prepara el intento solo a quien ya le toca y no tiene borrador en la Cola", () => {
     const d = detalle(parts, avisos);
     expect(intentosPorPreparar(d, horas(7), "2026-10-23")).toEqual([]);

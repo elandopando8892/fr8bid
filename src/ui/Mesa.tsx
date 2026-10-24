@@ -521,6 +521,11 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
         {conteo("declino") ? `, ${conteo("declino")} declinaron` : ""}
         {conteo("rebote") ? `, ${conteo("rebote")} rebotaron` : ""}.
       </p>
+      {d.respuestas === null && (
+        <p className="aviso-caja">
+          No se pudo revisar quién ya contestó por correo o en el chat del Bid Room. Mientras no se pueda, Fr8Bid no prepara intentos ni recordatorios.
+        </p>
+      )}
       {flacas.length > 0 && (
         <div className="aviso-caja">
           <p>
@@ -571,7 +576,9 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                 <tr>
                   <td>{x.carrier}</td>
                   <td>
-                    {ETIQUETA_SEGUIMIENTO[x.estado]}
+                    {x.estado === "respondio" && x.respondioPor.length
+                      ? `respondió por ${x.respondioPor.map((c) => (c === "correo" ? "correo" : "chat del Bid Room")).join(" y ")}`
+                      : ETIQUETA_SEGUIMIENTO[x.estado]}
                     {x.diasSinRespuesta !== null ? ` · ${x.diasSinRespuesta} día(s)` : ""}
                   </td>
                   <td>{x.estado === "oferto" && x.ofertadas < x.rutas ? `${x.ofertadas} de ${x.rutas}` : x.rutas}</td>
