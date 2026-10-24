@@ -58,7 +58,8 @@ describe("revisión con IA", () => {
     expect(enviados).toEqual(["b", "c"]);
     expect(r.body.telefonos.a).toMatchObject({ certeza: "regla", numero: "19565238773" });
     expect(r.body.telefonos.b).toMatchObject({ certeza: "ia", numero: "528125842714" });
-    expect(r.body.telefonos.c).toMatchObject({ certeza: "dudoso", numero: null });
+    // Dígitos inventados: se rechaza y queda la mejor apuesta de las reglas.
+    expect(r.body.telefonos.c).toMatchObject({ certeza: "dudoso", numero: "523141234567" });
     expect(r.body).toMatchObject({ ia: "ok", revisados_por_ia: 2 });
   });
 
@@ -74,7 +75,10 @@ describe("revisión con IA", () => {
     expect(falla.body.ia).toBe("fallo");
   });
 
-  it("«ninguno» de la IA queda por confirmar", () => {
-    expect(aceptarRespuestaIA("8125842714", { pais: "ninguno", numero: "", motivo: "no se sabe" })).toMatchObject({ numero: null, certeza: "dudoso" });
+  it("«ninguno» de la IA queda por confirmar con la mejor apuesta de las reglas", () => {
+    const ninguno = { pais: "ninguno", numero: "", motivo: "no se sabe" };
+    expect(aceptarRespuestaIA("8125842714", ninguno)).toMatchObject({ numero: null, certeza: "dudoso" });
+    const apuesta = clasificarTelefono("8125842714", { carrier: "ACG CARRIERS LLC" });
+    expect(aceptarRespuestaIA("8125842714", ninguno, apuesta)).toMatchObject({ numero: "18125842714", pais: "US", certeza: "dudoso" });
   });
 });
