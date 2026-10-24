@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { enviarAEdgeFunctions, manejar } from "../src/servidor/proxy.js";
+import { enviarAEdgeFunctions, manejar, modoEscrituras } from "../src/servidor/proxy.js";
 
 // POST /api/bid → rfx-bid-api de rateware-prod. La liga del carrier (token) es la credencial.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -9,7 +9,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!base || !anon) return res.status(503).json({ error: "Fr8Bid no tiene configurado Rateware.", code: "SIN_CONFIGURACION" });
   const r = await manejar("rfx-bid-api", (req.body as Record<string, unknown>) || null, req.headers.authorization || null, {
     enviar: enviarAEdgeFunctions(base, anon),
-    permitirEscrituras: process.env.FR8BID_ESCRITURAS_REALES === "si",
+    permitirEscrituras: modoEscrituras(process.env.FR8BID_ESCRITURAS_REALES) === "si",
+    soloBorradores: modoEscrituras(process.env.FR8BID_ESCRITURAS_REALES) === "borradores",
     real: true
   });
   for (const [k, v] of Object.entries(r.headers)) res.setHeader(k, v);

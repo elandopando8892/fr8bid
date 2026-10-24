@@ -26,7 +26,7 @@ import { candidatosRecordatorio, diasEntre, preguntaAlCarrier, recordatorio, seg
 import { crearXlsx } from "../src/dominio/xlsx";
 import { configCarrierFit } from "../src/dominio/carrierFit";
 import { operacionTanda, planearTandas } from "../src/dominio/tandas";
-import { ESCRITURAS, manejar, sinSecretos, SOLO_SIMULADO } from "../src/servidor/proxy";
+import { ESCRITURAS, manejar, modoEscrituras, sinSecretos, SOLO_SIMULADO } from "../src/servidor/proxy";
 import { crearSimulado, ORG, sembrarDemo } from "../src/simulado/semilla";
 import type { RatewareSimulado } from "../src/simulado/rateware";
 
@@ -172,6 +172,24 @@ describe("§9 recorrido de la rebanada", () => {
     const d = await admin.detalle(eventId);
     expect(d.avisos.length).toBe(antes + 1);
     expect(d.avisos.find((a) => a.id === r1.outreach_message.id)?.estado).toBe("borrador");
+  });
+
+  it("modo «solo borradores»: pasa el borrador de la Cola; invitar, ofertas, adjudicar y enviar no", async () => {
+    expect([modoEscrituras("si"), modoEscrituras("borradores"), modoEscrituras("no"), modoEscrituras(undefined), modoEscrituras("SI")]).toEqual(["si", "borradores", "no", "no", "no"]);
+    const op = { enviar: (sv: any, b: any, a: any) => sim.llamar(sv, b, a), permitirEscrituras: false, soloBorradores: true };
+    const borrador = { action: "draft_bid_room_carrier_message", event_id: eventId, rfx_event_id: eventId, rfx_lane_vendor_id: ids.A, body: "¿Nos comparte su oferta?", idempotency_key: `fr8bid-intento-3-${eventId}-${ids.A}`, confirmed: true, confirmation_action: "draft_bid_room_carrier_message" };
+    expect((await manejar("rateware-api", borrador, "Bearer sim:admin", op)).status).toBe(200);
+    const antes = sim.llamadas.length;
+    for (const b of [
+      { action: "invite_rfx_lane_vendors", event_id: eventId, ids: [ids.A], confirmed: true, confirmation_action: "invite_rfx_lane_vendors" },
+      { action: "update_rfx_bid", event_id: eventId, id: ids.A, patch: { bid_rate: 1 } },
+      { action: "award_rfx_lane_vendor", event_id: eventId, id: ids.A },
+      { action: "send_outreach_messages", rfx_event_id: eventId, ids: ["m1"] }
+    ]) expect((await manejar("rateware-api", b, "Bearer sim:admin", op)).body.code).toBe("SOLO_BORRADORES");
+    expect((await manejar("rfx-bid-api", { action: "submit_bid", token: "t" }, null, op)).body.code).toBe("SOLO_BORRADORES");
+    expect(sim.llamadas.length).toBe(antes);
+    // Apagado del todo: ni el borrador pasa.
+    expect((await manejar("rateware-api", borrador, "Bearer sim:admin", { ...op, soloBorradores: false })).body.code).toBe("ESCRITURA_NO_AUTORIZADA");
   });
 
   it("2 · versión 1 y luego versión 2: la 1 queda intacta y la vigente es la 2", async () => {

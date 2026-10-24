@@ -3,6 +3,7 @@
 // agrega lo que el recorrido exige de este lado:
 // - solo acciones de la rebanada (lista cerrada);
 // - ninguna escritura hacia Rateware real sin FR8BID_ESCRITURAS_REALES=si;
+//   con «borradores» solo pasan las que dejan un borrador sin enviar;
 // - operation_id válido para la entrega (si no, Rateware pone uno aleatorio);
 // - HDships fuera de cualquier lectura o escritura (I12);
 // - tokens de liga fuera de las respuestas;
@@ -66,6 +67,19 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
   "rfx-bid-api": new Set(["submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
 
+// Con FR8BID_ESCRITURAS_REALES=borradores solo pasan estas: dejan un borrador
+// en la Cola de Rateware y no envían, no invitan, no adjudican ni tocan ofertas.
+export const SOLO_BORRADORES: Record<Servicio, Set<string>> = {
+  "rateware-api": new Set(["draft_bid_room_carrier_message"]),
+  "rfx-bid-api": new Set()
+};
+
+export type ModoEscrituras = "no" | "borradores" | "si";
+
+export function modoEscrituras(valor: string | undefined): ModoEscrituras {
+  return valor === "si" ? "si" : valor === "borradores" ? "borradores" : "no";
+}
+
 // rateware-api (b11991f8) devuelve invitation_token ya descifrado en
 // list_rfx_detail y bid_link en la metadata de los avisos; las variantes
 // _encrypted/_hash las quita Rateware, pero aquí se quitan otra vez por si acaso.
@@ -120,6 +134,8 @@ function filtrarProtegidos(body: any): any {
 export interface OpcionesProxy {
   enviar: Enviar;
   permitirEscrituras: boolean;
+  // FR8BID_ESCRITURAS_REALES=borradores: solo las acciones de SOLO_BORRADORES.
+  soloBorradores?: boolean;
   // true cuando el destino es rateware-prod (funciones /api de Vercel).
   real?: boolean;
   hoy?: () => string;
@@ -176,7 +192,11 @@ export async function manejar(
     }
   }
 
-  if (esEscritura && !op.permitirEscrituras) {
+  if (esEscritura && !op.permitirEscrituras && op.soloBorradores && !SOLO_BORRADORES[servicio].has(action)) {
+    return error(423, "SOLO_BORRADORES", "Fr8Bid está en modo «solo borradores»: este paso se hace en Rateware o con la aprobación del propietario.", { action });
+  }
+
+  if (esEscritura && !op.permitirEscrituras && !(op.soloBorradores && SOLO_BORRADORES[servicio].has(action))) {
     return error(423, "ESCRITURA_NO_AUTORIZADA", "Escribir en Rateware real requiere la aprobación del propietario para esta acción.", { action });
   }
 
