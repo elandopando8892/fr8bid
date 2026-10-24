@@ -1,7 +1,8 @@
 // Cadencia de seguimiento por falta de profundidad (regla de Jose, 23-oct-2026).
 
 import { describe, expect, it } from "vitest";
-import { claveIntento, intentosPorPreparar, LIMITE_TEXTO_INTENTO, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento } from "../src/dominio/seguimiento";
+import { claveIntento, intentosPorPreparar, intentosWhatsapp, numeroWhatsapp, LIMITE_TEXTO_INTENTO, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento } from "../src/dominio/seguimiento";
+import { aviso } from "../src/cliente/mapear";
 import type { Aviso, Detalle, Participacion } from "../src/dominio/tipos";
 
 const ENVIO = "2026-10-22T15:13:00.000Z";
@@ -99,5 +100,52 @@ describe("cadencia por falta de profundidad", () => {
     expect(texto).toContain("San Luis Potosí → Tulsa");
     expect(texto).not.toMatch(/token=/);
     expect(claveIntento("e", "a", 2)).toBe(claveIntento("e", "a", 2));
+  });
+
+  it("el 4º intento abre WhatsApp con número y texto; sin número o «no contactar» no hay liga", () => {
+    const tres = (id: string, extra: Partial<Aviso> = {}) => [
+      { ...invitacion(id, ENVIO), ...extra },
+      invitacion(id, horas(10).toISOString(), 2),
+      invitacion(id, horas(22).toISOString(), 3)
+    ];
+    const d = detalle(
+      [part("ms", true), part("a"), part("b"), part("c"), part("sun")],
+      [
+        invitacion("ms", ENVIO),
+        ...tres("a", { whatsapp: "(81) 1234-5678" }),
+        ...tres("b"),
+        ...tres("c", { whatsapp: "+1 918 555 0101", whatsappNoContactar: true }),
+        ...tres("sun", { whatsapp: "8112345679" })
+      ]
+    );
+    d.respuestas = { sun: { participacionId: "sun", canales: ["correo"], primeraEn: ENVIO, ultimaEn: ENVIO } };
+    expect(intentosWhatsapp(d, horas(33), "2026-10-23")).toEqual([]);
+    const w = intentosWhatsapp(d, horas(34), "2026-10-23");
+    // Quien ya respondió (R2) no aparece; quien ofertó tampoco.
+    expect(w.map((x) => x.s.carrierId)).toEqual(["c-a", "c-b", "c-c"]);
+    const [a, b, c] = w;
+    expect(a.numero).toBe("528112345678");
+    expect(a.liga).toMatch(/^https:\/\/wa\.me\/528112345678\?text=/);
+    expect(a.texto).toContain("RFx-1021-PRIMAPro");
+    expect(a.texto).toContain("San Luis Potosí → Tulsa");
+    expect(a.texto).not.toMatch(/token=|https?:/);
+    expect(b).toMatchObject({ liga: null, motivo: "sin número de WhatsApp en Rateware" });
+    expect(c).toMatchObject({ liga: null, numero: null, motivo: "marcado «no contactar por WhatsApp» en Rateware" });
+    // Sin la revisión de respuestas no se ofrece nada.
+    expect(intentosWhatsapp({ ...d, respuestas: null }, horas(34), "2026-10-23")).toEqual([]);
+  });
+
+  it("normaliza el número como rateware-api", () => {
+    expect(numeroWhatsapp("81 1234 5678")).toBe("528112345678");
+    expect(numeroWhatsapp("+1 (918) 555-0101")).toBe("19185550101");
+    expect(numeroWhatsapp("+52 1 81 1234 5678")).toBe("5218112345678");
+    expect(numeroWhatsapp("12345")).toBeNull();
+    expect(numeroWhatsapp(null)).toBeNull();
+  });
+
+  it("toma el WhatsApp del vendor que list_outreach_messages trae con cada mensaje", () => {
+    const m = { id: "m1", rfx_lane_vendor_id: "a", status: "sent", metadata: { notice_type: "rfx_invitation" }, vendors: { vendor_name: "A", whatsapp_phone: "8112345678", whatsapp_do_not_contact: false } };
+    expect(aviso(m)).toMatchObject({ whatsapp: "8112345678", whatsappNoContactar: false });
+    expect(aviso({ ...m, vendors: null })).toMatchObject({ whatsapp: null, whatsappNoContactar: false });
   });
 });
