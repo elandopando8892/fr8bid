@@ -1,0 +1,23 @@
+/* Puente entre el marco de Fr8Bid y las pantallas de Bidware (.bw). Esta hoja
+   no pasa por el aislamiento de src/estilos/aislar.ts: es la única que toca
+   los dos lados. */
+
+/* Las pantallas de Bidware traen su propio encabezado y márgenes. */
+.contenido:has(> .bw) { padding: 0; max-width: none; }
+.bw { min-height: 100%; }
+.bw-publica { min-height: 100vh; }
+.bw-dialogos { min-height: 0; background: none; }
+
+.bw .bw-simulado {
+  margin: 0;
+  padding: 8px 32px;
+  background: var(--amber-light);
+  color: var(--amber);
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line);
+}
+.bw .bw-cargando { padding: 20px 32px; color: var(--muted); }
+
+@media (max-width: 860px) {
+  .bw .bw-simulado, .bw .bw-cargando { padding-left: 16px; padding-right: 16px; }
+}

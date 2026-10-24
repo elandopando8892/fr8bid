@@ -1,0 +1,26 @@
+.evidence-review { width: 100%; min-width: 0; max-width: 1500px; box-sizing: border-box; margin-inline: auto; }
+.evidence-review > section, .evidence-steps > div { min-width: 0; }
+.evidence-review .crm-table-wrap { max-width: 100%; overflow-x: auto; }
+.evidence-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-block: 24px; }
+.evidence-steps > div { padding: 18px; border: 1px solid #d6d6d6; border-radius: 6px; }
+.evidence-steps h2 { margin-top: 0; font-size: 18px; }
+.evidence-steps p, .evidence-review > section > p { line-height: 1.6; }
+.evidence-steps pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.evidence-file { display: grid; gap: 8px; font-weight: 600; }
+.evidence-file input { max-width: 100%; font-weight: normal; }
+.evidence-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-block: 22px; }
+.evidence-counts { display: flex; flex-wrap: wrap; gap: 28px; margin-block: 20px; }
+.evidence-counts b { font-size: 24px; }
+.evidence-table button { text-align: left; white-space: normal; }
+.evidence-detail { padding-block: 16px; }
+.evidence-detail details { padding: 12px 0; border-bottom: 1px solid #d6d6d6; overflow-wrap: anywhere; }
+.evidence-hashes { overflow-wrap: anywhere; font-size: 12px; }
+.provider-advisory { margin-top: 7px; max-width: 400px; }
+.provider-advisory p { margin-block: 5px; white-space: normal; }
+.published-classification { margin-block: 24px 36px; padding-bottom: 24px; border-bottom: 1px solid #d6d6d6; }
+.published-classification h2 { margin: 0; }
+.published-classification caption { text-align: left; padding-block: 10px; font-weight: 600; }
+.published-pending { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 16px; margin-block: 20px; }
+.published-pending > div { padding: 16px; background: var(--paper, #f8f8f6); border: 1px solid #d6d6d6; border-radius: 6px; }
+.published-pending h3 { margin-top: 0; }
+@media (max-width: 800px) { .evidence-steps { grid-template-columns: 1fr; } .evidence-review { padding: 12px; } .evidence-table { min-width: 580px; } }

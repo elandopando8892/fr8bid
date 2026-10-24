@@ -21,7 +21,7 @@ function siguiente(e: ResumenEvento): { accion: string; quien: string } {
 }
 
 export function Eventos() {
-  const { api, rol, listo } = useSesion();
+  const { api, rol, listo, modo } = useSesion();
   const [carga, setCarga] = useState<Carga<ResumenEvento[]>>({ tipo: "cargando" });
   const leer = useCallback(() => {
     setCarga({ tipo: "cargando" });
@@ -41,6 +41,11 @@ export function Eventos() {
     <section>
       <header className="cabecera">
         <h1>Eventos</h1>
+        {modo === "rateware" && rol !== "viewer" && (
+          <Liga a="/rfx/new" className="btn-primario">
+            Nuevo evento
+          </Liga>
+        )}
       </header>
       {carga.tipo === "ok" && (
         <div className="contadores">

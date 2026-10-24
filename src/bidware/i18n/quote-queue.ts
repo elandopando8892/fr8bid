@@ -1,0 +1,48 @@
+import { translator } from "./language";
+export const copy = {
+  title: { es: "Cola de envío · {0}", en: "Delivery queue · {0}" },
+  prepare: { es: "Preparar para la Cola", en: "Prepare for the queue" },
+  preparing: { es: "Preparando…", en: "Preparing…" },
+  prepareTitle: { es: "Preparar {0} para la Cola", en: "Prepare {0} for the queue" },
+  prepared: { es: "Cotización preparada en la Cola. Revisa y aprueba allí el envío.", en: "Quote prepared in the queue. Review and approve sending there." },
+  gate: { es: "Preparar no envía. Revisa cada cotización y aprueba su envío desde esta Cola.", en: "Preparing does not send. Review each quote and approve sending from this queue." },
+  refresh: { es: "Actualizar", en: "Refresh" },
+  empty: { es: "No hay cotizaciones preparadas. Vuelve a QuoteDesk para preparar una.", en: "No prepared quotes. Return to QuoteDesk to prepare one." },
+  back: { es: "Volver a cotización", en: "Back to quote" },
+  review: { es: "Revisar", en: "Review" },
+  snapshot: { es: "Cotización preparada", en: "Prepared quote" },
+  recipient: { es: "Destinatario", en: "Recipient" },
+  cc: { es: "Copia", en: "Cc" },
+  from: { es: "Remitente", en: "Sender" },
+  subject: { es: "Asunto", en: "Subject" },
+  state: { es: "Estado", en: "Status" },
+  drafted: { es: "Preparado", en: "Prepared" },
+  sending: { es: "En curso", en: "Sending" },
+  sent: { es: "Enviado", en: "Sent" },
+  failed: { es: "Falló", en: "Failed" },
+  delivery_unknown: { es: "Sin confirmar", en: "Unconfirmed" },
+  archived: { es: "Archivado", en: "Archived" },
+  blocked: { es: "Bloqueado", en: "Blocked" },
+  approve: { es: "Aprobar y enviar", en: "Approve and send" },
+  close: { es: "Cerrar", en: "Close" },
+  confirm: { es: "¿Enviar {0} a {1}{2} desde {3}?", en: "Send {0} to {1}{2} from {3}?" },
+  confirmCc: { es: " con copia a {0}", en: " with cc to {0}" },
+  success: { es: "Envío registrado. El recibo está en la Cola.", en: "Send recorded. The receipt is in the queue." },
+  unknown: { es: "No reintentes un envío en curso o sin confirmar. Revisa Enviados en Gmail antes de conciliarlo.", en: "Do not retry a sending or unconfirmed message. Check Gmail Sent before reconciling it." },
+  retry: { es: "Gmail rechazó el intento anterior. Puedes revisar y aprobar un reintento.", en: "The previous attempt failed. You can review and approve a retry." },
+  receipt: { es: "Recibo {0} · intento {1}", en: "Receipt {0} · attempt {1}" },
+  preview: { es: "Vista previa de la cotización", en: "Quote preview" },
+  page: { es: "{0}–{1} de {2}", en: "{0}–{1} of {2}" },
+  previous: { es: "Anterior", en: "Previous" },
+  next: { es: "Siguiente", en: "Next" },
+  conflict: { es: "Actualiza la Cola. Si cambió la cotización, prepara un nuevo borrador. Si hay un envío en curso o sin confirmar, revisa Enviados en Gmail antes de reintentar.", en: "Refresh the queue. If the quote changed, prepare a new draft. If a send is in progress or unconfirmed, check Gmail Sent before retrying." },
+  validation: { es: "Revisa destinatarios, rebotes, tarifas y vigencia de la cotización antes de prepararla o enviarla.", en: "Check recipients, suppressions, prices and quote validity before preparing or sending." },
+  denied: { es: "Tu cuenta no tiene permiso para esta acción.", en: "Your account does not have permission for this action." },
+  expired: { es: "Tu sesión venció. Inicia sesión otra vez.", en: "Your session expired. Sign in again." },
+  unavailable: { es: "No se pudo completar la acción. Actualiza la Cola y revisa el recibo antes de reintentar.", en: "The action could not be completed. Refresh the queue and check the receipt before retrying." },
+};
+export const tr = translator(copy);
+export function queueError(error: unknown) {
+  const status = (error as { status?: number })?.status;
+  return tr(status === 409 ? "conflict" : status === 400 ? "validation" : status === 403 ? "denied" : status === 401 ? "expired" : "unavailable");
+}

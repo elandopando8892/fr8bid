@@ -1,0 +1,19 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+const built=await build({entryPoints:['src/bidware/features/bid-room/bidroom.service.ts'],bundle:true,write:false,format:'esm',platform:'node',plugins:[{name:'api-fixture',setup(b){b.onResolve({filter:/^@\/lib\/api-client$/},()=>({path:'api',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:'export class ApiError extends Error{}; export const callRfxBidApi=(a,p)=>globalThis.carrierApi(a,p);',loader:'js'}));}}]});
+const m=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
+const lane={rfx_lane_id:'lane-a',invitation_token:'fixture-token',bid_rate:1200,currency:'USD',commercial_model:'cost_plus'};
+test('billing notice uses requested five business days after payment confirmation for cost-plus and sell-share only',()=>{
+ for(const [stored,pct,expected] of [['cost_plus','',3],['direct_cost_plus','4',4],['sell_share','',3],['carrier_share','5',5]]) {
+  const f={...m.offerForm({...lane,commercial_model:stored}),pct};const notice=m.billingNotice(f);
+  assert.ok(notice.includes(`(${expected} %)`));assert.ok(notice.includes('5 días hábiles después de la confirmación de pago del embarcador'));
+ }
+ assert.equal(m.billingNotice({...m.offerForm(lane),commercial_model:'xbf_buy_sell',pct:'12'}),null);
+});
+test('a price-only offer warns about missing information but remains valid',()=>{const f=m.offerForm(lane);assert.deepEqual(m.offerProblems(f),[]);const w=m.offerWarnings(f);for(const label of ['capacidad','tránsito','vigencia','disponibilidad'])assert.ok(w.some(s=>s.toLowerCase().includes(label)),label);});
+test('available equipment asks for operational context without requiring GPS access',()=>{const f={...m.offerForm(lane),weekly_capacity:'2',transit_days:'3',valid_through:'2099-12-31',equipment_available:'yes'};const w=m.offerWarnings(f).join(' ');for(const label of ['ubicación','vacío','unidad','recolección','entrega'])assert.ok(w.includes(label),label);assert.ok(!w.includes('GPS'));});
+test('zero deadhead is declared; full data and alternative survive serialization/reload',()=>{const f={...m.offerForm(lane),weekly_capacity:'2',transit_days:'3',valid_through:'2099-12-31',equipment_available:'yes',current_unit_location:'Monterrey',deadhead_distance:'0',deadhead_unit:'km',unit_details:'Controlled unit',eta_pickup:'2099-06-01T10:00',eta_delivery:'2099-06-03T10:00',mirror_account_enabled:true,best_alternative_offered:true,alternative_equipment:'Reefer',alternative_units:'2',alternative_notes:'Subject to confirmation',notes:'Fixture notes',pct:'3'};assert.deepEqual(m.offerWarnings(f),[]);const payload=m.offerPayload(f,lane);const restored=m.offerForm({...lane,...JSON.parse(JSON.stringify(payload))});assert.deepEqual(restored,f);});
+test('no equipment is an explicit response, not missing information',()=>{const f={...m.offerForm(lane),weekly_capacity:'2',transit_days:'3',valid_through:'2099-12-31',equipment_available:'no'};assert.deepEqual(m.offerWarnings(f),[]);assert.equal(m.offerPayload(f,lane).equipment_available,false);});
+test('alternative needs details in the advisory summary',()=>{const f={...m.offerForm(lane),best_alternative_offered:true};assert.ok(m.offerWarnings(f).some(w=>w.includes('alternativa')));});
+test('writes continue to use the selected lane token and unchanged operational fields',async()=>{let captured;globalThis.carrierApi=async(action,payload)=>{captured={action,payload};return{};};const p=m.offerPayload({...m.offerForm(lane),equipment_available:'yes',current_unit_location:'MTY'},lane);await m.submitBid('lane-b-token',p);assert.equal(captured.payload.token,'lane-b-token');assert.equal(captured.payload.equipment_available,true);assert.equal(captured.payload.current_unit_location,'MTY');});

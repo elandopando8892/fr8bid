@@ -1,0 +1,10 @@
+{
+  "name": "@marksman/http-response",
+  "version": "1.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "exports": {
+    ".": { "types": "./src/read-json.d.mts", "import": "./src/read-json.mjs" }
+  }
+}

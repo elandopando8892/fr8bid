@@ -1,0 +1,20 @@
+import {translator} from './language';
+export const receiptText=translator({
+ title:{es:'Recibo guardado',en:'Stored receipt'},id:{es:'Identificador del proveedor',en:'Provider identifier'},sentAt:{es:'Envío registrado al',en:'Send recorded at'},manualAt:{es:'Marca manual registrada al',en:'Manual mark recorded at'},notStored:{es:'Sin dato guardado',en:'Not stored'},
+ noReceipt:{es:'No hay un recibo del proveedor guardado. El estado enviado o una marca manual no lo sustituyen.',en:'No provider receipt is stored. Sent status or a manual mark does not replace it.'},
+ manual:{es:'También existe una marca manual; se muestra por separado del recibo del proveedor.',en:'A manual mark also exists; it is shown separately from the provider receipt.'},
+ note:{es:'Comprueba la presencia del ID guardado en Enviados. El contenido mostrado es la copia de Bidware; no acredita recepción del destinatario.',en:'Checks the stored ID in Sent. The displayed content is the Bidware copy; it does not prove recipient delivery.'},
+ refresh:{es:'Puede renovar el token existente. La consulta no envía correo ni cambia el estado del mensaje.',en:'May renew the existing token. The lookup does not send email or change message status.'},
+ verify:{es:'Comprobar en Gmail',en:'Verify in Gmail'},busy:{es:'Comprobando en Gmail…',en:'Verifying in Gmail…'},failure:{es:'No se pudo completar la consulta. Revisa la sesión antes de intentarlo manualmente.',en:'The lookup could not be completed. Review the session before a manual attempt.'},
+ found_sent:{es:'Google encontró ese identificador con la etiqueta Enviados.',en:'Google found that identifier with the Sent label.'},
+ found_not_sent:{es:'Google encontró el identificador, pero sin la etiqueta Enviados. Revisa su historial; esta consulta no autoriza un reenvío.',en:'Google found the identifier without the Sent label. Review its history; this lookup does not authorize resending.'},
+ not_found:{es:'Google no encontró ese identificador en el buzón consultado. Conserva el recibo y revisa el historial antes de decidir.',en:'Google did not find that identifier in the queried mailbox. Preserve the receipt and review its history before deciding.'},
+ provider_rejected:{es:'Google rechazó la consulta. Revisa el HTTP y los motivos disponibles.',en:'Google rejected the lookup. Review the HTTP and available reasons.'},
+ unavailable:{es:'No se obtuvo un resultado concluyente. El recibo guardado permanece disponible.',en:'No conclusive result was obtained. The stored receipt remains available.'},
+ missing:{es:'Mensaje o evento no disponible en tu contexto.',en:'Message or event unavailable in your context.'},
+ no_receipt:{es:'Este registro no tiene un recibo Gmail verificable.',en:'This record has no verifiable Gmail receipt.'},
+ not_connected:{es:'No hay una conexión activa del remitente autorizado.',en:'The authorized sender has no active connection.'},
+ scope_missing:{es:'La conexión no declara un permiso compatible con esta consulta. Revísala con el administrador.',en:'The connection does not declare a scope compatible with this lookup. Review it with the administrator.'},
+ credentials_unavailable:{es:'No se obtuvo una credencial vigente. Una renovación iniciada puede terminar después de esta consulta.',en:'A current credential was not obtained. A renewal already started may finish after this lookup.'},
+ checked:{es:'Comprobado al',en:'Checked at'},http:{es:'HTTP de Google',en:'Google HTTP'},reasons:{es:'Motivos disponibles',en:'Available reasons'},
+});
