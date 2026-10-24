@@ -34,7 +34,7 @@ export async function revisarTelefonos(body: any, sesionValida: boolean, pregunt
       const respuestas = await preguntar!(dudosos);
       for (const q of dudosos) {
         const r = respuestas.find((x) => x?.id === q.id);
-        if (r) salida[q.id] = aceptarRespuestaIA(q.valor, r);
+        if (r) salida[q.id] = aceptarRespuestaIA(q.valor, r, salida[q.id]);
       }
     } catch {
       ia = "fallo";

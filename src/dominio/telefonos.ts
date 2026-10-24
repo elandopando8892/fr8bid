@@ -102,12 +102,14 @@ export interface RespuestaTelefono {
 }
 
 // La IA no puede inventar dígitos: el número final debe terminar con los 10
-// dígitos que hay en Rateware y llevar +52 o +1.
-export function aceptarRespuestaIA(valor: string, r: { pais: string | null; numero: string | null; motivo: string }): Telefono {
+// dígitos que hay en Rateware y llevar +52 o +1. Si no lo resuelve, queda la
+// mejor apuesta de las reglas (respaldo), marcada por confirmar.
+export function aceptarRespuestaIA(valor: string, r: { pais: string | null; numero: string | null; motivo: string }, respaldo?: Telefono): Telefono {
   const d = String(valor).replace(/\D/g, "").slice(-10);
   const n = String(r.numero || "").replace(/\D/g, "");
   const motivo = String(r.motivo || "").slice(0, 160) || "sin explicación";
   if (r.pais === "MX" && n === `52${d}`) return { numero: n, pais: "MX", certeza: "ia", motivo };
   if (r.pais === "US" && n === `1${d}`) return { numero: n, pais: "US", certeza: "ia", motivo };
+  if (respaldo?.numero) return { ...respaldo, certeza: "dudoso", motivo: `la IA no lo pudo resolver (${motivo}); mejor apuesta: ${respaldo.pais === "MX" ? "México" : "EE. UU."}` };
   return { numero: null, pais: null, certeza: "dudoso", motivo: `la IA no lo pudo resolver: ${motivo}` };
 }
