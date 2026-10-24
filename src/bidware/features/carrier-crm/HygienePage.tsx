@@ -134,12 +134,9 @@ export function HygienePage() {
             <Link to="/crm">Carrier CRM</Link>
           </div>
           <h1>{tr("text060")}</h1>
-          <p className="sub">
-            {carriers ? `${fmt(carriers)} carriers. ` : ""}{tr("text154")}</p>
+          {carriers > 0 && <p className="sub">{fmt(carriers)} carriers</p>}
         </div>
         <div className="crm-head-actions">
-          <Link to="/crm" className="btn">
-            {tr("text155")}</Link>
           <button onClick={recalc} disabled={busy}>
             {tr("text156")}</button>
         </div>
@@ -148,7 +145,9 @@ export function HygienePage() {
       <div className="crm-rule">
         <b>{tr("text157")}</b>
         <span>
-          {tr("text158")}</span>
+          {tr("text158")}{" "}{tr("text244")}
+          {preview.data?.priority?.length ? <> {tr("text245")}{preview.data.priority.map(priorityLabel).join(" → ")}.</> : null}
+        </span>
       </div>
 
       <main className="crm-main hyg-main">
@@ -237,21 +236,18 @@ export function HygienePage() {
             )}
 
             <footer className="hyg-guard">
-              <div className="hyg-guard-line">
-                <Pill tone="indigo">{tr("text176")}</Pill>
-                <span>
-                  {tr("text177")}</span>
-              </div>
-              <p className="mono">
-                {tr("text178")}</p>
               <div className="hyg-guard-actions">
-                <button onClick={() => setShowQueue((v) => !v)} disabled={!totalGroups}>
-                  {showQueue ? tr("text179") : tr("text180", fmt(totalGroups))}
-                </button>
+                {totalGroups > 0 && (
+                  <button onClick={() => setShowQueue((v) => !v)}>
+                    {showQueue ? tr("text179") : tr("text180", fmt(totalGroups))}
+                  </button>
+                )}
                 <span className="spacer" />
-                <button className="primary" disabled={!group || !totalToRemove || busy || !canMerge} title={locked} onClick={merge}>
+                {group && totalToRemove > 0 && (
+                <button className="primary" disabled={busy || !canMerge} title={locked} onClick={merge}>
                   {busy ? tr("text181") : tr("text182")}
                 </button>
+                )}
               </div>
             </footer>
           </section>
@@ -305,29 +301,10 @@ export function HygienePage() {
                   {showContacts ? tr("text190") : tr("text191", fmt(clusters.length))}
                 </button>
               )}
-              <button disabled title={tr("text192")}>
-                {tr("text193")}</button>
             </footer>
           </section>
         </div>
 
-        <aside className="crm-side hyg-side">
-          <p className="crm-kicker">{tr("text194")}</p>
-          <p>
-            {tr("text195")}</p>
-          <p>
-            {tr("text196")}</p>
-          <div className="hyg-never">
-            <b>{tr("text197")}</b>
-            <p>
-              {tr("text198")}</p>
-          </div>
-          {preview.data?.priority?.length ? (
-            <p className="hyg-priority">
-              <b>{tr("text199")}</b> {tr("text200")}{preview.data.priority.map(priorityLabel).join(" → ")}.
-            </p>
-          ) : null}
-        </aside>
       </main>
     </>
   );

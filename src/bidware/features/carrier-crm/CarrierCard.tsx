@@ -3,7 +3,7 @@ import { useLang } from "@/i18n/language";
 import { useAsync } from "@/components/useAsync";
 import { NEED_REASON } from "@/lib/roles";
 import type { CarrierListTemplate, Vendor } from "@/types/domain";
-import { fetchVendorsByIds, STAGE_LABEL, vendorLabel, type VendorPatch } from "./crm.service";
+import { fetchVendorsByIds, STAGE_LABEL, STATUS_WORD, vendorLabel, type VendorPatch } from "./crm.service";
 
 export type TmsStatus = NonNullable<VendorPatch["status"]>;
 const STATUSES: TmsStatus[] = ["active", "inactive", "invited", "blocked"];
@@ -64,7 +64,7 @@ export function CarrierCard({
   const stored = String(vendor.funnel_stage ?? card?.funnel_stage ?? "");
   const stage =
     base === "procurement"
-      ? `Procurement · ${STAGE_LABEL[effective] ?? (effective || "—")}`
+      ? STAGE_LABEL[effective] ?? (effective || "—")
       : STAGE_LABEL[base] ?? (base || "—");
 
   const inTemplates = (templates ?? []).filter(
@@ -107,7 +107,7 @@ export function CarrierCard({
         </div>
         <div>
           <dt>{tr("text043")}</dt>
-          <dd>{status || "—"}</dd>
+          <dd>{STATUS_WORD[status] ?? (status || "—")}</dd>
         </div>
         <div>
           <dt>WhatsApp</dt>
@@ -138,7 +138,7 @@ export function CarrierCard({
               title={locked}
               onClick={() => onStatus(s)}
             >
-              {s}
+              {STATUS_WORD[s] ?? s}
             </button>
           ))}
         </div>
@@ -148,7 +148,7 @@ export function CarrierCard({
             <span>
               {STATUSES.map((s) => (
                 <button key={s} className="link" disabled={busy || !canWork} title={locked} onClick={() => onBulkStatus(s)}>
-                  {s}
+                  {STATUS_WORD[s] ?? s}
                 </button>
               ))}
             </span>

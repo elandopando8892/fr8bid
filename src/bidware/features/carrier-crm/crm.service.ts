@@ -154,16 +154,16 @@ export async function moveVendors(ids: string[], patch: VendorPatch) {
 }
 
 export const STAGE_LABEL: Record<string, string> = {
-  sourcing: "Sourcing",
+  get sourcing() { return tr("text232"); },
   get archived() { return tr("text108"); },
-  targeted: "Targeted",
-  nested: "Nested",
-  drafted: "Drafted",
-  invited: "Invited",
-  onboarded: "Onboarded",
-  trained: "Trained",
-  activated: "Activated",
-  completed: "Completed",
+  get targeted() { return tr("text233"); },
+  get nested() { return tr("text234"); },
+  get drafted() { return tr("text235"); },
+  get invited() { return tr("text236"); },
+  get onboarded() { return tr("text237"); },
+  get trained() { return tr("text238"); },
+  get activated() { return tr("text239"); },
+  get completed() { return tr("text240"); },
 };
 
 /**

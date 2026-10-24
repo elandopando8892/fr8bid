@@ -415,7 +415,7 @@ export const copy = {
     "en": ": the backend promotes carriers with linked quotes."
   },
   "text102": {
-    "es": "Quien tiene cotizaciones ligadas aparece al menos en Nested, aunque su etapa guardada sea anterior: el backend lo promueve.",
+    "es": "Quien tiene cotizaciones ligadas aparece al menos en «Con cotización», aunque su etapa guardada sea anterior.",
     "en": "Carriers with linked quotes appear at least in Nested, even if their saved stage is earlier: the backend promotes them."
   },
   "text103": {
@@ -443,11 +443,11 @@ export const copy = {
     "en": "Archived"
   },
   "text109": {
-    "es": "carriers encontrados que todavía no entran a procurement.",
+    "es": "carriers encontrados que todavía no entran al proceso de alta.",
     "en": "carriers found that have not yet entered procurement."
   },
   "text110": {
-    "es": "pasó de la base de sourcing a procurement.",
+    "es": "salió de prospección y entró al proceso de alta.",
     "en": "moved from sourcing to procurement."
   },
   "text111": {
@@ -471,7 +471,7 @@ export const copy = {
     "en": "completed training or TMS setup."
   },
   "text116": {
-    "es": "listo para usarse en procurement.",
+    "es": "listo para trabajar.",
     "en": "ready for procurement."
   },
   "text117": {
@@ -479,7 +479,7 @@ export const copy = {
     "en": "signed the complete legal package."
   },
   "text118": {
-    "es": "fuera del pipeline; puede volver a sourcing o a procurement.",
+    "es": "fuera del proceso; puede volver a prospección o al proceso de alta.",
     "en": "outside the pipeline; can return to sourcing or procurement."
   },
   "text119": {
@@ -933,6 +933,62 @@ export const copy = {
   "text231": {
     "es": ". Envíalo tú al carrier por correo o WhatsApp: Bidware no lo manda solo.",
     "en": ". Send it to the carrier by email or WhatsApp: Bidware does not send it automatically."
+  },
+  "text232": {
+    "es": "Prospección",
+    "en": "Sourcing"
+  },
+  "text233": {
+    "es": "Seleccionado",
+    "en": "Targeted"
+  },
+  "text234": {
+    "es": "Con cotización",
+    "en": "Nested"
+  },
+  "text235": {
+    "es": "En borrador",
+    "en": "Drafted"
+  },
+  "text236": {
+    "es": "Invitado",
+    "en": "Invited"
+  },
+  "text237": {
+    "es": "Dado de alta",
+    "en": "Onboarded"
+  },
+  "text238": {
+    "es": "Capacitado",
+    "en": "Trained"
+  },
+  "text239": {
+    "es": "Activado",
+    "en": "Activated"
+  },
+  "text240": {
+    "es": "Completado",
+    "en": "Completed"
+  },
+  "text241": {
+    "es": "Carriers",
+    "en": "Carriers"
+  },
+  "text242": {
+    "es": "{0} seleccionado(s)",
+    "en": "{0} selected"
+  },
+  "text243": {
+    "es": "Mover",
+    "en": "Move"
+  },
+  "text244": {
+    "es": "Ninguna fusión es automática: se revisa una por una.",
+    "en": "No merge is automatic: each one is reviewed."
+  },
+  "text245": {
+    "es": "Se conserva, en este orden: ",
+    "en": "Kept, in this order: "
   }
 };
 

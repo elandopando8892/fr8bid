@@ -112,7 +112,6 @@ export function BouncesPage() {
             <Link to="/crm" className="btn">
               ← Carrier CRM
             </Link>
-            <button onClick={reload}>{tr("text010")}</button>
             <button className="primary" disabled={!!busy || !canWork} title={lockedTitle} onClick={sync}>
               {busy === "sync" ? tr("text011") : tr("text012")}
             </button>
@@ -125,12 +124,14 @@ export function BouncesPage() {
           <InfoBanner title={tr("text013")}>
             {tr("text014")}</InfoBanner>
           {notice && <InfoBanner>{notice}</InfoBanner>}
-          <Kpis
-            items={[
-              { label: tr("text015"), value: rows.length, accent: true },
-              { label: tr("text016"), value: addresses },
-            ]}
-          />
+          {rows.length > 0 && (
+            <Kpis
+              items={[
+                { label: tr("text015"), value: rows.length, accent: true },
+                { label: tr("text016"), value: addresses },
+              ]}
+            />
+          )}
           {loading && <Spinner label={tr("text017")} />}
           {error && <ErrorBanner message={error} />}
           {!loading && !error && (rows.length ? (

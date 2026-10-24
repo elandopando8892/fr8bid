@@ -4958,6 +4958,21 @@ a.btn:hover {
   border-color: #dadada;
   padding: 8px 11px;
 }
+/* Lo seleccionado y qué hacer con ello, juntos y solo cuando hay selección. */
+.crm-selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 8px 12px;
+  font-size: 12.5px;
+}
+.crm-selection .crm-move {
+  border-color: #dadada;
+}
 .crm-move {
   display: inline-flex;
   align-items: center;
