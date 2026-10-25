@@ -32,7 +32,7 @@ export const copy = {
     "en": "ARCHIVED"
   },
   "text008": {
-    "es": "Nombre del nuevo template (la copia nace como borrador v1):",
+    "es": "Nombre de la nueva lista (la copia nace como borrador v1):",
     "en": "New template name (the copy starts as a v1 draft):"
   },
   "text009": {
@@ -40,19 +40,19 @@ export const copy = {
     "en": "{0} (copy)"
   },
   "text010": {
-    "es": "Template duplicado como borrador: {0}",
+    "es": "Lista duplicada como borrador: {0}",
     "en": "Template duplicated as draft: {0}"
   },
   "text011": {
-    "es": "Template archivado (reversible).",
+    "es": "Lista archivada (reversible).",
     "en": "Template archived (reversible)."
   },
   "text012": {
-    "es": "Template restaurado como activo.",
+    "es": "Lista restaurada como activa.",
     "en": "Template restored as active."
   },
   "text013": {
-    "es": "Listas reutilizables con membresía exacta · compartidas con rateware",
+    "es": "Listas reutilizables de carriers para cargar en un evento",
     "en": "Reusable lists with exact membership · shared with rateware"
   },
   "text014": {
@@ -60,7 +60,7 @@ export const copy = {
     "en": "Refresh"
   },
   "text015": {
-    "es": "+ Nuevo template",
+    "es": "+ Nueva lista",
     "en": "+ New template"
   },
   "text016": {
@@ -68,15 +68,15 @@ export const copy = {
     "en": "Static membership:"
   },
   "text017": {
-    "es": "editar el perfil de un carrier no cambia la lista. Cargar un template nunca crea carriers ni envía invitaciones — solo prepara una selección para Carrier Fit.",
+    "es": "editar el perfil de un carrier no cambia la lista. Cargar una lista nunca crea carriers ni envía invitaciones — solo prepara una selección para Carrier Fit.",
     "en": "editing a carrier profile does not change the list. Loading a template never creates carriers or sends invitations — it only prepares a selection for Carrier Fit."
   },
   "text018": {
-    "es": "Buscar templates…",
+    "es": "Buscar listas…",
     "en": "Search templates…"
   },
   "text019": {
-    "es": "Cargando templates…",
+    "es": "Cargando listas…",
     "en": "Loading templates…"
   },
   "text020": {
@@ -108,11 +108,11 @@ export const copy = {
     "en": "Duplicate"
   },
   "text027": {
-    "es": "Ningún template con este filtro",
+    "es": "Ninguna lista con este filtro",
     "en": "No templates with this filter"
   },
   "text028": {
-    "es": "No hay templates",
+    "es": "No hay listas",
     "en": "No templates"
   },
   "text029": {
@@ -120,11 +120,11 @@ export const copy = {
     "en": "Change the filter or search."
   },
   "text030": {
-    "es": "Crea el primero con + Nuevo template.",
+    "es": "Crea el primero con + Nueva lista.",
     "en": "Create the first with + New template."
   },
   "text031": {
-    "es": "Elige un template de la lista para ver su detalle.",
+    "es": "Elige una lista de la lista para ver su detalle.",
     "en": "Choose a template from the list to see its details."
   },
   "text032": {
@@ -188,11 +188,11 @@ export const copy = {
     "en": "pasted from the spreadsheet"
   },
   "text047": {
-    "es": "Cargando template…",
+    "es": "Cargando lista…",
     "en": "Loading template…"
   },
   "text048": {
-    "es": "Nuevo template",
+    "es": "Nueva lista",
     "en": "New template"
   },
   "text049": {
@@ -200,7 +200,7 @@ export const copy = {
     "en": "Edit · {0}"
   },
   "text050": {
-    "es": "Crear carrier list template",
+    "es": "Nueva lista de carriers",
     "en": "Create carrier list template"
   },
   "text051": {
@@ -208,7 +208,7 @@ export const copy = {
     "en": "Version {0} · saving creates {1}"
   },
   "text052": {
-    "es": "Lista reutilizable con membresía exacta · compartida con rateware",
+    "es": "Una lista reutilizable de carriers para cargar en un evento",
     "en": "Reusable list with exact membership · shared with rateware"
   },
   "text053": {
@@ -220,7 +220,7 @@ export const copy = {
     "en": "Save draft"
   },
   "text055": {
-    "es": "Revisar template",
+    "es": "Revisar lista",
     "en": "Review template"
   },
   "text056": {
@@ -236,7 +236,7 @@ export const copy = {
     "en": "Create and activate"
   },
   "text059": {
-    "es": "Crear template",
+    "es": "Crear lista",
     "en": "Create template"
   },
   "text060": {
@@ -244,7 +244,7 @@ export const copy = {
     "en": "Steps"
   },
   "text061": {
-    "es": "Nombre del template *",
+    "es": "Nombre de la lista *",
     "en": "Template name *"
   },
   "text062": {
@@ -260,7 +260,7 @@ export const copy = {
     "en": "Active"
   },
   "text065": {
-    "es": "Solo un template ",
+    "es": "Solo una lista ",
     "en": "Only an "
   },
   "text066": {
@@ -284,11 +284,11 @@ export const copy = {
     "en": "Upload CSV / XLSX"
   },
   "text071": {
-    "es": "Fuente: Carrier CRM (vendors) en Supabase.",
+    "es": "Fuente: Carrier CRM.",
     "en": "Source: Carrier CRM (vendors) in Supabase."
   },
   "text072": {
-    "es": "Solo se agregan carriers existentes; nunca se crean. La misma tabla que usa rateware.",
+    "es": "Solo se agregan carriers existentes; nunca se crean.",
     "en": "Only existing carriers are added; none are created. The same table used by rateware."
   },
   "text073": {
@@ -324,7 +324,7 @@ export const copy = {
     "en": "Search"
   },
   "text081": {
-    "es": "Ya está en el template",
+    "es": "Ya está en la lista",
     "en": "Already in the template"
   },
   "text082": {
@@ -516,7 +516,7 @@ export const copy = {
     "en": ". If someone changed it while you had it open, the backend responds instead of overwriting their change."
   },
   "text129": {
-    "es": "2 · Miembros del template",
+    "es": "2 · Miembros de la lista",
     "en": "2 · Template members"
   },
   "text130": {
@@ -532,7 +532,7 @@ export const copy = {
     "en": "spreadsheet"
   },
   "text133": {
-    "es": "Quitar del template",
+    "es": "Quitar de la lista",
     "en": "Remove from template"
   },
   "text134": {
@@ -557,7 +557,7 @@ const extraCopy={
     "en": "(unnamed)"
   },
   "extra1": {
-    "es": "Ya existe un template con ese nombre en la organización.",
+    "es": "Ya existe una lista con ese nombre en la organización.",
     "en": "A template with that name already exists in the organization."
   },
   "extra2": {
@@ -565,19 +565,19 @@ const extraCopy={
     "en": "{0} Reload: someone else edited it while you had it open."
   },
   "extra3": {
-    "es": "El template ya no está activo. Solo un template activo puede cargarse en un evento.",
+    "es": "La lista ya no está activa. Solo una lista activa puede cargarse en un evento.",
     "en": "The template is no longer active. Only an active template can be loaded in an event."
   },
   "extra4": {
-    "es": "Tu usuario no tiene organización asignada en Supabase (app_metadata.rateware_organization_id). Pídela antes de operar templates.",
+    "es": "Tu usuario no tiene organización asignada en Supabase (app_metadata.rateware_organization_id). Pídela antes de operar listas.",
     "en": "Your Supabase account has no assigned organization (app_metadata.rateware_organization_id). Request one before working with templates."
   },
   "extra5": {
-    "es": "Falta el permiso vendors:manage en tu usuario de Supabase; puedes ver templates pero no editarlos.",
+    "es": "Falta el permiso vendors:manage en tu usuario de Supabase; puedes ver listas pero no editarlos.",
     "en": "Your Supabase account lacks vendors:manage permission; you can view templates but cannot edit them."
   },
   "extra6": {
-    "es": "La API de carrier list templates está apagada en este entorno.",
+    "es": "La API de listas de carriers está apagada en este entorno.",
     "en": "The carrier list templates API is disabled in this environment."
   },
   "extra7": {

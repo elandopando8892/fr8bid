@@ -136,12 +136,10 @@ export function TemplatesPage() {
   return (
     <>
       <TopBar
-        crumb="Outreach"
         title={tr("text260")}
         sub={tr("text261")}
         actions={
           <>
-            <button onClick={reload}>{tr("text092")}</button>
             <button
               className="primary"
               disabled={!canWork}
@@ -154,8 +152,7 @@ export function TemplatesPage() {
       />
       <main className="main">
         <div style={{ display: "grid", gap: 14 }}>
-          <InfoBanner title={tr("text262")}>
-            {tr("text263")}</InfoBanner>
+          <p className="cell-sub" style={{ margin: 0 }}>{tr("text263")}</p>
           {notice && <InfoBanner>{notice}</InfoBanner>}
           {loading && <Spinner label={tr("text264")} />}
           {error && <ErrorBanner message={error} />}

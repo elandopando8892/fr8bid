@@ -140,7 +140,6 @@ export function TemplateEditorPage() {
   return (
     <>
       <TopBar
-        crumb={tr("text223")}
         title={title}
         sub={template ? (isSystem(template) ? tr("text224") : tr("text225")) : isNew ? tr("text225") : undefined}
         actions={

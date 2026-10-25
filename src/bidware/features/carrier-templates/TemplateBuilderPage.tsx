@@ -1,5 +1,5 @@
 import { words, tr } from "@/i18n/carrier-templates";
-import { useLang } from "@/i18n/language";
+import { useLang, getLang } from "@/i18n/language";
 import { useAuth } from "@/auth/AuthContext";
 import { NEED_REASON } from "@/lib/roles";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -355,13 +355,9 @@ export function TemplateBuilderPage() {
       <header className="identity crm-head">
         <div className="crm-head-main">
           <div className="crumb">
-            <Link to="/crm">Carrier CRM</Link>
-            {" › "}
-            <Link to="/templates">List templates</Link>
-            {" › "}
-            {editing ? tr("text038") : tr("text048")}
+            <Link to="/templates">{getLang() === "es" ? "Listas de carriers" : "Carrier lists"}</Link>
           </div>
-          <h1>{editing ? tr("text049", name || "template") : tr("text050")}</h1>
+          <h1>{editing ? tr("text049", name || "—") : tr("text050")}</h1>
           <p className="sub">
             {editing
               ? tr("text051", version ?? 1, (version ?? 1) + 1)
@@ -426,10 +422,7 @@ export function TemplateBuilderPage() {
               <small>
                 {tr("text065")}<b>{tr("text066")}</b>{tr("text067")}</small>
             </div>
-            <div className="tpl-note">
-              <b>{tr("text016")}</b>
-              <span>{tr("text068")}</span>
-            </div>
+            <small>{tr("text016")} {tr("text068")}</small>
           </section>
         )}
 

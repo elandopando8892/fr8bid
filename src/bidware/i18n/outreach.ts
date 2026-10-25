@@ -1051,8 +1051,8 @@ export const copy = {
     "en": "System and team:"
   },
   "text263": {
-    "es": "las del sistema son la base compartida y no se editan; \"Crear versión del equipo\" hace una copia con el mismo nombre que sí se edita. Cada campaña elige su plantilla en Message, y los borradores nuevos toman la versión guardada.",
-    "en": "system templates are the shared base and cannot be edited; “Create team version” makes an editable copy with the same name. Each campaign chooses its template in Message, and new drafts use the saved version."
+    "es": "Las plantillas del sistema no se editan: «Crear versión del equipo» hace una copia editable. Cada evento elige su plantilla al preparar el mensaje.",
+    "en": "System templates cannot be edited: “Create team version” makes an editable copy. Each event picks its template when preparing the message."
   },
   "text264": {
     "es": "Cargando plantillas…",
