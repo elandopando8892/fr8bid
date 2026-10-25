@@ -152,7 +152,7 @@ export function HygienePage() {
 
       <main className="crm-main hyg-main">
         <div className="crm-col">
-          {preview.error && <ErrorBanner message={preview.error} />}
+          {preview.error && <ErrorBanner message={tr("text246", preview.error)} />}
           {failure && <ErrorBanner message={failure} />}
           {notice && <InfoBanner>{notice}</InfoBanner>}
 

@@ -989,6 +989,10 @@ export const copy = {
   "text245": {
     "es": "Se conserva, en este orden: ",
     "en": "Kept, in this order: "
+  },
+  "text246": {
+    "es": "Rateware no pudo calcular los duplicados exactos ({0}). Los grupos de contacto compartido de abajo sí están al día.",
+    "en": "Rateware could not compute the exact duplicates ({0}). The shared-contact groups below are up to date."
   }
 };
 
