@@ -21,9 +21,9 @@ import { equipmentOf, groupByEvent, loads, matches, weeklyLoads, type BoardEvent
 
 type View = "cards" | "pipeline" | "sheet";
 const VIEWS: { key: View; label: string }[] = [
-  { key: "cards", label: "Cards" },
-  { key: "pipeline", label: "Pipeline" },
-  { key: "sheet", label: "Spreadsheet" },
+  { key: "cards", get label() { return tr("text135"); } },
+  { key: "pipeline", get label() { return tr("text136"); } },
+  { key: "sheet", get label() { return tr("text137"); } },
 ];
 
 /** Per-browser preferences; a private window just starts from the defaults. */
@@ -235,7 +235,7 @@ export function PublicBoardPage() {
             <small>{weekly ? tr("text118") : tr("text119")}</small>
           </strong>
           <p>
-            {summary?.live ?? "—"}{tr("text120")}{liveEvents}{tr("text121")}{liveEvents === 1 ? "" : "s"} ·{" "}
+            {summary?.live ?? "—"}{tr(summary?.live === 1 ? "text142" : "text120")}{liveEvents}{tr("text121")}{liveEvents === 1 ? "" : "s"} ·{" "}
             {summary?.total_quotes ?? "—"}{tr("text122")}</p>
         </div>
         <div className="pb-hero-tiles">
@@ -319,7 +319,7 @@ export function PublicBoardPage() {
                 keep("bidware.board.auto", e.target.checked ? "on" : "off");
               }}
             />
-            Auto-refresh
+            {tr("text138")}
           </label>
           <div className="pb-seg" role="group" aria-label={tr("text128")}>
             {VIEWS.map((v) => (

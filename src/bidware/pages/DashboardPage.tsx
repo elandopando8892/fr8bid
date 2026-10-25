@@ -8,44 +8,29 @@ import { useAuth } from "@/auth/AuthContext";
 import { awaitsTeam, listShipperProjects } from "@/features/shipper-intake/intake.service";
 import { dashboardSummary } from "./dashboard.service";
 
-/** The wireframe's four modules first, then the two the team added since. */
-const MODULES = [
+/** Where new work starts; the menu covers everything else. */
+const STARTS = [
   {
-    to: "/intake",
-    title: "Shipper intake (magic link)",
-    get body() { return tr("text001"); },
-  },
-  {
-    to: "/rfx",
-    title: "RFx / Bid Room",
+    to: "/rfx/new",
+    get title() { return tr("text017"); },
     get body() { return tr("text002"); },
   },
   {
-    to: "/templates",
-    title: "Carrier list templates",
-    get body() { return tr("text003"); },
-  },
-  {
-    to: "/board",
-    get title() { return tr("text004"); },
-    get body() { return tr("text005"); },
-  },
-  {
     to: "/quotedesk",
-    title: "QuoteDesk",
+    get title() { return tr("text018"); },
     get body() { return tr("text006"); },
   },
   {
-    to: "/crm",
-    title: "Carrier CRM",
-    get body() { return tr("text007"); },
+    to: "/intake",
+    get title() { return tr("text019"); },
+    get body() { return tr("text001"); },
   },
 ];
 
 const count = (value: number | undefined, loading: boolean) =>
   value === undefined ? (loading ? "…" : "—") : value.toLocaleString(locale());
 
-/** Dashboard (wireframe 01): who's here, what needs them today, and where each job starts. */
+/** Panel: what is waiting on the team today, and where new work starts. */
 export function DashboardPage() {
   useLang();
   const { user } = useAuth();
@@ -59,24 +44,33 @@ export function DashboardPage() {
   const carriers =
     s?.vendors !== undefined ? s.vendors - (s.archived_vendors ?? 0) : undefined;
 
+  const fresh = projects.data?.filter(awaitsTeam).length;
+  // Orange only for what is waiting on the team, and only when something is.
   const kpis = [
     {
       label: tr("text008"),
-      value: count(projects.data?.filter(awaitsTeam).length, projects.loading),
+      value: count(fresh, projects.loading),
       to: "/intake",
-      accent: true,
+      accent: !!fresh,
       hint: tr("text009"),
+    },
+    {
+      label: tr("text020"),
+      value: count(s?.pending_review, summary.loading),
+      to: "/tarifas",
+      accent: !!s?.pending_review,
+      hint: tr("text021"),
     },
     {
       label: tr("text010"),
       value: count(s?.rfx_open_events, summary.loading),
-      to: "/rfx",
+      to: "/eventos",
       hint: tr("text011"),
     },
     {
       label: tr("text012"),
       value: count(s?.rfx_bids_since, summary.loading),
-      to: "/rfx",
+      to: "/eventos",
       hint: tr("text013"),
     },
     {
@@ -89,7 +83,7 @@ export function DashboardPage() {
 
   return (
     <>
-      <TopBar title="Dashboard" actions={<ModuleSearch />} />
+      <TopBar title="Panel" actions={<ModuleSearch />} />
       <main className="main">
         <div className="dash">
           <div className="dash-hello">
@@ -107,7 +101,7 @@ export function DashboardPage() {
           </div>
 
           <div className="dash-modules">
-            {MODULES.map((m) => (
+            {STARTS.map((m) => (
               <Link key={m.to} to={m.to} className="dash-module">
                 <i aria-hidden="true" />
                 <b>{m.title}</b>

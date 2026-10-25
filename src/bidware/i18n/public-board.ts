@@ -3,7 +3,7 @@ import { translator } from "./language";
 /** Copy del equipo; los valores de catálogo y datos del usuario se conservan. */
 export const copy = {
   "text001": {
-    "es": "Solicitud enviada para {0} lane{1}.",
+    "es": "Solicitud enviada para {0} ruta{1}.",
     "en": "Request submitted for {0} lane{1}."
   },
   "text002": {
@@ -35,7 +35,7 @@ export const copy = {
     "en": "Sending…"
   },
   "text009": {
-    "es": "Solicitar {0} lane{1}",
+    "es": "Solicitar {0} ruta{1}",
     "en": "Request {0} lane{1}"
   },
   "text010": {
@@ -59,7 +59,7 @@ export const copy = {
     "en": "Phone or WhatsApp"
   },
   "text015": {
-    "es": "¿Qué lanes cubres?",
+    "es": "¿Qué rutas cubres?",
     "en": "Which lanes do you cover?"
   },
   "text016": {
@@ -103,7 +103,7 @@ export const copy = {
     "en": "Search"
   },
   "text026": {
-    "es": "Escribe el correo con el que MARKSMAN te invita. Marcamos en el tablero los lanes donde ya tienes invitación; tus tarifas y tu identidad no se muestran a nadie.",
+    "es": "Escribe el correo con el que MARKSMAN te invita. Marcamos en el tablero las rutas donde ya tienes invitación; tus tarifas y tu identidad no se muestran a nadie.",
     "en": "Enter the email MARKSMAN uses to invite you. We mark the lanes where you are already invited; your rates and identity are not shown to anyone."
   },
   "text027": {
@@ -167,11 +167,11 @@ export const copy = {
     "en": "Already invited?"
   },
   "text042": {
-    "es": "Escribe tu correo y marcamos en el tablero los lanes donde puedes cotizar.",
+    "es": "Escribe tu correo y marcamos en el tablero las rutas donde puedes cotizar.",
     "en": "Enter your email and we mark the lanes where you can quote."
   },
   "text043": {
-    "es": "¿Aún no? Pide acceso desde cualquier lane en vivo.",
+    "es": "¿Aún no? Pide acceso desde cualquier ruta en vivo.",
     "en": "Not yet? Request access from any live lane."
   },
   "text044": {
@@ -195,11 +195,11 @@ export const copy = {
     "en": "How it works"
   },
   "text049": {
-    "es": "Encuentra tus lanes.",
+    "es": "Encuentra tus rutas.",
     "en": "Find your lanes."
   },
   "text050": {
-    "es": " Filtra por equipo o ruta; los de poca competencia son tu mejor oportunidad.",
+    "es": " Filtra por equipo o ruta; las de poca competencia son tu mejor oportunidad.",
     "en": " Filter by equipment or route; lanes with fewer bids are your best opportunity."
   },
   "text051": {
@@ -223,7 +223,7 @@ export const copy = {
     "en": "Do not miss a deadline"
   },
   "text056": {
-    "es": "Activa avisos y te avisamos en el navegador cuando llegue una oferta, abra un lane o se acerque un cierre.",
+    "es": "Activa avisos y te avisamos en el navegador cuando llegue una oferta, abra una ruta o se acerque un cierre.",
     "en": "Enable notifications to hear when an offer arrives, a lane opens or a deadline approaches."
   },
   "text057": {
@@ -271,8 +271,8 @@ export const copy = {
     "en": "No closing date"
   },
   "text068": {
-    "es": "Cierra en {0} d",
-    "en": "Closes in {0} d"
+    "es": "{0} días",
+    "en": "{0} days"
   },
   "text069": {
     "es": "hace {0} min",
@@ -355,11 +355,11 @@ export const copy = {
     "en": "Latest bid "
   },
   "text089": {
-    "es": "Ocultar lanes",
+    "es": "Ocultar rutas",
     "en": "Hide lanes"
   },
   "text090": {
-    "es": "Ver {0} lane{1} →",
+    "es": "Ver {0} ruta{1} →",
     "en": "View {0} lane{1} →"
   },
   "text091": {
@@ -443,7 +443,7 @@ export const copy = {
     "en": "{0} s ago"
   },
   "text111": {
-    "es": "Suena cuando llega una oferta, abre un lane, se acerca un cierre o se adjudica",
+    "es": "Suena cuando llega una oferta, abre una ruta, se acerca un cierre o se adjudica",
     "en": "Sound on new bids, new lanes, approaching deadlines or awards"
   },
   "text112": {
@@ -475,11 +475,11 @@ export const copy = {
     "en": " loads per week"
   },
   "text119": {
-    "es": " lanes en vivo",
+    "es": " rutas en vivo",
     "en": " live lanes"
   },
   "text120": {
-    "es": " lanes en vivo en ",
+    "es": " rutas en vivo en ",
     "en": " live lanes in "
   },
   "text121": {
@@ -491,7 +491,7 @@ export const copy = {
     "en": " bids received · no carrier identity"
   },
   "text123": {
-    "es": "Lanes en vivo",
+    "es": "Rutas en vivo",
     "en": "Live lanes"
   },
   "text124": {
@@ -507,7 +507,7 @@ export const copy = {
     "en": "No activity yet."
   },
   "text127": {
-    "es": "🔎  Buscar por folio, lane, mercado, equipo…",
+    "es": "🔎  Buscar por folio, ruta, mercado, equipo…",
     "en": "🔎 Search by reference, lane, market, equipment…"
   },
   "text128": {
@@ -537,7 +537,15 @@ export const copy = {
   "text134": {
     "es": "las oportunidades son visibles para conocimiento de mercado. Para cotizar necesitas tu invitación privada o solicitar acceso. Nunca se expone la identidad de los carriers.",
     "en": "opportunities are visible for market awareness. To quote, you need a private invitation or must request access. Carrier identity is never exposed."
-  }
+  },
+  "text135": { "es": "Tarjetas", "en": "Cards" },
+  "text136": { "es": "Por etapa", "en": "Pipeline" },
+  "text137": { "es": "Tabla", "en": "Spreadsheet" },
+  "text138": { "es": "Actualizar solo", "en": "Auto-refresh" },
+  "text139": { "es": "Rutas", "en": "Lanes" },
+  "text140": { "es": "EN VIVO", "en": "LIVE" },
+  "text141": { "es": "{0} ruta{1}", "en": "{0} lane{1}" },
+  "text142": { "es": " ruta en vivo en ", "en": " live lane in " }
 };
 
 export const tr = translator(copy);

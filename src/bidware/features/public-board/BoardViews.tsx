@@ -17,7 +17,7 @@ import {
 type Tone = "" | "green" | "amber" | "blue" | "orange";
 
 export const STATUS: Record<BoardStatus, { label: string; tone: Tone; column: string }> = {
-  live: { label: "LIVE", tone: "green", get column() { return tr("text058"); } },
+  live: { get label() { return tr("text140"); }, tone: "green", get column() { return tr("text058"); } },
   closing: { get label() { return tr("text059"); }, tone: "amber", get column() { return tr("text060"); } },
   awarded: { get label() { return tr("text061"); }, tone: "blue", get column() { return tr("text062"); } },
   expired: { get label() { return tr("text063"); }, tone: "", get column() { return tr("text064"); } },
@@ -181,7 +181,7 @@ export function EventCards({ events, actions }: { events: BoardEvent[]; actions:
             <RouteLine lanes={event.lanes} />
             <dl className="pb-stats">
               <div>
-                <dt>Lanes</dt>
+                <dt>{tr("text139")}</dt>
                 <dd>{event.lanes.length}</dd>
               </div>
               <div>

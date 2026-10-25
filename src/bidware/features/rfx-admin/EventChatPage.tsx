@@ -130,15 +130,12 @@ export function EventChatPage() {
   return (
     <>
       <TopBar
-        crumb={`RFx / Bid Room  ›  ${eventName}`}
         title={tr("text229")}
-        sub={tr("text230")}
+        sub={eventName}
         actions={
           <>
             <Link to={`/rfx/${id}`} className="btn">
               {tr("text231")}</Link>
-            <button onClick={chat.reload} disabled={chat.loading}>
-              {tr("text232")}</button>
             <button className="primary" disabled={!canWork} title={canWork ? undefined : NEED_REASON.operate} onClick={() => setComposing(true)}>
               {tr("text233")}</button>
           </>
@@ -168,12 +165,16 @@ export function EventChatPage() {
           ) : !all.length ? (
             <Empty title={tr("text239")} hint={tr("text240")} />
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) 1fr", gap: 12, alignItems: "start" }}>
+            <div className="chat-layout">
               <div className="card" style={{ padding: 0 }}>
                 <div className="tabs" role="tablist" style={{ padding: "0 8px" }}>
                   {filters().map(([key, label]) => (
                     <button key={key} role="tab" aria-selected={filter === key} className={filter === key ? "active" : ""} onClick={() => setFilter(key)}>
                       {label}
+                      {key === "needs_reply" && all.some(needsReply) ? <span className="tab-count">{all.filter(needsReply).length}</span> : null}
+                      {key === "unread" && all.some((t) => t.read_status === "unread") ? (
+                        <span className="tab-count">{all.filter((t) => t.read_status === "unread").length}</span>
+                      ) : null}
                     </button>
                   ))}
                 </div>
@@ -224,12 +225,9 @@ export function EventChatPage() {
                       </div>
                     </div>
                     <div className="spacer" />
-                    <button disabled={!canWork || busy} onClick={() => act(selected.read_status === "unread" ? "mark_read" : "mark_unread")}>
-                      {selected.read_status === "unread" ? tr("text245") : tr("text246")}
-                    </button>
-                    {!needsReply(selected) && (
-                      <button disabled={!canWork || busy} onClick={() => act("mark_needs_reply")}>
-                        {tr("text221")}</button>
+                    {selected.thread_type === "carrier_private" && selected.rfx_lane_id && selected.vendor_id && (
+                      <button disabled={!canWork || busy} onClick={() => setApplying(true)} title={tr("text250")}>
+                        {tr("text251")}</button>
                     )}
                     {selected.communication_status === "resolved" ? (
                       <button disabled={!canWork || busy} onClick={() => act("reopen")}>
@@ -238,14 +236,25 @@ export function EventChatPage() {
                       <button disabled={!canWork || busy} onClick={() => act("resolve")}>
                         {tr("text247")}</button>
                     )}
-                    <button disabled={!canWork || busy} onClick={() => act("assign", { assigned_to: user?.email ?? null })}>
-                      {tr("text248")}</button>
-                    <button disabled={!canWork || busy} onClick={editNote}>
-                      {tr("text249")}</button>
-                    {selected.thread_type === "carrier_private" && selected.rfx_lane_id && selected.vendor_id && (
-                      <button disabled={!canWork || busy} onClick={() => setApplying(true)} title={tr("text250")}>
-                        {tr("text251")}</button>
-                    )}
+                    <details className="qd-more">
+                      <summary className="btn">{tr("text791")} ▾</summary>
+                      <div
+                        className="qd-more-menu"
+                        onClick={(e) => ((e.currentTarget.parentElement as HTMLDetailsElement).open = false)}
+                      >
+                        <button disabled={!canWork || busy} onClick={() => act(selected.read_status === "unread" ? "mark_read" : "mark_unread")}>
+                          {selected.read_status === "unread" ? tr("text245") : tr("text246")}
+                        </button>
+                        {!needsReply(selected) && (
+                          <button disabled={!canWork || busy} onClick={() => act("mark_needs_reply")}>
+                            {tr("text221")}</button>
+                        )}
+                        <button disabled={!canWork || busy} onClick={() => act("assign", { assigned_to: user?.email ?? null })}>
+                          {tr("text248")}</button>
+                        <button disabled={!canWork || busy} onClick={editNote}>
+                          {tr("text249")}</button>
+                      </div>
+                    </details>
                   </div>
                   {selected.internal_note && (
                     <InfoBanner title={tr("text252")}>{selected.internal_note}</InfoBanner>
