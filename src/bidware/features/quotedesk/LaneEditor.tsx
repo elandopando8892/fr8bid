@@ -163,7 +163,10 @@ export function LaneEditor({
   const [miles, setMiles] = useState<MilesSuggestion | null>(null);
   const [loadingMiles, setLoadingMiles] = useState(false);
   const [modal, setModal] = useState(false);
-  const savedFcm = (lane?.metadata?.fcm ?? null) as FcmEstimate | null;
+  // Estimates saved by older versions of the FCM lack the components; they are
+  // not shown (the lane's own numbers still are) until the next estimate.
+  const storedFcm = (lane?.metadata?.fcm ?? null) as FcmEstimate | null;
+  const savedFcm = storedFcm && storedFcm.components ? storedFcm : null;
   const [fcmBases, setFcmBases] = useState<FcmBases | null>(null);
   // "" = automatic: the server picks the base of the route's scope, as the FCM enforces.
   const [fcmBaseId, setFcmBaseId] = useState(savedFcm?.cost_base && savedFcm.cost_base.auto === false ? savedFcm.cost_base.id : "");
@@ -775,17 +778,17 @@ function FcmSummary({ estimate }: { estimate: FcmEstimate }) {
       )}
       {c.border_amount !== null && (
         <li>
-          <b>{tr("text101")}</b> {estimate.border.carries ? tr("text102", m(c.border_amount)) : tr("text103")}
+          <b>{tr("text101")}</b> {estimate.border?.carries ? tr("text102", m(c.border_amount)) : tr("text103")}
         </li>
       )}
       <li>
         <b>{tr("text104")}{m(estimate.carrier_price)}</b> · {FCM_TIER_LABEL[estimate.tier]}{" "}
         {pct(estimate.margin * 100)} · {estimate.service}
         {estimate.service !== estimate.customer_service ? tr("text105", estimate.customer_service) : ""} ·{" "}
-        {estimate.cost_base.name}
-        {estimate.cost_base.auto ? tr("text106") : ""}
+        {estimate.cost_base?.name}
+        {estimate.cost_base?.auto ? tr("text106") : ""}
       </li>
-      {estimate.warnings.map((w, i) => (
+      {(estimate.warnings ?? []).map((w, i) => (
         <li key={i} className="qd-warn">
           {w}
         </li>

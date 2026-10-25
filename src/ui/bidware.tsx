@@ -1,7 +1,7 @@
 // Pantallas traídas de Bidware (src/bidware). Cada una carga aparte, dentro de
 // .bw para que sus estilos no choquen con los de la Mesa.
 
-import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
+import { Component, lazy, Suspense, type ComponentType, type ReactNode } from "react";
 import { Navigate, useLocation, useParams } from "react-router-dom";
 import "@/styles/global.css";
 import { MODO } from "./sesion";
@@ -57,9 +57,41 @@ export function Bw({ children, publica = false }: { children: ReactNode; publica
           Modo simulado: este módulo trabaja con Rateware real y aquí no tiene datos. La Mesa sí funciona con el evento de prueba.
         </div>
       )}
-      <Suspense fallback={<div className="bw-cargando">Cargando…</div>}>{children}</Suspense>
+      <Atrapa>
+        <Suspense fallback={<div className="bw-cargando">Cargando…</div>}>{children}</Suspense>
+      </Atrapa>
     </div>
   );
+}
+
+// Si una pantalla falla al dibujarse, solo ella muestra el aviso: el menú y las
+// demás pantallas siguen. Cambiar de dirección la vuelve a intentar.
+function Atrapa({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+  return <AtrapaError key={pathname}>{children}</AtrapaError>;
+}
+
+class AtrapaError extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  componentDidCatch(error: Error) {
+    console.error("Pantalla con error:", error);
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="bw-fallo" role="alert">
+        <h2>Esta pantalla tuvo un error</h2>
+        <p>Nada se envió ni se guardó por este error. Puedes volver a intentarlo o seguir en otra sección del menú.</p>
+        <p className="bw-fallo-detalle">{this.state.error.message}</p>
+        <button type="button" onClick={() => this.setState({ error: null })}>
+          Volver a intentar
+        </button>
+      </div>
+    );
+  }
 }
 
 // Las ligas viejas del evento abren la Mesa.

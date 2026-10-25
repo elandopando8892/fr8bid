@@ -17,7 +17,12 @@
   border-bottom: 1px solid var(--line);
 }
 .bw .bw-cargando { padding: 20px 32px; color: var(--muted); }
+.bw .bw-fallo { margin: 24px 32px; padding: 18px 20px; border: 1px solid var(--line); border-left: 3px solid var(--orange); background: var(--panel); display: grid; gap: 8px; max-width: 640px; }
+.bw .bw-fallo h2 { margin: 0; font-size: 16px; }
+.bw .bw-fallo p { margin: 0; }
+.bw .bw-fallo .bw-fallo-detalle { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.bw .bw-fallo button { justify-self: start; }
 
 @media (max-width: 860px) {
-  .bw .bw-simulado, .bw .bw-cargando { padding-left: 16px; padding-right: 16px; }
+  .bw .bw-simulado, .bw .bw-cargando, .bw .bw-fallo { padding-left: 16px; padding-right: 16px; }
 }
