@@ -1,7 +1,7 @@
 import { words, tr, reeferText } from "@/i18n/carrier-fit";
 import { evaluateReeferRestrictions, isReeferTemplate } from "../../../../packages/carrier-fit/reefer-restrictions.mjs";
 import { ProviderAdvisory } from "@/features/carrier-templates/ProviderAdvisory";
-import { useLang, locale } from "@/i18n/language";
+import { useLang, getLang, locale } from "@/i18n/language";
 import { confirmAsync } from "@/components/confirm";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -322,9 +322,6 @@ function CarrierFitContent() {
       ) : (
         <header className="identity crm-head">
           <div className="crm-head-main">
-            <div className="crumb">
-              <Link to="/rfx">RFx / Bid Room</Link>
-            </div>
             <h1>Carrier fit</h1>
             <p className="sub">{tr("text015")}</p>
           </div>
@@ -339,13 +336,10 @@ function CarrierFitContent() {
             <h2>{tr("text016")}</h2>
             <p>{tr("text017")}</p>
           </div>
-          <span className="fit-badge blue">{tr("text018")}</span>
-          <span className="fit-badge green">{tr("text019")}</span>
         </div>
 
         <div className="fit-start">
           <b>{tr("text020")}</b>
-          <span className="fit-source">{tr("text021")}</span>
           {templateSelect}
           {!eventId && (
             <select value={eventId} onChange={(e) => pick("event", e.target.value)} aria-label={tr("text022")}>
@@ -383,7 +377,7 @@ function CarrierFitContent() {
           </div>
         )}
 
-        <div className="rev-kpis fit-kpis">
+        {memberIds.length > 0 && <div className="rev-kpis fit-kpis">
           {[
             { label: tr("text028"), value: memberIds.length },
             { label: tr("text029"), value: eligible.length, accent: true },
@@ -396,11 +390,11 @@ function CarrierFitContent() {
               <strong className={k.accent ? "accent" : undefined}>{loadingTemplate ? "…" : fmt(k.value)}</strong>
             </div>
           ))}
-        </div>
+        </div>}
 
         {eventId && lanes.length > 0 && (
           <div className="fit-lanes">
-            <b>Lanes</b>
+            <b>{getLang() === "es" ? "Rutas" : "Lanes"}</b>
             <span>
               {selectedLanes.size === lanes.length
                 ? tr("text033", lanes.length)

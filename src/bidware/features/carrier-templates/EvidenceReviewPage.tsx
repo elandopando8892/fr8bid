@@ -77,9 +77,9 @@ function EvidenceReviewContent({ org }: { org: string }) {
   ] : [];
   return <>
     <header className="identity crm-head"><div className="crm-head-main">
-      <div className="crumb"><Link to="/templates">Carrier list templates</Link></div>
+      <div className="crumb"><Link to="/templates">{text("Listas de carriers", "Carrier lists")}</Link></div>
       <h1>{text("Revisión de evidencia", "Evidence review")}</h1>
-      <p className="sub">{text("Clasificador de ChatGPT · 25 plantillas originales", "ChatGPT classifier · 25 original templates")}</p>
+      <p className="sub">{text("Clasificación de carriers para las 25 listas originales", "Carrier classification for the 25 original lists")}</p>
     </div></header>
     <div className="evidence-review tpl-body">
       <InfoBanner>{text("Las propuestas conservan sus fuentes y pendientes de identidad. Esta revisión no aplica cambios ni autoriza operación o contacto.", "Proposals retain their sources and identity issues. This review does not apply changes or authorize operations or contact.")}</InfoBanner>

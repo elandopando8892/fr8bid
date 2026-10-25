@@ -43,11 +43,11 @@ export const copy = {
     "en": "{0} · Retrying with the same ID is safe ({1}…)."
   },
   "text011": {
-    "es": "Plantilla",
+    "es": "Lista",
     "en": "Template"
   },
   "text012": {
-    "es": "— Elige una plantilla activa —",
+    "es": "— Elige una lista activa —",
     "en": "— Choose an active template —"
   },
   "text013": {
@@ -59,7 +59,7 @@ export const copy = {
     "en": "Public board"
   },
   "text015": {
-    "es": "Una plantilla como punto de partida · elegibilidad para el evento · participantes en borrador",
+    "es": "Parte de una lista de carriers y elige quiénes entran al evento",
     "en": "A template as a starting point · eligibility for the event · draft participants"
   },
   "text016": {
@@ -67,7 +67,7 @@ export const copy = {
     "en": "Find carriers for this opportunity"
   },
   "text017": {
-    "es": "La plantilla es el punto de partida: se recalcula la elegibilidad para este RFx sin modificarla.",
+    "es": "Elige una lista y el evento: verás quién es elegible. La lista no cambia y nada se envía desde aquí.",
     "en": "The template is the starting point: eligibility is recalculated for this RFx without changing it."
   },
   "text018": {
@@ -95,7 +95,7 @@ export const copy = {
     "en": "— Choose the RFx event —"
   },
   "text024": {
-    "es": "Administrar plantillas en Carrier CRM ↗",
+    "es": "Administrar listas ↗",
     "en": "Manage templates in Carrier CRM ↗"
   },
   "text025": {
@@ -111,7 +111,7 @@ export const copy = {
     "en": "Prepare message →"
   },
   "text028": {
-    "es": "Miembros de la plantilla",
+    "es": "En la lista",
     "en": "Template members"
   },
   "text029": {
@@ -163,11 +163,11 @@ export const copy = {
     "en": "Loading…"
   },
   "text041": {
-    "es": "Elige una plantilla activa",
+    "es": "Elige una lista activa",
     "en": "Choose an active template"
   },
   "text042": {
-    "es": "Solo las plantillas activas se cargan en un evento.",
+    "es": "Solo las listas activas se cargan en un evento.",
     "en": "Only active templates can be loaded in an event."
   },
   "text043": {
@@ -255,11 +255,11 @@ export const copy = {
     "en": "Select {0}"
   },
   "text064": {
-    "es": "La plantilla no tiene miembros",
+    "es": "La lista no tiene carriers",
     "en": "The template has no members"
   },
   "text065": {
-    "es": "Edítala en Carrier CRM.",
+    "es": "Agrégalos desde Listas de carriers.",
     "en": "Edit it in Carrier CRM."
   },
   "text066": {
@@ -296,7 +296,7 @@ export const tr = translator(copy);
 
 const wordCopy={
   "invalidMembers": {
-    "es": "No se pudo verificar la carga completa de miembros. Actualiza la plantilla antes de continuar.",
+    "es": "No se pudo verificar la carga completa de miembros. Actualiza la lista antes de continuar.",
     "en": "The complete membership could not be verified. Refresh the template before continuing."
   },
   "word0": {

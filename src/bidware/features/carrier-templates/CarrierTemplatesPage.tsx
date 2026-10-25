@@ -1,5 +1,5 @@
 import { tr } from "@/i18n/carrier-templates";
-import { useLang, locale } from "@/i18n/language";
+import { useLang, getLang, locale } from "@/i18n/language";
 import { promptAsync } from "@/components/confirm";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -123,15 +123,11 @@ function CarrierTemplatesContent() {
     <>
       <header className="identity crm-head">
         <div className="crm-head-main">
-          <div className="crumb">
-            <Link to="/crm">Carrier CRM</Link>
-          </div>
-          <h1>Carrier list templates</h1>
+          <h1>{language === "es" ? "Listas de carriers" : "Carrier lists"}</h1>
           <p className="sub">{tr("text013")}</p>
         </div>
         <div className="crm-head-actions">
           <Link to="/templates/review" className="btn">{language === "es" ? "Revisar evidencia" : "Review evidence"}</Link>
-          <button onClick={reload}>{tr("text014")}</button>
           {locked ? (
             <button className="primary" disabled title={locked}>
               {tr("text015")}</button>
@@ -143,12 +139,6 @@ function CarrierTemplatesContent() {
       </header>
 
       <div className="tpl-body">
-        <div className="tpl-note">
-          <b>{tr("text016")}</b>
-          <span>
-            {tr("text017")}</span>
-        </div>
-
         {notice && <InfoBanner>{notice}</InfoBanner>}
         {error && <ErrorBanner message={error} />}
 
@@ -181,7 +171,7 @@ function CarrierTemplatesContent() {
                 <table className="data tpl-table">
                   <thead>
                     <tr>
-                      <th>Template</th>
+                      <th>{language === "es" ? "Lista" : "List"}</th>
                       <th className="tpl-col-members">{tr("text020")}</th>
                       <th className="tpl-col-state">{tr("text021")}</th>
                       <th className="tpl-col-date">{tr("text022")}</th>
@@ -280,7 +270,7 @@ function TemplateSide({
   if (!t) {
     return (
       <aside className="crm-side tpl-side">
-        <p className="crm-kicker">Template</p>
+        <p className="crm-kicker">{getLang() === "es" ? "Lista" : "List"}</p>
         <p className="crm-card-empty">{tr("text031")}</p>
       </aside>
     );
@@ -292,7 +282,7 @@ function TemplateSide({
 
   return (
     <aside className="crm-side tpl-side">
-      <p className="crm-kicker">Template · v{templateVersion(t)}</p>
+      <p className="crm-kicker">{getLang() === "es" ? "Lista" : "List"} · v{templateVersion(t)}</p>
       <h2>{templateName(t)}</h2>
 
       <div className="tpl-field">
