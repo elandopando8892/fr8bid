@@ -194,6 +194,8 @@ export function CarrierCrmPage() {
   const loading = funnel.loading || sourcing.loading || archived.loading;
   const error = funnel.error || sourcing.error || archived.error;
   const columns: Column[] = ["sourcing", ...FUNNEL_STAGES, "archived"];
+  const countPending = (c: Column) =>
+    c === "sourcing" ? sourcing.loading && !sourcing.data : c === "archived" ? archived.loading && !archived.data : funnel.loading && !funnel.data;
   const empties = funnel.data ? FUNNEL_STAGES.filter((s) => !(stageCounts.get(s) ?? 0)) : [];
 
   return (
@@ -234,7 +236,8 @@ export function CarrierCrmPage() {
             title={STAGE_HINT[c]}
           >
             {STAGE_LABEL[c]}
-            <b>{fmt(stageCounts.get(c) ?? 0)}</b>
+            {/* The funnel takes a while on a large base: «…» until it answers, never a false 0. */}
+            <b>{countPending(c) ? "…" : fmt(stageCounts.get(c) ?? 0)}</b>
           </button>
         ))}
       </nav>
