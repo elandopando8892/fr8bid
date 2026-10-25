@@ -12,6 +12,7 @@ import {
   FUNNEL_STAGES,
   STAGE_HINT,
   STAGE_LABEL,
+  STATUS_WORD,
   type BaseStage,
   type FunnelStage,
   type VendorPatch,
@@ -106,19 +107,7 @@ export function CarrierCrmPage() {
 
   const focused = visible.find((v) => v.id === focusId) ?? visible[0] ?? null;
 
-  /** "Onboarded or later, still inactive in the TMS" — the case the two axes exist for. */
-  const onboardedInactive = useMemo(() => {
-    const from = FUNNEL_STAGES.indexOf("onboarded");
-    return (funnel.data?.rows ?? []).filter(
-      (r) =>
-        FUNNEL_STAGES.indexOf((r.effective_funnel_stage || r.funnel_stage) as FunnelStage) >= from &&
-        String(r.status ?? "").toLowerCase() === "inactive",
-    ).length;
-  }, [getLang(), funnel.data]);
 
-  const promoted = visible.find(
-    (r) => r.effective_funnel_stage && r.funnel_stage && r.effective_funnel_stage !== r.funnel_stage,
-  );
 
   function pickColumn(next: Column) {
     setColumn(next);
@@ -183,7 +172,7 @@ export function CarrierCrmPage() {
     if (!ids.length) return;
     if (
       !await confirmAsync(
-        tr("text056", who, status) +
+        tr("text056", who, STATUS_WORD[status] ?? status) +
           tr("text057"),
       )
     )
@@ -192,7 +181,7 @@ export function CarrierCrmPage() {
     setNotice(null);
     try {
       const res = await moveVendors(ids, { status });
-      setNotice(tr("text058", res.updated, status));
+      setNotice(tr("text058", res.updated, STATUS_WORD[status] ?? status));
       if (clearSelection) setSelected(new Set());
       reloadAll();
     } catch (e) {
@@ -205,33 +194,22 @@ export function CarrierCrmPage() {
   const loading = funnel.loading || sourcing.loading || archived.loading;
   const error = funnel.error || sourcing.error || archived.error;
   const columns: Column[] = ["sourcing", ...FUNNEL_STAGES, "archived"];
-  const inProcurement = FUNNEL_STAGES.reduce((n, s) => n + (stageCounts.get(s) ?? 0), 0);
   const empties = funnel.data ? FUNNEL_STAGES.filter((s) => !(stageCounts.get(s) ?? 0)) : [];
 
   return (
     <>
       <header className="identity crm-head">
         <div className="crm-head-main">
-          <div className="crumb">Carrier CRM</div>
-          <h1>Pipeline</h1>
-          <p className="sub">{tr("text059")}</p>
+          <div className="crumb">{tr("text241")}</div>
+          <h1>Carrier CRM</h1>
         </div>
         <div className="crm-head-actions">
           <Link to="/crm/higiene" className="btn">
             {tr("text060")}</Link>
           <Link to="/crm/rebotes" className="btn">
             {tr("text061")}</Link>
-          <button onClick={reloadAll}>{tr("text010")}</button>
           <button disabled={!canWork} title={locked} onClick={() => setCreating(true)}>
             {tr("text062")}</button>
-          <button
-            className="primary"
-            disabled={!selected.size || busy || !canWork || (touchesArchive && !canArchive)}
-            title={locked ?? (touchesArchive && !canArchive ? NEED_REASON.admin : undefined)}
-            onClick={apply}
-          >
-            {busy ? tr("text063") : tr("text064", selected.size)}
-          </button>
         </div>
       </header>
       {profileFor && <ProfileLinkDialog vendor={profileFor} onClose={() => setProfileFor(null)} />}
@@ -245,34 +223,6 @@ export function CarrierCrmPage() {
           }}
         />
       )}
-
-      <div className="crm-rule">
-        <b>{tr("text065")}</b>
-        <span>
-          {tr("text066")}{" "}
-          {onboardedInactive > 0 ? (
-            <>
-              {tr("text067")}{fmt(onboardedInactive)} carrier{onboardedInactive === 1 ? "" : "s"} {tr("text068")}{onboardedInactive === 1 ? tr("text069") : tr("text070")} {tr("text071")}{onboardedInactive === 1 ? "" : "s"} {tr("text072")}</>
-          ) : (
-            <>{tr("text073")}</>
-          )}
-        </span>
-      </div>
-
-      <div className="crm-band">
-        {[
-          { label: "Sourcing", value: stageCounts.get("sourcing") ?? 0 },
-          { label: tr("text074"), value: inProcurement, accent: true },
-          { label: tr("text075"), value: stageCounts.get("archived") ?? 0 },
-          { label: tr("text076"), value: rows.length },
-          { label: tr("text077"), value: selected.size },
-        ].map((k) => (
-          <div key={k.label}>
-            <span>{k.label}</span>
-            <strong className={k.accent ? "accent" : undefined}>{loading ? "…" : fmt(k.value)}</strong>
-          </div>
-        ))}
-      </div>
 
       <nav className="crm-stages" aria-label={tr("text078")}>
         {columns.map((c) => (
@@ -310,22 +260,34 @@ export function CarrierCrmPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <button onClick={() => setSelected(new Set(visible.map((v) => v.id)))}>{tr("text082")}</button>
-            <button onClick={() => setSelected(new Set())}>{tr("text083")}</button>
-            <label className="crm-move">
-              <span>{tr("text084")}</span>
-              <select value={target} onChange={(e) => setTarget(e.target.value as Column)}>
-                {columns
-                  .filter((c) => c !== column)
-                  .map((c) => (
-                    <option key={c} value={c}>
-                      {STAGE_LABEL[c]}
-                      {c === "archived" && !canArchive ? tr("text085") : ""}
-                    </option>
-                  ))}
-              </select>
-            </label>
           </div>
+          {selected.size > 0 && (
+            <div className="crm-selection" role="region" aria-label={tr("text077")}>
+              <b>{tr("text242", fmt(selected.size))}</b>
+              <label className="crm-move">
+                <span>{tr("text084")}</span>
+                <select value={target} onChange={(e) => setTarget(e.target.value as Column)}>
+                  {columns
+                    .filter((c) => c !== column)
+                    .map((c) => (
+                      <option key={c} value={c}>
+                        {STAGE_LABEL[c]}
+                        {c === "archived" && !canArchive ? tr("text085") : ""}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <button
+                className="primary"
+                disabled={busy || !canWork || (touchesArchive && !canArchive)}
+                title={locked ?? (touchesArchive && !canArchive ? NEED_REASON.admin : undefined)}
+                onClick={apply}
+              >
+                {busy ? tr("text063") : tr("text243")}
+              </button>
+              <button className="link" onClick={() => setSelected(new Set())}>{tr("text083")}</button>
+            </div>
+          )}
 
           {loading ? (
             <Spinner label={tr("text086")} />
@@ -381,7 +343,7 @@ export function CarrierCrmPage() {
                           {v.primary_email || v.whatsapp_phone || <span className="crm-none">{tr("text091")}</span>}
                         </td>
                         <td className="crm-col-status">
-                          <Pill tone={STATUS_TONE[status] ?? ""}>{(status || "—").toUpperCase()}</Pill>
+                          <Pill tone={STATUS_TONE[status] ?? ""}>{(STATUS_WORD[status] ?? (status || "—")).toUpperCase()}</Pill>
                         </td>
                         <td className="crm-col-stage">
                           {effective ? STAGE_LABEL[effective] || effective : STAGE_LABEL[column]}
@@ -410,19 +372,6 @@ export function CarrierCrmPage() {
             />
           )}
 
-          {!loading && column !== "sourcing" && column !== "archived" && (
-            <div className="crm-note">
-              <Pill tone="indigo">{tr("text098")}</Pill>
-              <span>
-                {promoted ? (
-                  <>
-                    {vendorLabel(promoted)} {tr("text099")}{STAGE_LABEL[promoted.effective_funnel_stage!]} {tr("text100")}{STAGE_LABEL[promoted.funnel_stage!] ?? promoted.funnel_stage}{tr("text101")}</>
-                ) : (
-                  <>{tr("text102")}</>
-                )}{" "}
-                {tr("text103")}</span>
-            </div>
-          )}
         </div>
 
         <CarrierCard
