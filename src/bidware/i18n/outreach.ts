@@ -1121,6 +1121,14 @@ export const copy = {
   "text280": {
     "es": "Eventos",
     "en": "Events"
+  },
+  "text281": {
+    "es": "Hacer predeterminada",
+    "en": "Make default"
+  },
+  "text282": {
+    "es": "«{0}» es ahora la plantilla predeterminada en {1}.",
+    "en": "“{0}” is now the default template in {1}."
   }
 };
 
