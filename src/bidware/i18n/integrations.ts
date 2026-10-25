@@ -77,24 +77,24 @@ export const copy = {
     "en": "Connected with green quality."
   },
   "text019": {
-    "es": "LISTO",
-    "en": "READY"
+    "es": "Listo",
+    "en": "Ready"
   },
   "text020": {
-    "es": "ATENCIÓN",
-    "en": "ATTENTION"
+    "es": "Atención",
+    "en": "Attention"
   },
   "text021": {
-    "es": "NO USABLE",
-    "en": "UNAVAILABLE"
+    "es": "No usable",
+    "en": "Unavailable"
   },
   "text022": {
-    "es": "DESCONOCIDO",
-    "en": "UNKNOWN"
+    "es": "Desconocido",
+    "en": "Unknown"
   },
   "text023": {
-    "es": "CONECTADO",
-    "en": "CONNECTED"
+    "es": "Conectado",
+    "en": "Connected"
   },
   "text024": {
     "es": "hoy {0}",
@@ -125,12 +125,12 @@ export const copy = {
     "en": "the sales account"
   },
   "text031": {
-    "es": "Integraciones / Canales",
-    "en": "Integrations / Channels"
+    "es": "Integraciones",
+    "en": "Integrations"
   },
   "text032": {
-    "es": "Conexiones del backend compartido · las mismas que usa rateware",
-    "en": "Shared backend connections · the same ones used by rateware"
+    "es": "Los canales por los que Fr8Bid envía y recibe: WhatsApp, Gmail y Google Chat",
+    "en": "The channels Fr8Bid sends and receives through: WhatsApp, Gmail and Google Chat"
   },
   "text033": {
     "es": "Consultando…",
@@ -269,24 +269,24 @@ export const copy = {
     "en": "blocks automatic sending in {0}"
   },
   "text067": {
-    "es": "OJO",
-    "en": "NOTE"
+    "es": "Aviso",
+    "en": "Note"
   },
   "text068": {
-    "es": "Mientras Meta marque una plantilla como PENDING, los borradores de email siguen usables pero el envío automático por WhatsApp en ese idioma queda deshabilitado.",
-    "en": "While Meta marks a template as PENDING, email drafts remain usable but automatic WhatsApp sending in that language is disabled."
+    "es": "Mientras Meta revisa una plantilla, el envío automático por WhatsApp en ese idioma queda en pausa; los borradores de correo siguen funcionando.",
+    "en": "While Meta reviews a template, automatic WhatsApp sending in that language is paused; email drafts keep working."
   },
   "text069": {
     "es": "Grupos de WhatsApp",
     "en": "WhatsApp groups"
   },
   "text070": {
-    "es": "Con el flag encendido, un grupo con meta_group_id queda api_ready y su envío se automatiza desde la Cola de envío.",
-    "en": "With the flag enabled, a group with meta_group_id becomes api_ready and can be sent automatically from the Delivery queue."
+    "es": "El envío a grupos está encendido: un grupo con su ID de Meta queda listo y se envía desde la Cola de envío.",
+    "en": "Group sending is on: a group with its Meta ID is ready and is sent from the delivery queue."
   },
   "text071": {
-    "es": "Con el flag apagado puedes abrir o copiar el mensaje del grupo, pero el envío no se automatiza. El ciclo se cierra marcando “enviado manualmente”. Para pasar a api_ready se necesita el flag en true y un meta_group_id por grupo.",
-    "en": "With the flag disabled, you can open or copy the group message, but sending is manual. Complete the cycle by marking it “sent manually”. Becoming api_ready requires the flag set to true and a meta_group_id for each group."
+    "es": "El envío automático a grupos está apagado: abre o copia el mensaje del grupo y márcalo como enviado en la Cola de envío.",
+    "en": "Automatic group sending is off: open or copy the group message and mark it as sent in the delivery queue."
   },
   "text072": {
     "es": "Buscando grupos…",
@@ -301,12 +301,12 @@ export const copy = {
     "en": "Open Carrier CRM"
   },
   "text075": {
-    "es": "{0}: verificado, sigue manual_only (el flag está apagado o no tiene meta_group_id).",
-    "en": "{0}: verified, still manual_only (the flag is disabled or meta_group_id is missing)."
+    "es": "{0}: verificado; sigue con envío manual.",
+    "en": "{0}: verified; still sent manually."
   },
   "text076": {
-    "es": "{0}: verificado y listo para la API.",
-    "en": "{0}: verified and ready for the API."
+    "es": "{0}: verificado y listo para envío automático.",
+    "en": "{0}: verified and ready for automatic sending."
   },
   "text077": {
     "es": "Verificar grupo",
@@ -357,8 +357,8 @@ export const copy = {
     "en": "none"
   },
   "text089": {
-    "es": "El envío de Outreach sale de este buzón. Los rebotes se sincronizan y alimentan la supresión de correos inválidos.",
-    "en": "Outreach is sent from this mailbox. Bounces are synchronized to suppress invalid email addresses."
+    "es": "Las invitaciones y avisos salen de este buzón. Los rebotes se sincronizan para no volver a escribir a correos inválidos.",
+    "en": "Invitations and notices are sent from this mailbox. Bounces are synced so invalid addresses are not emailed again."
   },
   "text090": {
     "es": " Un token de acceso vencido es normal: duran una hora y el backend los renueva solo al enviar.",
@@ -385,7 +385,7 @@ export const copy = {
     "en": "Bounces: {0} notices checked, {1} new, {2} email addresses suppressed."
   },
   "text096": {
-    "es": "Sincronizar bounces",
+    "es": "Sincronizar rebotes",
     "en": "Sync bounces"
   },
   "text097": {
@@ -497,13 +497,27 @@ export const copy = {
     "en": " reposts undelivered Bid Room messages to the space (up to 50); nothing is sent to carriers."
   },
   "text124": {
-    "es": "COMPUERTA",
-    "en": "GATE"
+    "es": "Aprobación",
+    "en": "Approval"
   },
   "text125": {
-    "es": "Aunque los tres canales estén conectados, nada se envía sin tu aprobación explícita en la Cola de envío. Los secretos se muestran enmascarados: el estado sólo indica configurado sí/no.",
-    "en": "Even with all three channels connected, nothing is sent without your explicit approval in the Delivery queue. Secrets are masked: status only indicates whether they are configured."
-  }
+    "es": "Aunque los tres canales estén conectados, nada se envía sin tu aprobación en la Cola de envío. Los secretos nunca se muestran: solo se indica si están configurados.",
+    "en": "Even with all three channels connected, nothing is sent without your approval in the delivery queue. Secrets are never shown: only whether they are configured."
+  },
+  "text126": { "es": "Calidad", "en": "Quality" },
+  "text127": { "es": "ID del número", "en": "Phone number ID" },
+  "text128": { "es": "Secreto de la app", "en": "App secret" },
+  "text129": { "es": "Token del webhook", "en": "Webhook token" },
+  "text130": { "es": "Envío automático", "en": "Automatic sending" },
+  "text131": { "es": "Envío manual", "en": "Manual sending" },
+  "text132": { "es": "Aprobada", "en": "Approved" },
+  "text133": { "es": "En revisión", "en": "In review" },
+  "text134": { "es": "Rechazada", "en": "Rejected" },
+  "text135": { "es": "Pausada", "en": "Paused" },
+  "text136": { "es": "Manual", "en": "Manual" },
+  "text137": { "es": "Automático", "en": "Automatic" },
+  "text138": { "es": "Verificado", "en": "Verified" },
+  "text139": { "es": "Bloqueado", "en": "Blocked" }
 };
 
 export const tr = translator(copy);

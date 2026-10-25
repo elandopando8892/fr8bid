@@ -56,6 +56,27 @@ function when(iso?: string | null): string {
   return d.toDateString() === new Date().toDateString() ? tr("text024", time) : `${dateShort(iso)} · ${time}`;
 }
 
+/** Meta's template review, in the team's words. */
+const TEMPLATE_STATUS: Record<string, string> = {
+  get APPROVED() { return tr("text132"); },
+  get PENDING() { return tr("text133"); },
+  get REJECTED() { return tr("text134"); },
+  get PAUSED() { return tr("text135"); },
+};
+
+/** A carrier's WhatsApp group, as the server reports it. */
+const GROUP_STATUS: Record<string, string> = {
+  get manual_only() { return tr("text136"); },
+  get api_ready() { return tr("text137"); },
+  get verified() { return tr("text138"); },
+  get blocked() { return tr("text139"); },
+  get error() { return "Error"; },
+};
+
+const MAILBOX_STATUS: Record<string, string> = {
+  get connected() { return tr("text023"); },
+};
+
 /** One labelled fact of a channel: value in mono, plus "✓ configurado" when a secret is in place. */
 function Fact({ label, value, configured }: { label: string; value: ReactNode; configured?: boolean | null }) {
   useLang();
@@ -183,7 +204,6 @@ export function IntegrationsPage() {
   return (
     <>
       <TopBar
-        crumb="Admin"
         title={tr("text031")}
         sub={tr("text032")}
         actions={
@@ -199,9 +219,6 @@ export function IntegrationsPage() {
           {gmail.error && <ErrorBanner message={gmail.error} />}
           {wa.error && <ErrorBanner message={wa.error} />}
 
-          <InfoBanner title={tr("text035")}>
-            {tr("text036")}</InfoBanner>
-
           {loading && <Spinner label={tr("text037")} />}
 
           {!loading && (
@@ -211,7 +228,6 @@ export function IntegrationsPage() {
                 <div className="ig-head">
                   <h2>WhatsApp Business · Meta Cloud API</h2>
                   <Pill tone={HEALTH_TONE[w.state]}>{stateLabel()[w.state]}</Pill>
-                  {conn?.connection_mode && <Pill tone="blue">{conn.connection_mode}</Pill>}
                   <div className="spacer" />
                   <button
                     disabled={busy !== null}
@@ -257,11 +273,11 @@ export function IntegrationsPage() {
                 <div className="ig-facts">
                   <Fact label={tr("text052")} value={conn?.display_phone_number || "—"} />
                   <Fact label={tr("text053")} value={conn?.verified_name || "—"} />
-                  <Fact label="Quality rating" value={conn?.quality_rating || "—"} />
-                  <Fact label="Phone number ID" value={conn?.phone_number_id || "—"} configured={conn?.phone_number_id_configured} />
+                  <Fact label={tr("text126")} value={conn?.quality_rating || "—"} />
+                  <Fact label={tr("text127")} value={conn?.phone_number_id || "—"} configured={conn?.phone_number_id_configured} />
                   <Fact label="WABA ID" value={conn?.waba_id || "—"} configured={conn?.waba_id_configured} />
-                  <Fact label="App secret" value={tr("text054")} configured={conn?.app_secret_configured} />
-                  <Fact label="Verify token" value={tr("text054")} configured={conn?.webhook_configured} />
+                  <Fact label={tr("text128")} value={tr("text054")} configured={conn?.app_secret_configured} />
+                  <Fact label={tr("text129")} value={tr("text054")} configured={conn?.webhook_configured} />
                   <Fact
                     label="Webhook"
                     value={conn?.webhook_verified_at ? tr("text055", when(conn.webhook_verified_at)) : tr("text056")}
@@ -297,7 +313,7 @@ export function IntegrationsPage() {
                         <span className="ig-template-hint">
                           {ok ? tr("text065") : tr("text066", lang.split("_")[0].toUpperCase())}
                         </span>
-                        <Pill tone={ok ? "green" : status === "REJECTED" ? "red" : "amber"}>{status || "—"}</Pill>
+                        <Pill tone={ok ? "green" : status === "REJECTED" ? "red" : "amber"}>{TEMPLATE_STATUS[status] ?? (status || "—")}</Pill>
                       </div>
                     );
                   })}
@@ -316,11 +332,7 @@ export function IntegrationsPage() {
                 <section className="card ig-card ig-groups">
                   <div className="ig-head">
                     <h2>{tr("text069")}</h2>
-                    <Pill tone={groupsEnabled ? "green" : "amber"}>{groupsEnabled ? "API READY" : "MANUAL ONLY"}</Pill>
-                  </div>
-                  <div className="ig-flag mono">
-                    WHATSAPP_GROUPS_ENABLED
-                    <Pill tone={groupsEnabled ? "green" : "orange"}>{groupsEnabled ? "true" : "false"}</Pill>
+                    <Pill tone={groupsEnabled ? "green" : "amber"}>{groupsEnabled ? tr("text130") : tr("text131")}</Pill>
                   </div>
                   <p className="ig-note">
                     {groupsEnabled
@@ -335,16 +347,14 @@ export function IntegrationsPage() {
                         groupRows.map((v: Vendor) => {
                           const status = String(v.whatsapp_group_status ?? "manual_only");
                           const name = String(v.whatsapp_group_name || v.vendor_name || v.name || tr("text073"));
-                          const metaId = v.whatsapp_meta_group_id ? String(v.whatsapp_meta_group_id) : "—";
                           return (
                             <div key={v.id} className="ig-list-row">
                               <Link to="/crm" className="ig-list-name" title={tr("text074")}>
                                 {name}
                                 {Boolean(v.whatsapp_group_name) && <small>{String(v.vendor_name ?? v.name ?? "")}</small>}
                               </Link>
-                              <span className="mono ig-muted">meta_group_id: {metaId}</span>
                               <Pill tone={status === "api_ready" || status === "verified" ? "green" : status === "blocked" || status === "error" ? "red" : "amber"}>
-                                {status}
+                                {GROUP_STATUS[status] ?? status.replace(/_/g, " ")}
                               </Pill>
                               <button
                                 className="ig-small"
@@ -370,8 +380,6 @@ export function IntegrationsPage() {
                       )}
                     </div>
                   )}
-                  <p className="ig-note">
-                    <b>{tr("text079")}</b> {tr("text080")}</p>
                 </section>
 
                 {/* Gmail */}
@@ -384,7 +392,7 @@ export function IntegrationsPage() {
                   <div className="ig-facts two">
                     <Fact label={tr("text081")} value={mailbox?.mailbox_email ?? gmail.data?.allowed_sender ?? "—"} />
                     <Fact label={tr("senderIdentity")} value={mailbox?.sender_name || tr("senderNotConfigured")} />
-                    <Fact label={tr("text082")} value={mailbox?.status ?? "—"} />
+                    <Fact label={tr("text082")} value={mailbox?.status ? MAILBOX_STATUS[mailbox.status] ?? mailbox.status : "—"} />
                     <Fact label="Token OAuth" value={mailbox?.status === "connected" ? tr("text083") : "—"} configured={mailbox?.status === "connected"} />
                     <Fact label={tr("text084")} value={accessTokenAge(mailbox?.token_expires_at)} />
                     <Fact label={tr("text085")} value={mailbox?.bounces_synced_at ? when(mailbox.bounces_synced_at) : tr("text086")} />

@@ -74,7 +74,7 @@ export function BoardSide({
                   <i style={{ width: `${Math.max(6, (c.offers / top) * 100)}%` }} />
                 </span>
                 <small>
-                  {c.lanes} lane{c.lanes === 1 ? "" : "s"}
+                  {tr("text141", c.lanes, c.lanes === 1 ? "" : "s")}
                   {c.loads ? tr("text046", loads(c.loads)) : ""}
                 </small>
               </li>

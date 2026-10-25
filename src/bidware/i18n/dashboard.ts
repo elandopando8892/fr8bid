@@ -3,12 +3,12 @@ import { translator } from "./language";
 /** Copy del equipo; los valores de catálogo y datos del usuario se conservan. */
 export const copy = {
   "text001": {
-    "es": "Genera un enlace para que el shipper pida spot o mini-bid con info parcial. Llega como draft y tú autorizas.",
-    "en": "Create a link for the shipper to request a spot quote or mini-bid with partial information. It arrives as a draft for your approval."
+    "es": "Genera una liga para que el shipper capture sus rutas; llega como solicitud y tú decides.",
+    "en": "Create a link for the shipper to enter their lanes; it arrives as a request for you to review."
   },
   "text002": {
-    "es": "Crea eventos, importa lanes, arma la audiencia de carriers, revisa bids en vivo y adjudica.",
-    "en": "Create events, import lanes, build a carrier audience, review live bids and award."
+    "es": "Importa rutas, invita carriers, compara ofertas y adjudica.",
+    "en": "Import lanes, invite carriers, compare offers and award."
   },
   "text003": {
     "es": "Listas reutilizables de carriers (membresía exacta). Se comparten y replican con rateware.",
@@ -23,8 +23,8 @@ export const copy = {
     "en": "Marketplace of active opportunities, keeping carrier identities private."
   },
   "text006": {
-    "es": "Cotizaciones spot con los componentes del FCM: estima, aplica markup o manda a Bid Room.",
-    "en": "Spot quotes using FCM components: estimate, apply markup or move to Bid Room."
+    "es": "Cotiza un spot con el tarifario y el margen, o mándalo a cotizar con carriers.",
+    "en": "Quote a spot from the rate base and margin, or send it out to carriers."
   },
   "text007": {
     "es": "La base de carriers: pipeline, estatus en el TMS, contactos, duplicados y rebotes.",
@@ -43,12 +43,12 @@ export const copy = {
     "en": "Active events"
   },
   "text011": {
-    "es": "Bid Rooms abiertos: aparecen en el tablero público",
-    "en": "Open Bid Rooms: shown on the public board"
+    "es": "Eventos abiertos a ofertas",
+    "en": "Events open to offers"
   },
   "text012": {
-    "es": "Bids hoy",
-    "en": "Bids today"
+    "es": "Ofertas hoy",
+    "en": "Offers today"
   },
   "text013": {
     "es": "Ofertas recibidas o revisadas desde las 00:00, incluidas las que capturó el equipo",
@@ -63,9 +63,14 @@ export const copy = {
     "en": "Hello"
   },
   "text016": {
-    "es": "Módulo Bid Room. Todo lo que creas aquí vive en el mismo backend que rateware.",
-    "en": "Bid Room module. Everything you create here uses the same backend as rateware."
-  }
+    "es": "Lo que espera al equipo hoy.",
+    "en": "What is waiting on the team today."
+  },
+  "text017": { "es": "Nuevo evento RFx", "en": "New RFx event" },
+  "text018": { "es": "Nueva cotización", "en": "New quote" },
+  "text019": { "es": "Liga para un shipper", "en": "Link for a shipper" },
+  "text020": { "es": "Tarifas por revisar", "en": "Rates to review" },
+  "text021": { "es": "Tarifas que esperan entrar al tarifario", "en": "Rates waiting to enter the rate base" }
 };
 
 export const tr = translator(copy);

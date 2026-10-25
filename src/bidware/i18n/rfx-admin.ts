@@ -3177,7 +3177,8 @@ export const copy = {
   "text790": {
     "es": "Objetivo",
     "en": "Target"
-  }
+  },
+  "text791": { "es": "Más", "en": "More" }
 };
 
 export const tr = translator(copy);

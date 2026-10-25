@@ -8234,6 +8234,19 @@ table.data.op-table td.op-over {
   flex: none;
 }
 
+/* Event conversations: threads beside the open one; stacked on a phone. */
+.chat-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+@media (max-width: 720px) {
+  .chat-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ---------- Dashboard (wireframe 01) ---------- */
 .dash {
   display: grid;
@@ -8252,7 +8265,7 @@ table.data.op-table td.op-over {
 }
 .dash-kpis {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
 }
 .dash-kpi,
@@ -8292,7 +8305,7 @@ table.data.op-table td.op-over {
 }
 .dash-modules {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 .dash-module {
@@ -8706,6 +8719,10 @@ table.data.uploads-table {
   }
   .rate-filters > input,
   .rate-filters > select {
+    width: 100% !important;
+  }
+  .module-search,
+  .module-search input {
     width: 100% !important;
   }
   .upload-form > .field {
