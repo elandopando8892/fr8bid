@@ -233,12 +233,11 @@ export function ShipperDetailPage() {
   return (
     <>
       <TopBar
-        crumb="Procurement  ›  Shippers"
         title={shipperLabel(row)}
         sub={[row.domain, SHIPPER_STATUS_LABEL[row.status ?? ""], SHIPPER_STAGE_LABEL[row.relationship_stage ?? ""]].filter(Boolean).join(" · ")}
         actions={
           <>
-            <button onClick={() => navigate("/shippers")}>Volver</button>
+            <button onClick={() => navigate("/shippers")}>← Shippers</button>
             {archived ? (
               <button disabled={!isAdmin || Boolean(busy)} title={isAdmin ? undefined : NEED_REASON.admin} onClick={restore}>
                 {busy === "restore" ? "Restaurando…" : "Restaurar"}

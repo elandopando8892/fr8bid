@@ -145,8 +145,8 @@ export const copy = {
     "en": "Shared integration:"
   },
   "text036": {
-    "es": "Bidware no configura canales aparte. Usa el mismo remitente, plantillas y webhooks ya conectados en el backend compartido. Los secretos nunca vuelven al navegador.",
-    "en": "Bidware uses the sender, templates and webhooks already connected in the shared backend. Secrets are never returned to the browser."
+    "es": "Fr8Bid no configura canales aparte. Usa el mismo remitente, plantillas y webhooks ya conectados en el backend compartido. Los secretos nunca vuelven al navegador.",
+    "en": "Fr8Bid uses the sender, templates and webhooks already connected in the shared backend. Secrets are never returned to the browser."
   },
   "text037": {
     "es": "Consultando canales…",
@@ -393,8 +393,8 @@ export const copy = {
     "en": "Bounced emails"
   },
   "text098": {
-    "es": "Vas a DESCONECTAR el Gmail de ventas. Desde ese momento no sale ningún correo de Bidware ni de rateware ",
-    "en": "You are about to DISCONNECT sales Gmail. No email will be sent from Bidware or rateware "
+    "es": "Vas a DESCONECTAR el Gmail de ventas. Desde ese momento no sale ningún correo de Fr8Bid ni de rateware ",
+    "en": "You are about to DISCONNECT sales Gmail. No email will be sent from Fr8Bid or rateware "
   },
   "text099": {
     "es": "(invitaciones, avisos, cotizaciones) hasta que alguien lo vuelva a conectar.\n\n¿Desconectar?",

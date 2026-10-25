@@ -60,7 +60,7 @@ const copy = {
   incoming: { es: "Respuesta recibida", en: "Incoming reply" },
   outgoing: { es: "Estado del proveedor", en: "Provider status" },
   occurred: { es: "Fecha del evento", en: "Event time" },
-  received: { es: "Registrado en Bidware", en: "Recorded in Bidware" },
+  received: { es: "Registrado en Fr8Bid", en: "Recorded in Fr8Bid" },
   missingDate: { es: "Fecha no disponible", en: "Time unavailable" },
   loading: { es: "Consultando evidencia de WhatsApp…", en: "Loading WhatsApp evidence…" },
   refresh: { es: "Actualizar evidencia", en: "Refresh evidence" },

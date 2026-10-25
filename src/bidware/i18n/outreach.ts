@@ -1292,5 +1292,5 @@ export const batchText = translator({
   stopped: { es: "Tandas detenidas: {0} envío(s) confirmado(s). Revisa la Cola para aprobar los pendientes.", en: "Batches stopped: {0} send(s) confirmed. Review the queue to approve the remaining drafts." },
   attention: { es: "Envío detenido: {0} confirmado(s). Hay un error o resultado sin confirmar. Revisa los estados antes de volver a aprobar; no hubo reintento automático.", en: "Sending stopped: {0} confirmed. An error or unconfirmed outcome needs attention. Review statuses before approving again; no automatic retry was made." },
   version: { es: "La versión aprobada del correo cambió o no está disponible. Actualiza la Cola, revisa el mensaje y aprueba de nuevo. No se reintentará automáticamente.", en: "The approved email version changed or is unavailable. Refresh the queue, review the message and approve again. There is no automatic retry." },
-  another: { es: "Hay un envío activo en otra pestaña de Bidware. Espera a que termine.", en: "Another Bidware tab is sending. Wait until it finishes." },
+  another: { es: "Hay un envío activo en otra pestaña de Fr8Bid. Espera a que termine.", en: "Another Fr8Bid tab is sending. Wait until it finishes." },
 });

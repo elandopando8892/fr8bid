@@ -85,13 +85,11 @@ export function CatalogSelect({
 }
 
 /** "catálogo": the list is the RFI template's own. */
-export const CatalogTag = ({ copy }: { copy: Copy }) => <em className="sr-tag catalog">{copy.catalogTag}</em>;
 
 /** A labelled control; `required` marks what the RFI template stars. */
 function Field({
   label,
   required,
-  tag,
   wide,
   title,
   copy,
@@ -99,7 +97,6 @@ function Field({
 }: {
   label: string;
   required?: boolean;
-  tag?: boolean;
   wide?: boolean;
   title?: string;
   copy: Copy;
@@ -114,7 +111,6 @@ function Field({
             •
           </i>
         )}
-        {tag && <CatalogTag copy={copy} />}
       </span>
       {children}
     </label>
@@ -296,10 +292,10 @@ export function LaneForm({ token, lane, kind, segments, defaults, lang, copy, pr
 
       <h4 className="sr-sec-title">{copy.sections.cargo}</h4>
       <div className="sr-grid4">
-        <Field label={copy.truck} required={marks} tag copy={copy}>
+        <Field label={copy.truck} required={marks} copy={copy}>
           <CatalogSelect list={TRUCK_TYPES} value={lane.truck} lang={lang} empty={copy.choose} invalid={bad("truck")} onChange={(truck) => onChange({ truck })} />
         </Field>
-        <Field label={copy.equipment} required={marks} tag copy={copy}>
+        <Field label={copy.equipment} required={marks} copy={copy}>
           <CatalogSelect
             list={EQUIPMENT_TYPES}
             value={lane.equipment}
@@ -404,7 +400,7 @@ export function LaneForm({ token, lane, kind, segments, defaults, lang, copy, pr
             ))}
           </select>
         </Field>
-        <Field label={copy.operation} required={marks} tag copy={copy}>
+        <Field label={copy.operation} required={marks} copy={copy}>
           <CatalogSelect
             list={OPERATION_TYPES}
             value={lane.operation}
@@ -415,7 +411,7 @@ export function LaneForm({ token, lane, kind, segments, defaults, lang, copy, pr
         </Field>
         {crossing && (
           <>
-            <Field label={copy.crossing} required={marks} tag copy={copy}>
+            <Field label={copy.crossing} required={marks} copy={copy}>
               <CatalogSelect list={BORDER_CROSSINGS} value={lane.border_crossing} lang={lang} empty={copy.choose} onChange={(border_crossing) => onChange({ border_crossing })} />
             </Field>
             <Field label={copy.borderDays} required={marks} copy={copy}>

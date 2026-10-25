@@ -1082,7 +1082,7 @@ export const copy = {
   },
   "text270": {
     "es": "Cópialo a tu correo, o usa «Preparar para la Cola» para dejarlo como borrador.",
-    "en": "Copy it to your email. Sending from Bidware will be available in a later phase."
+    "en": "Copy it to your email, or use «Prepare for the queue» to leave it as a draft."
   },
   "text271": {
     "es": "Texto copiado.",

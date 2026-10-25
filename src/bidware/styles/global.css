@@ -1853,15 +1853,6 @@ textarea {
   color: var(--muted);
   white-space: nowrap;
 }
-.sr-tag.catalog {
-  margin-left: auto;
-  background: var(--indigo-light);
-  color: var(--indigo);
-}
-.sr-tag.blue {
-  background: var(--blue-light);
-  color: var(--blue);
-}
 .sr-tag.green {
   background: var(--green-light);
   color: var(--green);
@@ -1992,38 +1983,34 @@ textarea {
   padding: 18px 22px;
 }
 .sr-type {
-  display: grid;
-  gap: 6px;
+  margin: 0;
+  font-size: 13px;
 }
 .sr-type-label {
   font-size: 12px;
   font-weight: 600;
 }
-.sr-type-label small {
+.sr-type small {
   color: var(--muted);
   font-size: 11px;
-  font-weight: 400;
 }
-.sr-segmented {
-  display: flex;
-  padding: 3px;
-  background: var(--subtle);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+/* The project's requirements stay folded until the shipper opens them. */
+.sr-crit-fold > summary {
+  cursor: pointer;
+  list-style: none;
 }
-.sr-segmented > span {
-  flex: 1;
-  padding: 8px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--grey);
-  border-radius: var(--radius);
-  cursor: default;
+.sr-crit-fold > summary::-webkit-details-marker {
+  display: none;
 }
-.sr-segmented > span.active {
-  background: var(--ink);
-  color: #fff;
-  font-weight: 600;
+.sr-crit-fold > summary h2::before {
+  content: "▸ ";
+  color: var(--muted);
+}
+.sr-crit-fold[open] > summary h2::before {
+  content: "▾ ";
+}
+.sr-crit-fold[open] > * + * {
+  margin-top: 14px;
 }
 .sr-multi {
   position: relative;
@@ -2351,9 +2338,6 @@ textarea {
   .sr-grid4 .sr-place,
   .sr-grid4 .sr-days-field {
     grid-column: auto;
-  }
-  .sr-segmented {
-    flex-direction: column;
   }
   .sr-lane-row {
     flex-wrap: wrap;
@@ -8610,8 +8594,8 @@ table.data.intake-table td {
   white-space: nowrap;
 }
 
-/* QuoteDesk: counts ride on the stage tabs; secondary moves live under «Más». */
-.qd-tab-count {
+/* Counts ride on their tab; QuoteDesk keeps its secondary moves under «Más». */
+.tab-count {
   margin-left: 6px;
   padding: 0 6px;
   border-radius: 999px;
@@ -8665,6 +8649,31 @@ table.data.intake-table td {
     padding-right: 6px;
   }
   .qd-table .cell-sub:not(:first-child) {
+    display: none;
+  }
+}
+@media (max-width: 640px) {
+  /* A phone stacks the page title over its actions and wraps tab strips instead of scrolling sideways. */
+  .topbar {
+    flex-wrap: wrap;
+  }
+  .topbar > div:first-child {
+    flex-basis: 100%;
+  }
+  .topbar > .spacer {
+    display: none;
+  }
+  .tabs {
+    flex-wrap: wrap;
+  }
+  .shippers-table th:nth-child(2),
+  .shippers-table td:nth-child(2),
+  .shippers-table th:nth-child(3),
+  .shippers-table td:nth-child(3),
+  .shippers-table th:nth-child(6),
+  .shippers-table td:nth-child(6),
+  .shippers-table th:nth-child(7),
+  .shippers-table td:nth-child(7) {
     display: none;
   }
 }

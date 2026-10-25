@@ -69,7 +69,7 @@ export function CarrierProfilePage() {
 
   useEffect(() => {
     document.documentElement.lang = lang;
-    document.title = `${COPY[lang].eyebrow} · Bidware`;
+    document.title = `${COPY[lang].eyebrow} · Marksman`;
     try {
       localStorage.setItem(LANG_KEY, lang);
     } catch {
@@ -342,7 +342,7 @@ function Shell({
   return (
     <div style={{ maxWidth: 1080, margin: "0 auto", padding: "28px 20px 60px" }}>
       <div className="brand" style={{ paddingLeft: 0 }}>
-        <span className="dot" /> Bidware
+        <span className="dot" /> Marksman
       </div>
       <div className="public-head">
         <div>

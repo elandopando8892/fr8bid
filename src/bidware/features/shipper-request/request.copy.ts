@@ -10,7 +10,7 @@ export const COPY = {
     barNote: "Solicitud de cotización · enlace privado",
     pageTitle: "Solicita tu cotización",
     pageSub:
-      "Con info parcial es suficiente. Los desplegables usan catálogos reales (equipo, operación, cruce) para que tu solicitud empate con nuestro modelo.",
+      "Con información parcial es suficiente.",
     autosaves: "Se guarda solo: puedes salir y volver con esta misma liga.",
     loading: "Abriendo tu solicitud…",
     missingTitle: "Falta la liga",
@@ -40,7 +40,6 @@ export const COPY = {
     mainCommodity: "Commodity principal",
     mainCommodityHint: "Alimentos, autopartes…",
     standardEquipment: "Equipo estándar",
-    catalogTag: "catálogo",
     standard: "Estándar",
     segments: "Segmento operativo",
     segmentsHint: "Elige los que cubre tu solicitud; cada uno trae sus propias preguntas.",
@@ -55,7 +54,6 @@ export const COPY = {
     auto: "Automático",
     // Lanes
     lanesTitle: "Rutas / Lanes",
-    lanesTag: "detalle por ruta",
     laneTag: (n: number) => `LANE ${String(n).padStart(3, "0")}`,
     newLane: "Nueva ruta",
     lanesComplete: (done: number, total: number) => `${done} de ${total} completas`,
@@ -143,8 +141,8 @@ export const COPY = {
     driverAssist: "¿Asistencia del conductor?",
     notesHint: "Restricciones, excepciones, comentarios de esta ruta…",
     // Criterios globales del proyecto: rateware's questionnaire
-    criteriaTitle: "Criterios globales del proyecto",
-    criteriaTag: "opcional · aplican a todas las rutas",
+    criteriaTitle: "Requisitos para todas las rutas",
+    criteriaTag: "opcional",
     criteria: {
       logistics_model: "Modelo Logístico",
       operation_criteria: "Criterios de Operación",
@@ -181,7 +179,7 @@ export const COPY = {
     barNote: "Quote request · private link",
     pageTitle: "Request your quote",
     pageSub:
-      "Partial info is enough. The dropdowns use real catalogs (equipment, operation, crossing) so your request matches our model.",
+      "Partial info is enough.",
     autosaves: "It saves as you go: leave and come back with this same link.",
     loading: "Opening your request…",
     missingTitle: "The link is missing",
@@ -209,7 +207,6 @@ export const COPY = {
     mainCommodity: "Main commodity",
     mainCommodityHint: "Food, auto parts…",
     standardEquipment: "Standard equipment",
-    catalogTag: "catalog",
     standard: "Standard",
     segments: "Operating segment",
     segmentsHint: "Pick the ones your request covers; each brings its own questions.",
@@ -223,7 +220,6 @@ export const COPY = {
     choose: "Choose…",
     auto: "Automatic",
     lanesTitle: "Lanes",
-    lanesTag: "per-lane detail",
     laneTag: (n: number) => `LANE ${String(n).padStart(3, "0")}`,
     newLane: "New lane",
     lanesComplete: (done: number, total: number) => `${done} of ${total} complete`,
@@ -308,8 +304,8 @@ export const COPY = {
     teamDriver: "Team driver",
     driverAssist: "Driver's assistance?",
     notesHint: "Restrictions, exceptions, comments on this lane…",
-    criteriaTitle: "Project-wide criteria",
-    criteriaTag: "optional · apply to every lane",
+    criteriaTitle: "Requirements for every lane",
+    criteriaTag: "optional",
     criteria: {
       logistics_model: "Logistics Model",
       operation_criteria: "Operating Criteria",
