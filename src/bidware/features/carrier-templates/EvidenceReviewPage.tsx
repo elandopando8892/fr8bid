@@ -5,8 +5,9 @@ import { useLang } from "@/i18n/language";
 import { ErrorBanner, InfoBanner } from "@/components/ui";
 import { ProviderAdvisory } from "./ProviderAdvisory";
 import { PublishedClassification } from "./PublishedClassification";
-import { downloadJSON, MAX_REVIEW_BYTES, parseReview, readCurrentCut, REVIEW_TTL_MS, verifyAgainstCut,
-  type EvidenceCut, type ReviewBundle, type PlanEntry } from "./evidence-review";
+import { downloadJSON, listTiers, MAX_REVIEW_BYTES, parseReview, readCurrentCut, REVIEW_TTL_MS, TaxonomyError, verifyAgainstCut,
+  type EvidenceCut, type ListTier, type ReviewBundle, type PlanEntry } from "./evidence-review";
+import { listAllCarrierTemplates } from "./templates.service";
 import "./evidence-review.css";
 
 export function EvidenceReviewPage() {
@@ -22,9 +23,21 @@ function EvidenceReviewContent({ org }: { org: string }) {
   const [checkedAt, setCheckedAt] = useState(0), [now, setNow] = useState(Date.now()), [focus, setFocus] = useState("");
   const serial = useRef(0);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => { serial.current++; clearInterval(timer); }; }, []);
+  const [tiers, setTiers] = useState<ListTier[] | null>(null), [tiersError, setTiersError] = useState(false);
+  useEffect(() => {
+    let live = true;
+    listAllCarrierTemplates().then(r => { if (live) setTiers(listTiers(r.rows)); }).catch(() => { if (live) setTiersError(true); });
+    return () => { live = false; };
+  }, [org]);
   const current = Boolean(bundle && checkedAt && now - checkedAt < REVIEW_TTL_MS);
   const ready = current && bundle?.plan.status === "ready_for_host_review";
   function explain(e: unknown): string {
+    if (e instanceof TaxonomyError) {
+      const faltan = e.missing.join(", "), repetidas = e.duplicated.join(", ");
+      return text(
+        `El clasificador original necesita las 25 listas con su nombre exacto. ${e.missing.length ? `Faltan ${e.missing.length}: ${faltan}.` : ""}${e.duplicated.length ? ` Repetidas: ${repetidas}.` : ""} Las listas de arriba no cambian por esto.`,
+        `The original classifier needs all 25 lists with their exact names. ${e.missing.length ? `Missing ${e.missing.length}: ${faltan}.` : ""}${e.duplicated.length ? ` Repeated: ${repetidas}.` : ""} The lists above are not affected.`);
+    }
     const code = e instanceof Error ? e.message : "";
     const messages: Record<string, [string, string]> = {
       REVIEW_CHANGED: ["Cambió la versión o membresía de las plantillas. Exporta otro corte y vuelve a ejecutar el clasificador.", "Template versions or members changed. Export a new cut and run the classifier again."],
@@ -83,6 +96,22 @@ function EvidenceReviewContent({ org }: { org: string }) {
     </div></header>
     <div className="evidence-review tpl-body">
       <InfoBanner>{text("Las propuestas conservan sus fuentes y pendientes de identidad. Esta revisión no aplica cambios ni autoriza operación o contacto.", "Proposals retain their sources and identity issues. This review does not apply changes or authorize operations or contact.")}</InfoBanner>
+      <section aria-label={text("Listas actuales", "Current lists")}>
+        <h2>{text("Listas actuales", "Current lists")}</h2>
+        <p>{text("Principal: carriers con oferta real o cotización propia. Ampliada: carriers con tarifa histórica compatible (clasificador de ChatGPT/Codex); no es tarifa vigente.", "Main: carriers with a real offer or their own quote. Extended: carriers with a compatible historical rate (ChatGPT/Codex classifier); not a current rate.")}</p>
+        {tiersError && <ErrorBanner message={text("No se pudieron leer las listas.", "The lists could not be read.")} />}
+        {!tiers && !tiersError && <p role="status">{text("Cargando…", "Loading…")}</p>}
+        {tiers && <div className="crm-table-wrap"><table className="data evidence-table"><thead><tr>
+          <th>{text("Plantilla", "Template")}</th><th>{text("Principal", "Main")}</th><th>{text("Ampliada", "Extended")}</th>
+        </tr></thead><tbody>{tiers.map(t => <tr key={t.base}>
+          <td>{t.principal ? <Link to={`/templates/${t.principal.id}/edit`}>{t.base}</Link> : t.base}</td>
+          <td>{t.principal ? t.principal.members : "—"}</td>
+          <td>{t.ampliada ? <Link to={`/templates/${t.ampliada.id}/edit`}>{t.ampliada.members}</Link> : "—"}</td>
+        </tr>)}</tbody><tfoot><tr><td>{text("Total", "Total")}</td>
+          <td>{tiers.reduce((n, t) => n + (t.principal?.members ?? 0), 0)}</td>
+          <td>{tiers.reduce((n, t) => n + (t.ampliada?.members ?? 0), 0)}</td>
+        </tr></tfoot></table></div>}
+      </section>
       <PublishedClassification org={org} />
       <h2>{text("Revisión local del clasificador (opcional)", "Local classifier review (optional)")}</h2>
       <section className="evidence-steps" aria-label={text("Preparar revisión", "Prepare review")}>

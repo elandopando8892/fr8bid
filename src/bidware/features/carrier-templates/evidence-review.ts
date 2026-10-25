@@ -63,7 +63,7 @@ export async function digest(value: unknown): Promise<string> {
 export async function makeCut(rows: CarrierListTemplate[], orgId: string, now = new Date()): Promise<EvidenceCut> {
   if (!orgId || rows.some(r => r.organization_id !== orgId)) throw new Error("REVIEW_ORGANIZATION");
   const selected = rows.filter(r => TEMPLATE_NAMES.includes(String(r.segment_name)));
-  if (selected.length !== 25 || !unique(selected.map(r => String(r.segment_name)))) throw new Error("REVIEW_TAXONOMY");
+  if (selected.length !== 25 || !unique(selected.map(r => String(r.segment_name)))) throw new TaxonomyError(selected);
   const templates = selected.map(r => {
     if (!r.id || !Number.isSafeInteger(r.template_version) || Number(r.template_version) < 1 ||
         !strings(r.vendor_ids) || !unique(r.vendor_ids) || r.lifecycle_status === "archived" ||
@@ -75,6 +75,39 @@ export async function makeCut(rows: CarrierListTemplate[], orgId: string, now = 
   return { snapshot_format: "bidware-carrier-cut/1", snapshot_id: `bidware:${now.toISOString()}:${membershipHash}`,
     captured_at: now.toISOString(), org_id: orgId, membership_version: `sha256:${membershipHash}`, templates,
     outside_scope: rows.filter(r => !TEMPLATE_NAMES.includes(String(r.segment_name)) && r.lifecycle_status !== "archived").length };
+}
+/** The classifier's contract is the 25 original lists; this names which ones the catalog lacks or repeats. */
+export class TaxonomyError extends Error {
+  readonly missing: string[];
+  readonly duplicated: string[];
+  constructor(selected: CarrierListTemplate[]) {
+    super("REVIEW_TAXONOMY");
+    const live = selected.filter(r => r.lifecycle_status !== "archived").map(r => String(r.segment_name));
+    this.missing = TEMPLATE_NAMES.filter(name => !live.includes(name));
+    this.duplicated = TEMPLATE_NAMES.filter(name => live.filter(n => n === name).length > 1);
+  }
+}
+
+/** Second tier of a list: carriers with only historical compatible rates (ChatGPT/Codex register, 22-oct-2026). */
+export const AMPLIADA_SUFFIX = " · Ampliada";
+export interface TierList { id: string; version: number; members: number; status: string }
+export interface ListTier { base: string; original: boolean; principal?: TierList; ampliada?: TierList }
+
+/** Pairs each list with its «· Ampliada» companion. Archived lists are left out. */
+export function listTiers(rows: CarrierListTemplate[]): ListTier[] {
+  const tiers = new Map<string, ListTier>();
+  for (const r of rows) {
+    if (!r.id || r.lifecycle_status === "archived") continue;
+    const name = String(r.segment_name ?? "");
+    const ampliada = name.endsWith(AMPLIADA_SUFFIX);
+    const base = ampliada ? name.slice(0, -AMPLIADA_SUFFIX.length) : name;
+    const tier = tiers.get(base) ?? { base, original: TEMPLATE_NAMES.includes(base) };
+    const entry = { id: r.id, version: Number(r.template_version ?? 0),
+      members: r.vendor_ids?.length ?? r.member_count ?? 0, status: String(r.lifecycle_status ?? "") };
+    if (ampliada) tier.ampliada = entry; else tier.principal = entry;
+    tiers.set(base, tier);
+  }
+  return [...tiers.values()].sort((a, b) => a.base.localeCompare(b.base));
 }
 export async function readCurrentCut(orgId: string): Promise<EvidenceCut> {
   return makeCut((await listAllCarrierTemplates()).rows, orgId);
