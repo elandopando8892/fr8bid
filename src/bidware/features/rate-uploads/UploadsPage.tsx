@@ -1,8 +1,6 @@
 import { words, tr } from "@/i18n/rate-uploads";
 import { useLang } from "@/i18n/language";
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import "@/styles/table-scroll.css";
 import { useAuth } from "@/auth/AuthContext";
 import { confirmAsync, promptAsync } from "@/components/confirm";
 import { useAsync } from "@/components/useAsync";
@@ -30,8 +28,8 @@ const STATUS: Record<string, { tone: any; label: string }> = {
   uploaded: { tone: "amber", get label() { return tr("text003"); } },
   interpreting: { tone: "blue", get label() { return tr("text004"); } },
   staged: { tone: "green", get label() { return tr("text005"); } },
-  error: { tone: "red", label: "ERROR" },
-  failed: { tone: "red", label: "ERROR" },
+  get error() { return { tone: "red", label: tr("text058") }; },
+  get failed() { return { tone: "red", label: tr("text058") }; },
 };
 
 const readResult = (name: string, res: Interpretation) => {
@@ -191,18 +189,7 @@ export function UploadsPage() {
 
   return (
     <>
-      <TopBar
-        crumb={tr("text021")}
-        title={tr("text022")}
-        sub={tr("text023")}
-        actions={
-          <>
-            <Link to="/tarifas" className="btn">
-              {tr("text024")}</Link>
-            <button onClick={list.reload}>{tr("text025")}</button>
-          </>
-        }
-      />
+      <TopBar title={tr("text022")} sub={tr("text023")} />
       <main className="main">
         <div style={{ display: "grid", gap: 14 }}>
           {notice && <InfoBanner>{notice}</InfoBanner>}
@@ -211,7 +198,7 @@ export function UploadsPage() {
             <h2 style={{ margin: 0 }}>{tr("text026")}</h2>
             <p className="cell-sub" style={{ margin: 0 }}>
               {tr("text027")}</p>
-            <div className="row" style={{ flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div className="row upload-form" style={{ flexWrap: "wrap", alignItems: "flex-end" }}>
               <label className="field" style={{ minWidth: 260, marginBottom: 0 }}>
                 <span>{tr("text028")}</span>
                 <input
@@ -281,12 +268,20 @@ export function UploadsPage() {
           {list.error && <ErrorBanner message={list.error} />}
           {list.data && (
             <div className="row" style={{ flexWrap: "wrap" }}>
-              <button className={tab === "team" ? "primary" : undefined} onClick={() => { setTab("team"); setShowAll(false); }}>
-                {tr("text038")}{team.length})
-              </button>
-              <button className={tab === "bids" ? "primary" : undefined} onClick={() => { setTab("bids"); setShowAll(false); }}>
-                {tr("text039")}{bids.length})
-              </button>
+              <div className="tabs" role="tablist">
+                {([["team", tr("text038"), team.length], ["bids", tr("text039"), bids.length]] as const).map(([key, label, count]) => (
+                  <button
+                    key={key}
+                    role="tab"
+                    aria-selected={tab === key}
+                    className={tab === key ? "active" : ""}
+                    onClick={() => { setTab(key); setShowAll(false); }}
+                  >
+                    {label}
+                    {count ? <span className="tab-count">{count}</span> : null}
+                  </button>
+                ))}
+              </div>
               {tab === "bids" && (
                 <span className="cell-sub">
                   {tr("text040")}</span>
@@ -295,8 +290,7 @@ export function UploadsPage() {
           )}
           {list.data && (rows.length ? (
             <>
-              <div className="data-table-scroll" role="region" tabIndex={0} aria-label={tr("text022")}>
-              <table className="data">
+              <table className="data uploads-table">
                 <thead>
                   <tr>
                     <th>{tr("text028")}</th>
@@ -309,13 +303,13 @@ export function UploadsPage() {
                 </thead>
                 <tbody>
                   {visible.map((u) => {
-                    const status = STATUS[String(u.status || "").toLowerCase()] ?? { tone: "", label: String(u.status || "—").toUpperCase() };
+                    const status = STATUS[String(u.status || "").toLowerCase()] ?? { tone: "", label: String(u.status || "—").replace(/_/g, " ") };
                     const warnings = Array.isArray(u.audit_warnings) ? u.audit_warnings.length : 0;
                     return (
                       <tr key={u.id}>
                         <td>
                           <div className="cell-title">{u.original_filename || u.filename || "—"}</div>
-                          <div className="cell-sub">{TYPE_LABEL[String(u.document_type)] ?? u.document_type ?? ""}</div>
+                          <div className="cell-sub">{TYPE_LABEL[String(u.document_type)] ?? String(u.document_type ?? "").replace(/_/g, " ")}</div>
                         </td>
                         <td>
                           {u.vendors?.vendor_name || u.vendor_hint || "—"}
@@ -334,22 +328,28 @@ export function UploadsPage() {
                           ) : null}
                         </td>
                         <td>
-                          <div className="row" style={{ justifyContent: "flex-end", flexWrap: "wrap" }}>
+                          <div className="row" style={{ justifyContent: "flex-end", flexWrap: "nowrap" }}>
                             <button onClick={() => open(u)}>{tr("text046")}</button>
                             {tab === "team" && (
-                              <>
-                                <button disabled={!canWork || !!busy} title={lockedTitle} onClick={() => read(u)}>
-                                  {busy === u.id ? tr("text047") : u.interpreted_at || u.interpreted_rate_rows ? tr("text048") : tr("text049")}
-                                </button>
-                                <button disabled={!canWork || !!busy} title={lockedTitle} onClick={() => archive(u)}>
-                                  {tr("text050")}</button>
-                                <button
-                                  disabled={!canWork || !!busy}
-                                  title={canAdmin ? undefined : tr("text051")}
-                                  onClick={() => remove(u)}
+                              <details className="qd-more">
+                                <summary className="btn">{tr("text059")} ▾</summary>
+                                <div
+                                  className="qd-more-menu"
+                                  onClick={(e) => ((e.currentTarget.parentElement as HTMLDetailsElement).open = false)}
                                 >
-                                  {tr("text052")}</button>
-                              </>
+                                  <button disabled={!canWork || !!busy} title={lockedTitle} onClick={() => read(u)}>
+                                    {busy === u.id ? tr("text047") : u.interpreted_at || u.interpreted_rate_rows ? tr("text048") : tr("text049")}
+                                  </button>
+                                  <button disabled={!canWork || !!busy} title={lockedTitle} onClick={() => archive(u)}>
+                                    {tr("text050")}</button>
+                                  <button
+                                    disabled={!canWork || !!busy}
+                                    title={canAdmin ? undefined : tr("text051")}
+                                    onClick={() => remove(u)}
+                                  >
+                                    {tr("text052")}</button>
+                                </div>
+                              </details>
                             )}
                           </div>
                         </td>
@@ -358,7 +358,6 @@ export function UploadsPage() {
                   })}
                 </tbody>
               </table>
-              </div>
               {rows.length > visible.length && (
                 <div className="row">
                   <span className="cell-sub">

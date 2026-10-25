@@ -3,7 +3,7 @@ import { useLang, getLang } from "@/i18n/language";
 import { useEffect, useMemo, useState } from "react";
 import { confirmAsync } from "@/components/confirm";
 import { useAsync } from "@/components/useAsync";
-import { Empty, ErrorBanner, InfoBanner, Pill, Spinner, TopBar, money } from "@/components/ui";
+import { Empty, ErrorBanner, InfoBanner, Pill, Spinner, TopBar, dateShort, money } from "@/components/ui";
 import { useAuth } from "@/auth/AuthContext";
 import { NEED_REASON } from "@/lib/roles";
 import { listRfxEvents } from "@/features/rfx-admin/rfx.service";
@@ -223,12 +223,7 @@ function RateReviewContent() {
 
   return (
     <div className="rr-page">
-      <TopBar
-        crumb={tr("text037")}
-        title={tr("text038")}
-        sub={tr("text039")}
-        actions={<button onClick={pending.reload}>{tr("text040")}</button>}
-      />
+      <TopBar title={tr("text038")} sub={tr("text039")} />
       <main className="main">
         <div style={{ display: "grid", gap: 14 }}>
           {pending.error && <ErrorBanner message={pending.error} />}
@@ -348,8 +343,16 @@ function RateReviewContent() {
                           </td>
                           <td className="rr-equipment" role="cell" data-label={tr("text057")}>
                             {cellValue(row, "equipment")}
+                            {/* Only the parts the rate carries: an empty config adds no « · —». */}
                             <div className="cell-sub">
-                              {cellValue(row, "trailer")} · {cellValue(row, "config")}
+                              {(["trailer", "config"] as const)
+                                .filter((field) => row[field])
+                                .map((field, i) => (
+                                  <span key={field}>
+                                    {i ? " · " : ""}
+                                    {cellValue(row, field)}
+                                  </span>
+                                ))}
                             </div>
                           </td>
                           <td className="rr-operation" role="cell" data-label={tr("text058")}>
@@ -366,9 +369,9 @@ function RateReviewContent() {
                             )}
                           </td>
                           <td className="rr-validity" role="cell" data-label={tr("text060")}>
-                            <div>{row.valid_through ? String(row.valid_through).slice(0, 10) : "—"}</div>
+                            <div>{dateShort(row.valid_through)}</div>
                             <div className="cell-sub">
-                              {row.quote_date ? tr("text066", String(row.quote_date).slice(0, 10)) : ""}
+                              {row.quote_date ? tr("text066", dateShort(row.quote_date)) : ""}
                               {row.weekly_capacity ? tr("text067", row.weekly_capacity) : ""}
                             </div>
                           </td>
