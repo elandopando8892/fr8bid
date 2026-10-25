@@ -125,6 +125,36 @@ export async function updateTemplate(template: OutreachTemplate, edits: Template
   return res.row;
 }
 
+/**
+ * Makes this team template the one invitations start on for its language.
+ * Mensaje and the new event pick the team's default first; without one they
+ * fell on whichever team template came first (a test one). The team's other
+ * default in the same language is turned off, so there is only one.
+ */
+export async function makeDefault(template: OutreachTemplate, all: OutreachTemplate[]) {
+  const edits = (t: OutreachTemplate): TemplateEdits => ({
+    name: t.name,
+    channel: t.channel || "email",
+    subject: t.subject ?? "",
+    html_body: t.html_body ?? "",
+    whatsapp_body: t.whatsapp_body ?? "",
+  });
+  const language = languageOf(template);
+  const previous = all.filter(
+    (t) => t.id !== template.id && !isSystem(t) && t.is_default && languageOf(t) === language,
+  );
+  await callRatewareApi("update_outreach_template", {
+    id: template.id,
+    patch: fullTemplate({ ...template, is_default: true }, edits(template)),
+  });
+  for (const t of previous) {
+    await callRatewareApi("update_outreach_template", {
+      id: t.id,
+      patch: fullTemplate({ ...t, is_default: false }, edits(t)),
+    });
+  }
+}
+
 /** A team copy named "… Copy"; it has no WhatsApp link until it is connected. */
 export async function duplicateTemplate(id: string) {
   const res = await callRatewareApi<{ row: OutreachTemplate }>("duplicate_outreach_template", { id });

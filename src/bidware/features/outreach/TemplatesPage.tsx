@@ -17,6 +17,7 @@ import {
   isSystem,
   languageOf,
   listTemplates,
+  makeDefault,
   type OutreachTemplate,
 } from "./templates.service";
 
@@ -98,6 +99,14 @@ export function TemplatesPage() {
     await run(async () => {
       const row = await duplicateTemplate(t.id);
       navigate(`/plantillas/${row.id}`);
+    });
+  }
+
+  async function setDefault(t: OutreachTemplate) {
+    await run(async () => {
+      await makeDefault(t, rows);
+      setNotice(tr("text282", t.name, LANGUAGE_LABEL[languageOf(t)].toLowerCase()));
+      reload();
     });
   }
 
@@ -198,6 +207,10 @@ export function TemplatesPage() {
                             <>
                               <Link to={`/plantillas/${t.id}`} className="btn">
                                 {tr("text268")}</Link>
+                              {!t.is_default && (
+                                <button disabled={busy || !canWork} title={lockedTitle} onClick={() => setDefault(t)}>
+                                  {tr("text281")}</button>
+                              )}
                               <button disabled={busy || !canWork} title={lockedTitle} onClick={() => duplicate(t)}>
                                 {tr("text269")}</button>
                               <button disabled={busy || !canAdmin} title={adminTitle} onClick={() => archive(t)}>
