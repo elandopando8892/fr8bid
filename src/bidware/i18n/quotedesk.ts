@@ -109,11 +109,11 @@ export const copy = {
     "en": "You are about to remove lane {0} from {1}. Continue?"
   },
   "text027": {
-    "es": "Drivers FCM",
-    "en": "FCM drivers"
+    "es": "Datos de la ruta",
+    "en": "Lane details"
   },
   "text028": {
-    "es": "Catálogos de rateware. Geo: MX ciudad/estado · US/CA ZIP3 o mercado KMA, igual que en el FCM.",
+    "es": "Origen y destino: ciudad/estado en México; ZIP3 o mercado KMA en EUA y Canadá.",
     "en": "Catalogs from rateware. Geography: MX city/state · US/CA ZIP3 or KMA market, as in FCM."
   },
   "text029": {
@@ -209,11 +209,11 @@ export const copy = {
     "en": "catalog"
   },
   "text052": {
-    "es": "Se miden con Google, tramo MX y tramo US; si Google no responde, se usa el catálogo de millas de rateware.",
+    "es": "Se miden con Google, tramo MX y tramo US; si Google no responde, se usa el catálogo de millas.",
     "en": "Measured by Google for the MX and US legs; if Google is unavailable, rateware's mileage catalog is used."
   },
   "text053": {
-    "es": "Del catálogo de millas de rateware. Si la ruta no está, escríbelas a mano.",
+    "es": "Del catálogo de millas. Si la ruta no está, escríbelas a mano.",
     "en": "From rateware's mileage catalog. If the route is missing, enter miles manually."
   },
   "text054": {
@@ -321,7 +321,7 @@ export const copy = {
     "en": "use "
   },
   "text080": {
-    "es": "Cruce / border",
+    "es": "Cruce fronterizo",
     "en": "Border crossing"
   },
   "text081": {
@@ -765,7 +765,7 @@ export const copy = {
     "en": "Avg. margin"
   },
   "text191": {
-    "es": "Tracker de oportunidades · componentes de cálculo del FCM · estima, aplica markup o manda a Bid Room",
+    "es": "Cotiza rutas para shippers: estima con el FCM, aplica margen o mándalas al Bid Room.",
     "en": "Opportunity tracker · FCM calculation components · estimate, apply markup or move to Bid Room"
   },
   "text192": {
@@ -781,11 +781,11 @@ export const copy = {
     "en": "Loading quotes…"
   },
   "text195": {
-    "es": "Cliente (CRM)",
+    "es": "Shipper",
     "en": "Customer (CRM)"
   },
   "text196": {
-    "es": "Costo FCM",
+    "es": "Costo",
     "en": "FCM cost"
   },
   "text197": {
@@ -1081,7 +1081,7 @@ export const copy = {
     "en": "Details updated."
   },
   "text270": {
-    "es": "Cópialo a tu correo. Enviar desde Bidware llega en una siguiente fase.",
+    "es": "Cópialo a tu correo, o usa «Preparar para la Cola» para dejarlo como borrador.",
     "en": "Copy it to your email. Sending from Bidware will be available in a later phase."
   },
   "text271": {
@@ -1153,15 +1153,15 @@ export const copy = {
     "en": "Could not refresh the quote. {0}"
   },
   "text288": {
-    "es": "Estampado del RFx Event",
+    "es": "Lo que pasa al evento RFx",
     "en": "RFx Event details"
   },
   "text289": {
-    "es": "Todavía sin rubros: captura la ruta y sus drivers.",
+    "es": "Todavía sin rubros: captura la ruta y sus datos.",
     "en": "No categories yet: enter the lane and its drivers."
   },
   "text290": {
-    "es": "Los rubros capturados se homologan y viajan como snippets al RFx Event / cotización.",
+    "es": "Estos datos de la ruta viajan al evento cuando la mandas al Bid Room.",
     "en": "Entered categories are standardized and included as snippets in the RFx Event / quote."
   },
   "text291": {
@@ -1287,6 +1287,26 @@ export const copy = {
   "text321": {
     "es": "Envíos anteriores",
     "en": "Previous sends"
+  },
+  "text322": {
+    "es": "Cotización",
+    "en": "Quote"
+  },
+  "text323": {
+    "es": "Ruta",
+    "en": "Lane"
+  },
+  "text324": {
+    "es": "en Bid Room",
+    "en": "in Bid Room"
+  },
+  "text325": {
+    "es": "Más",
+    "en": "More"
+  },
+  "text326": {
+    "es": "Cotizaciones",
+    "en": "Quotes"
   }
 };
 

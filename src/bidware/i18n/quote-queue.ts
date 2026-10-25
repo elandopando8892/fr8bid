@@ -1,14 +1,15 @@
 import { translator } from "./language";
 export const copy = {
   title: { es: "Cola de envío · {0}", en: "Delivery queue · {0}" },
+  link: { es: "Cola de envío", en: "Delivery queue" },
   prepare: { es: "Preparar para la Cola", en: "Prepare for the queue" },
   preparing: { es: "Preparando…", en: "Preparing…" },
   prepareTitle: { es: "Preparar {0} para la Cola", en: "Prepare {0} for the queue" },
   prepared: { es: "Cotización preparada en la Cola. Revisa y aprueba allí el envío.", en: "Quote prepared in the queue. Review and approve sending there." },
   gate: { es: "Preparar no envía. Revisa cada cotización y aprueba su envío desde esta Cola.", en: "Preparing does not send. Review each quote and approve sending from this queue." },
   refresh: { es: "Actualizar", en: "Refresh" },
-  empty: { es: "No hay cotizaciones preparadas. Vuelve a QuoteDesk para preparar una.", en: "No prepared quotes. Return to QuoteDesk to prepare one." },
-  back: { es: "Volver a cotización", en: "Back to quote" },
+  empty: { es: "Todavía no hay envíos preparados. Desde la cotización, usa «Preparar para la Cola».", en: "Nothing prepared yet. From the quote, use «Prepare for the queue»." },
+  back: { es: "Volver a la cotización", en: "Back to quote" },
   review: { es: "Revisar", en: "Review" },
   snapshot: { es: "Cotización preparada", en: "Prepared quote" },
   recipient: { es: "Destinatario", en: "Recipient" },
