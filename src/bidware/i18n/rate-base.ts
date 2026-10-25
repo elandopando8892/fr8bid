@@ -131,7 +131,7 @@ export const copy = {
     "en": "Rate corrected; it remains approved."
   },
   "text033": {
-    "es": "Buscar lane, ciudad, carrier o RFx…",
+    "es": "Buscar ruta, ciudad, carrier o RFx…",
     "en": "Search lane, city, carrier or RFx…"
   },
   "text034": {
@@ -241,6 +241,14 @@ export const copy = {
   "text060": {
     "es": "Las tarifas cargadas antes del registro de cambios no tienen historial.",
     "en": "Rates uploaded before change tracking began have no history."
+  },
+  "text061": {
+    "es": "Ruta",
+    "en": "Lane"
+  },
+  "text062": {
+    "es": "Más",
+    "en": "More"
   }
 };
 

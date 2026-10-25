@@ -11,16 +11,16 @@ export const copy = {
     "en": "Image"
   },
   "text003": {
-    "es": "SIN LEER",
-    "en": "UNREAD"
+    "es": "Sin leer",
+    "en": "Unread"
   },
   "text004": {
-    "es": "LEYENDO",
-    "en": "READING"
+    "es": "Leyendo",
+    "en": "Reading"
   },
   "text005": {
-    "es": "LEÍDO",
-    "en": "READ"
+    "es": "Leído",
+    "en": "Read"
   },
   "text006": {
     "es": "{0}: {1} tarifa(s) listas para revisar",
@@ -151,12 +151,12 @@ export const copy = {
     "en": "Loading files…"
   },
   "text038": {
-    "es": "Del equipo (",
-    "en": "Team files ("
+    "es": "Del equipo",
+    "en": "Team files"
   },
   "text039": {
-    "es": "Ofertas del Bid Room (",
-    "en": "Bid Room offers ("
+    "es": "Ofertas del Bid Room",
+    "en": "Bid Room offers"
   },
   "text040": {
     "es": "Las guarda el sistema con cada oferta de un carrier; solo se consultan.",
@@ -229,6 +229,14 @@ export const copy = {
   "text057": {
     "es": "Sube el primero arriba.",
     "en": "Upload the first above."
+  },
+  "text058": {
+    "es": "Error",
+    "en": "Error"
+  },
+  "text059": {
+    "es": "Más",
+    "en": "More"
   }
 };
 

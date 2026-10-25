@@ -1,12 +1,11 @@
 import { words, tr } from "@/i18n/rate-base";
 import { useLang, locale } from "@/i18n/language";
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/auth/AuthContext";
 import { confirmAsync, promptAsync } from "@/components/confirm";
 import { useAsync } from "@/components/useAsync";
 import { NEED_REASON } from "@/lib/roles";
-import { Dialog, Empty, ErrorBanner, InfoBanner, Kpis, Spinner, TopBar, dateShort } from "@/components/ui";
+import { Dialog, Empty, ErrorBanner, InfoBanner, Spinner, TopBar, dateShort } from "@/components/ui";
 import { buildCatalogIndex, valueLabel, type CatalogIndex } from "@/features/rfx-admin/laneImport";
 import { loadCatalogRows } from "@/features/rfx-admin/laneSources";
 import { RateEditDialog } from "@/features/rate-review/RateEditDialog";
@@ -79,6 +78,14 @@ export function RateBasePage() {
     setNotice(null);
   }
 
+  // Search as you type, once the typing pauses.
+  useEffect(() => {
+    const next = searchText.trim();
+    if (next === filters.search) return;
+    const timer = window.setTimeout(() => filter({ search: next }), 400);
+    return () => window.clearTimeout(timer);
+  }, [searchText, filters.search]);
+
   async function exportCsv() {
     const ok =
       total <= EXPORT_MAX ||
@@ -132,18 +139,12 @@ export function RateBasePage() {
   return (
     <>
       <TopBar
-        crumb={tr("text024")}
         title={tr("text025")}
         sub={tr("text026")}
         actions={
-          <>
-            <Link to="/tarifas" className="btn">
-              {tr("text027")}</Link>
-            <button onClick={page.reload}>{tr("text028")}</button>
-            <button className="primary" disabled={!!busy || !total} onClick={exportCsv}>
-              {busy === "export" ? tr("text029") : tr("text030")}
-            </button>
-          </>
+          <button disabled={!!busy || !total} onClick={exportCsv}>
+            {busy === "export" ? tr("text029") : tr("text030")}
+          </button>
         }
       />
       {editing && (
@@ -164,29 +165,21 @@ export function RateBasePage() {
         <div style={{ display: "grid", gap: 14 }}>
           {notice && <InfoBanner>{notice}</InfoBanner>}
 
-          <div className="row" style={{ flexWrap: "wrap" }}>
+          <div className="row rate-filters" style={{ flexWrap: "wrap" }}>
             <input
+              type="search"
               placeholder={tr("text033")}
+              aria-label={tr("text033")}
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && filter({ search: searchText.trim() })}
-              style={{ minWidth: 280 }}
+              style={{ width: 320, maxWidth: "100%" }}
             />
-            <button onClick={() => filter({ search: searchText.trim() })}>{tr("text034")}</button>
-            {filters.search && (
-              <button
-                onClick={() => {
-                  setSearchText("");
-                  filter({ search: "" });
-                }}
-              >
-                {tr("text035")}</button>
-            )}
-            <div className="spacer" />
             {(["operation", "service"] as const).map((field) => (
               <select
                 key={field}
                 aria-label={field === "operation" ? tr("text036") : tr("text037")}
+                style={{ width: "auto" }}
                 value={filters[field]}
                 onChange={(e) => filter({ [field]: e.target.value })}
               >
@@ -200,8 +193,6 @@ export function RateBasePage() {
             ))}
           </div>
 
-          <Kpis items={[{ label: tr("text040"), value: page.loading ? "…" : total.toLocaleString(locale()), accent: true }]} />
-
           {page.loading && (
             <Spinner
               label={
@@ -214,10 +205,10 @@ export function RateBasePage() {
           {page.error && <ErrorBanner message={page.error} />}
           {!page.loading && !page.error && (rows.length ? (
             <>
-              <table className="data">
+              <table className="data rate-base-table">
                 <thead>
                   <tr>
-                    <th>Lane</th>
+                    <th>{tr("text061")}</th>
                     <th>{tr("text012")}</th>
                     <th>{tr("text043")}</th>
                     <th>All-in</th>
@@ -259,14 +250,22 @@ export function RateBasePage() {
                         <div className="row" style={{ justifyContent: "flex-end", flexWrap: "nowrap" }}>
                           <button disabled={!canWork || !!busy} title={canWork ? undefined : NEED_REASON.operate} onClick={() => setEditing(r)}>
                             {tr("text047")}</button>
-                          <button onClick={() => setHistory(r)}>{tr("text048")}</button>
-                          <button
-                            disabled={!canAdmin || !!busy}
-                            title={canAdmin ? tr("text049") : NEED_REASON.admin}
-                            onClick={() => sendBack(r)}
-                          >
-                            {busy === r.id ? tr("text050") : tr("text051")}
-                          </button>
+                          <details className="qd-more">
+                            <summary className="btn">{tr("text062")} ▾</summary>
+                            <div
+                              className="qd-more-menu"
+                              onClick={(e) => ((e.currentTarget.parentElement as HTMLDetailsElement).open = false)}
+                            >
+                              <button onClick={() => setHistory(r)}>{tr("text048")}</button>
+                              <button
+                                disabled={!canAdmin || !!busy}
+                                title={canAdmin ? tr("text049") : NEED_REASON.admin}
+                                onClick={() => sendBack(r)}
+                              >
+                                {busy === r.id ? tr("text050") : tr("text051")}
+                              </button>
+                            </div>
+                          </details>
                         </div>
                       </td>
                     </tr>
@@ -278,10 +277,14 @@ export function RateBasePage() {
                   {(offset + 1).toLocaleString(locale())}–{(offset + rows.length).toLocaleString(locale())}{tr("text052")}{total.toLocaleString(locale())}
                 </span>
                 <div className="spacer" />
-                <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>
-                  {tr("text053")}</button>
-                <button disabled={!page.data?.has_more} onClick={() => setOffset(offset + PAGE_SIZE)}>
-                  {tr("text054")}</button>
+                {(offset > 0 || page.data?.has_more) && (
+                  <>
+                    <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>
+                      {tr("text053")}</button>
+                    <button disabled={!page.data?.has_more} onClick={() => setOffset(offset + PAGE_SIZE)}>
+                      {tr("text054")}</button>
+                  </>
+                )}
               </div>
             </>
           ) : (

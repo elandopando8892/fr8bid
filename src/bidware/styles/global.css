@@ -8624,6 +8624,11 @@ table.data.intake-table td {
   border: 1px solid var(--line);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
 }
+/* Rate tables carry a «Más» menu per row; it has to show past the table's edge. */
+table.data.rate-base-table,
+table.data.uploads-table {
+  overflow: visible;
+}
 .qd-more-menu button {
   border: 0;
   text-align: left;
@@ -8675,5 +8680,36 @@ table.data.intake-table td {
   .shippers-table th:nth-child(7),
   .shippers-table td:nth-child(7) {
     display: none;
+  }
+  /* Rate tables keep the lane, price and actions; the rest lives in the row's detail. */
+  .rate-base-table th:nth-child(2),
+  .rate-base-table td:nth-child(2),
+  .rate-base-table th:nth-child(3),
+  .rate-base-table td:nth-child(3),
+  .rate-base-table th:nth-child(5),
+  .rate-base-table td:nth-child(5),
+  .rate-base-table th:nth-child(6),
+  .rate-base-table td:nth-child(6),
+  .uploads-table th:nth-child(2),
+  .uploads-table td:nth-child(2),
+  .uploads-table th:nth-child(3),
+  .uploads-table td:nth-child(3),
+  .uploads-table th:nth-child(5),
+  .uploads-table td:nth-child(5) {
+    display: none;
+  }
+  .rate-base-table button,
+  .rate-base-table summary,
+  .uploads-table button,
+  .uploads-table summary {
+    white-space: nowrap;
+  }
+  .rate-filters > input,
+  .rate-filters > select {
+    width: 100% !important;
+  }
+  .upload-form > .field {
+    min-width: 0 !important;
+    width: 100% !important;
   }
 }
