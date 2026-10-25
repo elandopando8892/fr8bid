@@ -62,7 +62,7 @@ function Shell({
     <div className="sr-page">
       <div className="sr-bar">
         <span className="sr-mark" aria-hidden="true" />
-        <strong>BIDWARE</strong>
+        <strong>MARKSMAN</strong>
         <span className="spacer" />
         <span className="sr-bar-note">{copy.barNote}</span>
         <div className="profile-lang sr-lang" role="group" aria-label="Idioma / Language">
@@ -185,7 +185,7 @@ function ShipperRequestContent({ token }: { token: string }) {
   const done = alreadySent || Boolean(submittedAt);
 
   useEffect(() => {
-    document.title = `Bidware · ${copy.pageTitle}`;
+    document.title = `Marksman · ${copy.pageTitle}`;
   }, [copy]);
 
   const autosave = useAutosave(

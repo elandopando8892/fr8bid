@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/auth/AuthContext";
 import { Link, useNavigate } from "react-router-dom";
 import { useAsync } from "@/components/useAsync";
-import { Empty, ErrorBanner, InfoBanner, Kpis, Pill, Spinner, TopBar } from "@/components/ui";
+import { Empty, ErrorBanner, InfoBanner, Pill, Spinner, TopBar } from "@/components/ui";
 import { ShipperPicker } from "@/components/ShipperPicker";
 import type { ShipperOption } from "@/features/quotedesk/quotedesk.service";
 import {
@@ -127,15 +127,8 @@ function ShipperIntakeContent() {
         ),
     [projects.data],
   );
-  const kpis = useMemo(() => {
-    const promotedCount = rows.filter(promoted).length;
-    return {
-      active: rows.filter((p) => ["sent", "filling"].includes(stageOf(p))).length,
-      fresh: rows.filter(awaitsTeam).length,
-      promoted: promotedCount,
-      conversion: rows.length ? `${Math.round((promotedCount / rows.length) * 100)}%` : "—",
-    };
-  }, [rows]);
+  // Requests the shipper already sent and the team has yet to act on.
+  const freshCount = useMemo(() => rows.filter(awaitsTeam).length, [rows]);
 
   const crmContact = {
     name: shipper?.primary_contact_name ?? "",
@@ -267,23 +260,8 @@ function ShipperIntakeContent() {
 
   return (
     <>
-      <TopBar
-        title="Shipper intake"
-        actions={
-          <button className="primary" onClick={startOver}>
-            {tr("text019")}</button>
-        }
-      />
+      <TopBar title="Shipper intake" />
       <main className="main intake">
-        <Kpis
-          items={[
-            { label: tr("text020"), value: kpis.active },
-            { label: tr("text021"), value: kpis.fresh, accent: true },
-            { label: tr("text022"), value: kpis.promoted },
-            { label: tr("text023"), value: kpis.conversion },
-          ]}
-        />
-
         <div className="intake-cols">
           <section className="intake-form" ref={form}>
             <h2>{tr("text024")}</h2>
@@ -353,7 +331,7 @@ function ShipperIntakeContent() {
 
             {fresh && (
               <div className="intake-fresh">
-                <b>{tr("text035")}{fresh.shipper} (Shipper CRM)</b>
+                <b>{tr("text035")}{fresh.shipper}</b>
                 <div>
                   <span className="mono">{fresh.link}</span>
                   <button
@@ -368,6 +346,7 @@ function ShipperIntakeContent() {
                     {tr("text038")}</a>
                 </div>
                 <em>{tr("text039")}</em>
+                <button onClick={startOver}>{tr("text019")}</button>
               </div>
             )}
 
@@ -383,7 +362,10 @@ function ShipperIntakeContent() {
 
           <section className="intake-drafts">
             <header>
-              <h2>{tr("text044")}</h2>
+              <h2>
+                {tr("text044")}
+                {freshCount ? <span className="tab-count">{freshCount}</span> : null}
+              </h2>
               <p>
                 {tr("text045")}</p>
             </header>
@@ -397,7 +379,7 @@ function ShipperIntakeContent() {
                     <tr>
                       <th>{tr("text047")}</th>
                       <th>{tr("text048")}</th>
-                      <th>Lanes</th>
+                      <th>{tr("text267")}</th>
                       <th>{tr("text049")}</th>
                       <th>{tr("text050")}</th>
                       <th>{tr("text051")}</th>

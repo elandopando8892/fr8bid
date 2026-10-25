@@ -549,8 +549,8 @@ const movementCopy = {
   awarded: { es: "Adjudicada · ", en: "Awarded · " },
   expired: { es: "Cerró · ", en: "Closed · " },
   previous: { es: "Oferta · ", en: "Bid · " },
-  followedTitle: { es: "Bidware · un evento que sigues se movió", en: "Bidware · an event you follow changed" },
-  title: { es: "Bidware · movimiento en el tablero", en: "Bidware · board activity" },
+  followedTitle: { es: "Marksman · un evento que sigues se movió", en: "Marksman · an event you follow changed" },
+  title: { es: "Marksman · movimiento en el tablero", en: "Marksman · board activity" },
   more: { es: "{0} y {1} más", en: "{0} and {1} more" },
 };
 export const movement = translator(movementCopy);

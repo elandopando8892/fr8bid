@@ -64,7 +64,7 @@ export async function lookupPlace(place: SourcePlace): Promise<PlaceLookup> {
 /** A synonym in the shared catalog: the next file that says `raw` resolves to `value`. */
 export const saveCatalogAlias = (field: CatalogField, raw: string, value: string) =>
   callRatewareApi("save_catalog_value", {
-    catalog_value: { category: field, raw_value: raw, normalized_value: value, note: "Sinónimo guardado al crear un bid event en Bidware" },
+    catalog_value: { category: field, raw_value: raw, normalized_value: value, note: "Sinónimo guardado al crear un bid event en Fr8Bid" },
   });
 
 /** A synonym in the location catalog, with the geography of the place it points to. */

@@ -195,7 +195,7 @@ export function PublicBoardPage() {
         <div>
           <div className="pb-brand">
             <span className="dot" />
-            BIDWARE
+            MARKSMAN
           </div>
           <p>{tr("text106")}</p>
         </div>

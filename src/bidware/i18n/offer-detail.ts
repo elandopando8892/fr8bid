@@ -61,7 +61,7 @@ export const offerText = translator({
   exportAnonymous: { es: "Vista anónima", en: "Anonymous view" },
   exportSheet: { es: "Comparativo", en: "Comparison" },
   exportContextSheet: { es: "Contexto", en: "Context" },
-  exportSnapshotNote: { es: "Copia de revisión de una ruta. Los datos ausentes y rubros sin confirmar siguen indicados; verifica los datos vigentes en Bidware antes de adjudicar. Este archivo no se importa para modificar pujas.", en: "Review copy of one lane. Missing data and unconfirmed requirements remain indicated; verify current data in Bidware before awarding. This file is not imported to change bids." },
+  exportSnapshotNote: { es: "Copia de revisión de una ruta. Los datos ausentes y rubros sin confirmar siguen indicados; verifica los datos vigentes en Fr8Bid antes de adjudicar. Este archivo no se importa para modificar pujas.", en: "Review copy of one lane. Missing data and unconfirmed requirements remain indicated; verify current data in Fr8Bid before awarding. This file is not imported to change bids." },
   comparisonField: { es: "Condición", en: "Condition" },
   comparisonChooseLane: { es: "Selecciona una ruta para comparar sus ofertas.", en: "Select a lane to compare its offers." },
   comparisonStatus: { es: "Estado de la participación", en: "Participation status" },

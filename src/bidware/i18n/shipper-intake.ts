@@ -75,7 +75,7 @@ export const copy = {
     "en": "Event created in Bid Room. Nothing was sent to carriers."
   },
   "text019": {
-    "es": "Nuevo magic link",
+    "es": "Generar otra liga",
     "en": "New magic link"
   },
   "text020": {
@@ -95,15 +95,15 @@ export const copy = {
     "en": "Conversion"
   },
   "text024": {
-    "es": "1 · Generar magic link",
+    "es": "1 · Generar liga para el shipper",
     "en": "1 · Generate magic link"
   },
   "text025": {
-    "es": "Shipper (Shipper CRM)",
+    "es": "Shipper",
     "en": "Shipper (Shipper CRM)"
   },
   "text026": {
-    "es": "¿No está? Crear cuenta en Shipper CRM ↗",
+    "es": "¿No está? Darlo de alta en Shippers ↗",
     "en": "Missing? Create an account in Shipper CRM ↗"
   },
   "text027": {
@@ -135,11 +135,11 @@ export const copy = {
     "en": "Generating…"
   },
   "text034": {
-    "es": "Generar enlace",
+    "es": "Generar liga",
     "en": "Generate link"
   },
   "text035": {
-    "es": "Enlace asociado a ",
+    "es": "Liga para ",
     "en": "Link associated with "
   },
   "text036": {
@@ -175,11 +175,11 @@ export const copy = {
     "en": "“Open” shows the link as the shipper sees it. Everything entered there is saved in their request."
   },
   "text044": {
-    "es": "2 · Drafts entrantes",
+    "es": "2 · Solicitudes recibidas",
     "en": "2 · Incoming drafts"
   },
   "text045": {
-    "es": "Cada solicitud queda ligada a su cuenta en Shipper CRM. Cuando el shipper la envía, pásala a cotización o a evento del Bid Room.",
+    "es": "Cada solicitud queda ligada al shipper. Cuando la envía, pásala a cotización o a evento del Bid Room.",
     "en": "Each request is linked to its Shipper CRM account. Once the shipper submits it, turn it into a quote or a Bid Room event."
   },
   "text046": {
@@ -187,7 +187,7 @@ export const copy = {
     "en": "Loading requests…"
   },
   "text047": {
-    "es": "Shipper (CRM)",
+    "es": "Shipper",
     "en": "Shipper (CRM)"
   },
   "text048": {
@@ -256,6 +256,10 @@ export const copy = {
   "text061": {
     "es": "Genera la primera liga a la izquierda.",
     "en": "Generate the first link on the left."
+  },
+  "text267": {
+    "es": "Rutas",
+    "en": "Lanes"
   }
 };
 

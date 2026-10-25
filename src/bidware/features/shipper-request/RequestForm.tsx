@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ErrorBanner, InfoBanner } from "@/components/ui";
 import { catalogLabel, EQUIPMENT_TYPES, TRUCK_TYPES } from "./catalog";
 import { downloadTemplate, importLanes } from "./excel";
-import { CatalogSelect, CatalogTag, LaneForm } from "./LaneFields";
+import { CatalogSelect, LaneForm } from "./LaneFields";
 import type { Copy } from "./request.copy";
 import {
   answerKey,
@@ -69,25 +69,15 @@ const handlingText = (lane: LaneDraft) =>
 
 // ------------------------------------------------------------- the request
 
-const MAIN_TYPES = ["spot", "contract", "program"];
-
 /** The request's type, as the team opened it; the shipper can't change it here. */
 function RequestType({ type, copy }: { type: string | null; copy: Copy }) {
   const current = String(type || "spot").toLowerCase();
-  const options = MAIN_TYPES.includes(current) ? MAIN_TYPES : [...MAIN_TYPES, current];
+  // Read-only: a plain line, not a control that looks clickable.
   return (
-    <div className="sr-type">
-      <span className="sr-type-label">
-        {copy.requestType} <small>· {copy.requestTypeHint}</small>
-      </span>
-      <div className="sr-segmented" role="radiogroup" aria-label={copy.requestType}>
-        {options.map((option) => (
-          <span key={option} role="radio" aria-checked={option === current} aria-disabled={option !== current || undefined} className={option === current ? "active" : undefined}>
-            {copy.types[option] ?? option}
-          </span>
-        ))}
-      </div>
-    </div>
+    <p className="sr-type">
+      <span className="sr-type-label">{copy.requestType}:</span> <b>{copy.types[current] ?? current}</b>
+      <small> · {copy.requestTypeHint}</small>
+    </p>
   );
 }
 
@@ -137,10 +127,7 @@ function Basics({ draft, type, lang, copy, update }: FormProps) {
           <input value={draft.commodity} placeholder={copy.mainCommodityHint} onChange={(e) => update((d) => ({ ...d, commodity: e.target.value }))} />
         </label>
         <label className="field">
-          <span className="sr-field-head">
-            {copy.standardEquipment}
-            <CatalogTag copy={copy} />
-          </span>
+          <span className="sr-field-head">{copy.standardEquipment}</span>
           <CatalogSelect list={EQUIPMENT_TYPES} value={draft.equipment} lang={lang} empty={copy.choose} onChange={(equipment) => update((d) => ({ ...d, equipment }))} />
         </label>
         <div className="field">
@@ -252,7 +239,6 @@ function Lanes({ token, draft, lang, copy, showProblems, update }: FormProps) {
     <>
       <div className="sr-h">
         <h2>{copy.lanesTitle}</h2>
-        <em className="sr-tag blue">{copy.lanesTag}</em>
         {draft.kind === "rfq" && (
           <span className="sr-hint">
             <i className="sr-req">•</i> {copy.templateMark}
@@ -469,12 +455,19 @@ function CriteriaCard({ category, effect, segments, props }: { category: RubricC
 function Criteria(props: FormProps) {
   const { draft, lang, copy } = props;
   const segments = requestSegments(draft);
+  // Optional: folded until the shipper wants it, or once something in it is answered.
+  const started = Object.values(draft.answers).some(isAnswered) || Boolean(draft.notes.trim());
   return (
-    <>
-      <div className="sr-h">
+    <details className="sr-crit-fold" open={started || undefined}>
+      <summary className="sr-h">
         <h2>{copy.criteriaTitle}</h2>
-        <em className="sr-tag">{copy.criteriaTag}</em>
-      </div>
+        <span className="sr-hint">{copy.criteriaTag}</span>
+      </summary>
+      <section className="sr-card sr-tip">
+        <strong>{copy.tipTitle}</strong>
+        <p className="widens">{copy.tipWide}</p>
+        <p className="narrows">{copy.tipNarrow}</p>
+      </section>
       {/* The answer lists, once: every answer box suggests from its own. */}
       {(Object.keys(RESPONSE_CATALOGS) as ResponseCatalog[]).map((catalog) => (
         <datalist key={catalog} id={listId(catalog, lang)}>
@@ -488,7 +481,7 @@ function Criteria(props: FormProps) {
           <CriteriaCard key={card.category} category={card.category} effect={card.effect} segments={segments} props={props} />
         ))}
       </div>
-    </>
+    </details>
   );
 }
 
@@ -503,11 +496,6 @@ export function RequestForm(props: FormProps) {
   const { copy, onSubmit, sending, error } = props;
   return (
     <div className="sr-form">
-      <section className="sr-card sr-tip">
-        <strong>{copy.tipTitle}</strong>
-        <p className="widens">{copy.tipWide}</p>
-        <p className="narrows">{copy.tipNarrow}</p>
-      </section>
       <Basics {...props} />
       <Lanes {...props} />
       <Criteria {...props} />

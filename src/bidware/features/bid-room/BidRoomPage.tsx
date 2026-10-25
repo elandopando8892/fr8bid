@@ -127,7 +127,7 @@ function BidRoomContent({ token }: { token: string }) {
     return (
       <div className="croom">
         <header className="croom-head closed">
-          <div className="croom-crumb">Acceso privado de carrier · Bidware</div>
+          <div className="croom-crumb">Acceso privado de carrier · Marksman</div>
           <h1>No pudimos abrir tu Bid Room</h1>
         </header>
         <main className="croom-page">
@@ -168,7 +168,7 @@ function BidRoomContent({ token }: { token: string }) {
     <div className="croom">
       <header className="croom-head">
         <div className="croom-crumb">
-          Acceso privado de carrier · Bidware{event.rfx_id ? ` · ${event.rfx_id}` : ""}
+          Acceso privado de carrier · Marksman{event.rfx_id ? ` · ${event.rfx_id}` : ""}
         </div>
         <h1>{event.name || "Bid Room privado"}</h1>
         <div className="croom-meta">

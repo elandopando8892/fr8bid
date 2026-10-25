@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { useAsync } from "@/components/useAsync";
-import { Empty, ErrorBanner, Kpis, Pill, Spinner, TopBar, dateShort } from "@/components/ui";
+import { Empty, ErrorBanner, Pill, Spinner, TopBar, dateShort } from "@/components/ui";
 import { NEED_REASON } from "@/lib/roles";
 import { crmSummary } from "./crm.service";
 import { NewShipperDialog } from "./NewShipperDialog";
@@ -22,10 +22,13 @@ const VIEWS = [
   ["comercial", "RFIs y oportunidades"],
   ["acciones", "Cola de acciones"],
   ["inteligencia", "Inteligencia"],
+] as const;
+/** Housekeeping views: reached from the header, not from the working tabs. */
+const TOOLS = [
   ["duplicados", "Duplicados"],
   ["importar", "Importar"],
 ] as const;
-type View = (typeof VIEWS)[number][0];
+type View = (typeof VIEWS)[number][0] | (typeof TOOLS)[number][0];
 
 const FILTERS = [
   { key: "", label: "Todos" },
@@ -44,7 +47,8 @@ const FILTERS = [
 export function ShippersPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const view: View = VIEWS.some(([key]) => key === params.get("vista")) ? (params.get("vista") as View) : "directorio";
+  const view: View = [...VIEWS, ...TOOLS].some(([key]) => key === params.get("vista")) ? (params.get("vista") as View) : "directorio";
+  const go = (key: View) => setParams(key === "directorio" ? {} : { vista: key }, { replace: true });
   const summary = useAsync(crmSummary, []);
   const { can } = useAuth();
   const [status, setStatus] = useState("");
@@ -86,31 +90,30 @@ export function ShippersPage() {
     if (view === "directorio") load(0);
   }, [load, view]);
 
+  // The CRM's totals ride on the directory filters instead of a separate KPI band.
+  const filterCount = (key: string) =>
+    key === "" ? summary.data?.total : key === "active" ? summary.data?.active : key === "prospect" ? summary.data?.prospects : undefined;
+
   return (
     <>
       <TopBar
-        crumb="Procurement"
         title="Shippers"
         sub="Clientes y prospectos del CRM compartido"
         actions={
+          <>
+          {TOOLS.map(([key, label]) => (
+            <button key={key} className={view === key ? "active" : undefined} aria-pressed={view === key} onClick={() => go(key)}>
+              {label}
+            </button>
+          ))}
           <button className="primary" disabled={!canWork} title={canWork ? undefined : NEED_REASON.operate} onClick={() => setCreating(true)}>
             Nuevo shipper
           </button>
+          </>
         }
       />
       <main className="main">
         <div style={{ display: "grid", gap: 14 }}>
-          {summary.data && (
-            <Kpis
-              items={[
-                { label: "Shippers", value: summary.data.total },
-                { label: "Activos", value: summary.data.active, accent: true },
-                { label: "Prospectos", value: summary.data.prospects },
-                { label: "Sin contacto", value: summary.data.missing_contact },
-                { label: "Oportunidades abiertas", value: summary.data.open_opportunities },
-              ]}
-            />
-          )}
           <div className="tabs" role="tablist" aria-label="Vistas del CRM de shippers">
             {VIEWS.map(([key, label]) => (
               <button
@@ -118,9 +121,10 @@ export function ShippersPage() {
                 role="tab"
                 aria-selected={view === key}
                 className={view === key ? "active" : ""}
-                onClick={() => setParams(key === "directorio" ? {} : { vista: key }, { replace: true })}
+                onClick={() => go(key)}
               >
                 {label}
+                {key === "comercial" && summary.data?.open_opportunities ? <span className="tab-count">{summary.data.open_opportunities}</span> : null}
               </button>
             ))}
           </div>
@@ -144,12 +148,13 @@ export function ShippersPage() {
                   onClick={() => setStatus(filter.key)}
                 >
                   {filter.label}
+                  {filterCount(filter.key) ? <span className="tab-count">{filterCount(filter.key)}</span> : null}
                 </button>
               ))}
             </div>
             <div className="spacer" />
             <input
-              style={{ width: 320 }}
+              style={{ width: 320, maxWidth: "100%" }}
               value={search}
               placeholder="Buscar por nombre, dominio, contacto o ciudad…"
               aria-label="Buscar shippers"
@@ -166,7 +171,7 @@ export function ShippersPage() {
             />
           ) : (
             <div className="card" style={{ padding: 0 }}>
-              <table className="data" style={{ border: "none" }}>
+              <table className="data shippers-table" style={{ border: "none" }}>
                 <thead>
                   <tr>
                     <th>Shipper</th>
@@ -200,17 +205,17 @@ export function ShippersPage() {
                   ))}
                 </tbody>
               </table>
-              <div className="row" style={{ padding: "10px 16px", borderTop: "1px solid var(--line)" }}>
-                <span className="cell-sub">
-                  {rows.length} de {total} shipper(s)
-                </span>
-                <div className="spacer" />
-                {rows.length < total && (
+              {rows.length < total && (
+                <div className="row" style={{ padding: "10px 16px", borderTop: "1px solid var(--line)" }}>
+                  <span className="cell-sub">
+                    {rows.length} de {total} shippers
+                  </span>
+                  <div className="spacer" />
                   <button disabled={loading} onClick={() => load(rows.length)}>
                     {loading ? "Cargando…" : "Mostrar más"}
                   </button>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
           </>

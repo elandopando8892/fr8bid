@@ -931,8 +931,8 @@ export const copy = {
     "en": "Expires on "
   },
   "text231": {
-    "es": ". Envíalo tú al carrier por correo o WhatsApp: Bidware no lo manda solo.",
-    "en": ". Send it to the carrier by email or WhatsApp: Bidware does not send it automatically."
+    "es": ". Envíalo tú al carrier por correo o WhatsApp: Fr8Bid no lo manda solo.",
+    "en": ". Send it to the carrier by email or WhatsApp: Fr8Bid does not send it automatically."
   },
   "text232": {
     "es": "Prospección",

@@ -100,7 +100,7 @@ export function QuoteDeskPage() {
               {FILTERS.map((f) => (
                 <button key={f.key} className={filter === f.key ? "active" : undefined} onClick={() => setFilter(f.key)}>
                   {f.label}
-                  {counts[f.key] ? <span className="qd-tab-count">{counts[f.key]}</span> : null}
+                  {counts[f.key] ? <span className="tab-count">{counts[f.key]}</span> : null}
                 </button>
               ))}
             </div>
