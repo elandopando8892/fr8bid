@@ -13,10 +13,8 @@ import { LaneEditor } from "./LaneEditor";
 import { LaunchBidRoomDialog } from "./LaunchBidRoomDialog";
 import { SendQuoteDialog } from "./SendQuoteDialog";
 import {
-  CROSSING_MODELS,
   STATUS_LABEL,
   STATUS_TONE,
-  customerService,
   getQuote,
   type QuoteContext,
   type QuoteLane,
@@ -46,27 +44,6 @@ export function laneSummary(lane: QuoteLane | null | undefined): string {
   ]
     .filter(Boolean)
     .join(" · ");
-}
-
-/**
- * The rubrics a lane carries into its RFx event, as chips. The wireframe also
- * stamps free time, temperature, tracking, POD and C-TPAT; those are not
- * fields of a quote lane in rateware (they live in the event's rubrics), so
- * the chips show what the lane really stores.
- */
-function stamps(lane: QuoteLane | null): string[] {
-  if (!lane) return [];
-  const model = CROSSING_MODELS.find((m) => m.key === lane.crossing_model)?.label.split(" · ")[0];
-  const weight = toNumber(lane.weight_lb);
-  const equipment = [lane.trailer || lane.equipment, lane.config].filter(Boolean).join(" · ");
-  return [
-    model ? tr("text279", model) : null,
-    lane.border_crossing ? tr("text280", lane.border_crossing) : null,
-    lane.operation ? tr("text281", lane.operation) : null,
-    lane.service ? tr("text282", customerService(lane.service)) : null,
-    equipment ? tr("text283", equipment) : null,
-    weight ? tr("text284", weight.toLocaleString(locale())) : null,
-  ].filter((s): s is string => Boolean(s));
 }
 
 /**
@@ -149,7 +126,6 @@ export function QuotePanel({
   const locked = CLOSED.includes(quote.status);
   const allPriced = lanes.length > 0 && lanes.every((l) => toNumber(l.all_in_rate) !== null);
   const canLaunch = !quote.rfx_event_id && ["new", "estimating", "quoted"].includes(quote.status);
-  const chips = stamps(lane ?? lanes[0] ?? null);
   const stale = !detail.loading && detail.error;
 
   return (
@@ -180,23 +156,6 @@ export function QuotePanel({
             {tr("text261")}</Link>
         </div>
       )}
-
-      <section className="qd-stamp">
-        <b>{tr("text288")}</b>
-        {chips.length ? (
-          <div className="qd-chips">
-            {chips.map((c) => (
-              <span key={c} className="pill blue">
-                {c}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <p className="qd-muted qd-small">{tr("text289")}</p>
-        )}
-        <p className="qd-muted qd-small">
-          {tr("text290")}</p>
-      </section>
 
       {(lanes.length > 1 || (!locked && lanes.length > 0)) && (
         <div className="tabs qd-lane-tabs">
@@ -266,7 +225,7 @@ export function QuotePanel({
           onClick={() => setEmailing(true)}
         >
           {queueTr("prepare")}</button>
-        <Link className="btn" to={`/quotedesk/${quote.id}/delivery`}>{queueTr("title", quote.folio)}</Link>
+        <Link className="btn" to={`/quotedesk/${quote.id}/delivery`}>{queueTr("link")}</Link>
         {canLaunch && (
           <div className="qd-side-launch">
             <button disabled={!lanes.length || dirty} onClick={() => setLaunching("spot")}>

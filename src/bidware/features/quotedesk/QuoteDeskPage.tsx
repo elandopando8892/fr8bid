@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { confirmAsync } from "@/components/confirm";
 import { useAsync } from "@/components/useAsync";
-import { Empty, ErrorBanner, Kpis, Pill, Spinner, TopBar, dateShort, money } from "@/components/ui";
+import { Empty, ErrorBanner, Pill, Spinner, TopBar, dateShort, money } from "@/components/ui";
 import { pct } from "./calc";
 import { NewQuoteDialog } from "./NewQuoteDialog";
 import { QuotePanel } from "./QuotePanel";
@@ -72,44 +72,35 @@ export function QuoteDeskPage() {
   }, [data, loading, rows, selectedId, panelDirty]);
 
   async function pick(id: string) {
+    // A phone has no room for the side editor: the tap opens the full quote instead.
+    if (window.matchMedia("(max-width: 720px)").matches) return navigate(`/quotedesk/${id}`);
     if (id === selectedId) return;
     if (panelDirty && !(await confirmAsync(tr("text188")))) return;
     setPanelDirty(false);
     setSelectedId(id);
   }
 
-  const counts = data?.kpis.counts ?? {};
-  const kpis = [
-    { label: tr("text183"), value: counts.new ?? 0, accent: true },
-    { label: tr("text152"), value: counts.estimating ?? 0 },
-    { label: tr("text184"), value: counts.quoted ?? 0 },
-    { label: tr("text189"), value: counts.bid_room ?? 0 },
-    { label: tr("text190"), value: pct(data?.kpis.avg_margin_pct) },
-  ];
+  // The open stages carry their count on the tab itself, instead of a separate KPI band.
+  const counts: Record<string, number | undefined> = data?.kpis.counts ?? {};
 
   return (
     <>
       <TopBar
-        crumb="Procurement"
         title="QuoteDesk"
         sub={tr("text191")}
         actions={
-          <>
-            <button onClick={reload}>{tr("text192")}</button>
-            <button className="primary" onClick={() => setCreating(true)}>
-              {tr("text138")}</button>
-          </>
+          <button className="primary" onClick={() => setCreating(true)}>
+            {tr("text138")}</button>
         }
       />
       <main className="main">
         <div style={{ display: "grid", gap: 14 }}>
-          <Kpis items={kpis} />
-
           <div className="row qd-filters">
             <div className="tabs">
               {FILTERS.map((f) => (
                 <button key={f.key} className={filter === f.key ? "active" : undefined} onClick={() => setFilter(f.key)}>
                   {f.label}
+                  {counts[f.key] ? <span className="qd-tab-count">{counts[f.key]}</span> : null}
                 </button>
               ))}
             </div>
@@ -131,9 +122,9 @@ export function QuoteDeskPage() {
                 <table className="data qd-table">
                   <thead>
                     <tr>
-                      <th>Quote</th>
+                      <th>{tr("text322")}</th>
                       <th>{tr("text195")}</th>
-                      <th>Lane</th>
+                      <th>{tr("text323")}</th>
                       <th className="num">{tr("text196")}</th>
                       <th className="num">All-in</th>
                       <th className="num">{tr("text015")}</th>
@@ -178,7 +169,7 @@ export function QuoteDeskPage() {
                           <td className="num mono">{priced ? money(q.summary.base_cost_total, q.currency) : "—"}</td>
                           <td className="num mono">
                             {q.status === "bid_room" && !priced
-                              ? "subasta"
+                              ? tr("text324")
                               : priced
                                 ? money(q.summary.all_in_total, q.currency)
                                 : "—"}

@@ -72,7 +72,7 @@ function QuoteDeliveryQueueContent() {
   }
   return <>
     <TopBar crumb="QuoteDesk" title={tr("title", data?.quote.folio || "Spot")} actions={<>
-      <Link className="btn" to={`/quotedesk/${id}`}>{tr("back")}</Link>
+      <Link className="btn" to={`/quotedesk/${id}`}>← {tr("back")}</Link>
       <button onClick={refresh} disabled={busy || loading}>{tr("refresh")}</button>
     </>} />
     <main className="main launch-main">
@@ -89,11 +89,11 @@ function QuoteDeliveryQueueContent() {
             <td><button onClick={() => setSelected(row)} disabled={busy || Boolean(failure)}>{tr("review")}</button></td>
           </tr>)}</tbody>
         </table></div>}
-        <div className="row" style={{ flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+        {data.total > 20 && <div className="row" style={{ flexWrap: "wrap", gap: 8, marginTop: 12 }}>
           <span>{tr("page", data.total ? offset + 1 : 0, Math.min(offset + data.rows.length, data.total), data.total)}</span>
           <button disabled={offset === 0 || busy} onClick={() => setOffset(value => Math.max(0, value - 20))}>{tr("previous")}</button>
           <button disabled={offset + data.rows.length >= data.total || busy} onClick={() => setOffset(value => value + 20)}>{tr("next")}</button>
-        </div>
+        </div>}
       </section>}
       {selected && <Dialog title={tr("snapshot")} ariaLabel={tr("snapshot")} onClose={busy ? () => undefined : () => setSelected(null)} footer={<>
         <button className="primary" onClick={send} disabled={busy || loading || Boolean(failure) || !roleLoaded || !can("operate") || !["drafted", "failed"].includes(selected.status)}>{busy ? tr("sending") : tr("approve")}</button>

@@ -207,7 +207,7 @@ export function QuoteDetailPage() {
   const channelLabel = CHANNELS.find((c) => c.key === quote.channel)?.label ?? quote.channel;
   const fx = toNumber(quote.fx_usd_mxn);
 
-  const actions: { label: string; run: () => void; primary?: boolean; disabled?: boolean; title?: string }[] = [];
+  const actions: { label: string; run: () => void; primary?: boolean; secondary?: boolean; disabled?: boolean; title?: string }[] = [];
   const s = quote.status;
   if (["new", "estimating", "bid_room", "expired"].includes(s)) {
     actions.push({
@@ -230,10 +230,10 @@ export function QuoteDetailPage() {
     actions.push({ label: tr("text155"), run: () => move("won", tr("text238", quote.folio)) });
   }
   if (["new", "estimating", "quoted", "bid_room"].includes(s)) {
-    actions.push({ label: tr("text156"), run: () => move("lost", tr("text239"), true) });
+    actions.push({ label: tr("text156"), secondary: true, run: () => move("lost", tr("text239"), true) });
   }
   if (s === "quoted") {
-    actions.push({ label: tr("text157"), run: () => move("expired", tr("text240", quote.folio)) });
+    actions.push({ label: tr("text157"), secondary: true, run: () => move("expired", tr("text240", quote.folio)) });
   }
   if (["won", "lost", "expired"].includes(s)) {
     actions.push({
@@ -246,6 +246,7 @@ export function QuoteDetailPage() {
   if (s !== "archived") {
     actions.push({
       label: tr("text243"),
+      secondary: true,
       ...adminOnly,
       run: () => move("archived", tr("text244", quote.folio)),
     });
@@ -258,10 +259,21 @@ export function QuoteDetailPage() {
     });
   }
 
+  const actionButton = (a: (typeof actions)[number]) => (
+    <button
+      key={a.label}
+      className={a.primary ? "primary" : undefined}
+      disabled={busy || a.disabled}
+      title={a.title}
+      onClick={a.run}
+    >
+      {a.label}
+    </button>
+  );
+
   return (
     <>
       <TopBar
-        crumb="Procurement  ›  QuoteDesk"
         title={`${quote.folio} · ${quote.shipper_name ?? "Shipper"}`}
         sub={quote.title || tr("text247")}
         actions={
@@ -293,9 +305,9 @@ export function QuoteDetailPage() {
                 {fx ? tr("text252", fx.toFixed(2), dateShort(quote.fx_rate_date)) : ""}
                 {quote.valid_until ? tr("text253", dateShort(quote.valid_until)) : ""}
               </span>
-              <div className="spacer" />
-              <button onClick={() => setEditing(true)} disabled={busy}>
-                {tr("text254")}</button>
+            </div>
+            {/* One row: the next step first, the rest of the pipeline, then «Más» for edits and exits. */}
+            <div className="row" style={{ flexWrap: "wrap", gap: 8, marginTop: 12 }}>
               <button
                 className={allPriced && ["new", "estimating", "bid_room"].includes(quote.status) ? "primary" : undefined}
                 onClick={() => setEmailing(true)}
@@ -303,22 +315,22 @@ export function QuoteDetailPage() {
                 title={allPriced ? undefined : tr("text235")}
               >
                 {queueTr("prepare")}</button>
-              <Link className="btn" to={`/quotedesk/${quote.id}/delivery`}>{queueTr("title", quote.folio)}</Link>
+              {actions.filter((a) => !a.secondary).map(actionButton)}
               <button onClick={() => setShowText(true)} disabled={!allPriced}>
                 {tr("text256")}</button>
-            </div>
-            <div className="row" style={{ flexWrap: "wrap", gap: 8, marginTop: 12 }}>
-              {actions.map((a) => (
-                <button
-                  key={a.label}
-                  className={a.primary ? "primary" : undefined}
-                  disabled={busy || a.disabled}
-                  title={a.title}
-                  onClick={a.run}
+              <Link className="btn" to={`/quotedesk/${quote.id}/delivery`}>{queueTr("link")}</Link>
+              <details className="qd-more">
+                <summary className="btn">{tr("text325")} ▾</summary>
+                <div
+                  className="qd-more-menu"
+                  // Picking an item closes the menu, as any dropdown does.
+                  onClick={(e) => ((e.currentTarget.parentElement as HTMLDetailsElement).open = false)}
                 >
-                  {a.label}
-                </button>
-              ))}
+                  <button onClick={() => setEditing(true)} disabled={busy}>
+                    {tr("text254")}</button>
+                  {actions.filter((a) => a.secondary).map(actionButton)}
+                </div>
+              </details>
             </div>
             {quote.outcome_reason && <p className="qd-muted qd-small">{tr("text257")}{quote.outcome_reason}</p>}
             {quote.notes && <p className="qd-muted qd-small">{quote.notes}</p>}

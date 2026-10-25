@@ -442,7 +442,6 @@ export function LaneEditor({
       <section className="card qd-drivers">
         <div className="qd-card-head">
           <h2>{tr("text027")}</h2>
-          <span className="pill orange">editable</span>
         </div>
         <p className="qd-muted qd-small">
           {tr("text028")}</p>
@@ -572,7 +571,7 @@ export function LaneEditor({
       <section className="card qd-calc">
         <div className="qd-card-head">
           <h2>{tr("text054")}</h2>
-          <span className="pill blue">{lane?.cost_source === "bid_room_award" ? "Bid Room" : "editable"}</span>
+          {lane?.cost_source === "bid_room_award" && <span className="pill blue">Bid Room</span>}
         </div>
         {award && (
           <div className="banner info qd-award">

@@ -1409,24 +1409,6 @@ textarea {
   font-size: 11px;
   color: var(--muted);
 }
-.qd-stamp {
-  background: var(--blue-light);
-  border: 1px solid var(--line);
-  padding: 10px 12px;
-}
-.qd-stamp b {
-  font-size: 11.5px;
-  color: var(--blue);
-}
-.qd-stamp p {
-  margin: 6px 0 0;
-}
-.qd-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
 /* The editor stacks its two cards inside the panel, as the wireframe does. */
 .qd-side .qd-lane-grid {
   grid-template-columns: 1fr;
@@ -8626,4 +8608,63 @@ table.data.intake-table td {
 }
 .launch-tabs a {
   white-space: nowrap;
+}
+
+/* QuoteDesk: counts ride on the stage tabs; secondary moves live under «Más». */
+.qd-tab-count {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--line);
+  font-size: 11px;
+  font-weight: 600;
+}
+.qd-more {
+  position: relative;
+}
+.qd-more > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.qd-more > summary::-webkit-details-marker {
+  display: none;
+}
+.qd-more-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  display: grid;
+  min-width: 180px;
+  background: var(--panel, #fff);
+  border: 1px solid var(--line);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+.qd-more-menu button {
+  border: 0;
+  text-align: left;
+  justify-content: flex-start;
+}
+@media (max-width: 720px) {
+  .qd-filters input {
+    width: 100% !important;
+  }
+  /* On a phone a tap opens the full quote, so the side editor and the cost columns step aside. */
+  .qd-desk .qd-side {
+    display: none;
+  }
+  .qd-table th:nth-child(4),
+  .qd-table td:nth-child(4),
+  .qd-table th:nth-child(6),
+  .qd-table td:nth-child(6) {
+    display: none;
+  }
+  table.data.qd-table th,
+  table.data.qd-table td {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+  .qd-table .cell-sub:not(:first-child) {
+    display: none;
+  }
 }
