@@ -199,7 +199,7 @@ export function candadosAviso(detalle: Detalle, aviso: Aviso, ctx: Contexto): Ca
   return [
     { regla: "I8", ok: aviso.tipo !== "adjudicacion" || recibo, texto: recibo ? "Recibo de Rateware confirmado" : "Requiere el recibo de Rateware" },
     { regla: "I7", ok: Boolean(aviso.version), texto: aviso.version ? "Se envía solo esta versión exacta del texto" : "Sin versión del texto: vuelve a cargar" },
-    { regla: "I7", ok: enviable, texto: aviso.estado === "incierto" ? "Envío incierto: conciliar en la Cola antes de otro intento" : aviso.estado === "en_cola" ? "En cola en Rateware: aún no salió" : enviable ? "Sin envío previo" : "Ya salió" },
+    { regla: "I7", ok: enviable, texto: aviso.estado === "por_verificar" ? "Aprobación no verificada: revisa en Rateware" : aviso.estado === "incierto" ? "Envío incierto: conciliar en la Cola antes de otro intento" : aviso.estado === "en_cola" ? "En cola en Rateware: aún no salió" : enviable ? "Sin envío previo" : "Ya salió" },
     { regla: "rol", ok: ctx.rol === "admin", texto: ctx.rol === "admin" ? "Tu rol: Administrador" : "Solo el Administrador aprueba y envía avisos" }
   ];
 }

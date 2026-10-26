@@ -368,14 +368,13 @@ export class RatewareSimulado {
       case "list_outreach_messages": {
         const event = this.evento(u, body.rfx_event_id || body.event_id);
         // Como OUTREACH_MESSAGE_SELECT de rateware-api: cada mensaje con vendors(...).
-        return ok({
-          rows: this.mensajes
+        const rows = this.mensajes
             .filter((m) => m.rfx_event_id === event.id)
             .map((m) => {
               const v = this.vendors.find((x) => x.id === m.vendor_id);
               return { ...structuredClone(m), vendors: v ? { vendor_name: v.vendor_name, domain: v.domain || null, primary_email: v.primary_email, whatsapp_phone: v.whatsapp_phone ?? null, whatsapp_do_not_contact: v.whatsapp_do_not_contact === true } : null };
-            })
-        });
+            });
+        return ok({ rows, total: rows.length, has_more: false });
       }
       case "create_rfx_event": {
         const datos: Fila = body.event && typeof body.event === "object" ? body.event : body;

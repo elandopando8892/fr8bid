@@ -41,17 +41,17 @@ let admin: MesaApi;
 let operador: MesaApi;
 
 function relojDeTicks(s: RatewareSimulado) {
-  // Arranca después de la siembra (que usa el reloj real): si no, a ciertas
-  // horas las versiones sembradas quedan "después" de la adjudicación.
-  let t = Date.now();
+  // Un solo reloj antes y después de sembrar: orden reproducible.
+  let t = Date.parse("2026-10-21T15:00:00.000Z");
   s.ahora = () => new Date((t += 1000)).toISOString();
   s.hoy = () => "2026-10-21";
 }
 
 async function preparar() {
-  const demo = await sembrarDemo();
+  const base = crearSimulado();
+  relojDeTicks(base.sim);
+  const demo = await sembrarDemo(base);
   sim = demo.sim;
-  relojDeTicks(sim);
   eventId = demo.eventId;
   ids = demo.participaciones;
   admin = new MesaApi(transporteSimulado(sim, () => "admin"), () => sim.hoy());

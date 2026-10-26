@@ -171,13 +171,14 @@ export class MesaApi {
   async detalle(eventId: string, recibo: Recibo | null = null): Promise<Detalle> {
     const [crudo, mensajes, rubros, condiciones, revisiones, respuestas] = await Promise.all([
       this.rw({ action: "list_rfx_detail", event_id: eventId }),
-      this.rw({ action: "list_outreach_messages", rfx_event_id: eventId }),
+      this.rw({ action: "list_outreach_messages", rfx_event_id: eventId, channel: "email" }),
       this.rw({ action: "list_rfx_segment_confirmations", event_id: eventId }),
       this.condicionesDe(eventId),
       this.revisionesDe(eventId),
       this.respuestasDe(eventId)
     ]);
-    const d = mapear.detalle(crudo, mensajes.rows || mensajes.messages || [], null, { hoy: this.hoy(), rubros: rubros.rows || [], condiciones, revisiones, respuestas });
+    if (mensajes.has_more === true) throw new ErrorApi(409, "LECTURA_INCOMPLETA", "Hay más avisos de los que devuelve esta lectura. Consulta la cola de Rateware antes de continuar.");
+    const d = mapear.detalle(crudo, mapear.filasListado(mensajes, "messages"), null, { hoy: this.hoy(), rubros: rubros.rows || [], condiciones, revisiones, respuestas });
     return { ...d, recibo };
   }
 
@@ -417,7 +418,7 @@ export class MesaApi {
       if (!p) return { estado: "sin_preparar", operationId: null, error: `La ruta ${ruta.numero} no tiene primario.` };
       for (const x of [p, ...ruta.participaciones.filter((y) => y.rol === "respaldo")]) {
         const vx = versionVigente(x);
-        if (!x.adjudicada || !vx) return { estado: "sin_preparar", operationId: null, error: `No se identifica la versión adjudicada de ${x.carrier}.` };
+        if (!x.adjudicada || !vx) return { estado: "sin_preparar", operationId: null, error: `No se identifica con certeza la versión adjudicada de ${x.carrier}. Revisa la adjudicación y las fechas de sus ofertas antes de entregar.` };
         if (versionMasReciente(x) || x.adjudicada.huella !== vx.huella)
           return { estado: "sin_preparar", operationId: null, error: `${x.carrier} tiene una versión más reciente que la adjudicada: anula y adjudica de nuevo.` };
       }

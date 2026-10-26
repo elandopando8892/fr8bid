@@ -1,7 +1,7 @@
 // /bid/:token — liga privada del carrier sobre rfx-bid-api. Sin sesión: el
 // token es la credencial y solo permite responder su propia participación.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ErrorApi } from "../cliente/api";
 import { describirModelo, nombreModelo } from "../dominio/modelo";
 import { aCarga, Confirmar, dinero, EstadoVista, fecha, Prueba, type Carga } from "./comun";
@@ -28,8 +28,11 @@ export function LigaCarrier({ token }: { token: string }) {
   const [conds, setConds] = useState<Record<string, { answer: string; value: string; comment: string }>>({});
   const [msg, setMsg] = useState<{ ok: boolean; texto: string } | null>(null);
 
+  const [enviando, setEnviando] = useState(false);
+  const enCurso = useRef(false);
+
   const leer = useCallback(() => {
-    api.invitacion(token).then(
+    return api.invitacion(token).then(
       (datos) => {
         setCarga({ tipo: "ok", datos, leidoEn: Date.now() });
         const r: Record<string, string> = {};
@@ -68,19 +71,28 @@ export function LigaCarrier({ token }: { token: string }) {
   const prueba = /PRUEBA CONTROLADA/i.test(event?.name || "");
 
   const hacer = async (f: () => Promise<unknown>, ok: string) => {
+    if (enCurso.current || bid_window_closed || inv.invitation_status === "declined") return;
+    enCurso.current = true;
+    setEnviando(true);
     setMsg(null);
     try {
       await f();
       setMsg({ ok: true, texto: ok });
     } catch (e) {
       setMsg({ ok: false, texto: e instanceof ErrorApi ? e.message : String(e) });
+    } finally {
+      try {
+        await leer();
+      } finally {
+        enCurso.current = false;
+        setEnviando(false);
+      }
     }
-    leer();
   };
   const n = (x: string) => (x === "" ? null : Number(x));
 
   return (
-    <section className="liga">
+    <section className="liga" aria-busy={enviando}>
       <header className="cabecera">
         <div>
           <p className="miga">Invitación · {event.rfx_id}</p>
@@ -89,7 +101,7 @@ export function LigaCarrier({ token }: { token: string }) {
         </div>
         {prueba && <Prueba />}
       </header>
-      {msg && <div className={msg.ok ? "estado estado-ok" : "estado estado-error"}>{msg.texto}</div>}
+      {msg && <div className={msg.ok ? "estado estado-ok" : "estado estado-error"} role={msg.ok ? "status" : "alert"}>{msg.texto}</div>}
       {bid_window_closed && <div className="estado estado-permiso">Esta puja ya cerró. Ya no se aceptan ofertas.</div>}
       {inv.bid_rate !== null && (
         <div className="tarjeta">
@@ -132,8 +144,8 @@ export function LigaCarrier({ token }: { token: string }) {
           </div>
           <label className="campo"><span>Nota (sin valor comercial)</span><input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
           <div className="fila-botones">
-            <button className="btn-primario" type="submit">{inv.bid_rate === null ? "Enviar oferta" : "Enviar corrección"}</button>
-            <Confirmar etiqueta="Declinar invitación" clase="btn-texto" advertencia="Ya no podrás ofertar en esta ruta." onConfirmar={() => hacer(() => api.declinar(token), "Invitación declinada.")} />
+            <button className="btn-primario" type="submit" disabled={enviando}>{enviando ? "Procesando…" : inv.bid_rate === null ? "Enviar oferta" : "Enviar corrección"}</button>
+            <Confirmar deshabilitado={enviando} etiqueta="Declinar invitación" clase="btn-texto" advertencia="Ya no podrás ofertar en esta ruta." onConfirmar={() => hacer(() => api.declinar(token), "Invitación declinada.")} />
           </div>
         </form>
       )}
@@ -187,6 +199,7 @@ export function LigaCarrier({ token }: { token: string }) {
           })}
           <button
             className="btn-secundario"
+            disabled={enviando}
             onClick={() =>
               hacer(
                 () =>
@@ -227,6 +240,7 @@ export function LigaCarrier({ token }: { token: string }) {
           ))}
           <button
             className="btn-secundario"
+            disabled={enviando}
             onClick={() =>
               hacer(
                 () =>

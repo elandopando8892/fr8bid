@@ -151,11 +151,13 @@ export function sinSecretos(x: any): any {
 }
 
 function filtrarProtegidos(body: any): any {
-  for (const k of ["rows", "events"]) {
-    if (body && Array.isArray(body[k])) return { ...body, [k]: body[k].filter((e: any) => !esProtegido(e?.id) && !esProtegido(e?.rfx_event_id)) };
-  }
   if (body?.event && esProtegido(body.event.id)) return null;
-  return body;
+  if (!body) return body;
+  let limpio = body;
+  for (const k of ["rows", "events"]) {
+    if (Array.isArray(body[k])) limpio = { ...limpio, [k]: body[k].filter((e: any) => !esProtegido(e?.id) && !esProtegido(e?.rfx_event_id)) };
+  }
+  return limpio;
 }
 
 export interface OpcionesProxy {

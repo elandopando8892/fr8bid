@@ -70,6 +70,7 @@ function estadoEvento(e: Fila, hoy: string): EstadoEvento {
 // queued/sending/delivery_unknown no se reenvían: cuentan como inciertos.
 const ESTADO_AVISO: Record<string, EstadoAviso> = {
   drafted: "borrador",
+  approved: "por_verificar",
   queued: "en_cola",
   sending: "en_cola",
   sent: "aceptado",
@@ -112,6 +113,15 @@ function version(r: Fila, numero: number): OfertaVersion {
   };
 }
 
+function instante(fecha: string): number {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/i.test(fecha)) return NaN;
+  const dia = fecha.slice(0, 10);
+  const medianoche = Date.parse(`${dia}T00:00:00Z`);
+  // Date.parse normaliza ciertos días inexistentes, como el 30 de febrero.
+  if (!Number.isFinite(medianoche) || new Date(medianoche).toISOString().slice(0, 10) !== dia) return NaN;
+  return Date.parse(fecha);
+}
+
 function participacion(lv: Fila, confirmaciones: Fila[]): Participacion {
   // Rateware real: solo la versión vigente (columnas de rfx_lane_vendors).
   // Simulado: además `bid_revisions`, el historial que Rateware no expone.
@@ -119,17 +129,23 @@ function participacion(lv: Fila, confirmaciones: Fila[]): Participacion {
   const versiones = revisiones.length
     ? revisiones.map((r) => version(r, Number(r.revision)))
     : lv.bid_rate !== null && lv.bid_rate !== undefined
-      ? [version(lv, 1)]
+      ? [version({ ...lv, created_at: lv.responded_at }, 1)]
       : [];
   const rol = lv.award_role === "primary" ? "primario" : lv.award_role === "backup" ? "respaldo" : null;
   let adjudicada: Participacion["adjudicada"] = null;
   if (rol && versiones.length) {
-    // La adjudicación de Rateware apunta a la fila, no a una versión: se toma la
-    // última versión anterior a awarded_at (contrato C2 pendiente).
+    // C2 sigue pendiente: solo inferir con una cronología completa y coherente.
+    // Sin evidencia suficiente, null conserva el bloqueo de prepararEntrega.
     const corte = String(lv.awarded_at || "");
-    const previas = corte ? versiones.filter((v) => !v.creadaEn || v.creadaEn <= corte) : versiones;
-    const v = (previas.length ? previas : versiones).reduce((a, b) => (b.numero > a.numero ? b : a));
-    adjudicada = { numero: v.numero, huella: v.huella, por: String(lv.awarded_by || ""), en: corte };
+    const limite = instante(corte);
+    const ordenadas = [...versiones].sort((a, b) => a.numero - b.numero);
+    const fechas = ordenadas.map((v) => instante(v.creadaEn));
+    const coherente = Number.isFinite(limite) && ordenadas.every((v, i) =>
+      Number.isInteger(v.numero) && v.numero > 0 && Number.isFinite(fechas[i]) &&
+      (i === 0 || (v.numero > ordenadas[i - 1].numero && fechas[i] > fechas[i - 1]))
+    );
+    const v = coherente ? ordenadas.filter((_v, i) => fechas[i] <= limite).at(-1) : undefined;
+    if (v) adjudicada = { numero: v.numero, huella: v.huella, por: String(lv.awarded_by || ""), en: corte };
   }
   const rubros: Record<string, RubroEstado> = {};
   const condiciones: Participacion["condiciones"] = {};
@@ -268,7 +284,7 @@ export function detalle(
       cierre: ["cerrado", "adjudicado", "archivado"].includes(estadoEvento(e, hoy)) ? leerCierre(e.notes) : null
     },
     rutas: (crudo.lanes || []).map((l: Fila) => ruta(l, extra.rubros || [], extra.condiciones || [])).sort((a: Ruta, b: Ruta) => a.numero - b.numero),
-    avisos: mensajes.map(aviso),
+    avisos: mensajes.filter((m) => !m.channel || m.channel === "email" || m.channel === "gmail").map(aviso),
     recibo: reciboCrudo ? recibo(reciboCrudo) : null,
     revisiones: extra.revisiones ? revisionesVigentes(extra.revisiones) : null,
     ...(extra.respuestas === undefined ? {} : { respuestas: extra.respuestas === null ? null : respuestas(extra.respuestas) })
@@ -290,9 +306,15 @@ export function respuestas(filas: Fila[]): Record<string, RespuestaCarrier> {
   return salida;
 }
 
+export function filasListado(crudo: Fila, anterior: "events" | "messages"): Fila[] {
+  const filas = crudo?.rows !== undefined ? crudo.rows : crudo?.[anterior] ?? [];
+  if (!Array.isArray(filas)) throw new Error("La respuesta del listado no contiene una lista válida.");
+  return filas;
+}
+
 export function resumenes(crudo: Fila, hoy: string = hoyMexico()): ResumenEvento[] {
   // rateware-api devuelve `rows`; sin `lanes_preview`, solo `lane_count`.
-  return (crudo.rows || crudo.events || [])
+  return filasListado(crudo, "events")
     .filter((e: Fila) => !esProtegido(e.id))
     .map((e: Fila) => ({
       id: e.id,

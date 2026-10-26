@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ErrorApi } from "../cliente/api";
 import { NOMBRE_ROL, USUARIOS_SIMULADOS, useSesion } from "./sesion";
@@ -7,6 +7,9 @@ import { NOMBRE_ROL, USUARIOS_SIMULADOS, useSesion } from "./sesion";
 export function useRuta(): string {
   return useLocation().pathname;
 }
+
+// «1 ruta», «3 rutas»: sin «ruta(s)».
+export const plural = (n: number, uno: string, varios = `${uno}s`) => `${n.toLocaleString("es-MX")} ${n === 1 ? uno : varios}`;
 
 let navegar: ((ruta: string) => void) | null = null;
 
@@ -221,6 +224,7 @@ export function Confirmar({
   clase?: string;
 }) {
   const [paso, setPaso] = useState<"inicio" | "confirmar" | "enviando">("inicio");
+  const enCurso = useRef(false);
   if (paso === "inicio")
     return (
       <button className={clase} disabled={deshabilitado} onClick={() => setPaso("confirmar")}>
@@ -233,12 +237,15 @@ export function Confirmar({
       <div className="fila-botones">
         <button
           className={clase}
-          disabled={paso === "enviando"}
+          disabled={deshabilitado || paso === "enviando"}
           onClick={async () => {
+            if (deshabilitado || enCurso.current) return;
+            enCurso.current = true;
             setPaso("enviando");
             try {
               await onConfirmar();
             } finally {
+              enCurso.current = false;
               setPaso("inicio");
             }
           }}
@@ -252,6 +259,3 @@ export function Confirmar({
     </div>
   );
 }
-
-// «1 ruta», «3 rutas»: sin «ruta(s)».
-export const plural = (n: number, uno: string, varios = `${uno}s`) => `${n.toLocaleString("es-MX")} ${n === 1 ? uno : varios}`;

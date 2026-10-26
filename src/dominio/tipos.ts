@@ -112,7 +112,7 @@ export interface Ruta {
 export type TipoAviso = "invitacion" | "adjudicacion";
 // «en_cola»: Rateware lo tiene en cola o enviando (p. ej. pausado por la cuota
 // de Gmail). Nunca se muestra como enviado.
-export type EstadoAviso = "borrador" | "en_cola" | "aceptado" | "rebotado" | "fallido" | "incierto";
+export type EstadoAviso = "por_verificar" | "borrador" | "en_cola" | "aceptado" | "rebotado" | "fallido" | "incierto";
 export type ResultadoAviso = "adjudicado" | "respaldo" | "no_adjudicado";
 
 // Mensaje de la Cola de Rateware (outreach_messages). Rateware no tiene estado

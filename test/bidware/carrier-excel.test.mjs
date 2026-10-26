@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { build } from 'esbuild';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 const require = createRequire(import.meta.url);
+// Use the same TypeScript-capable bundler as the existing Vite build.
+const viteRequire = createRequire(require.resolve('vite/package.json'));
+const { build } = viteRequire('esbuild');
 const XLSX = require('xlsx');
 fs.mkdirSync('.test-output/carrier-excel-20261006', { recursive: true });
 const outfile = '.test-output/carrier-excel-20261006/module.cjs';

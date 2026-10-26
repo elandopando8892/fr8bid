@@ -415,7 +415,7 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
         <ul className="lista-compacta">
           {enviadas.map((a) => (
             <li key={a.id}>
-              <b>{carrierDe(a)?.carrier}</b> · {a.destinatario} · <span className="tenue">{ESTADO_INVITACION[a.estado] ?? a.estado}</span>
+              <b>{carrierDe(a)?.carrier}</b> · {a.destinatario} · <span className="tenue">{a.estado === "por_verificar" ? "aprobación no verificada" : ESTADO_INVITACION[a.estado] ?? a.estado}</span>
             </li>
           ))}
         </ul>
@@ -428,7 +428,7 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
               const p = carrierDe(a);
               return (
                 <li key={a.id}>
-                  <b>{p?.carrier}</b> · {a.destinatario} · <span className="tenue">{ESTADO_INVITACION[a.estado] ?? a.estado}</span>
+                  <b>{p?.carrier}</b> · {a.destinatario} · <span className="tenue">{a.estado === "por_verificar" ? "aprobación no verificada" : ESTADO_INVITACION[a.estado] ?? a.estado}</span>
                   {a.estado === "en_cola" && <span className="tenue"> ({a.motivo && /dailyLimit|daily_cap|quota/i.test(a.motivo) ? "cuota diaria de Gmail" : a.motivo || "todavía no sale"})</span>}
                   {p && !revisada(a) && <span className="pill">{MOTIVO_OMISION[estadoRevision(d, p.carrierId) as keyof typeof MOTIVO_OMISION]}</span>}
                 </li>
@@ -1470,7 +1470,7 @@ function Respaldo({ d, ruta, p, ctx, accion }: { d: Detalle; ruta: Ruta; p: Part
     <div className="aviso-caja">
       <h3>Respaldo de la ruta {ruta.numero}</h3>
       <p>
-        <b>{p.carrier}</b> · v{p.adjudicada?.numero} · {dinero(p.versiones.find((v) => v.numero === p.adjudicada?.numero)?.tarifaAllIn, ruta.moneda)}
+        <b>{p.carrier}</b> · {p.adjudicada ? <>v{p.adjudicada.numero} · {dinero(p.versiones.find((v) => v.numero === p.adjudicada?.numero)?.tarifaAllIn, ruta.moneda)}</> : "Versión adjudicada por revisar"}
       </p>
       <p className="tenue">Motivo: {p.motivo}</p>
       {!p.entregadaEn && ctx.rol === "admin" && (
@@ -1492,9 +1492,10 @@ function PrimarioActual({ d, ruta, p, ctx, accion }: { d: Detalle; ruta: Ruta; p
     <>
       <h3>Primario de la ruta {ruta.numero}</h3>
       <p>
-        <b>{p.carrier}</b> · v{p.adjudicada?.numero} · {dinero(p.versiones.find((v) => v.numero === p.adjudicada?.numero)?.tarifaAllIn, ruta.moneda)}
+        <b>{p.carrier}</b> · {p.adjudicada ? <>v{p.adjudicada.numero} · {dinero(p.versiones.find((v) => v.numero === p.adjudicada?.numero)?.tarifaAllIn, ruta.moneda)}</> : "Versión adjudicada por revisar"}
       </p>
       <p className="tenue">Motivo: {p.motivo} · {p.adjudicada?.por} · {fecha(p.adjudicada?.en)}</p>
+      {!p.adjudicada && <div className="estado estado-error" role="alert">Revisa la adjudicación y las fechas de sus ofertas. No se puede identificar la versión adjudicada con certeza.</div>}
       {reciente && (
         <div className="estado estado-viejo">
           Hay una versión más reciente (v{reciente.numero}, {dinero(reciente.tarifaAllIn, reciente.moneda)}). La adjudicación sigue en v{p.adjudicada?.numero}; cambiarla exige anular y adjudicar de nuevo.
@@ -1543,7 +1544,7 @@ function PanelEntrega({ d, ctx, accion, entrega, setEntrega, recibo, setRecibo }
           return (
             <p key={ruta.id}>
               Ruta {ruta.numero} · {ruta.origen} → {ruta.destino}:{" "}
-              {p ? <><b>{p.carrier}</b> {monto(p)} (v{p.adjudicada?.numero})</> : <span className="tenue">{ruta.desiertaMotivo ? "desierta" : "sin primario"}</span>}
+              {p ? <><b>{p.carrier}</b> {p.adjudicada ? <>{monto(p)} (v{p.adjudicada.numero})</> : "Versión adjudicada por revisar"}</> : <span className="tenue">{ruta.desiertaMotivo ? "desierta" : "sin primario"}</span>}
               {resp.map((x) => <span key={x.id} className="tenue"> · respaldo {x.carrier} {monto(x)}</span>)}
             </p>
           );
@@ -1592,7 +1593,7 @@ function PanelEntrega({ d, ctx, accion, entrega, setEntrega, recibo, setRecibo }
         <Candados
           lista={[
             { regla: "I4", ok: decidido, texto: decidido ? "Todas las rutas decididas" : "Faltan rutas por decidir" },
-            { regla: "I2", ok: prims.every((p) => !versionMasReciente(p)), texto: "Lo adjudicado es la versión vigente" },
+            { regla: "I2", ok: d.rutas.flatMap((ruta) => ruta.participaciones).filter((p) => p.rol).every((p) => p.adjudicada && !versionMasReciente(p)), texto: d.rutas.some((ruta) => ruta.participaciones.some((p) => p.rol && !p.adjudicada)) ? "Revisa la adjudicación: versión no identificada" : "Lo adjudicado es la versión vigente" },
             { regla: "I5", ok: entrega.estado !== "incierta", texto: entrega.estado === "incierta" ? "Incierta: concilia con la misma operación" : "Sin entregas inciertas" },
             { regla: "rol", ok: ctx.rol === "admin", texto: ctx.rol === "admin" ? "Tu rol: Administrador" : "Solo el Administrador entrega" }
           ]}
@@ -1638,7 +1639,12 @@ function PanelAviso({ d, ctx, accion }: Props) {
   const r = recorrido(d, ctx);
   const prims = d.rutas.map(primario).filter(Boolean) as Participacion[];
   const faltan = prims.filter((p) => !avisoDe(d, p.id, "adjudicacion"));
-  const otros = d.avisos.filter((a) => a.tipo === "adjudicacion" && a.resultado !== "adjudicado");
+  const principales = [...new Map(prims.map((p) => {
+    const a = avisoDe(d, p.id, "adjudicacion");
+    return [a?.id ?? p.id, { p, a }] as const;
+  })).values()].filter((x) => x.a);
+  const idsPrincipales = new Set(principales.map(({ a }) => a!.id));
+  const otros = d.avisos.filter((a) => a.tipo === "adjudicacion" && a.resultado !== "adjudicado" && !idsPrincipales.has(a.id));
   return (
     <div className="tarjeta">
       <h2>Aviso de adjudicación</h2>
@@ -1654,8 +1660,7 @@ function PanelAviso({ d, ctx, accion }: Props) {
       {d.avisos.some((a) => a.tipo === "adjudicacion") && (
         <p className="nota">El texto lo arma Rateware (en Rateware real sale en inglés) y se edita en su Cola; al volver, Fr8Bid muestra la versión nueva. Se envían desde sales@heymarksman.com por Gmail, que llega hasta «aceptado»; un rebote se muestra aquí.</p>
       )}
-      {prims.map((p) => {
-        const a = avisoDe(d, p.id, "adjudicacion");
+      {principales.map(({ p, a }) => {
         return a ? <TarjetaAviso key={a.id} d={d} a={a} titulo={p.carrier} ctx={ctx} accion={accion} /> : null;
       })}
       {otros.length > 0 && (
@@ -1686,12 +1691,12 @@ function TarjetaAviso({ d, a, titulo, ctx, accion }: { d: Detalle; a: Aviso; tit
     <div className="aviso-caja">
       <div className="fila">
         <b>{titulo}</b>
-        <span className="pill">{ESTADO_INVITACION[a.estado] ?? a.estado}</span>
+        <span className="pill">{a.estado === "por_verificar" ? "aprobación no verificada" : ESTADO_INVITACION[a.estado] ?? a.estado}</span>
       </div>
       <p className="tenue">Para: {a.destinatario} · versión {fecha(a.version)}</p>
       <p><b>{a.asunto}</b></p>
       <p className="texto-aviso">{a.cuerpo}</p>
-      {a.reciboProveedor && <p className="tenue">Gmail aceptó el mensaje · id {a.reciboProveedor}</p>}
+      {a.reciboProveedor && <p className="tenue">{a.estado === "aceptado" ? "Gmail aceptó el mensaje" : "Referencia del proveedor"} · id {a.reciboProveedor}</p>}
       {enviable && <Candados lista={candados} />}
       {enviable && (
         <Confirmar

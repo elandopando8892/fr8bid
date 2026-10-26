@@ -32,8 +32,8 @@ export function crearSimulado() {
 
 // Lleva el evento simulado hasta «ofertas recibidas» usando solo acciones del
 // contrato, como lo haría el equipo. Sirve para la vista local.
-export async function sembrarDemo() {
-  const { sim, carriers } = crearSimulado();
+export async function sembrarDemo(base = crearSimulado()) {
+  const { sim, carriers } = base;
   const como = (clave: string) => (body: Record<string, unknown>) => sim.llamar("rateware-api", body, `Bearer sim:${clave}`).then((r) => r.body);
   const op = como("operador");
   const admin = como("admin");
