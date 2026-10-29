@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ErrorApi, type AvanceEnvio } from "../cliente/api";
 import { proyeccionLoads } from "../dominio/loads";
 import { operacionAdjudicacion } from "../dominio/operacion";
@@ -57,18 +57,41 @@ export function Mesa({ id }: { id: string }) {
   const [vista, setVista] = useState<ClaveEtapa | null>(null);
   const [aviso, setAvisoMsg] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
   const actualPrevio = useRef<string | null>(null);
+  const secuencia = useRef(0);
+  const contexto = JSON.stringify([s.modo, s.rol, s.correo, s.usuarioSimulado]);
+  const origen = useMemo(() => ({ api: s.api, id, recibo, listo: s.listo, contexto }), [s.api, id, recibo, s.listo, contexto]);
+  const dueno = useRef<typeof origen | null>(null);
+
+  // No pintar el detalle ni conservar estado local de otra fuente, evento o sesión.
+  useLayoutEffect(() => {
+    setCarga({ tipo: "cargando" });
+    setEntrega(SIN_ENTREGA);
+    setRecibo(null);
+    setVista(null);
+    setAvisoMsg(null);
+    actualPrevio.current = null;
+  }, [s.api, id, s.listo, contexto]);
+  // El recibo también pertenece a la lectura: una clausura anterior no debe releer sin él.
+  useLayoutEffect(() => {
+    dueno.current = origen.listo ? origen : null;
+    secuencia.current++;
+    return () => { dueno.current = null; secuencia.current++; };
+  }, [origen]);
 
   const leer = useCallback(async () => {
+    if (!origen.listo || dueno.current !== origen) return;
+    const lectura = ++secuencia.current;
+    const vigente = () => secuencia.current === lectura && dueno.current === origen;
     try {
-      const datos = await s.api.detalle(id, recibo);
-      setCarga({ tipo: "ok", datos, leidoEn: Date.now() });
+      const datos = await origen.api.detalle(origen.id, origen.recibo);
+      if (vigente()) setCarga({ tipo: "ok", datos, leidoEn: Date.now() });
     } catch (e) {
-      setCarga(aCarga(e));
+      if (vigente()) setCarga(aCarga(e));
     }
-  }, [s.api, id, recibo]);
+  }, [origen]);
   useEffect(() => {
-    if (s.listo) leer();
-  }, [s.listo, leer]);
+    void leer();
+  }, [leer]);
 
   const ctx: Contexto = useMemo(() => ({ rol: s.rol, hoy: hoyMexico(), entrega }), [s.rol, entrega]);
   const r = carga.tipo === "ok" ? recorrido(carga.datos, ctx) : null;
