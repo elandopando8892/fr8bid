@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ResumenEvento } from "../dominio/tipos";
 import { aCarga, Desactualizado, EstadoVista, fecha, ir, Liga, Prueba, type Carga } from "./comun";
 import { useSesion } from "./sesion";
@@ -21,17 +21,32 @@ function siguiente(e: ResumenEvento): { accion: string; quien: string } {
 }
 
 export function Eventos() {
-  const { api, rol, listo, modo } = useSesion();
+  const { api, rol, listo, modo, correo, usuarioSimulado } = useSesion();
   const [carga, setCarga] = useState<Carga<ResumenEvento[]>>({ tipo: "cargando" });
-  const leer = useCallback(() => {
+  const secuencia = useRef(0);
+  const contexto = JSON.stringify([modo, rol, correo, usuarioSimulado]);
+  const dueno = useRef<{ api: typeof api; contexto: string } | null>(null);
+  // Retirar datos antes de pintar otra fuente/cuenta, aunque conserve el mismo cliente API.
+  useLayoutEffect(() => {
+    dueno.current = listo ? { api, contexto } : null;
+    secuencia.current++;
     setCarga({ tipo: "cargando" });
-    api.eventos().then(
-      (datos) => setCarga({ tipo: "ok", datos, leidoEn: Date.now() }),
-      (e) => setCarga(aCarga(e))
-    );
-  }, [api]);
+    return () => { dueno.current = null; secuencia.current++; };
+  }, [api, contexto, listo]);
+  const leer = useCallback(async () => {
+    if (!listo || dueno.current?.api !== api || dueno.current.contexto !== contexto) return;
+    const lectura = ++secuencia.current;
+    const vigente = () => secuencia.current === lectura && dueno.current?.api === api && dueno.current.contexto === contexto;
+    setCarga({ tipo: "cargando" });
+    try {
+      const datos = await api.eventos();
+      if (vigente()) setCarga({ tipo: "ok", datos, leidoEn: Date.now() });
+    } catch (e) {
+      if (vigente()) setCarga(aCarga(e));
+    }
+  }, [api, contexto, listo]);
   useEffect(() => {
-    if (listo) leer();
+    if (listo) void leer();
   }, [listo, leer]);
 
   const eventos = carga.tipo === "ok" ? carga.datos : [];
