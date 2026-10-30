@@ -127,12 +127,12 @@ export function revisar(l: Llamada): Rechazo | null {
   }
 
   if (fn === "rateware-api" && EN_LA_MESA.has(action))
-    return rechazo(409, "EN_LA_MESA", "Adjudicar, entregar a Rateware y avisar a los carriers se hacen en la Mesa del evento, con sus candados.", action);
+    return rechazo(409, "EN_LA_MESA", "Adjudicar, entregar a Rateware y avisar a los carriers se hacen en la página del evento, con sus candados.", action);
 
   if (fn === "rateware-api" && action === "update_rfx_event") {
     const patch = body.patch && typeof body.patch === "object" ? (body.patch as Record<string, unknown>) : {};
     if (ESTADOS_DE_ENTREGA.has(String(patch.status ?? "").toLowerCase()))
-      return rechazo(409, "CIERRE_POR_ENTREGA", "Cerrar el evento en Rateware es la entrega: hazlo desde la Mesa, que lleva su operation_id.", action);
+      return rechazo(409, "CIERRE_POR_ENTREGA", "Cerrar el evento en Rateware es la entrega: hazlo desde la página del evento, que lleva su operation_id.", action);
   }
 
   if (body.operation_id != null && !UUID_RATEWARE.test(String(body.operation_id)))

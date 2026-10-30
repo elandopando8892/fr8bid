@@ -55,7 +55,8 @@ function Rutas() {
         <Route path="/rfx/:id/message" element={modulo(<P.Mensaje />)} />
         <Route path="/rfx/:id/delivery" element={modulo(<P.Cola />)} />
         <Route path="/rfx/:id/review" element={modulo(<P.RevisionContactos />)} />
-        <Route path="/rfx/:id/notices" element={modulo(<P.Avisos />)} />
+        {/* Los avisos de adjudicación salen solo de la página del evento. */}
+        <Route path="/rfx/:id/notices" element={<AMesa />} />
         <Route path="/rfx/:id/chat" element={modulo(<P.Chat />)} />
         <Route path="/panel" element={modulo(<P.Panel />)} />
         <Route path="/intake" element={modulo(<P.Intake />)} />

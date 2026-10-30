@@ -5,19 +5,10 @@ import { offerText } from "@/i18n/offer-detail";
 import { domainLabel } from "@/i18n/domain";
 import { tr } from "@/i18n/rfx-admin";
 import { useLang, locale, getLang } from "@/i18n/language";
-import { confirmAsync, promptAsync } from "@/components/confirm";
+import { promptAsync } from "@/components/confirm";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  awardLaneVendor,
-  clearAward,
-  closeoutToRateware,
-  isVoidLane,
-  newOperationId,
-  ROLE_LABEL,
-  setLaneNoAward,
-  type AwardRole,
-} from "./award.service";
+import { isVoidLane, ROLE_LABEL, setLaneNoAward } from "./award.service";
 import type { LaneWithInvitations } from "./stages";
 import { laneSegmentKey, termsLabel, termsOf, termsTone, type ConfirmationRow } from "./confirmations.service";
 import { ErrorBanner, InfoBanner, Empty, Pill, money } from "@/components/ui";
@@ -81,7 +72,6 @@ export function CloseStage({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [closeoutId, setCloseoutId] = useState(() => newOperationId());
   // Awarding, declaring a lane void and the hand-off to rateware are an Administrador's decisions.
   const { can } = useAuth();
   const decides = can("admin");
@@ -161,20 +151,6 @@ export function CloseStage({
     }
   }
 
-  function award(offer: Offer, role: AwardRole) {
-    const id = String(offer.id);
-    // One id per attempt, reused if the call is retried.
-    const operationId = newOperationId();
-    run(
-      id + role,
-      async () => {
-        const res = await awardLaneVendor({ invitationId: id, role, operationId });
-        if (res.idempotent) return tr("text117");
-      },
-      tr("text118", domainLabel(ROLE_LABEL[role] ?? role).toLowerCase()),
-    );
-  }
-
   async function declareVoid(targets: typeof priced) {
     if (!targets.length) return;
     const one = targets.length === 1;
@@ -211,36 +187,6 @@ export function CloseStage({
         await setLaneNoAward({ eventId, laneIds: [String(lane.id)], noAward: false });
       },
       tr("text133"),
-    );
-  }
-
-  async function closeout() {
-    if (!decides || !canCloseout || busy === "closeout") return;
-    if (
-      !await confirmAsync(
-        tr("text134", covered) +
-          (voided.length
-            ? tr("text135", voided.length === 1 ? tr("text136") : tr("text137", voided.length)) +
-              voided.map((p) => `· ${routeOf(p.lane)}`).join("\n") +
-              "\n\n"
-            : "") +
-          tr("text138") +
-          tr("text139"),
-      )
-    )
-      return;
-    run(
-      "closeout",
-      async () => {
-        const res = await closeoutToRateware(eventId, closeoutId);
-        setCloseoutId(newOperationId());
-        return (
-          tr("text140", res.queued_for_review ?? 0) +
-          `${res.inserted != null ? tr("text141", res.inserted) : ""}` +
-          `${res.linked != null ? tr("text142", res.linked) : ""}.`
-        );
-      },
-      tr("text143"),
     );
   }
 
@@ -295,6 +241,12 @@ export function CloseStage({
 
       <div className="close-grid">
         <div className="close-col">
+          {/* Adjudicar, entregar y avisar viven solo en la página del evento: aquí
+              se ve el estado de cada ruta y se declaran rutas sin adjudicar. */}
+          <InfoBanner title="Se adjudica en la página del evento">
+            Adjudicar, entregar a Rateware y avisar a los carriers se hacen en la página del evento, con sus candados.{" "}
+            <Link to={`/eventos/${eventId}`}>Ir a la página del evento →</Link>
+          </InfoBanner>
           {error && <ErrorBanner message={error} />}
           {notice && <InfoBanner>{notice}</InfoBanner>}
           {!decides && (
@@ -358,7 +310,6 @@ export function CloseStage({
                     const id = String(o.id);
                     const late = expired(o);
                     const until = day(o.valid_through);
-                    const voidTitle = state === "void" ? tr("text178") : adminOnly;
                     return (
                       <div key={id} className="close-offer">
                         <span className="mono close-rank">{i + 1}</span>
@@ -383,34 +334,10 @@ export function CloseStage({
                         </div>
                         <button onClick={() => setOfferDetail({ lane, invitation: o })}>{offerText("view")}</button>
                         <span className="mono close-rate">{money(o.bid_rate, String(o.currency ?? "USD"))}</span>
-                        {role ? (
-                          <>
-                            <Pill tone={role === "primary" ? "indigo" : ""}>
-                              {domainLabel(ROLE_LABEL[role] ?? role)?.toUpperCase() ?? role.toUpperCase()}
-                            </Pill>
-                            <button
-                              className="link close-undo"
-                              disabled={!decides || busy === id + "clear"}
-                              title={adminOnly}
-                              onClick={() => run(id + "clear", () => clearAward(id).then(() => undefined), tr("text185"))}
-                            >
-                              {tr("text186")}</button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              disabled={!decides || state === "void" || busy === id + "primary"}
-                              title={voidTitle}
-                              onClick={() => award(o, "primary")}
-                            >
-                              {tr("text187")}</button>
-                            <button
-                              disabled={!decides || state === "void" || busy === id + "backup"}
-                              title={voidTitle}
-                              onClick={() => award(o, "backup")}
-                            >
-                              {tr("text188")}</button>
-                          </>
+                        {role && (
+                          <Pill tone={role === "primary" ? "indigo" : ""}>
+                            {domainLabel(ROLE_LABEL[role] ?? role)?.toUpperCase() ?? role.toUpperCase()}
+                          </Pill>
                         )}
                       </div>
                     );
@@ -439,18 +366,9 @@ export function CloseStage({
               </li>
             ))}
           </ul>
-          <button
-            className={canCloseout && decides ? "primary" : "close-blocked"}
-            disabled={!decides || !canCloseout || busy === "closeout"}
-            title={adminOnly}
-            onClick={closeout}
-          >
-            {busy === "closeout"
-              ? tr("text194")
-              : canCloseout
-                ? tr("text195")
-                : tr("text196")}
-          </button>
+          <Link className={canCloseout && decides ? "btn primary" : "btn close-blocked"} to={`/eventos/${eventId}`}>
+            Entregar a Rateware en la página del evento
+          </Link>
           <p className="close-why">
             {canCloseout
               ? tr("text197", voided.length ? tr("text198", voided.length === 1 ? tr("text199") : tr("text200", voided.length)) : "")
