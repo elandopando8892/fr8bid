@@ -13,6 +13,7 @@ import {
   candadosAviso,
   diaCorto,
   primario,
+  propuestaPrimarios,
   puedeAdjudicar,
   recorrido,
   versionMasReciente,
@@ -1113,5 +1114,38 @@ describe("proxy de /api", () => {
     const antes = sim.llamadas.length;
     await expect(admin.eventos()).rejects.toSatisfy((e: unknown) => e instanceof ErrorApi && e.status === 504);
     expect(sim.llamadas.length).toBe(antes + 1);
+  });
+});
+
+describe("adjudicar en lote", () => {
+  beforeEach(preparar);
+
+  it("propone la más barata de cada ruta sin decidir y deja a mano la que necesita confirmación", async () => {
+    await admin.cerrarAOfertas(eventId);
+    const d = await admin.detalle(eventId, null);
+    const [r1] = d.rutas;
+    const sinVigencia = structuredClone(r1);
+    sinVigencia.id = "ruta-2";
+    sinVigencia.numero = 2;
+    const b2 = sinVigencia.participaciones.find((p) => p.id === ids.B)!;
+    versionVigente(b2)!.vigenteHasta = null;
+    const decidida = structuredClone(r1);
+    decidida.id = "ruta-3";
+    decidida.numero = 3;
+    decidida.participaciones.find((p) => p.id === ids.A)!.rol = "primario";
+    const varias: Detalle = { ...d, rutas: [r1, sinVigencia, decidida] };
+
+    const propuesta = propuestaPrimarios(varias, ctx());
+    expect(propuesta.map((x) => x.ruta.id)).toEqual([r1.id, "ruta-2"]);
+    expect(propuesta[0].p?.id).toBe(ids.B);
+    // B sigue siendo la más barata en la ruta 2: no se salta a A en silencio.
+    expect(propuesta[1].p).toBeNull();
+    expect(propuesta[1].motivo).toContain("Carrier Prueba B");
+  });
+
+  it("no propone nada a quien no es Administrador", async () => {
+    await admin.cerrarAOfertas(eventId);
+    const d = await admin.detalle(eventId, null);
+    expect(propuestaPrimarios(d, ctx("operator")).every((x) => x.p === null)).toBe(true);
   });
 });

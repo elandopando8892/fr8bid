@@ -185,6 +185,26 @@ export function puedeAdjudicar(candados: Candado[], confirmaVigencia: boolean): 
   return candados.every((c) => c.ok || (c.confirmable && confirmaVigencia));
 }
 
+// Adjudicar en lote: para cada ruta sin decidir, la oferta más barata (all-in)
+// que pasa todos sus candados sin confirmaciones extra. Una ruta sin oferta así
+// (p. ej. la más barata no declara vigencia) se adjudica a mano, nunca se
+// salta en silencio a una más cara.
+export type PropuestaPrimario = { ruta: Ruta; p: Participacion; motivo?: undefined } | { ruta: Ruta; p: null; motivo: string };
+
+export function propuestaPrimarios(detalle: Detalle, ctx: Contexto): PropuestaPrimario[] {
+  return detalle.rutas
+    .filter((ruta) => !rutaDecidida(ruta))
+    .map((ruta): PropuestaPrimario => {
+      const filas = conOferta(ruta)
+        .filter((p) => !p.rol)
+        .sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
+      if (!filas.length) return { ruta, p: null, motivo: "sin ofertas" };
+      const mejor = filas[0];
+      if (puedeAdjudicar(candadosAdjudicacion(detalle, ruta, mejor, ctx, "primario"), false)) return { ruta, p: mejor };
+      return { ruta, p: null, motivo: `la más barata (${mejor.carrier}) necesita revisión a mano` };
+    });
+}
+
 export function avisoDe(detalle: Detalle, participacionId: string, tipo: Aviso["tipo"]): Aviso | null {
   return detalle.avisos.find((a) => a.tipo === tipo && (a.participacionId === participacionId || a.participaciones.includes(participacionId))) ?? null;
 }

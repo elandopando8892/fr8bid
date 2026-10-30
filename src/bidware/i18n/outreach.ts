@@ -1111,7 +1111,7 @@ export const copy = {
     "en": "Nothing to review: {0} carrier(s) reviewed."
   },
   "text278": {
-    "es": "Volver a la Mesa",
+    "es": "Volver a la página del evento",
     "en": "Back to the event"
   },
   "text279": {

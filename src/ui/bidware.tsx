@@ -54,7 +54,7 @@ export function Bw({ children, publica = false }: { children: ReactNode; publica
     <div className={publica ? "bw bw-publica" : "bw"}>
       {MODO === "simulado" && !publica && (
         <div className="bw-simulado" role="note">
-          Modo simulado: este módulo trabaja con Rateware real y aquí no tiene datos. La Mesa sí funciona con el evento de prueba.
+          Modo simulado: este módulo trabaja con Rateware real y aquí no tiene datos. La página del evento sí funciona con el evento de prueba.
         </div>
       )}
       <Atrapa>

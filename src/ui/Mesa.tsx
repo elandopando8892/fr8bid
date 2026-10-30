@@ -9,6 +9,7 @@ import {
   conOferta,
   hoyMexico,
   primario,
+  propuestaPrimarios,
   puedeAdjudicar,
   recorrido,
   revisarCondiciones,
@@ -1232,6 +1233,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
           />
         </div>
       )}
+      {d.evento.estado === "cerrado" && ctx.rol === "admin" && <AdjudicarEnLote d={d} ctx={ctx} accion={accion} />}
       {d.rutas.map((ruta, i) => {
         const filas = [...conOferta(ruta)].sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
         const sel = ruta.participaciones.find((x) => x.id === elegido) ?? null;
@@ -1329,6 +1331,86 @@ function PanelComparar({ d, ctx, accion }: Props) {
         );
       })}
     </>
+  );
+}
+
+// Varias rutas sin primario: la mejor oferta de cada una (la más barata que
+// pasa sus candados) se adjudica con un solo motivo y una confirmación. Cada
+// ruta se puede quitar del lote y adjudicarse a mano abajo.
+function AdjudicarEnLote({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion: Props["accion"] }) {
+  const s = useSesion();
+  const [motivo, setMotivo] = useState("");
+  const [fuera, setFuera] = useState<Set<string>>(new Set());
+  const propuesta = propuestaPrimarios(d, ctx);
+  const elegibles = propuesta.filter((x) => x.p);
+  if (propuesta.length < 2 || !elegibles.length) return null;
+  const lote = elegibles.filter((x) => !fuera.has(x.ruta.id));
+  const alternar = (id: string) => setFuera((f) => {
+    const n = new Set(f);
+    if (n.has(id)) n.delete(id);
+    else n.add(id);
+    return n;
+  });
+  return (
+    <div className="tarjeta">
+      <h2>Adjudicar la mejor oferta de cada ruta</h2>
+      <p className="tenue">La más barata de cada ruta que pasa todos sus candados. Quita las que quieras decidir a mano abajo.</p>
+      <div className="tabla-envoltura">
+        <table className="tabla tabla-tarjetas">
+          <thead>
+            <tr><th aria-label="Incluir"></th><th>Ruta</th><th>Carrier</th><th>All-in</th><th>Contra objetivo</th></tr>
+          </thead>
+          <tbody>
+            {propuesta.map((x) => {
+              const v = x.p ? versionVigente(x.p) : null;
+              const dif = v && x.ruta.objetivo ? v.tarifaAllIn - x.ruta.objetivo : null;
+              return (
+                <tr key={x.ruta.id}>
+                  <td>{x.p && <input type="checkbox" aria-label={`Incluir la ruta ${x.ruta.numero}`} checked={!fuera.has(x.ruta.id)} onChange={() => alternar(x.ruta.id)} />}</td>
+                  <td data-etiqueta="Ruta">{x.ruta.numero} · {x.ruta.origen} → {x.ruta.destino}</td>
+                  <td data-etiqueta="Carrier">{x.p ? <b>{x.p.carrier}</b> : <span className="tenue">A mano: {x.motivo}</span>}</td>
+                  <td data-etiqueta="All-in" className="mono">{v ? dinero(v.tarifaAllIn, v.moneda) : "—"}</td>
+                  <td data-etiqueta="Contra objetivo" className={dif !== null && dif > 0 ? "alerta" : ""}>
+                    {dif === null ? "—" : dif === 0 ? "igual" : `${dif > 0 ? "+" : "−"}${dinero(Math.abs(dif), v!.moneda)}`}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <label className="campo">
+        <span>Motivo para todas (obligatorio)</span>
+        <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={2} placeholder="Ej.: mejor all-in de cada ruta con candados en orden" />
+      </label>
+      <Confirmar
+        etiqueta={`Adjudicar ${plural(lote.length, "ruta")} como primario`}
+        deshabilitado={!lote.length || !motivo.trim()}
+        advertencia={<>Se adjudican {lote.map((x) => `ruta ${x.ruta.numero} a ${x.p!.carrier}`).join(", ")}. No se envía nada al carrier; el aviso se desbloquea con el recibo de Rateware. {ADVERTENCIA_REAL(s, d)}</>}
+        onConfirmar={() =>
+          accion(async () => {
+            let hechas = 0;
+            for (const x of lote) {
+              const v = versionVigente(x.p!)!;
+              try {
+                await s.api.adjudicar({
+                  eventId: d.evento.id,
+                  participacionId: x.p!.id,
+                  rol: "primario",
+                  motivo,
+                  operationId: operacionAdjudicacion(d.evento.id, x.p!.id, "primario", v.huella),
+                  confirmaSinVigencia: false
+                });
+              } catch (e) {
+                throw new Error(`${hechas} de ${lote.length} rutas adjudicadas. Se detuvo en la ruta ${x.ruta.numero}: ${e instanceof Error ? e.message : String(e)}`);
+              }
+              hechas += 1;
+            }
+            return hechas;
+          }, (n) => `${plural(n, "ruta adjudicada", "rutas adjudicadas")} como primario.`)
+        }
+      />
+    </div>
   );
 }
 
@@ -1544,6 +1626,9 @@ function PanelEntrega({ d, ctx, accion, entrega, setEntrega, recibo, setRecibo }
   const r = recorrido(d, ctx);
   const decidido = r.pasos[7].estado === "hecho";
   const prims = d.rutas.map(primario).filter(Boolean) as Participacion[];
+  // Un respaldo abierto y sin adjudicar se perdería al entregar: se dice antes.
+  const [respaldoAbierto, setRespaldoAbierto] = useState<string | null>(null);
+  const respaldoPendiente = respaldoAbierto ? d.rutas.flatMap((x) => x.participaciones).find((x) => x.id === respaldoAbierto && !x.rol) : undefined;
   const confirmar = (op: string) =>
     accion(async () => {
       setEntrega({ estado: "enviada", operationId: op, error: null });
@@ -1588,14 +1673,19 @@ function PanelEntrega({ d, ctx, accion, entrega, setEntrega, recibo, setRecibo }
         {entrega.error && entrega.estado !== "confirmada" && <div className="estado estado-error">{entrega.error}</div>}
 
         {!r.entregaConfirmada && decidido && ctx.rol === "admin" && (entrega.estado === "sin_preparar" || entrega.estado === "rechazada") && (
-          <OfrecerRespaldo d={d} ctx={ctx} accion={accion} />
+          <OfrecerRespaldo d={d} ctx={ctx} accion={accion} abierta={respaldoAbierto} setAbierta={setRespaldoAbierto} />
         )}
         {!r.entregaConfirmada && decidido && ctx.rol === "admin" && (
           <div className="fila-botones">
             {entrega.estado === "sin_preparar" || entrega.estado === "rechazada" ? (
               <Confirmar
                 etiqueta="Entregar a Rateware"
-                advertencia={<>Rateware guarda {plural(prims.length, "tarifa")} en Revisión (pending_review) y devuelve el recibo. {ADVERTENCIA_REAL(s, d)}</>}
+                advertencia={
+                  <>
+                    {respaldoPendiente && <b>Abriste el respaldo de {respaldoPendiente.carrier} y no lo adjudicaste: si entregas ahora, va sin ese respaldo y ya no se puede agregar. </b>}
+                    Rateware guarda {plural(prims.length, "tarifa")} en Revisión (pending_review) y devuelve el recibo. {ADVERTENCIA_REAL(s, d)}
+                  </>
+                }
                 onConfirmar={() => {
                   // Comprobación local (versión adjudicada = vigente) y, si pasa, la entrega.
                   const preparada = s.api.prepararEntrega(d);
@@ -1629,8 +1719,7 @@ function PanelEntrega({ d, ctx, accion, entrega, setEntrega, recibo, setRecibo }
 
 // Antes de entregar: rutas con primario, sin respaldo y con otra oferta
 // vigente. Se ofrece la siguiente mejor (por all-in) como respaldo; es opcional.
-function OfrecerRespaldo({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion: Props["accion"] }) {
-  const [abierta, setAbierta] = useState<string | null>(null);
+function OfrecerRespaldo({ d, ctx, accion, abierta, setAbierta }: { d: Detalle; ctx: Contexto; accion: Props["accion"]; abierta: string | null; setAbierta: (id: string | null) => void }) {
   if (d.evento.estado !== "cerrado") return null;
   const candidatas = d.rutas.flatMap((ruta) => {
     const prim = primario(ruta);
@@ -1680,6 +1769,7 @@ function PanelAviso({ d, ctx, accion }: Props) {
           onConfirmar={() => accion(() => s.api.generarAvisosAdjudicacion(d.evento.id), "Avisos preparados. Revisa cada texto y apruébalo aquí.")}
         />
       )}
+      <AprobarTodos d={d} ctx={ctx} accion={accion} />
       {d.avisos.some((a) => a.tipo === "adjudicacion") && (
         <p className="nota">El texto lo arma Rateware (en Rateware real sale en inglés) y se edita en su Cola; al volver, Fr8Bid muestra la versión nueva. Se envían desde sales@heymarksman.com por Gmail, que llega hasta «aceptado»; un rebote se muestra aquí.</p>
       )}
@@ -1701,6 +1791,49 @@ function PanelAviso({ d, ctx, accion }: Props) {
           ))}
         </>
       )}
+    </div>
+  );
+}
+
+// Todos los avisos listos (adjudicado, respaldo y no adjudicados) con una sola
+// confirmación, en tandas y con la versión exacta de cada uno. Los que tienen un
+// candado pendiente se quedan para aprobarse uno por uno.
+function AprobarTodos({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion: Props["accion"] }) {
+  const s = useSesion();
+  const [avance, setAvance] = useState<AvanceEnvio | null>(null);
+  if (ctx.rol !== "admin") return null;
+  const listos = d.avisos.filter(
+    (a) => a.tipo === "adjudicacion" && (a.estado === "borrador" || a.estado === "fallido" || a.estado === "en_cola") && candadosAviso(d, a, ctx).every((c) => c.ok)
+  );
+  if (listos.length < 2) return null;
+  const tandas = planearTandas(listos).length;
+  return (
+    <div className="aviso-caja">
+      <p><b>{plural(listos.length, "aviso listo", "avisos listos")}</b>: {listos.map((a) => d.rutas.flatMap((r) => r.participaciones).find((x) => x.id === a.participacionId)?.carrier ?? a.destinatario).join(", ")}. Revisa los textos abajo antes de aprobar.</p>
+      {avance && (
+        <p className={avance.detenido ? "estado estado-error" : "tenue"}>
+          Tanda {avance.hechas} de {avance.tandas}: {avance.enviados} aceptado(s) por Gmail{avance.enCola ? `, ${avance.enCola} en cola` : ""}. {avance.detenido ?? ""}
+        </p>
+      )}
+      <Confirmar
+        etiqueta={`Aprobar y enviar los ${listos.length} avisos`}
+        advertencia={
+          <>
+            Se envían por Gmail exactamente los textos que ves abajo{tandas > 1 ? `, en ${tandas} tandas de hasta ${TAMANO_TANDA}` : ""}. Si alguien cambió uno en la Cola, Rateware lo rechaza y lo vuelves a revisar. {ADVERTENCIA_REAL(s, d)}
+          </>
+        }
+        onConfirmar={() =>
+          accion(
+            async () => {
+              const r = await s.api.enviarPorTandas(d.evento.id, listos, { alAvanzar: setAvance });
+              setAvance(r);
+              if (r.detenido) throw new Error(`${r.enviados} de ${listos.length} aceptados por Gmail. ${r.detenido}`);
+              return r;
+            },
+            (r) => `${plural(r.enviados, "aviso aceptado", "avisos aceptados")} por Gmail.`
+          )
+        }
+      />
     </div>
   );
 }

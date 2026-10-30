@@ -14,7 +14,7 @@ import { readJsonResponse } from "../../../packages/http-response/src/read-json.
 export const functionEndpoint = (fn: string) => `/api/funcion?fn=${encodeURIComponent(fn)}`;
 
 export const SIMULATED_MESSAGE =
-  "Modo simulado: este módulo trabaja con Rateware real y aquí no tiene datos. La Mesa sí funciona con el evento de prueba.";
+  "Modo simulado: este módulo trabaja con Rateware real y aquí no tiene datos. La página del evento sí funciona con el evento de prueba.";
 
 function assertBackend(action: string) {
   if (env.simulated) throw new ApiError(SIMULATED_MESSAGE, { status: 503, code: "SIMULADO", action });
