@@ -36,6 +36,7 @@ import { planSendBatches, runSendBatches, waitBetweenBatches, type BatchProgress
 import { Spinner, ErrorBanner, InfoBanner, Empty, Pill } from "@/components/ui";
 import { LaunchHeader, LaunchTabs } from "./LaunchShell";
 import { listContactReviews } from "./review.service";
+import { BulkEmailReview } from "./BulkEmailReview";
 import { MessageReviewDialog } from "./MessageReviewDialog";
 import { outreachVendorName } from "./outreach.service";
 import { tr as reviewText } from "@/i18n/outreach-review";
@@ -467,6 +468,7 @@ function DeliveryQueueContent() {
         }
         actions={
           <>
+            <BulkEmailReview eventId={id} scope={scope} drafts={draftRows} detail={detail.data ?? undefined} reviews={reviews.data ?? undefined} refreshVersion={evidenceRefresh} disabled={busy || queue.loading || !!queue.error || detail.loading || !!detail.error || reviews.loading || !!reviews.error} onReview={messageId => { forget([messageId]); setReviewMessage({ id: messageId, scope }); }} />
             <button type="button" onClick={refresh} disabled={busy}>
               {tr("text092")}</button>
             <button

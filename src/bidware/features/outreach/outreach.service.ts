@@ -159,11 +159,13 @@ export async function listQueuePage(input: {
   offset: number;
   /** Up to 250, the server's cap; a page by default. */
   limit?: number;
+  /** Full persisted bodies for read-only bulk review. */
+  includeContent?: boolean;
 }): Promise<QueuePage> {
   const res = await callRatewareApi<Partial<QueuePage>>("list_outreach_messages", {
     rfx_event_id: input.eventId,
     enforce_rfx_event_scope: true,
-    compact: true,
+    compact: !input.includeContent,
     channels: channelsOf(input.channel),
     search: input.search || undefined,
     ...(input.state ? { tracking_status: input.state, include_archived: true } : {}),
