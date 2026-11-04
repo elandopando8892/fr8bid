@@ -223,7 +223,7 @@ function RateReviewContent() {
 
   return (
     <div className="rr-page">
-      <TopBar title={tr("text038")} sub={tr("text039")} />
+      <TopBar title={tr("text038")} sub={tr("text039")} actions={<button onClick={pending.reload}>{tr("text040")}</button>} />
       <main className="main">
         <div style={{ display: "grid", gap: 14 }}>
           {pending.error && <ErrorBanner message={pending.error} />}

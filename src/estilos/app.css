@@ -27,6 +27,8 @@ button, input, select, textarea { font: inherit; }
 .lateral nav .externo { color: var(--muted2); font-size: 11px; margin-left: 2px; }
 .cuenta { margin-top: auto; display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
 .cuenta .rol { color: var(--orange); font-weight: 600; }
+.cuenta .idioma { display: flex; gap: 6px; }
+.cuenta .idioma [aria-pressed="true"] { font-weight: 700; text-decoration: underline; }
 .cuenta select { width: 100%; }
 .contenido { padding: 24px 28px; max-width: 1280px; width: 100%; }
 .contenido.solo { margin: 0 auto; max-width: 760px; }

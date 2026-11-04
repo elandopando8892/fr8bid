@@ -18,6 +18,8 @@ export interface Sesion {
   modo: typeof MODO;
   api: MesaApi;
   rol: Rol;
+  // False hasta que llega el rol leído del servidor (el de la sesión puede tener una hora).
+  rolLeido: boolean;
   correo: string | null;
   listo: boolean;
   sim: RatewareSimulado | null;
@@ -68,6 +70,7 @@ export function ProveedorSesion({ children }: { children: ReactNode }) {
     modo: MODO,
     api,
     rol: MODO === "simulado" ? u.rol : auth.role,
+    rolLeido: MODO === "simulado" ? true : auth.roleLoaded,
     correo: MODO === "simulado" ? sim?.usuarios.get(usuarioSimulado)?.email ?? null : auth.user?.email ?? null,
     listo: MODO === "simulado" ? listo : !auth.loading,
     sim,
