@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ErrorApi } from "../cliente/api";
-import { NOMBRE_ROL, USUARIOS_SIMULADOS, useSesion } from "./sesion";
+import { USUARIOS_SIMULADOS, useSesion } from "./sesion";
+import { setLang, useLang } from "@/i18n/language";
+import { tr } from "@/i18n/common";
+import { TEAM_ROLE_LABEL } from "@/lib/roles";
 
 // ——— Rutas: react-router (las comparten la Mesa y los módulos de Bidware) ———
 export function useRuta(): string {
@@ -114,6 +117,7 @@ function Menu({ ruta }: { ruta: string }) {
 
 export function Marco({ children }: { children: ReactNode }) {
   const s = useSesion();
+  useLang(); // el rol y el aviso cambian de idioma con los módulos
   const ruta = useRuta();
   return (
     <div className="marco">
@@ -142,10 +146,36 @@ export function Marco({ children }: { children: ReactNode }) {
               <button className="btn-texto" onClick={s.salir}>Salir</button>
             </>
           ) : null}
-          {s.modo !== "simulado" && s.correo && <span className="rol">{NOMBRE_ROL[s.rol]}</span>}
+          {s.modo !== "simulado" && s.correo && s.rolLeido && <span className="rol sidebar-role">{TEAM_ROLE_LABEL[s.rol]}</span>}
+          <Idioma />
         </div>
       </aside>
-      <main className="contenido">{children}</main>
+      <main className="contenido main-col">
+        {s.modo !== "simulado" && s.correo && s.rolLeido && s.rol === "viewer" && (
+          <div className="aviso-caja" role="note">
+            <b>{tr("text010")}</b> {tr("text011")}
+          </div>
+        )}
+        {children}
+      </main>
+    </div>
+  );
+}
+
+// Idioma de los módulos traídos de Bidware (el equipo trabaja en español o en
+// inglés); la página del evento sigue en español.
+function Idioma() {
+  const lang = useLang();
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+  return (
+    <div className="idioma" role="group" aria-label={lang === "es" ? "Idioma del equipo" : "Team language"}>
+      {(["es", "en"] as const).map((op) => (
+        <button key={op} type="button" className="btn-texto" aria-pressed={lang === op} onClick={() => setLang(op)}>
+          {op.toUpperCase()}
+        </button>
+      ))}
     </div>
   );
 }

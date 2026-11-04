@@ -23,6 +23,10 @@ import { isSystem, languageOf, listTemplates, updateTemplate } from "./templates
 import { LaunchHeader, LaunchTabs, audienceOf } from "./LaunchShell";
 import { listContactReviews } from "./review.service";
 import { reviewedDraftAudience } from "./reviewed-audience";
+import { BatchFlowPanel } from "./BatchFlowPanel";
+import { prepareDraftChannels, type DraftPreparation } from "./draft-preparation";
+import { DraftPreparationResult } from "./DraftPreparationResult";
+import { draftPreparationText } from "@/i18n/draft-preparation";
 
 /**
  * The variables worth inserting, as rateware's renderer fills them per carrier
@@ -61,6 +65,13 @@ function metaPill(status?: string | null) {
  * the drafts go to the Delivery queue, the only surface that sends.
  */
 export function MessagePage() {
+  const { id = "" } = useParams();
+  const { user, role, roleLoaded } = useAuth();
+  const organization = user?.app_metadata?.rateware_organization_id ?? user?.app_metadata?.organization_id ?? "";
+  return <MessageContent key={JSON.stringify([user?.id, organization, role, roleLoaded, id])} />;
+}
+
+function MessageContent() {
   useLang();
   const { id = "" } = useParams();
   const { can } = useAuth();
@@ -78,9 +89,18 @@ export function MessagePage() {
   const [channels, setChannels] = useState<Set<DraftChannel>>(new Set(["email"]));
   const [busy, setBusy] = useState<"save" | "generate" | "archive" | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [preparation, setPreparation] = useState<DraftPreparation | null>(null);
+  const [preparedTemplateName, setPreparedTemplateName] = useState("");
+  const preparingRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+  const [batchRevision, setBatchRevision] = useState(0);
   const [campaignKey, setCampaignKey] = useState(() => newOperationId());
-  // One id per channel for this attempt: generate_outreach_drafts is a
-  // correlated high-risk action, and a retry without the same id generates twice.
+  // Keep a channel's operation id until its response confirms preparation.
+  // Uncertain attempts are reconciled in Queue; this screen never retries them.
   const [operationIds, setOperationIds] = useState<Record<DraftChannel, string>>(() => ({
     email: newOperationId(),
     whatsapp: newOperationId(),
@@ -175,64 +195,53 @@ export function MessagePage() {
 
   /** Links the event to the template (reusing its campaign) and prepares one set of drafts per channel. */
   async function generate() {
-    if (!template || !canGenerate) return;
+    if (!template || !canGenerate || preparingRef.current) return;
+    preparingRef.current = true;
+    setBusy("generate");
     const reviewedVendorIds = audience.map((v) => v.id);
     const list = [...channels];
-    const ok = await confirmAsync(
-      tr("text149", template.name, list.map((c) => CHANNEL_LABEL[c]).join(tr("text070"))) +
-        tr("text150", audience.length, audience.length === 1 ? "" : "s") +
-        tr("text151"),
-      { ok: tr("text152") },
-    );
-    if (!ok) return;
-    setBusy("generate");
-    setNotice(null);
+    const isCurrent = () => mountedRef.current && preparingRef.current;
+    let started = false;
     try {
-      let campaignId = campaign?.id as string | undefined;
-      if (!campaignId) {
-        const rfxKey = String(event?.rfx_id ?? event?.name ?? "RFx");
-        const { row } = await createOutreachCampaign({
-          rfx_event_id: id,
-          template_id: template.id,
-          name: `${rfxKey} invitation wave`,
-          channel: String(template.channel || "email"),
-          // Same key across retries of this attempt; a new one after success.
-          idempotency_key: `bidware:${id}:${campaignKey}`,
-        });
-        setCampaignKey(newOperationId());
-        campaignId = row?.id;
-        campaigns.reload();
-      }
-      if (!campaignId) throw new Error(tr("text153"));
-      const parts: string[] = [];
-      let prepared = 0;
-      for (const channel of list) {
-        const res = (await generateOutreachDrafts({
-          campaign_id: campaignId,
-          channel,
-          reviewed_vendor_ids: reviewedVendorIds,
+      const ok = await confirmAsync(
+        tr("text149", template.name, list.map((c) => CHANNEL_LABEL[c]).join(tr("text070"))) +
+          tr("text150", audience.length, audience.length === 1 ? "" : "s") + tr("text151"),
+        { ok: tr("text152") },
+      );
+      if (!ok || !isCurrent()) return;
+      started = true;
+      setNotice(null);
+      setPreparedTemplateName(template.name);
+      const result = await prepareDraftChannels({
+        channels: list,
+        isCurrent,
+        progress: setPreparation,
+        confirmed: channel => setOperationIds(prev => ({ ...prev, [channel]: newOperationId() })),
+        campaign: async () => {
+          if (campaign?.id) return campaign.id;
+          const rfxKey = String(event?.rfx_id ?? event?.name ?? "RFx");
+          const { row } = await createOutreachCampaign({
+            rfx_event_id: id, template_id: template.id, name: `${rfxKey} invitation wave`,
+            channel: String(template.channel || "email"), idempotency_key: `bidware:${id}:${campaignKey}`,
+          });
+          if (!row?.id) throw new Error(tr("text153"));
+          if (isCurrent()) { setCampaignKey(newOperationId()); campaigns.reload(); }
+          return row.id;
+        },
+        prepare: (campaignId, channel) => generateOutreachDrafts({
+          campaign_id: campaignId, channel, reviewed_vendor_ids: reviewedVendorIds,
           operation_id: operationIds[channel],
-        })) as { generated?: number; rows?: unknown[]; skipped?: { reason?: string; reason_code?: string }[] };
-        setOperationIds((prev) => ({ ...prev, [channel]: newOperationId() }));
-        const count = res.generated ?? res.rows?.length ?? 0;
-        prepared += count;
-        const reasons = [...new Set((res.skipped ?? []).map((s) =>
-          s.reason_code === "daily_cap" ? generationText("dailyCap") : s.reason_code === "not_reviewed" ? generationText("notReviewed") : s.reason,
-        ).filter(Boolean))];
-        parts.push(
-          `${CHANNEL_LABEL[channel]}: ${count}` +
-            (reasons.length ? tr("text154", res.skipped!.length, reasons.join("; ")) : ""),
-        );
-      }
-      setNotice(prepared > 0 ? tr("text155", parts.join(" · ")) : generationText("none", parts.join(" · ")));
-    } catch (e) {
-      const code = (e as { code?: string }).code;
-      if (code === "reviewed_audience_changed" || code === "reviewed_audience_required") {
-        setNotice(generationText(code === "reviewed_audience_changed" ? "changed" : "noReviewed"));
+        }),
+      });
+      if (isCurrent() && result?.issue === "audience") {
         reviews.reload(); campaigns.reload(); detail.reload();
-      } else setNotice(tr("text066", (e as Error).message));
+      }
     } finally {
-      setBusy(null);
+      preparingRef.current = false;
+      if (mountedRef.current) {
+        if (started) setBatchRevision(value => value + 1);
+        setBusy(null);
+      }
     }
   }
 
@@ -252,6 +261,7 @@ export function MessagePage() {
     } catch (e) {
       setNotice(tr("text066", (e as Error).message));
     } finally {
+      setBatchRevision(value => value + 1);
       setBusy(null);
     }
   }
@@ -310,8 +320,8 @@ export function MessagePage() {
   const cta = tr("text161", audience.length ? tr("text162", audience.length, audience.length === 1 ? "" : "s") : "");
   const canGenerate = Boolean(template && channels.size && audience.length && !loading
     && !detail.error && !campaigns.error && !reviews.error && !segments.error && !draftAudience.unresolved
-    && !dirty && canWork && busy === null);
-  const generateTitle = !canWork
+    && !dirty && canWork && busy === null && preparation?.phase !== "stopped");
+  const generateTitle = preparation?.phase === "stopped" ? draftPreparationText("stopped") : !canWork
     ? NEED_REASON.operate
     : dirty
       ? tr("text163")
@@ -342,6 +352,9 @@ export function MessagePage() {
       />
       <main className="main launch-main">
         <LaunchTabs eventId={id} active="message" />
+        {template && <BatchFlowPanel eventId={id} templateId={template.id} refreshKey={batchRevision}
+          enabled={!loading && busy === null && !detail.error && !campaigns.error && !reviews.error && !segments.error && !templates.error} />}
+        {preparation && <DraftPreparationResult result={preparation} eventId={id} templateName={preparedTemplateName} />}
         {notice && <div role="status" aria-live="polite"><InfoBanner>{notice}</InfoBanner></div>}
         {detail.error && <ErrorBanner message={detail.error} />}
         {templates.error && <ErrorBanner message={templates.error} />}
@@ -376,7 +389,7 @@ export function MessagePage() {
                 <div className="msg-row">
                   <label className="msg-field grow">
                     <span>{tr("text175")}</span>
-                    <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+                    <select value={templateId} disabled={busy !== null} onChange={(e) => setTemplateId(e.target.value)}>
                       {inLanguage.map((t) => (
                         <option key={t.id} value={t.id}>
                           {t.name}
@@ -390,7 +403,7 @@ export function MessagePage() {
                     <span>{tr("text122")}</span>
                     <div className="msg-seg" role="group" aria-label={tr("text122")}>
                       {(["es", "en"] as const).map((l) => (
-                        <button key={l} type="button" className={language === l ? "on" : undefined} onClick={() => pickLanguage(l)}>
+                        <button key={l} type="button" disabled={busy !== null} className={language === l ? "on" : undefined} onClick={() => pickLanguage(l)}>
                           {l.toUpperCase()}
                         </button>
                       ))}
@@ -416,7 +429,7 @@ export function MessagePage() {
                 </p>
                 <label className="msg-field">
                   <span>{tr("text181")}</span>
-                  <input className="mono" value={subject} readOnly={!editable || !canWork} onChange={(e) => setSubject(e.target.value)} />
+                  <input className="mono" value={subject} readOnly={!editable || !canWork || busy !== null} onChange={(e) => setSubject(e.target.value)} />
                 </label>
                 <label className="msg-field">
                   <span>{tr("text182")}</span>
@@ -425,7 +438,7 @@ export function MessagePage() {
                     className="mono msg-body"
                     rows={12}
                     value={body}
-                    readOnly={!editable || !canWork}
+                    readOnly={!editable || !canWork || busy !== null}
                     onChange={(e) => setBody(e.target.value)}
                   />
                 </label>
@@ -433,7 +446,7 @@ export function MessagePage() {
                   <div className="msg-vars">
                     <span>{tr("text183")}</span>
                     {VARIABLES.map((v) => (
-                      <button key={v} type="button" onClick={() => insert(v)}>
+                      <button key={v} type="button" disabled={busy !== null} onClick={() => insert(v)}>
                         {`{{${v}}}`}
                       </button>
                     ))}
@@ -448,6 +461,7 @@ export function MessagePage() {
                 <label className={`msg-channel${channels.has("email") ? " on" : ""}`}>
                   <input
                     type="checkbox"
+                    disabled={busy !== null}
                     checked={channels.has("email")}
                     onChange={(e) => toggle(setChannels, "email", e.target.checked)}
                   />
@@ -468,7 +482,7 @@ export function MessagePage() {
                 <label className={`msg-channel${channels.has("whatsapp") ? " on" : ""}${meta ? "" : " off"}`}>
                   <input
                     type="checkbox"
-                    disabled={!meta}
+                    disabled={!meta || busy !== null}
                     checked={channels.has("whatsapp")}
                     onChange={(e) => toggle(setChannels, "whatsapp", e.target.checked)}
                   />
@@ -485,6 +499,7 @@ export function MessagePage() {
                 <label className={`msg-channel${channels.has("whatsapp_group") ? " on" : ""}`}>
                   <input
                     type="checkbox"
+                    disabled={busy !== null}
                     checked={channels.has("whatsapp_group")}
                     onChange={(e) => toggle(setChannels, "whatsapp_group", e.target.checked)}
                   />

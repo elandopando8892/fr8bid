@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ErrorBanner, Pill, dateShort } from "@/components/ui";
 import {
   COMMERCIAL_MODELS,
+  isLockedBrokerage,
   explainBidError,
   requestLaneAccess,
   segmentProgress,
@@ -67,6 +68,7 @@ export function BusinessOverview({
 }) {
   const [requested, setRequested] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const lockedCommercialModel = lanes.length > 0 && lanes.every(isLockedBrokerage);
   const segments = segmentsOf(lanes);
   const quoted = lanes.filter((l) => l.bid_rate != null).length;
   const terms = segments.reduce(
@@ -153,7 +155,10 @@ export function BusinessOverview({
           </ol>
         </section>
 
-        <section className="croom-card">
+        {lockedCommercialModel ? <section className="croom-card">
+          <header className="croom-card-head"><b>XBF compra-venta · Modelo fijo</b></header>
+          <p className="pad">Cotiza tu tarifa de venta a XBF. Las demás modalidades no aplican en esta etapa.</p>
+        </section> : (        <section className="croom-card">
           <header className="croom-card-head">
             <b className="grow">Modelos comerciales</b>
           </header>
@@ -188,7 +193,7 @@ export function BusinessOverview({
               </tbody>
             </table>
           </div>
-        </section>
+        </section>) }
 
         {others.length > 0 && (
           <section className="croom-card">

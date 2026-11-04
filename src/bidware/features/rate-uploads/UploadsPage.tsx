@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+import "@/styles/table-scroll.css";
 import { words, tr } from "@/i18n/rate-uploads";
 import { useLang } from "@/i18n/language";
 import { useEffect, useRef, useState } from "react";
@@ -189,7 +191,16 @@ export function UploadsPage() {
 
   return (
     <>
-      <TopBar title={tr("text022")} sub={tr("text023")} />
+      <TopBar
+        title={tr("text022")}
+        sub={tr("text023")}
+        actions={
+          <>
+            <Link to="/tarifas" className="btn">{tr("text024")}</Link>
+            <button onClick={list.reload}>{tr("text025")}</button>
+          </>
+        }
+      />
       <main className="main">
         <div style={{ display: "grid", gap: 14 }}>
           {notice && <InfoBanner>{notice}</InfoBanner>}
@@ -290,6 +301,7 @@ export function UploadsPage() {
           )}
           {list.data && (rows.length ? (
             <>
+              <div className="data-table-scroll" role="region" tabIndex={0} aria-label={tr("text022")}>
               <table className="data uploads-table">
                 <thead>
                   <tr>
@@ -358,6 +370,7 @@ export function UploadsPage() {
                   })}
                 </tbody>
               </table>
+              </div>
               {rows.length > visible.length && (
                 <div className="row">
                   <span className="cell-sub">

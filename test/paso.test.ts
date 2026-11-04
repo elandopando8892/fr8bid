@@ -30,6 +30,13 @@ describe("paso de los módulos de Bidware (/api/funcion)", () => {
     expect(llamada("rateware-api", { action: "consolidate_exact_vendor_duplicates", dry_run: false }, "no")?.status).toBe(423);
   });
 
+  it("lo traído de Bidware el 25-29 oct: sus lecturas pasan sin «si» y sus escrituras no", () => {
+    for (const action of ["list_rfx_event_context", "list_rfx_invitation_wave_reviews", "preview_outreach_audience", "list_outreach_campaigns", "list_outreach_audience_segments", "list_outreach_messages"])
+      expect(llamada("rateware-api", { action, rfx_event_id: "e" }, "no")).toBeNull();
+    for (const action of ["generate_outreach_drafts", "mark_outreach_messages", "delete_outreach_messages", "update_carrier_list_template"])
+      expect(llamada("rateware-api", { action, rfx_event_id: "e" }, "no")?.status).toBe(423);
+  });
+
   it("HDships no se lee ni se toca", () => {
     expect(llamada("rateware-api", { action: "list_rfx_detail", event_id: HD })?.status).toBe(404);
     expect(llamada("rateware-api", { action: "update_vendor", patch: { note: `ver ${HD.toUpperCase()}` } })?.status).toBe(404);

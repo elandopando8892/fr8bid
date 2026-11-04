@@ -1,7 +1,8 @@
 import { tr } from "@/i18n/rfx-admin";
+import { followupText } from "@/i18n/response-followup";
 import { useLang, locale, getLang } from "@/i18n/language";
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { confirmAsync, promptAsync } from "@/components/confirm";
 import { useAsync } from "@/components/useAsync";
@@ -60,7 +61,9 @@ export function EventChatPage() {
   const chat = useAsync(() => listEventChat(id), [id]);
   const detail = useAsync(() => fetchRfxDetail(id), [id]);
   const [filter, setFilter] = useState("all");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedId = searchParams.get("thread");
+  const setSelectedId = (threadId: string) => setSearchParams(previous => { previous.set("thread", threadId); return previous; }, { replace: true });
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -85,7 +88,8 @@ export function EventChatPage() {
     );
   }, [getLang(), chat.data, filter]);
   const all = chat.data?.rows ?? [];
-  const selected = all.find((t) => t.id === selectedId) ?? threads[0] ?? null;
+  // An exact destination must never silently select a different conversation.
+  const selected = selectedId !== null ? all.find((t) => t.id === selectedId) ?? null : threads[0] ?? null;
   const lanes = (detail.data?.lanes ?? []) as LaneWithInvitations[];
   const eventName = String(detail.data?.event?.name ?? detail.data?.event?.rfx_id ?? tr("text225"));
   const hasEventThread = all.some((t) => t.thread_type === "event_group");
@@ -214,6 +218,7 @@ export function EventChatPage() {
                 })}
               </div>
 
+              {selectedId !== null && !selected && <InfoBanner>{followupText("unavailable")}</InfoBanner>}
               {selected && (
                 <div className="card" style={{ display: "grid", gap: 10 }}>
                   <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>

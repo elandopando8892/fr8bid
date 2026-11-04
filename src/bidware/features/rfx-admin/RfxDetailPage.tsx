@@ -26,6 +26,7 @@ import {
 import { listEventConfirmations } from "./confirmations.service";
 import { StageRail, GatePanel, GateStrip } from "./StageRail";
 import { BuildStage } from "./BuildStage";
+import { CarrierPreselection } from "./CarrierPreselection";
 import { OperateStage } from "./OperateStage";
 import { CloseStage } from "./CloseStage";
 import { fxOf } from "./operate";
@@ -390,6 +391,7 @@ export function RfxDetailPage() {
           {confirmations.error && (
             <ErrorBanner message={tr("text726", confirmations.error)} />
           )}
+          {event && <CarrierPreselection eventId={id} master={event.rfx_master_package} />}
           {event && status === "draft" && stats.invitations > 0 && (
             <div className="open-room">
               <span>
@@ -429,6 +431,7 @@ export function RfxDetailPage() {
                   <GateStrip stage={current} next={next} />
                   <OperateStage
                     eventId={id}
+                    reading={loading}
                     lanes={lanes}
                     fx={fx}
                     confirmations={confirmations.data ?? []}

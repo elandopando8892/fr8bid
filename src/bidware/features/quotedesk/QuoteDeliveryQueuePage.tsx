@@ -72,7 +72,7 @@ function QuoteDeliveryQueueContent() {
   }
   return <>
     <TopBar crumb="QuoteDesk" title={tr("title", data?.quote.folio || "Spot")} actions={<>
-      <Link className="btn" to={`/quotedesk/${id}`}>← {tr("back")}</Link>
+      <Link className="btn" to={`/quotedesk/${id}`}><span aria-hidden="true">← </span>{tr("back")}</Link>
       <button onClick={refresh} disabled={busy || loading}>{tr("refresh")}</button>
     </>} />
     <main className="main launch-main">

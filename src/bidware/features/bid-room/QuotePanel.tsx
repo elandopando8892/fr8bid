@@ -9,6 +9,7 @@ import {
   declineInvitation,
   explainBidError,
   isRevision,
+  isLockedBrokerage,
   laneState,
   modelSpec,
   offerForm,
@@ -84,6 +85,7 @@ export function QuotePanel({
   const set = (patch: Partial<OfferForm>) => setForm((f) => ({ ...f, ...patch }));
   const revision = isRevision(lane);
   const editable = canQuote(lane);
+  const lockedCommercialModel = isLockedBrokerage(lane);
   const spec = modelSpec(form.commercial_model);
   const problems = offerProblems(form);
   const warnings = offerWarnings(form);
@@ -227,6 +229,12 @@ export function QuotePanel({
         </label>
       </div>
 
+      {lockedCommercialModel ? (
+        <div className="croom-note" aria-label="Modelo comercial fijo">
+          <b>XBF compra-venta · Modelo fijo</b>
+          <p>Captura tu tarifa de venta a XBF. Las demás modalidades no aplican en esta etapa.</p>
+        </div>
+      ) : (<>
       <div className="croom-fields">
         <label className="grow">
           <span>Modelo comercial</span>
@@ -257,6 +265,8 @@ export function QuotePanel({
       <p className="croom-hint">
         {spec.enter} {spec.effect}
       </p>
+
+      </>)}
 
       <label className="croom-field">
         <span>Notas para MARKSMAN</span>

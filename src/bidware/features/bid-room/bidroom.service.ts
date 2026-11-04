@@ -1,3 +1,4 @@
+import { lockedBrokeragePolicy } from "../../../../packages/carrier-commercial/locked-policy.mjs";
 import { callRfxBidApi, ApiError } from "@/lib/api-client";
 
 /**
@@ -310,8 +311,11 @@ function toLocalInput(value: unknown): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+export const isLockedBrokerage = (lane: BookLane) => Boolean(lockedBrokeragePolicy(lane));
+
 export function offerForm(lane: BookLane): OfferForm {
-  const model = modelKeyOf(lane.commercial_model);
+  const locked = isLockedBrokerage(lane);
+  const model = locked ? "xbf_buy_sell" : modelKeyOf(lane.commercial_model);
   const pct = model === "carrier_share" ? lane.carrier_share_pct : lane.marksman_margin_pct;
   const available = lane.equipment_available;
   return {
@@ -321,7 +325,7 @@ export function offerForm(lane: BookLane): OfferForm {
     transit_days: str(lane.transit_days),
     valid_through: str(lane.valid_through).slice(0, 10),
     commercial_model: model,
-    pct: str(pct),
+    pct: locked ? "" : str(pct),
     notes: str(lane.notes),
     equipment_available: available === true ? "yes" : available === false ? "no" : "",
     current_unit_location: str(lane.current_unit_location),
@@ -409,6 +413,10 @@ function validationStatus(current: unknown, mirror: boolean): string {
 }
 
 export function offerPayload(form: OfferForm, lane: BookLane): BidInput {
+  const locked = isLockedBrokerage(lane);
+  if (locked && (form.commercial_model !== "xbf_buy_sell" || form.pct.trim())) {
+    throw new Error("Este evento solo admite XBF compra-venta; el margen es interno.");
+  }
   const spec = modelSpec(form.commercial_model);
   const pct = parseAmount(form.pct);
   const num = (v: string) => parseAmount(v);
@@ -421,8 +429,10 @@ export function offerPayload(form: OfferForm, lane: BookLane): BidInput {
     valid_through: form.valid_through || null,
     commercial_model: form.commercial_model,
     // Blank sends null and the server applies the model's default.
-    marksman_margin_pct: spec.pctField === "marksman_margin_pct" ? pct : null,
-    carrier_share_pct: spec.pctField === "carrier_share_pct" ? pct : null,
+    ...(!locked ? {
+      marksman_margin_pct: spec.pctField === "marksman_margin_pct" ? pct : null,
+      carrier_share_pct: spec.pctField === "carrier_share_pct" ? pct : null,
+    } : {}),
     notes: form.notes.trim(),
     equipment_available: form.equipment_available === "yes" ? true : form.equipment_available === "no" ? false : null,
     current_unit_location: form.current_unit_location.trim(),

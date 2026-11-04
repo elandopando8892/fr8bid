@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ErrorBanner } from "@/components/ui";
 import { confirmAsync } from "@/components/confirm";
-import { billingNotice, eventLanes, getInvitation, modelSpec, offerPayload, submitBid, type BookLane } from "./bidroom.service";
+import { billingNotice, eventLanes, getInvitation, modelSpec, isLockedBrokerage, offerPayload, submitBid, type BookLane } from "./bidroom.service";
 import { buildBidTemplate, currentOfferForSend, displayOfferValue, OFFER_COLUMNS, parseBidTemplate, type ImportedOffer } from "./bid-template";
 
 export function QuoteExcel({ token, eventId, onBusy, onSettled }: {
@@ -127,12 +127,12 @@ export function QuoteExcel({ token, eventId, onBusy, onSettled }: {
         const model = modelSpec(offer.form.commercial_model);
         return <article key={offer.lane.rfx_lane_id} style={{ borderTop: "1px solid var(--border, #ddd)", padding: "12px 0" }}>
           <b>Ruta {offer.lane.lane_number ?? offer.row}: {offer.lane.origin} → {offer.lane.destination}</b>
-          <p>{offer.form.bid_rate} {offer.form.currency} · {model.label} · {displayOfferValue("pct", offer.form)}</p>
-          <p>{model.enter} {model.effect}</p>
+          <p>{offer.form.bid_rate} {offer.form.currency} · {model.label}{!isLockedBrokerage(offer.lane) && <> · {displayOfferValue("pct", offer.form)}</>}</p>
+          <p>{isLockedBrokerage(offer.lane) ? "Captura tu tarifa de venta a XBF. Modelo fijo en esta etapa." : `${model.enter} ${model.effect}`}</p>
           {billingNotice(offer.form) && <p><strong>{billingNotice(offer.form)}</strong></p>}
           {done.includes(offer.lane.rfx_lane_id) && <strong>Envío confirmado</strong>}
           <details><summary>Revisar todos los datos de la ruta {offer.lane.lane_number ?? offer.row}</summary>
-            <dl>{OFFER_COLUMNS.map(([key, label]) => <div key={key} style={{ margin: "6px 0", overflowWrap: "anywhere" }}>
+            <dl>{OFFER_COLUMNS.filter(([key]) => !isLockedBrokerage(offer.lane) || key !== "pct").map(([key, label]) => <div key={key} style={{ margin: "6px 0", overflowWrap: "anywhere" }}>
               <dt><b>{label}</b></dt><dd style={{ margin: 0 }}>{displayOfferValue(key, offer.form)}</dd>
             </div>)}</dl>
           </details>
