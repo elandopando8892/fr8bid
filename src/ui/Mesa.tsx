@@ -148,10 +148,18 @@ export function Mesa({ id }: { id: string }) {
           <p className="miga">
             <Liga a="/eventos">Eventos</Liga> / <span className="mono">{d.evento.folio}</span>
           </p>
-          <h1>{d.rutas.map((x) => `${x.origen} → ${x.destino}`).join(" · ") || d.evento.nombre}</h1>
+          {/* Con varias rutas, el título es el shipper; las rutas van en chips. */}
+          <h1>{d.rutas.length === 1 ? `${d.rutas[0].origen} → ${d.rutas[0].destino}` : d.rutas.length > 1 ? `${d.evento.shipper} · ${plural(d.rutas.length, "ruta")}` : d.evento.nombre}</h1>
           <p className="tenue">
             {[...new Set(d.rutas.map((x) => x.equipo))].join(", ")} · {plural(d.rutas.length, "ruta")} · {d.evento.shipper} · plazo {fecha(d.evento.cierre?.plazoOriginal ?? d.evento.plazo)}
           </p>
+          {d.rutas.length > 1 && (
+            <ul className="chips-rutas" aria-label="Rutas del evento">
+              {d.rutas.map((x) => (
+                <li key={x.id}>{x.origen} → {x.destino}</li>
+              ))}
+            </ul>
+          )}
         </div>
         <div className="etiquetas">
           {d.evento.prueba && <Prueba />}

@@ -325,6 +325,7 @@ export function resumenes(crudo: Fila, hoy: string = hoyMexico()): ResumenEvento
       plazo: e.due_date || null,
       prueba: esPrueba(e.name),
       rutas: e.lanes_preview || [],
+      numRutas: Number(e.lane_count ?? (Array.isArray(e.lanes_preview) ? e.lanes_preview.length : 0)) || 0,
       ofertas: Number(e.bid_count || 0),
       participaciones: Number(e.invitation_count || 0)
     }));

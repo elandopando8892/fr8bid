@@ -5,6 +5,7 @@ import { USUARIOS_SIMULADOS, useSesion } from "./sesion";
 import { setLang, useLang } from "@/i18n/language";
 import { tr } from "@/i18n/common";
 import { TEAM_ROLE_LABEL } from "@/lib/roles";
+import * as I from "./Iconos";
 
 // ——— Rutas: react-router (las comparten la Mesa y los módulos de Bidware) ———
 export function useRuta(): string {
@@ -41,75 +42,97 @@ export function Liga({ a, children, className }: { a: string; children: ReactNod
   );
 }
 
-// Menú completo: la Mesa y los módulos traídos de Bidware, todos aquí.
-type Modulo = { etiqueta: string; a: string; publica?: boolean; activo?: (ruta: string) => boolean };
+// Menú completo: la página del evento y los módulos traídos de Bidware, todos
+// aquí, con el mismo trazo de iconos que Fr8Growth. «Más» va plegado.
+type Modulo = { etiqueta: string; a: string; icono: (p: { size?: number }) => JSX.Element; publica?: boolean; activo?: (ruta: string) => boolean };
 const bajo = (a: string) => (ruta: string) => ruta === a || ruta.startsWith(`${a}/`);
-export const MENU: { grupo: string; modulos: Modulo[] }[] = [
+export const MENU: { grupo: string; plegado?: boolean; modulos: Modulo[] }[] = [
   {
-    grupo: "Eventos",
+    grupo: "",
     modulos: [
-      { etiqueta: "Eventos RFx", a: "/eventos", activo: (r) => r === "/" || bajo("/eventos")(r) || bajo("/rfx")(r) },
-      { etiqueta: "QuoteDesk", a: "/quotedesk" },
-      { etiqueta: "Shipper intake", a: "/intake" }
+      { etiqueta: "Hoy", a: "/", icono: I.Casa, activo: (r) => r === "/" },
+      { etiqueta: "Eventos RFx", a: "/eventos", icono: I.Martillo, activo: (r) => bajo("/eventos")(r) || bajo("/rfx")(r) },
+      { etiqueta: "QuoteDesk", a: "/quotedesk", icono: I.Calculadora },
+      { etiqueta: "Shipper intake", a: "/intake", icono: I.Bandeja }
     ]
   },
   {
     grupo: "Carriers",
     modulos: [
-      { etiqueta: "Carrier CRM", a: "/crm" },
-      { etiqueta: "Listas de carriers", a: "/templates" },
-      { etiqueta: "Carrier fit", a: "/carrier-fit" },
-      { etiqueta: "Plantillas de correo", a: "/plantillas" }
+      { etiqueta: "Carrier CRM", a: "/crm", icono: I.Camion },
+      { etiqueta: "Listas de carriers", a: "/templates", icono: I.Lista },
+      { etiqueta: "Carrier fit", a: "/carrier-fit", icono: I.Mira },
+      { etiqueta: "Plantillas de correo", a: "/plantillas", icono: I.Sobre }
     ]
   },
   {
     grupo: "Shippers y tarifas",
     modulos: [
-      { etiqueta: "Shippers", a: "/shippers" },
-      { etiqueta: "Revisión de tarifas", a: "/tarifas" },
-      { etiqueta: "Tarifario", a: "/tarifario" },
-      { etiqueta: "Archivos de tarifas", a: "/archivos" }
+      { etiqueta: "Shippers", a: "/shippers", icono: I.Edificio },
+      { etiqueta: "Revisión de tarifas", a: "/tarifas", icono: I.Etiqueta },
+      { etiqueta: "Tarifario", a: "/tarifario", icono: I.Libro },
+      { etiqueta: "Archivos de tarifas", a: "/archivos", icono: I.Carpeta }
     ]
   },
   {
     grupo: "Más",
+    plegado: true,
     modulos: [
-      { etiqueta: "Panel", a: "/panel" },
-      { etiqueta: "Integraciones", a: "/integraciones" },
+      { etiqueta: "Panel", a: "/panel", icono: I.Grafica },
+      { etiqueta: "Integraciones", a: "/integraciones", icono: I.Enchufe },
       // La vista que ven los carriers: se abre aparte, sin el marco del equipo.
-      { etiqueta: "Tablero público", a: "/board", publica: true }
+      { etiqueta: "Tablero público", a: "/board", icono: I.Pantalla, publica: true }
     ]
   }
 ];
 
 const esActivo = (m: Modulo, ruta: string) => (m.activo ?? bajo(m.a))(ruta);
 
+function Entrada({ m, ruta }: { m: Modulo; ruta: string }) {
+  const Ic = m.icono;
+  if (m.publica)
+    return (
+      <a href={m.a} target="_blank" rel="noreferrer" title="La vista pública, en otra pestaña">
+        <Ic size={17} /> <span className="menu-texto">{m.etiqueta}</span> <I.Externo size={13} className="externo" aria-label="abre en otra pestaña" />
+      </a>
+    );
+  return (
+    <Liga a={m.a} className={esActivo(m, ruta) ? "activo" : ""}>
+      <Ic size={17} /> <span className="menu-texto">{m.etiqueta}</span>
+    </Liga>
+  );
+}
+
 function Menu({ ruta }: { ruta: string }) {
   const [abierto, setAbierto] = useState(false);
-  const actual = MENU.flatMap((g) => g.modulos).find((m) => !m.publica && esActivo(m, ruta));
+  const todos = MENU.flatMap((g) => g.modulos);
+  const actual = todos.find((m) => !m.publica && esActivo(m, ruta));
+  const masActivo = MENU.some((g) => g.plegado && g.modulos.some((m) => !m.publica && esActivo(m, ruta)));
+  const [mas, setMas] = useState(masActivo);
   useEffect(() => setAbierto(false), [ruta]);
+  useEffect(() => { if (masActivo) setMas(true); }, [masActivo]);
+  const Actual = actual?.icono;
   return (
     <nav className={`menu ${abierto ? "abierto" : ""}`} aria-label="Módulos">
       <button className="menu-boton" aria-expanded={abierto} onClick={() => setAbierto(!abierto)}>
-        {actual?.etiqueta ?? "Menú"} <span aria-hidden>▾</span>
+        {Actual && <Actual size={17} />} {actual?.etiqueta ?? "Menú"} <span aria-hidden>▾</span>
       </button>
       <div className="menu-grupos">
-        {MENU.map((g) => (
-          <div key={g.grupo} className="menu-grupo">
-            <span className="menu-titulo">{g.grupo}</span>
-            {g.modulos.map((m) =>
-              m.publica ? (
-                <a key={m.a} href={m.a} target="_blank" rel="noreferrer" title="La vista pública, en otra pestaña">
-                  {m.etiqueta} <span className="externo" aria-label="abre en otra pestaña">↗</span>
-                </a>
-              ) : (
-                <Liga key={m.a} a={m.a} className={esActivo(m, ruta) ? "activo" : ""}>
-                  {m.etiqueta}
-                </Liga>
-              )
-            )}
-          </div>
-        ))}
+        {MENU.map((g) =>
+          g.plegado ? (
+            <div key={g.grupo} className="menu-grupo">
+              <button type="button" className="menu-titulo menu-plegable" aria-expanded={mas} onClick={() => setMas(!mas)}>
+                <I.Puntos size={17} /> <span className="menu-texto">{g.grupo}</span> <span aria-hidden className="chevron">{mas ? "▴" : "▾"}</span>
+              </button>
+              {mas && g.modulos.map((m) => <Entrada key={m.a} m={m} ruta={ruta} />)}
+            </div>
+          ) : (
+            <div key={g.grupo || "principal"} className="menu-grupo">
+              {g.grupo && <span className="menu-titulo">{g.grupo}</span>}
+              {g.modulos.map((m) => <Entrada key={m.a} m={m} ruta={ruta} />)}
+            </div>
+          )
+        )}
       </div>
     </nav>
   );
@@ -122,10 +145,10 @@ export function Marco({ children }: { children: ReactNode }) {
   return (
     <div className="marco">
       <aside className="lateral">
-        <div className="marca">
+        <Liga a="/" className="marca">
           <span className="logo">MARKS<b>MAN</b></span>
-          <span className="sub">Bid Room</span>
-        </div>
+          <span className="sub">Fr8Bid · Bid Room</span>
+        </Liga>
         <Menu ruta={ruta} />
         <div className="cuenta">
           {s.modo === "simulado" ? (
@@ -141,13 +164,22 @@ export function Marco({ children }: { children: ReactNode }) {
               </label>
             </>
           ) : s.correo ? (
-            <>
-              <span className="correo">{s.correo}</span>
-              <button className="btn-texto" onClick={s.salir}>Salir</button>
-            </>
+            <div className="quien">
+              <span className="inicial" aria-hidden>{s.correo.slice(0, 1).toUpperCase()}</span>
+              <span className="quien-texto">
+                <span className="correo" title={s.correo}>{s.correo}</span>
+                {s.rolLeido && <span className="rol sidebar-role">{TEAM_ROLE_LABEL[s.rol]}</span>}
+              </span>
+            </div>
           ) : null}
-          {s.modo !== "simulado" && s.correo && s.rolLeido && <span className="rol sidebar-role">{TEAM_ROLE_LABEL[s.rol]}</span>}
-          <Idioma />
+          <div className="cuenta-acciones">
+            {s.modo !== "simulado" && s.correo && (
+              <button className="btn-texto salir" onClick={s.salir}>
+                <I.Salir size={15} /> Salir
+              </button>
+            )}
+            <Idioma />
+          </div>
         </div>
       </aside>
       <main className="contenido main-col">
@@ -196,7 +228,13 @@ export function aCarga<T>(e: unknown): Carga<T> {
 
 // Los cuatro estados de vista nunca se confunden: un error no se lee como cero.
 export function EstadoVista({ carga, reintentar, vacio }: { carga: Carga<unknown>; reintentar: () => void; vacio?: string }) {
-  if (carga.tipo === "cargando") return <div className="estado">Leyendo Rateware…</div>;
+  if (carga.tipo === "cargando")
+    return (
+      <div className="cargando" role="status" aria-live="polite">
+        <span className="giro" aria-hidden /> Leyendo Rateware…
+        <span className="esqueleto" aria-hidden><i /><i /><i /></span>
+      </div>
+    );
   if (carga.tipo === "error")
     return (
       <div className="estado estado-error" role="alert">

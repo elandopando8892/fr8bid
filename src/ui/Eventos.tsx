@@ -1,26 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ResumenEvento } from "../dominio/tipos";
-import { aCarga, Desactualizado, EstadoVista, fecha, ir, Liga, Prueba, type Carga } from "./comun";
+import { hoyMexico } from "../dominio/recorrido";
+import { aCarga, Desactualizado, EstadoVista, fecha, ir, Liga, plural, Prueba, type Carga } from "./comun";
+import { cuantasRutas, ESTADO_EVENTO, grupoDe, nombreEvento, porUrgencia, resumenRutas, siguiente, type Grupo } from "./eventosVista";
+import * as I from "./Iconos";
 import { useSesion } from "./sesion";
 
-// Igual que la Mesa: abierto con todas las ofertas dentro ya no espera a los
-// carriers, le toca al Administrador cerrar.
-function siguiente(e: ResumenEvento): { accion: string; quien: string } {
-  switch (e.estado) {
-    case "borrador":
-      return { accion: "Publicar e invitar", quien: "Administrador" };
-    case "abierto":
-      return e.participaciones > 0 && e.ofertas >= e.participaciones ? { accion: "Cerrar a ofertas", quien: "Administrador" } : { accion: "Esperar ofertas", quien: "Carriers" };
-    case "cerrado":
-      return { accion: "Adjudicar y entregar", quien: "Administrador" };
-    case "adjudicado":
-      return { accion: "Avisar a los carriers", quien: "Administrador" };
-    default:
-      return { accion: "—", quien: "—" };
-  }
-}
-
-export function Eventos() {
+// Lectura del listado, compartida por Hoy y Eventos. Retira los datos antes
+// de pintar otra fuente o cuenta y descarta respuestas viejas.
+export function useEventos() {
   const { api, rol, listo, modo, correo, usuarioSimulado } = useSesion();
   const [carga, setCarga] = useState<Carga<ResumenEvento[]>>({ tipo: "cargando" });
   const secuencia = useRef(0);
@@ -49,62 +37,105 @@ export function Eventos() {
     if (listo) void leer();
   }, [listo, leer]);
 
+  return { carga, leer };
+}
+
+export function Eventos() {
+  const { rol, modo } = useSesion();
+  const { carga, leer } = useEventos();
   const eventos = carga.tipo === "ok" ? carga.datos : [];
-  const teToca = eventos.filter((e) => siguiente(e).quien === "Administrador" && rol === "admin").length;
+  const esAdmin = rol === "admin";
+  const hoy = hoyMexico();
+  const [filtro, setFiltro] = useState<Grupo>("todos");
+  const [busca, setBusca] = useState("");
+  const grupo = (e: ResumenEvento) => grupoDe(e, hoy, esAdmin);
+  const cuenta = (g: Grupo) => eventos.filter((e) => grupo(e) === g).length;
+  const teToca = cuenta("te_toca");
+  const q = busca.trim().toLowerCase();
+  const visibles = eventos
+    .filter((e) => filtro === "todos" || grupo(e) === filtro)
+    .filter((e) => !q || [e.folio, e.nombre, e.shipper, ...e.rutas].some((x) => x.toLowerCase().includes(q)))
+    .sort(filtro === "te_toca" || filtro === "todos" ? porUrgencia : (a, b) => (a.plazo || "9999").localeCompare(b.plazo || "9999"));
+  const pestanas: { g: Grupo; texto: string; n: number }[] = [
+    ...(esAdmin ? [{ g: "te_toca" as Grupo, texto: "Te toca", n: teToca }] : []),
+    { g: "carriers", texto: "Esperando carriers", n: cuenta("carriers") },
+    { g: "entregados", texto: "Entregados", n: cuenta("entregados") },
+    { g: "borradores_viejos", texto: "Borradores vencidos", n: cuenta("borradores_viejos") },
+    { g: "pruebas", texto: "Pruebas", n: cuenta("pruebas") },
+    { g: "todos", texto: "Todos", n: eventos.length }
+  ];
+  const vacio: Record<Grupo, string> = {
+    te_toca: "Nada te espera: ningún evento necesita una decisión tuya.",
+    carriers: "Ningún evento está esperando ofertas.",
+    entregados: "Aún no hay eventos entregados a Rateware.",
+    borradores_viejos: "No hay borradores con el plazo vencido.",
+    pruebas: "No hay eventos de prueba.",
+    todos: "Aún no hay eventos en tu organización."
+  };
 
   return (
-    <section>
+    <section className="pagina">
       <header className="cabecera">
-        <h1>Eventos</h1>
+        <div>
+          <p className="miga">Eventos RFx</p>
+          <h1>Eventos</h1>
+          <p className="tenue">Cada evento es una página: invitar, comparar ofertas, adjudicar y entregar a Rateware.</p>
+        </div>
         {modo === "rateware" && rol !== "viewer" && (
           <Liga a="/rfx/new" className="btn-primario">
-            Nuevo evento
+            <I.Mas size={15} /> Nuevo evento
           </Liga>
         )}
       </header>
       {carga.tipo === "ok" && (
-        <div className="contadores">
-          {rol === "admin" && <span>Te toca: <b>{teToca}</b></span>}
-          <span>Esperando carriers: <b>{eventos.filter((e) => e.estado === "abierto").length}</b></span>
-          <span>Entregados: <b>{eventos.filter((e) => e.estado === "adjudicado").length}</b></span>
+        <div className="barra-filtros">
+          <div className="contadores pestanas" role="tablist" aria-label="Filtrar eventos">
+            {pestanas.map((p) => (
+              <button key={p.g} role="tab" aria-selected={filtro === p.g} className={`pestana ${filtro === p.g ? "activa" : ""}`} onClick={() => setFiltro(p.g)}>
+                {p.texto}: <b>{p.n}</b>
+              </button>
+            ))}
+          </div>
+          <label className="buscador">
+            <I.Lupa size={15} />
+            <input type="search" placeholder="Buscar folio, shipper o ciudad…" value={busca} onChange={(e) => setBusca(e.target.value)} aria-label="Buscar eventos" />
+          </label>
         </div>
       )}
       {carga.tipo === "ok" && <Desactualizado leidoEn={carga.leidoEn} actualizar={leer} />}
       <EstadoVista carga={carga} reintentar={leer} vacio={carga.tipo === "ok" && !eventos.length ? "Aún no hay eventos en tu organización." : undefined} />
-      {carga.tipo === "ok" && eventos.length > 0 && (
-        <div className="tabla-envoltura">
-          <table className="tabla tabla-tarjetas">
-            <thead>
-              <tr>
-                <th>Evento</th>
-                <th>Folio</th>
-                <th>Ofertas</th>
-                <th>Siguiente paso</th>
-                <th>Plazo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {eventos.map((e) => {
-                const sig = siguiente(e);
-                const tuyo = sig.quien === "Administrador" && rol === "admin";
-                return (
-                  <tr key={e.id} className="fila-liga" onClick={() => ir(`/eventos/${e.id}`)}>
-                    <td>
-                      <Liga a={`/eventos/${e.id}`}><b>{e.rutas.join(" · ") || e.nombre}</b></Liga>
-                      <div className="tenue">{e.shipper}{e.prueba && <> <Prueba /></>}</div>
-                    </td>
-                    <td className="mono" data-etiqueta="Folio">{e.folio}</td>
-                    <td data-etiqueta="Ofertas">{e.ofertas} de {e.participaciones}</td>
-                    <td data-etiqueta="Siguiente">
-                      {sig.accion}
-                      {sig.quien !== "—" && <div className={tuyo ? "alerta" : "tenue"}>{tuyo ? "Te toca" : sig.quien === "Carriers" ? "Los carriers" : sig.quien}</div>}
-                    </td>
-                    <td data-etiqueta="Plazo">{fecha(e.plazo)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {carga.tipo === "ok" && eventos.length > 0 && !visibles.length && <div className="estado vacio">{q ? `Nada coincide con «${busca.trim()}».` : vacio[filtro]}</div>}
+      {carga.tipo === "ok" && visibles.length > 0 && (
+        <div className="tarjeta lista-eventos">
+          {visibles.map((e) => {
+            const sig = siguiente(e);
+            const tuyo = sig.quien === "Administrador" && esAdmin;
+            const est = ESTADO_EVENTO[e.estado];
+            const n = cuantasRutas(e);
+            const rutas = resumenRutas(e.rutas);
+            return (
+              <div key={e.id} className="fila-evento fila-liga" onClick={() => ir(`/eventos/${e.id}`)}>
+                <div className="fila-evento-principal">
+                  <Liga a={`/eventos/${e.id}`}><b>{nombreEvento(e)}</b></Liga>
+                  <div className="tenue">
+                    {[e.shipper !== "—" && !nombreEvento(e).includes(e.shipper) ? e.shipper : null, rutas || null, n > 1 || (!rutas && n) ? plural(n, "ruta") : null].filter(Boolean).join(" · ")}
+                    {e.prueba && <> <Prueba /></>}
+                  </div>
+                  <div className="folio mono" title={e.folio}>{e.folio}</div>
+                </div>
+                <div className="fila-evento-dato" data-etiqueta="Estado"><span className={`pill ${est.tono}`}>{est.texto}</span></div>
+                <div className="fila-evento-dato" data-etiqueta="Ofertas">
+                  <b>{e.ofertas}</b> <span className="tenue">de {e.participaciones}</span>
+                </div>
+                <div className="fila-evento-dato" data-etiqueta="Plazo">{fecha(e.plazo)}</div>
+                <div className="fila-evento-siguiente">
+                  <span className={tuyo ? "alerta" : "tenue"}>{sig.accion}</span>
+                  {sig.quien !== "—" && <span className="tenue">{tuyo ? "Te toca" : sig.quien === "Carriers" ? "Los carriers" : sig.quien}</span>}
+                </div>
+                <I.Flecha size={16} className="fila-evento-flecha" />
+              </div>
+            );
+          })}
         </div>
       )}
       <p className="nota">Solo eventos de tu organización.</p>

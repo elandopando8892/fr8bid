@@ -208,6 +208,8 @@ export interface ResumenEvento {
   plazo: string | null;
   prueba: boolean;
   rutas: string[];
+  /** Rateware real no manda las rutas en el listado, solo cuántas son. */
+  numRutas?: number;
   ofertas: number;
   participaciones: number;
 }

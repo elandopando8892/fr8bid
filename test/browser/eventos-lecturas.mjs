@@ -55,7 +55,7 @@ const server = createServer(async (req, res) => {
 await new Promise(done => server.listen(0, '127.0.0.1', done)); const origin = `http://127.0.0.1:${server.address().port}`;
 const frames = () => page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
 const count = () => page.evaluate(() => qa.calls.length);
-const rows = () => page.locator('tbody tr');
+const rows = () => page.locator('.fila-evento');
 const text = () => page.locator('main').innerText();
 async function change(patch) { await page.evaluate(patch => qaRender(patch), patch); await frames(); }
 async function fresh({ strict = false, width = 1280 } = {}) {
@@ -68,7 +68,7 @@ async function advance(ms = 600001) { await page.evaluate(ms => qa.advance(ms), 
 async function check(name, fn) { const n = assertions; try { await fn(); results.push({ name, passed: true, assertions: assertions - n }); } catch (e) { results.push({ name, passed: false, assertions: assertions - n, error: e.message }); } }
 async function isB() {
   verify(await rows().count() === 2 && (await text()).includes('RFx-SYN-B') && !(await text()).includes('RFx-SYN-A'), 'Only current B rows');
-  const counters = await page.locator('.contadores').textContent(); verify(counters.includes('Te toca: 2') && counters.includes('Esperando carriers: 0') && counters.includes('Entregados: 1'), 'Counters belong to current result');
+  const counters = await page.locator('.contadores').textContent(); verify(counters.includes('Te toca: 0') && counters.includes('Pruebas: 2') && counters.includes('Todos: 2'), 'Counters belong to current result');
 }
 try {
   browser = await chromium.launch({ headless: true, channel: 'chrome' }); const context = await browser.newContext();
@@ -149,8 +149,8 @@ try {
   });
   await check('Tab, Shift+Tab and Enter navigate through the native event link', async () => {
     await fresh(); await reply(); const link = page.getByRole('link', { name: 'Evento sintético A', exact: true });
-    await page.getByRole('link', { name: 'Nuevo evento', exact: true }).focus(); await page.keyboard.press('Tab'); verify(await link.evaluate(el => el === document.activeElement), 'Event link reachable');
-    await page.keyboard.press('Shift+Tab'); verify(await page.getByRole('link', { name: 'Nuevo evento', exact: true }).evaluate(el => el === document.activeElement), 'Reverse keyboard navigation');
+    await page.getByRole('searchbox', { name: 'Buscar eventos' }).focus(); await page.keyboard.press('Tab'); verify(await link.evaluate(el => el === document.activeElement), 'Event link reachable');
+    await page.keyboard.press('Shift+Tab'); verify(await page.getByRole('searchbox', { name: 'Buscar eventos' }).evaluate(el => el === document.activeElement), 'Reverse keyboard navigation');
     await link.focus(); await page.keyboard.press('Enter'); verify(await page.getByRole('heading', { name: 'Destino /eventos/A', exact: true }).isVisible(), 'Correct destination'); verify(await page.evaluate(() => qa.writes.length) === 0, 'Navigation read-only');
   });
   await check('Reload fetches once without replaying event actions', async () => {
