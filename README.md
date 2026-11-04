@@ -18,7 +18,8 @@ Fr8Bid reemplaza a Bidware (bidware.heymarksman.com). Su código vive en `src/bi
 - Llamadas: `src/bidware/lib/api-client.ts` va a `/api/funcion?fn=…` (`api/funcion.ts` + `src/servidor/paso.ts`), que reenvía a la Edge Function desde el servidor. Reglas: solo las funciones de estos módulos; sin `FR8BID_ESCRITURAS_REALES=si`, solo lecturas; HDships fuera; adjudicar, entregar a Rateware y avisar solo desde la Mesa; `closed` nunca por `update_rfx_event`. Los archivos de tarifas suben hasta 4 MB (límite de Vercel).
 - Ligas para carriers y shippers: siguen saliendo con el dominio de Bidware (`VITE_APP_ORIGIN` lo cambia) hasta que ese dominio apunte a Fr8Bid.
 - Estilos: `src/estilos/aislar.ts` deja las hojas de Bidware bajo `.bw` y saca de ahí las de Fr8Bid; `src/estilos/puente.css` es lo único que toca a los dos.
-- Pruebas: `npm run test:bidware` (las de Node de Bidware). Las del Excel necesitan `xlsx` de cdn.sheetjs.com.
+- Pruebas: `npm run test:bidware` (las de Node de Bidware; las corre el CI). Las del Excel necesitan `xlsx` de cdn.sheetjs.com. Las de navegador de Bidware (`*.browser.*`, `*.lab.*`) no se portaron: dependen de su arnés local.
+- Al día con Bidware main cc9575f (29-oct): revisión y tratamiento por lotes, preparación y conciliación de borradores por canal, seguimiento de respuestas en Operar, preselección de carriers y candado XBF de O-I. El repositorio `bidware` queda congelado: cualquier cambio a estas pantallas se hace aquí.
 
 ## Uso local
 
