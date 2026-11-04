@@ -23,4 +23,53 @@
 .published-pending { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 16px; margin-block: 20px; }
 .published-pending > div { padding: 16px; background: var(--paper, #f8f8f6); border: 1px solid #d6d6d6; border-radius: 6px; }
 .published-pending h3 { margin-top: 0; }
+.batch-review { margin-block: 28px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.batch-readonly { padding: 14px; border-left: 3px solid var(--orange); background: var(--panel); }
+.batch-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-block: 18px; background: var(--ink); color: white; }
+.batch-metrics > div { padding: 16px; border-right: 1px solid var(--grey); }
+.batch-metrics strong { display: block; font-size: 28px; }
+.batch-metrics small, .batch-table small { display: block; margin-top: 5px; font-size: 11px; }
+.batch-board { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 20px; }
+.batch-groups, .batch-results { background: var(--panel); border: 1px solid var(--line); padding: 16px; min-width: 0; }
+.batch-groups { align-self: start; display: grid; gap: 8px; }
+.batch-groups button { display: flex; gap: 12px; justify-content: space-between; align-items: center; text-align: left; white-space: normal; padding: 12px; }
+.batch-groups button[aria-pressed="true"] { background: var(--ink); color: white; }
+.batch-groups h3, .batch-results h3 { margin-top: 0; }
+.batch-filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+.batch-filters label { display: grid; gap: 5px; flex: 1; min-width: 160px; }
+.batch-review input, .batch-review select { max-width: 100%; width: 100%; box-sizing: border-box; }
+.batch-review :is(button, input, select, summary, [tabindex]):focus-visible { outline: 3px solid var(--orange); outline-offset: 3px; }
+.batch-table { min-width: 650px; }
+.batch-table td { vertical-align: top; white-space: normal; min-width: 125px; max-width: 440px; overflow-wrap: anywhere; }
+.batch-table td:last-child { min-width: 230px; }
+.batch-badge { display: inline-block; background: #fbf1dc; color: var(--amber, #8a5a00); padding: 4px 6px; font-size: 11px; }
+.exception-treatment { margin-block: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.treatment-row { padding-block: 10px; border-bottom: 1px solid var(--line); }
+.treatment-row small, .treatment-row li small { display: block; overflow-wrap: anywhere; }
+.treatment-form { display: grid; gap: 14px; margin-top: 20px; }
+.treatment-form label { display: grid; gap: 6px; }
+.treatment-form textarea { min-height: 90px; width: 100%; }
+.exception-treatment input[type=checkbox] { width: auto; margin-right: 8px; }
+.exception-treatment :is(p,li,details) { overflow-wrap: anywhere; }
+.batch-warning { color: var(--amber, #8a5a00); }
+.batch-table details { margin-top: 9px; }
+.batch-table summary, .batch-targets > summary { cursor: pointer; font-weight: 600; }
+.batch-table ul { padding-left: 18px; }
+.batch-targets { margin-top: 20px; padding: 16px; border: 1px solid var(--line); background: var(--panel); }
+.batch-targets > div { margin-top: 18px; }
+.batch-targets label { display: grid; gap: 8px; }
+@media (max-width: 800px) {
+  .batch-board { grid-template-columns: 1fr; }
+  .batch-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .batch-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .batch-groups h3 { grid-column: 1 / -1; }
+  .batch-groups button { padding: 10px; }
+  .batch-results { padding: 12px; }
+}
 @media (max-width: 800px) { .evidence-steps { grid-template-columns: 1fr; } .evidence-review { padding: 12px; } .evidence-table { min-width: 580px; } }
+.treatment-controls { border: 0; margin: 0; padding: 0; min-width: 0; }
+.batch-membership { margin-block: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.batch-membership input[type=checkbox] { width: auto; margin-right: 8px; }
+.batch-membership small { display: block; overflow-wrap: anywhere; }
+.batch-membership :is(p,td) { overflow-wrap: anywhere; }
+.batch-membership fieldset > label { display: block; margin-block: 12px; }

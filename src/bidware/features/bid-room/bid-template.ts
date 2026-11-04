@@ -1,6 +1,6 @@
 import type { WorkBook } from "xlsx";
 import {
-  billingNotice, canQuote, COMMERCIAL_MODELS, modelSpec, offerForm, offerPayload, offerProblems,
+  billingNotice, canQuote, COMMERCIAL_MODELS, isLockedBrokerage, modelSpec, offerForm, offerPayload, offerProblems,
   offerWarnings, type BookLane, type OfferForm,
 } from "./bidroom.service";
 
@@ -35,11 +35,14 @@ export function displayOfferValue(key: keyof OfferForm, form: OfferForm): string
 
 export async function buildBidTemplate(lanes: BookLane[]): Promise<WorkBook> {
   const XLSX = await import("xlsx");
+  const lockedOnly = lanes.length > 0 && lanes.every(isLockedBrokerage);
+  const columns = lockedOnly ? OFFER_COLUMNS.filter(([key]) => key !== "pct" && key !== "commercial_model") : OFFER_COLUMNS;
+  const headers = [...META, ...columns.map(([, label]) => label)];
   const rows = lanes.map(lane => {
     const form = offerForm(lane);
     return [lane.rfx_event_id || "", lane.invitation_id || "", lane.rfx_lane_id,
       lane.lane_number ?? "", lane.origin || "", lane.destination || "", lane.equipment || "",
-      offerBaseline(lane), "No", ...OFFER_COLUMNS.map(([key]) => {
+      offerBaseline(lane), "No", ...columns.map(([key]) => {
         const v = form[key];
         if (key === "commercial_model") return modelSpec(form.commercial_model).label;
         if (typeof v === "boolean") return v ? "Sí" : "No";
@@ -47,8 +50,8 @@ export async function buildBidTemplate(lanes: BookLane[]): Promise<WorkBook> {
         return v;
       })];
   });
-  const sheet = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, ...rows]);
-  sheet["!cols"] = TEMPLATE_HEADERS.map((_, i) => ({ wch: i < 3 ? 38 : 25, hidden: i === 7 }));
+  const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  sheet["!cols"] = headers.map((_, i) => ({ wch: i < 3 ? 38 : 25, hidden: i === 7 }));
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, sheet, "Ofertas");
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([
@@ -59,9 +62,11 @@ export async function buildBidTemplate(lanes: BookLane[]): Promise<WorkBook> {
     ["Fechas: AAAA-MM-DD. ETA: AAAA-MM-DDTHH:mm en la zona horaria de tu navegador."],
     ["Números: punto decimal, sin separadores de miles. Sí/No para confirmaciones. Vacío: mi o km."],
     ["Usa valores, no fórmulas. Si ya cambió una oferta, descarga una plantilla nueva."],
-    ["Porcentaje vacío: se aplica el predeterminado del modelo. No escribas 0.03 para 3 %; escribe 3."],
-    [], ["Modelo", "Captura", "Efecto", "Mínimo %", "Máximo %", "Predeterminado %", "Facturación"],
-    ...COMMERCIAL_MODELS.map(m => [m.label, m.enter, m.effect, m.min, m.max, m.blank, billingNotice({ commercial_model: m.key, pct: "" }) || ""]),
+    ...(lockedOnly ? [["XBF compra-venta es fijo. Captura tu tarifa de venta a XBF; no captures porcentajes."]] : [
+      ["Porcentaje vacío: se aplica el predeterminado del modelo. No escribas 0.03 para 3 %; escribe 3."],
+      [], ["Modelo", "Captura", "Efecto", "Mínimo %", "Máximo %", "Predeterminado %", "Facturación"],
+      ...COMMERCIAL_MODELS.map(m => [m.label, m.enter, m.effect, m.min, m.max, m.blank, billingNotice({ commercial_model: m.key, pct: "" }) || ""]),
+    ]),
   ]), "Instrucciones y modelos");
   return book;
 }
@@ -114,7 +119,9 @@ export async function parseBidTemplate(data: ArrayBuffer, lanes: BookLane[]): Pr
   }
   const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "", raw: true });
   const header = (rows[0] || []).map(text);
-  if (header.length !== TEMPLATE_HEADERS.length || TEMPLATE_HEADERS.some(h => header.filter(v => v === h).length !== 1)) {
+  const lockedHeaders = TEMPLATE_HEADERS.filter(h => h !== "Porcentaje" && h !== "Modelo comercial");
+  const schema = !header.includes("Porcentaje") && !header.includes("Modelo comercial") ? lockedHeaders : TEMPLATE_HEADERS;
+  if (header.length !== schema.length || schema.some(h => header.filter(v => v === h).length !== 1)) {
     throw new Error("Las columnas no coinciden con la plantilla. Descarga una nueva y conserva todos sus encabezados.");
   }
   const result: ImportedOffer[] = [];
@@ -136,6 +143,10 @@ export async function parseBidTemplate(data: ArrayBuffer, lanes: BookLane[]): Pr
       if (baseline !== offerBaseline(lane)) throw new Error("La oferta cambió desde la descarga; descarga una nueva plantilla.");
       const form = offerForm(lane);
       for (const [key, label] of OFFER_COLUMNS) {
+        if (!header.includes(label)) {
+          if (!isLockedBrokerage(lane) || (key !== "pct" && key !== "commercial_model")) throw new Error("La plantilla omite datos requeridos.");
+          continue;
+        }
         let value = get(label);
         if (dateFields.has(key) && typeof value === "number") {
           const parts = XLSX.SSF.parse_date_code(value, { date1904: !!book.Workbook?.WBProps?.date1904 });

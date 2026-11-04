@@ -1,5 +1,6 @@
 import { OfferDetailDialog, type OfferSelection } from "./OfferDetailDialog";
 import { OfferComparisonDialog } from "./OfferComparisonDialog";
+import { ResponseFollowupPanel } from "./ResponseFollowupPanel";
 import { comparisonOffers } from "./offer-presentation";
 import { offerText } from "@/i18n/offer-detail";
 import { tr } from "@/i18n/rfx-admin";
@@ -78,6 +79,7 @@ export function OperateStage({
   confirmations,
   busy,
   canWork,
+  reading = false,
   onCapture,
   onAsk,
   onEditBid,
@@ -91,6 +93,7 @@ export function OperateStage({
   confirmations: ConfirmationRow[];
   busy: boolean;
   canWork: boolean;
+  reading?: boolean;
   onCapture: () => void;
   onAsk: (lane?: LaneWithInvitations, invitation?: Record<string, unknown>) => void;
   onEditBid: (lane: LaneWithInvitations, invitation: Record<string, unknown>) => void;
@@ -138,7 +141,7 @@ export function OperateStage({
   const comparisonTarget = laneId ? lanes.find(lane => lane.id === laneId) : lanes.length === 1 ? lanes[0] : undefined;
 
   return (
-    <div className="op">
+    <div className="op op-followup">
       {offerDetail && <OfferDetailDialog selection={offerDetail} confirmations={confirmations} onClose={() => setOfferDetail(null)} />}
       {comparisonLane && <OfferComparisonDialog lane={comparisonLane} confirmations={confirmations} anonymous={anon} displayName={offer => anon ? anonCode(String(offer.vendor_id ?? offer.id)) : String(vendorOf(offer).vendor_name ?? vendorOf(offer).domain ?? offer.vendor_id ?? "—")} onClose={() => setComparisonLaneId(null)} />}
       <Kpis
@@ -153,6 +156,10 @@ export function OperateStage({
           },
         ]}
       />
+
+      <ResponseFollowupPanel eventId={eventId} lanes={lanes} enabled={!busy && !reading} anonymous={anon} nameOf={anonCode}
+        onDetail={(lane, invitation) => setOfferDetail({ lane, invitation, displayName: anon ? anonCode(String(invitation.vendor_id)) : String(vendorOf(invitation).vendor_name ?? vendorOf(invitation).domain ?? invitation.vendor_id) })}
+        onCompare={setComparisonLaneId} />
 
       <nav className="op-tabs">
         <button className={tab === "lanes" ? "active" : undefined} onClick={() => setTab("lanes")}>

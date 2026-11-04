@@ -6,10 +6,9 @@ export interface DraftAudiencePolicy {
   saved_segment_id?: string | null;
 }
 
-/** Participation selection and contact review are independent requirements. */
-export function reviewedDraftAudience(
+/** The saved selection is shared by Message and the read-only batch preview. */
+export function selectedDraftAudience(
   all: { id: string; name: string }[],
-  reviews: CarrierReview[],
   policy?: DraftAudiencePolicy,
   segments: { id: string; vendor_ids?: string[] }[] = [],
 ) {
@@ -21,6 +20,17 @@ export function reviewedDraftAudience(
   const selected = unresolved ? [] : all.filter((v) =>
     selection.length ? selection.includes(v.id) : mode === "all_eligible",
   );
+  return { total: all.length, selected, unresolved };
+}
+
+/** Participation selection and contact review are independent requirements. */
+export function reviewedDraftAudience(
+  all: { id: string; name: string }[],
+  reviews: CarrierReview[],
+  policy?: DraftAudiencePolicy,
+  segments: { id: string; vendor_ids?: string[] }[] = [],
+) {
+  const { selected, unresolved } = selectedDraftAudience(all, policy, segments);
   const reviewed = new Set(reviews.filter((r) => r.reviewed).map((r) => r.vendor_id));
   return { total: all.length, selected: selected.length, unresolved, audience: selected.filter((v) => reviewed.has(v.id)) };
 }

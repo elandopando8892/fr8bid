@@ -41,6 +41,7 @@ import { MessageReviewDialog } from "./MessageReviewDialog";
 import { outreachVendorName } from "./outreach.service";
 import { tr as reviewText } from "@/i18n/outreach-review";
 import { WhatsappPendingEvidence, WhatsappQueueStatus, WhatsappQueueStep } from "./WhatsappDeliveryPanel";
+import { BatchFlowPanel } from "./BatchFlowPanel";
 
 type Tone = "" | "green" | "red" | "indigo" | "amber";
 type QueueFacts = {
@@ -485,6 +486,7 @@ function DeliveryQueueContent() {
       />
       <main className="main launch-main">
         <LaunchTabs eventId={id} active="delivery" />
+        <BatchFlowPanel eventId={id} refreshKey={evidenceRefresh} />
 
         <div className="dq-gate">
           <b>{tr("text094")}</b>

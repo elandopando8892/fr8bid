@@ -2,6 +2,7 @@ import type { ApprovedMessageVersion, WhatsappApproval } from "./send-batches";
 import { extra, deliveryText } from "@/i18n/outreach";
 import { callRatewareApi } from "@/lib/api-client";
 import { env } from "@/config/env";
+import { flowText } from "@/i18n/batch-flow";
 
 /**
  * Outreach = the Launch-phase surfaces: Message prepares drafts, Delivery queue
@@ -216,14 +217,27 @@ export async function listOutreachTemplates() {
 }
 
 /**
- * The handler ignores `rfx_event_id` and returns the whole workspace, so the
- * event filter has to happen here — otherwise every event's waves show up as
- * "this event's campaign".
+ * Event callers require a complete server-scoped read. Filtering the legacy
+ * global 100-row catalog locally can incorrectly invent a first campaign.
  */
 export async function listOutreachCampaigns(rfxEventId?: string) {
-  const res = await callRatewareApi<{ rows?: any[] }>("list_outreach_campaigns");
+  const res = await callRatewareApi<{ rows?: any[]; total?: number; complete?: boolean;
+    campaign_read_version?: number; has_more?: boolean; rfx_event_id?: string; organization_id?: string }>(
+      "list_outreach_campaigns", rfxEventId ? { rfx_event_id: rfxEventId } : {});
+  if (rfxEventId) {
+    const rows = res.rows;
+    if (res.campaign_read_version !== 1 || res.complete !== true || res.has_more === true
+      || res.rfx_event_id !== rfxEventId || typeof res.organization_id !== "string" || !res.organization_id
+      || !Array.isArray(rows) || !Number.isSafeInteger(res.total) || res.total !== rows.length
+      || rows.some(row => !row || typeof row.id !== "string" || !row.id.trim()
+        || row.rfx_event_id !== rfxEventId || row.organization_id !== res.organization_id || row.status === "archived")
+      || new Set(rows.map(row => row.id)).size !== rows.length) {
+      throw new Error(flowText("incomplete"));
+    }
+    return rows;
+  }
   const rows = res.rows ?? [];
-  return rfxEventId ? rows.filter((c) => c.rfx_event_id === rfxEventId) : rows;
+  return rows;
 }
 
 /**

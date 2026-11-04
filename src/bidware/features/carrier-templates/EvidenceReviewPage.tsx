@@ -5,6 +5,7 @@ import { useLang } from "@/i18n/language";
 import { ErrorBanner, InfoBanner } from "@/components/ui";
 import { ProviderAdvisory } from "./ProviderAdvisory";
 import { PublishedClassification } from "./PublishedClassification";
+import { BatchReview } from "./BatchReview";
 import { downloadJSON, listTiers, MAX_REVIEW_BYTES, parseReview, readCurrentCut, REVIEW_TTL_MS, TaxonomyError, verifyAgainstCut,
   type EvidenceCut, type ListTier, type ReviewBundle, type PlanEntry } from "./evidence-review";
 import { listAllCarrierTemplates } from "./templates.service";
@@ -92,10 +93,10 @@ function EvidenceReviewContent({ org }: { org: string }) {
     <header className="identity crm-head"><div className="crm-head-main">
       <div className="crumb"><Link to="/templates">{text("Listas de carriers", "Carrier lists")}</Link></div>
       <h1>{text("Revisión de evidencia", "Evidence review")}</h1>
-      <p className="sub">{text("Clasificación de carriers para las 25 listas originales", "Carrier classification for the 25 original lists")}</p>
+      <p className="sub">{text("Fuentes publicadas, lotes documentales y clasificador original", "Published evidence, documentary batches and original classifier")}</p>
     </div></header>
     <div className="evidence-review tpl-body">
-      <InfoBanner>{text("Las propuestas conservan sus fuentes y pendientes de identidad. Esta revisión no aplica cambios ni autoriza operación o contacto.", "Proposals retain their sources and identity issues. This review does not apply changes or authorize operations or contact.")}</InfoBanner>
+      <InfoBanner>{text("Las propuestas conservan sus fuentes y pendientes de identidad. Revisar no aplica cambios. Las incorporaciones requieren plan y confirmación separados; no autorizan operación o contacto.", "Proposals retain their sources and identity issues. Reviewing makes no changes. Additions require a separate plan and confirmation; they do not authorize operations or contact.")}</InfoBanner>
       <section aria-label={text("Listas actuales", "Current lists")}>
         <h2>{text("Listas actuales", "Current lists")}</h2>
         <p>{text("Principal: carriers con oferta real o cotización propia. Ampliada: carriers con tarifa histórica compatible (clasificador de ChatGPT/Codex); no es tarifa vigente.", "Main: carriers with a real offer or their own quote. Extended: carriers with a compatible historical rate (ChatGPT/Codex classifier); not a current rate.")}</p>
@@ -113,6 +114,7 @@ function EvidenceReviewContent({ org }: { org: string }) {
         </tr></tfoot></table></div>}
       </section>
       <PublishedClassification org={org} />
+      <BatchReview />
       <h2>{text("Revisión local del clasificador (opcional)", "Local classifier review (optional)")}</h2>
       <section className="evidence-steps" aria-label={text("Preparar revisión", "Prepare review")}>
         <div><h2>1. {text("Corte actual", "Current cut")}</h2>

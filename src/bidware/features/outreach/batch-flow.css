@@ -1,0 +1,23 @@
+.flow-panel { margin: 14px 0; padding: 16px; min-width: 0; }
+.flow-panel h2 { font-size: 15px; margin: 0 0 7px; }
+.flow-panel p { line-height: 1.5; margin: 8px 0; }
+.flow-panel > header, .flow-actions, .flow-filters { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.flow-panel > header > div { flex: 1; min-width: 210px; }
+.flow-panel label { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.flow-panel select, .flow-panel input { max-width: 100%; }
+.flow-actions { margin-top: 12px; }
+.flow-panel a { overflow-wrap: anywhere; }
+.flow-campaign { margin: 12px 0; max-width: 500px; }
+.flow-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: var(--ink); color: white; padding: 14px; gap: 12px; }
+.flow-stats dt { font-size: 11px; }
+.flow-stats dd { margin: 6px 0 0; font-size: 20px; font-weight: 700; }
+.flow-warning { background: #fff4e8; border-left: 3px solid var(--orange); padding: 10px; }
+.flow-hint, .flow-panel small { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.flow-panel small { display: block; margin-top: 6px; }
+.flow-panel summary { cursor: pointer; padding: 10px 0; }
+.flow-table { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); }
+.flow-table table { min-width: 700px; width: 100%; table-layout: fixed; }
+.flow-table td, .flow-table th { white-space: normal; overflow-wrap: anywhere; vertical-align: top; padding: 12px; }
+.flow-table ul { margin: 6px 0; padding-left: 14px; }
+.flow-filters > label { flex: 1; min-width: 180px; }
+@media (max-width: 800px) { .flow-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .flow-panel > header { align-items: stretch; } .flow-panel { padding: 12px; } }
