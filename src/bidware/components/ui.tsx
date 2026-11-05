@@ -1,6 +1,7 @@
 import { tr } from "@/i18n/common";
 import { useLang, locale, formatCurrency } from "@/i18n/language";
 import type { ReactNode } from "react";
+import { SIMULATED_MESSAGE } from "@/lib/api-client";
 
 export function Spinner({ label }: { label?: string }) {
   useLang();
@@ -14,6 +15,8 @@ export function Spinner({ label }: { label?: string }) {
 
 export function ErrorBanner({ message }: { message: string }) {
   useLang();
+  // En modo simulado el aviso ya va arriba de la pantalla: no se repite en rojo.
+  if (message.includes(SIMULATED_MESSAGE)) return null;
   return (
     <div className="banner error">
       <b>Error</b>
@@ -32,12 +35,13 @@ export function InfoBanner({ title, children }: { title?: string; children: Reac
   );
 }
 
-export function Empty({ title, hint }: { title: string; hint?: string }) {
+export function Empty({ title, hint, action }: { title: string; hint?: string; action?: ReactNode }) {
   useLang();
   return (
     <div className="empty">
       <strong>{title}</strong>
       {hint && <p style={{ margin: "6px 0 0" }}>{hint}</p>}
+      {action && <div style={{ marginTop: 12 }}>{action}</div>}
     </div>
   );
 }

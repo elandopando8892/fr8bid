@@ -111,6 +111,8 @@ function ShipperIntakeContent() {
   // A new key clears the picker's own search once a link is out.
   const [pickerKey, setPickerKey] = useState(0);
   const form = useRef<HTMLElement>(null);
+  // La liga se genera a pedido: el formulario se despliega con el botón de arriba.
+  const [formAbierto, setFormAbierto] = useState(false);
 
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const [rowMsg, setRowMsg] = useState<{ id: string; text: string; link?: string; eventId?: string } | null>(null);
@@ -263,9 +265,103 @@ function ShipperIntakeContent() {
       <TopBar title="Shipper intake" />
       <main className="main intake">
         <div className="intake-cols">
+          <section className="intake-drafts">
+            <header>
+              <h2>
+                {tr("text044")}
+                {freshCount ? <span className="tab-count">{freshCount}</span> : null}
+              </h2>
+              <button className={formAbierto || fresh ? undefined : "primary"} onClick={() => setFormAbierto((x) => !x)} aria-expanded={formAbierto || Boolean(fresh)}>
+                {formAbierto || fresh ? tr("text062") : tr("text024")}
+              </button>
+            </header>
+            {projects.loading && <Spinner label={tr("text046")} />}
+            {projects.error && <ErrorBanner message={projects.error} />}
+            {!projects.loading &&
+              !projects.error &&
+              (rows.length ? (
+                <table className="data intake-table">
+                  <thead>
+                    <tr>
+                      <th>{tr("text047")}</th>
+
+                      <th>{tr("text048")}</th>
+                      <th>{tr("text267")}</th>
+                      <th>{tr("text049")}</th>
+                      <th>{tr("text050")}</th>
+                      <th>{tr("text051")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((project) => {
+                      const stage = stageOf(project);
+                      const spot = isSpot(project);
+                      const quote = projectQuote(project);
+                      const came = responded(project) || stage === "promoted";
+                      return (
+                        <tr key={project.id}>
+                          <td>
+                            <div className="cell-title">{project.customer_name || project.title}</div>
+                            {project.customer_contact_email && <div className="cell-sub">{project.customer_contact_email}</div>}
+                            {rowMsg?.id === project.id && (
+                              <div className="intake-rowmsg">
+                                <InfoBanner>
+                                  {rowMsg.text}
+                                  {rowMsg.eventId && (
+                                    <>
+                                      {" "}
+                                      <Link to={`/rfx/${rowMsg.eventId}`}>{tr("text052")}</Link>
+                                    </>
+                                  )}
+                                  {/* Shown as well: the browser may block the clipboard. */}
+                                  {rowMsg.link && <div className="mono intake-link">{rowMsg.link}</div>}
+                                </InfoBanner>
+                              </div>
+                            )}
+                          </td>
+                          <td title={typeTitle(project.opportunity_type)}>{typeLabel(project.opportunity_type)}</td>
+                          <td className="mono">{project.lane_count || "—"}</td>
+                          <td className={came ? undefined : "intake-muted"} title={came ? undefined : tr("text053")}>
+                            {came ? when(project.updated_at) : tr("text054", when(project.created_at, false).toLowerCase())}
+                          </td>
+                          <td>
+                            <Pill tone={STAGE[stage].tone}>{STAGE[stage].label}</Pill>
+                          </td>
+                          <td className="intake-act">
+                            {project.bid_room_event_id ? (
+                              <Link to={`/rfx/${project.bid_room_event_id}`}>{tr("text055")}{project.bid_room_rfx_id || ""}</Link>
+                            ) : quote ? (
+                              <Link to={`/quotedesk/${quote.id}`}>{tr("text056")}{quote.folio}</Link>
+                            ) : stage === "new" ? (
+                              <button
+                                className="ne-link"
+                                disabled={!canOperate || rowBusy !== null}
+                                onClick={() => (spot ? toQuote(project) : toEvent(project))}
+                              >
+                                {spot ? tr("text057") : tr("text058")}
+                              </button>
+                            ) : (
+                              // Once answered, a new link would only reopen the request as "Liga enviada".
+                              <>
+                                <button className="ne-link" disabled={!canOperate || rowBusy !== null} onClick={() => withLink(project, false)}>
+                                  {tr("text059")}</button>
+                                <button className="ne-link" disabled={!canOperate || rowBusy !== null} onClick={() => withLink(project, true)}>
+                                  {tr("text038")}</button>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <Empty title={tr("text060")} hint={tr("text061")} />
+              ))}
+          </section>
+          {(formAbierto || fresh) && (
           <section className="intake-form" ref={form}>
             <h2>{tr("text024")}</h2>
-
             <div className="intake-field">
               <span>{tr("text025")}</span>
               <ShipperPicker key={pickerKey} value={shipper} onChange={pickShipper} appearance="card" />
@@ -359,99 +455,7 @@ function ShipperIntakeContent() {
               <p>{tr("text043")}</p>
             </details>
           </section>
-
-          <section className="intake-drafts">
-            <header>
-              <h2>
-                {tr("text044")}
-                {freshCount ? <span className="tab-count">{freshCount}</span> : null}
-              </h2>
-              <p>
-                {tr("text045")}</p>
-            </header>
-            {projects.loading && <Spinner label={tr("text046")} />}
-            {projects.error && <ErrorBanner message={projects.error} />}
-            {!projects.loading &&
-              !projects.error &&
-              (rows.length ? (
-                <table className="data intake-table">
-                  <thead>
-                    <tr>
-                      <th>{tr("text047")}</th>
-                      <th>{tr("text048")}</th>
-                      <th>{tr("text267")}</th>
-                      <th>{tr("text049")}</th>
-                      <th>{tr("text050")}</th>
-                      <th>{tr("text051")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((project) => {
-                      const stage = stageOf(project);
-                      const spot = isSpot(project);
-                      const quote = projectQuote(project);
-                      const came = responded(project) || stage === "promoted";
-                      return (
-                        <tr key={project.id}>
-                          <td>
-                            <div className="cell-title">{project.customer_name || project.title}</div>
-                            {project.customer_contact_email && <div className="cell-sub">{project.customer_contact_email}</div>}
-                            {rowMsg?.id === project.id && (
-                              <div className="intake-rowmsg">
-                                <InfoBanner>
-                                  {rowMsg.text}
-                                  {rowMsg.eventId && (
-                                    <>
-                                      {" "}
-                                      <Link to={`/rfx/${rowMsg.eventId}`}>{tr("text052")}</Link>
-                                    </>
-                                  )}
-                                  {/* Shown as well: the browser may block the clipboard. */}
-                                  {rowMsg.link && <div className="mono intake-link">{rowMsg.link}</div>}
-                                </InfoBanner>
-                              </div>
-                            )}
-                          </td>
-                          <td title={typeTitle(project.opportunity_type)}>{typeLabel(project.opportunity_type)}</td>
-                          <td className="mono">{project.lane_count || "—"}</td>
-                          <td className={came ? undefined : "intake-muted"} title={came ? undefined : tr("text053")}>
-                            {came ? when(project.updated_at) : tr("text054", when(project.created_at, false).toLowerCase())}
-                          </td>
-                          <td>
-                            <Pill tone={STAGE[stage].tone}>{STAGE[stage].label}</Pill>
-                          </td>
-                          <td className="intake-act">
-                            {project.bid_room_event_id ? (
-                              <Link to={`/rfx/${project.bid_room_event_id}`}>{tr("text055")}{project.bid_room_rfx_id || ""}</Link>
-                            ) : quote ? (
-                              <Link to={`/quotedesk/${quote.id}`}>{tr("text056")}{quote.folio}</Link>
-                            ) : stage === "new" ? (
-                              <button
-                                className="ne-link"
-                                disabled={!canOperate || rowBusy !== null}
-                                onClick={() => (spot ? toQuote(project) : toEvent(project))}
-                              >
-                                {spot ? tr("text057") : tr("text058")}
-                              </button>
-                            ) : (
-                              // Once answered, a new link would only reopen the request as "Liga enviada".
-                              <>
-                                <button className="ne-link" disabled={!canOperate || rowBusy !== null} onClick={() => withLink(project, false)}>
-                                  {tr("text059")}</button>
-                                <button className="ne-link" disabled={!canOperate || rowBusy !== null} onClick={() => withLink(project, true)}>
-                                  {tr("text038")}</button>
-                              </>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              ) : (
-                <Empty title={tr("text060")} hint={tr("text061")} />
-              ))}
-          </section>
+          )}
         </div>
       </main>
     </>

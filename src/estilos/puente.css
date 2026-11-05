@@ -26,3 +26,119 @@
 @media (max-width: 860px) {
   .bw .bw-simulado, .bw .bw-cargando, .bw .bw-fallo { padding-left: 16px; padding-right: 16px; }
 }
+
+/* ——— Una sola cara: las pantallas de Bidware con el encabezado, los botones,
+   las píldoras y las tablas de la página del evento. Solo presentación. ——— */
+.bw { --radius: 10px; --line-strong: var(--line); }
+
+/* Encabezado de módulo: miga + título, sin barra blanca ni mono en mayúsculas. */
+.bw .topbar, .bw .identity { background: none; border-bottom: 0; padding: 24px 28px 8px; align-items: flex-start; flex-wrap: wrap; }
+.bw .topbar .crumb, .bw .identity .crumb { font-family: var(--font); font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.bw .topbar h1, .bw .identity h1 { font-size: 24px; letter-spacing: -.01em; margin: 2px 0; }
+.bw .topbar .sub, .bw .identity .sub { font-size: 12.5px; color: var(--muted); }
+.bw .main { padding: 8px 28px 40px; }
+
+/* Botones y píldoras como en Fr8Bid. */
+.bw .btn, .bw button.primary, .bw button:not(.link):not(.tabs button) { border-radius: 9px; font-size: 13px; }
+.bw .btn { padding: 8px 14px; font-weight: 600; }
+.bw button.primary { padding: 9px 16px; font-weight: 600; }
+.bw button.primary:hover { filter: none; background: var(--accent); border-color: var(--accent); }
+.bw .pill { border-radius: 999px; font-size: 11.5px; padding: 2px 9px; }
+
+/* Tablas: encabezados en caja baja, filas con aire. */
+.bw table.data th { font-family: var(--font); font-size: 11.5px; text-transform: none; letter-spacing: 0; background: none; }
+.bw table.data th, .bw table.data td { padding: 10px 12px; font-size: 13px; }
+.bw table.data td.num, .bw table.data td.mono { font-size: 12.5px; }
+
+/* Campos, pestañas y avisos. */
+.bw input, .bw select, .bw textarea { font-size: 13px; border-radius: 8px; background: var(--panel); }
+.bw .field label, .bw .field > span { font-size: 12.5px; font-weight: 500; }
+.bw .tabs button { font-size: 13px; }
+.bw .banner, .bw .empty { border-radius: 10px; }
+.bw .card { border-radius: var(--radius); box-shadow: var(--shadow); }
+
+@media (max-width: 860px) {
+  .bw .topbar, .bw .identity { padding: 16px 16px 4px; }
+  .bw .main { padding: 8px 16px 32px; }
+}
+/* Encabezado del asistente de evento y las cejas en mono mayúsculas: igual
+   que el resto del marco (sans, caja normal). Las vistas públicas (.bw-publica)
+   conservan su propia cara. */
+.bw:not(.bw-publica) .nev-head { background: none; border-bottom: 0; padding: 24px 28px 8px; }
+.bw:not(.bw-publica) .nev-crumb2 { font-family: var(--font); font-size: 12px; }
+.bw:not(.bw-publica) .nev-head h1 { font-size: 24px; }
+.bw:not(.bw-publica) .crm-kicker, .bw:not(.bw-publica) .nev-kicker, .bw:not(.bw-publica) .support-eyebrow, .bw:not(.bw-publica) .sr-sec-title, .bw:not(.bw-publica) .bld-fact-label {
+  font-family: var(--font); font-size: 11.5px; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); font-weight: 600;
+}
+@media (max-width: 860px) {
+  .bw .crm-stages { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+  .bw .crm-stages > * { flex: 0 0 auto; }
+}
+
+/* ── Nuevo evento: ligero (5-nov) ───────────────────────────────────────── */
+.bw .nev-types button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-color: var(--line); }
+.bw .nev-types button.on { background: var(--orange-light, #fdeee6); color: var(--accent, #c94a14); border-color: #ea5e2755; box-shadow: none; }
+.bw .nev-rubric > span { font-family: inherit; text-transform: none; letter-spacing: 0; font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.bw .nev-rubric-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.bw .nev-rubric-chip { display: inline-flex; align-items: center; gap: 5px; background: var(--subtle, #f8f8f6); border: 1px solid transparent; border-radius: 999px; padding: 5px 12px; font-size: 12.5px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.bw .nev-rubric-chip:hover { background: var(--cloud, #efefea); }
+.bw .nev-info { background: transparent; border: 0; padding: 0; color: var(--muted); font-size: 12.5px; }
+.bw .nev-opciones { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: var(--subtle, #f8f8f6); border: 0; border-radius: 10px; padding: 10px 12px; margin: 2px 0 6px; cursor: pointer; color: var(--ink); font-size: 13px; }
+.bw .nev-opciones svg { color: var(--muted); flex: none; }
+.bw .nev-opciones span { flex: 1; }
+.bw .nev-opciones em { font-style: normal; color: var(--accent, #c94a14); font-weight: 600; font-size: 12.5px; }
+.bw .nev-opciones:hover { background: var(--cloud, #efefea); }
+
+/* ── Bandas de cifras y selección: claras, no negras (5-nov) ────────────── */
+/* Las cifras van en tarjetas claras, como el resto del marco; lo elegido se
+   marca en naranja suave en vez de negro. */
+.bw .kpis, .bw .qd-summary-bar, .bw .qd-summary, .bw .crm-band, .bw .rev-kpis, .bw .croom-kpis, .bw .dq-kpis {
+  background: var(--panel, #fff); border: 1px solid var(--line); box-shadow: none;
+}
+.bw .kpis span, .bw .qd-summary-bar span, .bw .qd-summary span, .bw .crm-band span, .bw .rev-kpis span, .bw .croom-kpis span, .bw .dq-kpis span {
+  font-family: inherit; text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--muted);
+}
+.bw .kpis strong, .bw .qd-summary-bar strong, .bw .qd-summary strong, .bw .crm-band strong, .bw .rev-kpis strong, .bw .croom-kpis strong, .bw .dq-kpis strong {
+  font-family: inherit; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink);
+}
+.bw .kpis strong.accent, .bw .qd-summary-bar strong.accent, .bw .qd-summary strong.accent, .bw .crm-band strong.accent, .bw .rev-kpis strong.accent, .bw .croom-kpis strong.signal { color: var(--accent, #c94a14); }
+.bw .qd-summary-bar strong.good, .bw .qd-summary strong.good, .bw .dq-kpis strong.ok { color: var(--green, #1f7a4d); }
+.bw .croom-kpis small { color: var(--muted); }
+.bw .profile-lang button.active, .bw .qd-country button.active, .bw .qd-segmented button.active,
+.bw .croom-seg button.on, .bw .msg-seg button.on, .bw .crm-stages button.on, .bw .tpl-filters button.on,
+.bw .tb-modes button.on, .bw .nev-segmented button.on, .bw .intake-segmented button.on {
+  background: var(--orange-light, #fdeee6); color: var(--accent, #c94a14); border-color: #ea5e2744; box-shadow: none;
+}
+.bw .crm-stages button.on span, .bw .crm-stages button.on b { color: inherit; }
+/* Paneles laterales con borde negro: mismo borde fino que las tarjetas. */
+.bw .gate, .bw .croom-side, .bw .crm-selection, .bw .crm-move, .bw .crm-side, .bw .an-gate { border-color: var(--line); }
+
+/* Nuevo evento: una columna, cédula plegada (5-nov, decisión de Jose) */
+.bw .nev-steps12 { flex-direction: column; align-items: stretch; max-width: 820px; }
+.bw .nev-step1, .bw .nev-step2 { width: auto; max-width: none; flex: none; }
+.bw .nev-cedula { margin: 0; }
+.bw .nev-cedula .tenue { color: var(--muted); font-weight: 400; }
+
+/* Shipper intake: solicitudes primero, la liga como botón (5-nov, decisión de Jose) */
+.bw .intake-cols { flex-direction: column; align-items: stretch; }
+.bw .intake-form { width: auto; }
+.bw .intake-drafts > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+/* Carriers (5-nov, decisión de Jose): la columna derecha solo existe al elegir; nota de plantillas del sistema. */
+.bw .crm-main.sin-lado, .bw .tpl-grid.sin-lado { grid-template-columns: minmax(0, 1fr); }
+.bw .nota-plantillas { margin: 0; font-size: 13px; color: var(--grey, #6b6b6b); }
+
+/* Shippers y tarifas (5-nov, decisión de Jose): recarga como icono, ayuda de campos en texto normal. */
+.bw .btn-icono { border: 0; background: none; padding: 0; min-height: 0; width: 32px; height: 32px; }
+.bw .btn-icono:hover { background: var(--subtle, #f1ede8); color: var(--accent, #c94a14); }
+.bw .ayuda-campos { margin: 0; font-size: 13px; color: var(--grey, #6b6b6b); }
+
+/* Integraciones y Tablero público (5-nov, decisión de Jose). */
+.bw .ig-card.ig-plegada > :not(.ig-head):not(.ig-alert):not(.ig-actions) { display: none; }
+.bw .ig-card.ig-plegada .ig-actions { margin-top: 0; }
+.bw .ig-detalles { background: none; border: 0; padding: 0; min-height: 0; font-size: 12.5px; color: var(--accent, #c94a14); cursor: pointer; }
+.bw .ig-detalles:hover { text-decoration: underline; }
+.bw .pb-panel.dark .pb-steps { color: #b8b8b8; margin-top: 4px; }
+.bw .pb-panel.dark .pb-steps b { color: #fff; }
+.bw .pb-avisos { justify-self: start; background: transparent; color: #fff; border: 1px solid #555; }
+.bw .pb-panel.dark .pb-steps li { white-space: normal; overflow: visible; text-overflow: clip; border: 0; padding: 0; }

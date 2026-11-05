@@ -161,11 +161,11 @@ export function TemplatesPage() {
       />
       <main className="main">
         <div style={{ display: "grid", gap: 14 }}>
-          <p className="cell-sub" style={{ margin: 0 }}>{tr("text263")}</p>
           {notice && <InfoBanner>{notice}</InfoBanner>}
           {loading && <Spinner label={tr("text264")} />}
           {error && <ErrorBanner message={error} />}
           {!loading && !error && (rows.length ? (
+            <>
             <div className="data-table-scroll" role="region" tabIndex={0} aria-label={tr("text260")}>
             <table className="data">
               <thead>
@@ -227,6 +227,8 @@ export function TemplatesPage() {
               </tbody>
             </table>
             </div>
+            {rows.some(isSystem) && <p className="nota-plantillas">{tr("text263")}</p>}
+            </>
           ) : (
             <Empty title={tr("text271")} hint={tr("text272")} />
           ))}

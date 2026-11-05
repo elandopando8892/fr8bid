@@ -124,6 +124,7 @@ export function ShippersPage() {
                 onClick={() => go(key)}
               >
                 {label}
+                {key === "directorio" && summary.data?.total ? <span className="tab-count">{summary.data.total}</span> : null}
                 {key === "comercial" && summary.data?.open_opportunities ? <span className="tab-count">{summary.data.open_opportunities}</span> : null}
               </button>
             ))}
@@ -137,22 +138,15 @@ export function ShippersPage() {
           {view === "directorio" && (
           <>
           {error && <ErrorBanner message={error} />}
-          <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-            <div className="tabs" role="tablist">
+          {/* Una sola fila (decisión de Jose, 5-nov): el estado es un filtro junto al buscador, no otra fila de pestañas. */}
+          <div className="row" style={{ gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <select value={status} aria-label="Estado" style={{ width: "auto", flex: "0 0 auto" }} onChange={(e) => setStatus(e.target.value)}>
               {FILTERS.map((filter) => (
-                <button
-                  key={filter.key}
-                  role="tab"
-                  aria-selected={status === filter.key}
-                  className={status === filter.key ? "active" : ""}
-                  onClick={() => setStatus(filter.key)}
-                >
-                  {filter.label}
-                  {filterCount(filter.key) ? <span className="tab-count">{filterCount(filter.key)}</span> : null}
-                </button>
+                <option key={filter.key} value={filter.key}>
+                  {filter.label}{filterCount(filter.key) ? ` (${filterCount(filter.key)})` : ""}
+                </option>
               ))}
-            </div>
-            <div className="spacer" />
+            </select>
             <input
               style={{ width: 320, maxWidth: "100%" }}
               value={search}

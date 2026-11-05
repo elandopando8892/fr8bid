@@ -95,8 +95,8 @@ export const copy = {
     "en": "Conversion"
   },
   "text024": {
-    "es": "1 · Generar liga para el shipper",
-    "en": "1 · Generate magic link"
+    "es": "Nueva liga para el shipper",
+    "en": "New link for the shipper"
   },
   "text025": {
     "es": "Shipper",
@@ -175,8 +175,8 @@ export const copy = {
     "en": "“Open” shows the link as the shipper sees it. Everything entered there is saved in their request."
   },
   "text044": {
-    "es": "2 · Solicitudes recibidas",
-    "en": "2 · Incoming drafts"
+    "es": "Solicitudes recibidas",
+    "en": "Incoming drafts"
   },
   "text045": {
     "es": "Cada solicitud queda ligada al shipper. Cuando la envía, pásala a cotización o a evento del Bid Room.",
@@ -253,9 +253,13 @@ export const copy = {
   conversionScopeChanged: { es: "La sesión cambió. Revisa la solicitud desde tu cuenta actual antes de continuar.", en: "The session changed. Review the request from your current account before continuing." },
   conversionUnavailable: { es: "No pudimos confirmar la conversión. Actualiza la lista o vuelve a intentar desde esta solicitud; no crees otra cotización manualmente.", en: "We could not confirm the conversion. Refresh the list or retry from this request; do not create another quote manually." },
   conversionLegacy: { es: "Esta solicitud tiene una cotización anterior que requiere revisión. Revisa su vínculo y sus rutas antes de continuar.", en: "This request has a previous quote that needs review. Check its link and lanes before continuing." },
+  "text062": {
+    "es": "Ocultar el formulario",
+    "en": "Hide the form"
+  },
   "text061": {
-    "es": "Genera la primera liga a la izquierda.",
-    "en": "Generate the first link on the left."
+    "es": "Genera la primera liga con el botón de arriba.",
+    "en": "Generate the first link with the button above."
   },
   "text267": {
     "es": "Rutas",

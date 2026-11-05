@@ -165,7 +165,7 @@ function CarrierTemplatesContent() {
         {loading ? (
           <Spinner label={tr("text019")} />
         ) : (
-          <div className="tpl-grid">
+          <div className={focused ? "tpl-grid" : "tpl-grid sin-lado"}>
             {rows.length ? (
               <div className="crm-table-wrap">
                 <table className="data tpl-table">
@@ -229,7 +229,7 @@ function CarrierTemplatesContent() {
               />
             )}
 
-            <TemplateSide
+            {focused && <TemplateSide
               template={focused}
               busy={Boolean(focused && busyId === focused.id)}
               locked={locked}
@@ -237,7 +237,7 @@ function CarrierTemplatesContent() {
               onDuplicate={askDuplicate}
               onArchive={archive}
               onRestore={restore}
-            />
+            />}
           </div>
         )}
       </div>

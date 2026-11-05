@@ -1,4 +1,5 @@
 import { getLang } from "@/i18n/language";
+import * as I from "../../../ui/Iconos";
 import { tr } from "@/i18n/rfx-admin";
 import { useLang } from "@/i18n/language";
 import { confirmAsync } from "@/components/confirm";
@@ -39,6 +40,12 @@ import type { LaneWithInvitations } from "./stages";
 const CURRENCIES = ["USD", "MXN"] as const;
 
 type Screen = "details" | "lanes" | "launch";
+
+/** Nombre propuesto del evento: el mismo título que usa la página del evento. */
+function nombrePropuesto(shipper: string, rutas: number): string {
+  if (!shipper) return "";
+  return rutas > 0 ? `${shipper} · ${rutas} ${rutas === 1 ? "ruta" : "rutas"}` : shipper;
+}
 
 const text = (value: unknown) => String(value ?? "").trim();
 
@@ -88,6 +95,15 @@ export function NewEventPage() {
   const [shipper, setShipper] = useState<ShipperOption | null>(null);
   const [name, setName] = useState("");
   const [eventType, setEventType] = useState<string>("rfx");
+  // La cédula es opcional: cada rubro se abre a pedido para no llenar la vista.
+  const [rubricasAbiertas, setRubricasAbiertas] = useState<string[]>([]);
+  // La cédula (opcional) va plegada bajo los datos; se abre a pedido o si ya tiene algo.
+  const [cedulaAbierta, setCedulaAbierta] = useState(false);
+  // El nombre se propone solo («Shipper · N rutas»); solo se guarda a mano si lo escribes.
+  const [nombreManual, setNombreManual] = useState(false);
+  // Visibilidad, segmento, moneda y folio tienen buen valor por omisión: van en
+  // una línea que se abre solo si hay que cambiarlos.
+  const [masOpciones, setMasOpciones] = useState(false);
   const [dueDate, setDueDate] = useState("");
   const [startDate, setStartDate] = useState("");
   const [currency, setCurrency] = useState("USD");
@@ -132,6 +148,7 @@ export function NewEventPage() {
     const rows = (detail.data?.lanes ?? []) as LaneWithInvitations[];
     const settings = loadDraftSettings(id);
     setName(text(loaded.name));
+    setNombreManual(Boolean(text(loaded.name)) && text(loaded.name) !== nombrePropuesto(text(loaded.customer), rows.length));
     setEventType(text(loaded.event_type) || "rfx");
     setDueDate(text(loaded.due_date).slice(0, 10));
     setStartDate(text(loaded.operation_start_date).slice(0, 10));
@@ -153,7 +170,8 @@ export function NewEventPage() {
     setHydrated(true);
   }, [id, hydrated, detail.data]);
 
-  const missingDetails = [!shipper && tr("text393"), !name.trim() && tr("text488"), !dueDate && tr("text489")].filter(
+  const nombreFinal = (nombreManual && name.trim()) || nombrePropuesto(shipperName, draftLanes.length);
+  const missingDetails = [!shipper && tr("text393"), !dueDate && tr("text489")].filter(
     Boolean,
   ) as string[];
 
@@ -168,7 +186,7 @@ export function NewEventPage() {
     setNotice(null);
     try {
       const fields: DraftFields = {
-        name: name.trim(),
+        name: nombreFinal,
         customer: shipperName || null,
         customer_id: shipper?.id ?? null,
         rfx_id: rfxId.trim() || undefined,
@@ -279,6 +297,11 @@ export function NewEventPage() {
       );
       setAliasesSaved((n) => n + saving - failed.length - conflicts.length);
       saveDraftSettings(id, { segment, currency, rubrics });
+      if (!nombreManual && res.inserted) {
+        const propuesto = nombrePropuesto(shipperName, draftLanes.length + res.inserted);
+        await updateDraft(id, { name: propuesto }).catch(() => undefined);
+        setName(propuesto);
+      }
       lanes.clear();
       detail.reload();
       const problems = [
@@ -395,11 +418,14 @@ export function NewEventPage() {
               <div className="nev-field">
                 <span>Shipper *</span>
                 <ShipperPicker value={shipper} onChange={setShipper} appearance="card" />
-                <em className="nev-hint">{tr("text523")}</em>
               </div>
               <label className="nev-field">
                 <span>{tr("text524")}</span>
-                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Manzanillo → GDL, MEX & MTY | FTL MX Drayage" />
+                <input
+                  value={nombreManual ? name : ""}
+                  onChange={(e) => { setName(e.target.value); setNombreManual(Boolean(e.target.value.trim())); }}
+                  placeholder={nombrePropuesto(shipperName, draftLanes.length) || "Se propone al elegir el shipper"}
+                />
               </label>
               <div className="nev-field">
                 <span>{tr("text525")}</span>
@@ -414,11 +440,11 @@ export function NewEventPage() {
                       title={t.hint}
                       onClick={() => setEventType(t.key)}
                     >
+                      {t.key === "spot" ? <I.Reloj size={16} /> : t.key === "bid" ? <I.Lista size={16} /> : <I.Grafica size={16} />}
                       {t.key === "rfx" ? tr("text526") : t.label}
                     </button>
                   ))}
                 </div>
-                <em className="nev-hint">{EVENT_TYPES.find((t) => t.key === eventType)?.hint}</em>
               </div>
               <div className="nev-pair">
                 <label className="nev-field">
@@ -430,6 +456,16 @@ export function NewEventPage() {
                   <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
                 </label>
               </div>
+              {!masOpciones ? (
+                <button type="button" className="nev-opciones" onClick={() => setMasOpciones(true)}>
+                  <I.Lapiz size={15} />
+                  <span>
+                    {[VISIBILITY_MODES.find((m) => m.key === visibility)?.label, SEGMENTS.find((x) => x.value === segment)?.[getLang()], currency, rfxId || null].filter(Boolean).join(" · ")}
+                  </span>
+                  <em>Cambiar</em>
+                </button>
+              ) : (
+                <>
               <div className="nev-pair">
                 <label className="nev-field">
                   <span>{tr("text058")}</span>
@@ -452,7 +488,6 @@ export function NewEventPage() {
                   </select>
                 </label>
               </div>
-              <em className="nev-hint">{VISIBILITY_MODES.find((m) => m.key === visibility)?.hint}</em>
               <div className="nev-pair">
                 <label className="nev-field">
                   <span>{tr("text530")}</span>
@@ -469,12 +504,17 @@ export function NewEventPage() {
                   <input className="mono" value={rfxId} onChange={(e) => setRfxId(e.target.value)} placeholder={tr("text409")} />
                 </label>
               </div>
-              <em className="nev-hint">
-                {tr("text531")}
-                {draftLanes.length > 0 && ` ${tr("text532")}${draftLanes.length}${tr("text533")}`}
-              </em>
+                </>
+              )}
             </section>
 
+            {!cedulaAbierta && !anyRubric ? (
+              <button type="button" className="nev-opciones nev-cedula" onClick={() => setCedulaAbierta(true)}>
+                <I.Mas size={15} />
+                <span>{tr("text780")} <em className="tenue">· {tr("text782").toLowerCase()}</em></span>
+                <em>Agregar</em>
+              </button>
+            ) : (
             <section className="nev-card nev-step2">
               <header>
                 <b>{tr("text780")}</b>
@@ -483,8 +523,17 @@ export function NewEventPage() {
                 </Pill>
               </header>
               <p className="nev-info">{tr("text783")}</p>
+              <div className="nev-rubric-chips">
+                {RUBRICS.filter((r) => !Boolean(text(rubrics[r.key])) && !rubricasAbiertas.includes(r.key)).map((r) => (
+                  <button key={r.key} type="button" className="nev-rubric-chip" onClick={() => setRubricasAbiertas((x) => [...x, r.key])}>
+                    <I.Mas size={14} />
+                    {r.label}
+                  </button>
+                ))}
+              </div>
               {RUBRICS.map((r, i) => {
                 const filled = Boolean(text(rubrics[r.key]));
+                if (!filled && !rubricasAbiertas.includes(r.key)) return null;
                 return (
                   <label key={r.key} className={`nev-rubric${filled ? " filled" : ""}`}>
                     <span>
@@ -493,6 +542,7 @@ export function NewEventPage() {
                     </span>
                     <textarea
                       rows={2}
+                      autoFocus={!filled}
                       value={rubrics[r.key] ?? ""}
                       placeholder={r.placeholder}
                       onChange={(e) => setRubrics((prev) => ({ ...prev, [r.key]: e.target.value }))}
@@ -502,6 +552,7 @@ export function NewEventPage() {
               })}
               {draftLanes.length > 0 && <p className="nev-note">{tr("text542")}{draftLanes.length}{tr("text543")}</p>}
             </section>
+            )}
           </div>
           <footer className="nev-foot">
             {messages}

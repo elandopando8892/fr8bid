@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { confirmAsync } from "@/components/confirm";
 import { useAsync } from "@/components/useAsync";
 import { Empty, ErrorBanner, InfoBanner, Pill, Spinner, TopBar, dateShort, money } from "@/components/ui";
+import * as I from "../../../ui/Iconos";
 import { useAuth } from "@/auth/AuthContext";
 import { NEED_REASON } from "@/lib/roles";
 import { listRfxEvents } from "@/features/rfx-admin/rfx.service";
@@ -226,7 +227,7 @@ function RateReviewContent() {
 
   return (
     <div className="rr-page">
-      <TopBar title={tr("text038")} sub={tr("text039")} actions={<button onClick={pending.reload}>{tr("text040")}</button>} />
+      <TopBar title={tr("text038")} sub={tr("text039")} actions={<button className="btn-icono" title={tr("text040")} aria-label={tr("text040")} onClick={pending.reload}><I.Recargar /></button>} />
       <main className="main">
         <div style={{ display: "grid", gap: 14 }}>
           {pending.error && <ErrorBanner message={pending.error} />}

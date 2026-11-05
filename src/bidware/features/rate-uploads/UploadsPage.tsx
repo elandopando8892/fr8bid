@@ -8,6 +8,8 @@ import { confirmAsync, promptAsync } from "@/components/confirm";
 import { useAsync } from "@/components/useAsync";
 import { NEED_REASON } from "@/lib/roles";
 import { Empty, ErrorBanner, InfoBanner, Pill, Spinner, TopBar, dateShort } from "@/components/ui";
+import { SIMULATED_MESSAGE } from "@/lib/api-client";
+import * as I from "../../../ui/Iconos";
 import { listVendors, vendorLabel } from "@/features/carrier-crm/crm.service";
 import type { Vendor } from "@/types/domain";
 import {
@@ -197,7 +199,7 @@ export function UploadsPage() {
         actions={
           <>
             <Link to="/tarifas" className="btn">{tr("text024")}</Link>
-            <button onClick={list.reload}>{tr("text025")}</button>
+            <button className="btn-icono" title={tr("text025")} aria-label={tr("text025")} onClick={list.reload}><I.Recargar /></button>
           </>
         }
       />
@@ -207,8 +209,6 @@ export function UploadsPage() {
 
           <div className="card" style={{ display: "grid", gap: 10 }}>
             <h2 style={{ margin: 0 }}>{tr("text026")}</h2>
-            <p className="cell-sub" style={{ margin: 0 }}>
-              {tr("text027")}</p>
             <div className="row upload-form" style={{ flexWrap: "wrap", alignItems: "flex-end" }}>
               <label className="field" style={{ minWidth: 260, marginBottom: 0 }}>
                 <span>{tr("text028")}</span>
@@ -272,11 +272,13 @@ export function UploadsPage() {
                 {busy === "upload" ? tr("text034") : tr("text035")}
               </button>
             </div>
+            <p className="ayuda-campos">{tr("text027")}</p>
             {file && !pickedType && <ErrorBanner message={tr("text036", file.name)} />}
           </div>
 
           {list.loading && !list.data && <Spinner label={tr("text037")} />}
           {list.error && <ErrorBanner message={list.error} />}
+          {list.error?.includes(SIMULATED_MESSAGE) && <Empty title={tr("text055")} hint={tr("text057")} />}
           {list.data && (
             <div className="row" style={{ flexWrap: "wrap" }}>
               <div className="tabs" role="tablist">

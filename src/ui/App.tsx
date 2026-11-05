@@ -3,6 +3,7 @@ import { AuthProvider } from "@/auth/AuthContext";
 import { ConfirmHost } from "@/components/confirm";
 import { AIntegraciones, AMesa, Bw, P } from "./bidware";
 import { Eventos } from "./Eventos";
+import { Hoy } from "./Hoy";
 import { LigaCarrier } from "./LigaCarrier";
 import { Mesa } from "./Mesa";
 import { Marco, NavegadorGlobal } from "./comun";
@@ -44,7 +45,7 @@ function Rutas() {
 
       {/* El equipo, dentro del marco de Fr8Bid. */}
       <Route element={<Equipo />}>
-        <Route path="/" element={<Eventos />} />
+        <Route path="/" element={<Hoy />} />
         <Route path="/eventos" element={<Eventos />} />
         <Route path="/eventos/:id" element={<MesaDelEvento />} />
         <Route path="/rfx" element={<Navigate to="/eventos" replace />} />
@@ -58,7 +59,8 @@ function Rutas() {
         {/* Los avisos de adjudicación salen solo de la página del evento. */}
         <Route path="/rfx/:id/notices" element={<AMesa />} />
         <Route path="/rfx/:id/chat" element={modulo(<P.Chat />)} />
-        <Route path="/panel" element={modulo(<P.Panel />)} />
+        {/* Panel repetía a Hoy (decisión de Jose, 5-nov): la ruta sigue viva y lleva a Hoy. */}
+        <Route path="/panel" element={<Navigate to="/" replace />} />
         <Route path="/intake" element={modulo(<P.Intake />)} />
         <Route path="/plantillas" element={modulo(<P.Plantillas />)} />
         <Route path="/plantillas/:id" element={modulo(<P.Plantilla />)} />

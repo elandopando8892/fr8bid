@@ -57,7 +57,10 @@ export function audienciaInvitacion(d: Detalle): Audiencia {
 
 export function resumenOmisiones(a: Audiencia): string {
   if (!a.omitidas.length) return "";
+  // Cuenta carriers, no participaciones: un carrier con ocho rutas es uno.
+  const porCarrier = new Map(a.omitidas.map((o) => [o.p.carrierId, o.motivo]));
   const conteo = new Map<string, number>();
-  for (const o of a.omitidas) conteo.set(o.motivo, (conteo.get(o.motivo) || 0) + 1);
-  return `${a.omitidas.length} carrier(s) no se invitan: ${[...conteo].map(([m, n]) => `${n} ${m}`).join(", ")}.`;
+  for (const motivo of porCarrier.values()) conteo.set(motivo, (conteo.get(motivo) || 0) + 1);
+  const n = porCarrier.size;
+  return `${n === 1 ? "1 carrier no se invita" : `${n} carriers no se invitan`}: ${[...conteo].map(([m, k]) => `${k} ${m}`).join(", ")}.`;
 }

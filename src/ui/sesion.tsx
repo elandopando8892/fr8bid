@@ -53,7 +53,7 @@ export function ProveedorSesion({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (MODO !== "simulado") return;
     // Import dinámico: el simulado no viaja en el modo rateware.
-    simGlobal ??= import("../simulado/semilla").then((m) => m.sembrarDemo()).then((d) => d.sim);
+    simGlobal ??= import("../simulado/semilla").then((m) => m.sembrarDemoAmplia()).then((d) => d.sim);
     simGlobal.then((s) => {
       setSim(s);
       setListo(true);

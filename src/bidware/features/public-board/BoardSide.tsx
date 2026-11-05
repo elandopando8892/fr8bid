@@ -58,8 +58,22 @@ export function BoardSide({
             <p className="pb-small">{tr("text043")}</p>
           </>
         )}
+        {/* Una sola tarjeta (decisión de Jose, 5-nov): el acceso, el paso a paso y los avisos juntos. */}
+        <ol className="pb-steps">
+          <li>
+            <b>{tr("text049")}</b>{tr("text050")}</li>
+          <li>
+            <b>{tr("text051")}</b>{tr("text052")}</li>
+          <li>
+            <b>{tr("text053")}</b>{tr("text054")}</li>
+        </ol>
+        {!notify && (
+          <button type="button" className="pb-avisos" onClick={onNotify}>
+            {tr("text057")}</button>
+        )}
       </section>
 
+      {hot.length > 0 && (
       <section className="pb-panel">
         <span className="pb-eyebrow">{tr("text044")}</span>
         {hot.length ? (
@@ -84,26 +98,6 @@ export function BoardSide({
           <p className="pb-small">{tr("text047")}</p>
         )}
       </section>
-
-      <section className="pb-panel">
-        <span className="pb-eyebrow">{tr("text048")}</span>
-        <ol className="pb-steps">
-          <li>
-            <b>{tr("text049")}</b>{tr("text050")}</li>
-          <li>
-            <b>{tr("text051")}</b>{tr("text052")}</li>
-          <li>
-            <b>{tr("text053")}</b>{tr("text054")}</li>
-        </ol>
-      </section>
-
-      {!notify && (
-        <section className="pb-panel accent">
-          <b>{tr("text055")}</b>
-          <p>{tr("text056")}</p>
-          <button type="button" onClick={onNotify}>
-            {tr("text057")}</button>
-        </section>
       )}
     </aside>
   );
