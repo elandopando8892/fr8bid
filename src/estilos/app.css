@@ -420,3 +420,9 @@ tr.mejor > td { background: #f6fbf7; }
 .cuerpo-aviso { background: var(--subtle); border-radius: 10px; padding: 10px 14px; margin: 8px 0; }
 .cuerpo-aviso p { margin: 4px 0; }
 .renglon-aviso > .btn-secundario { margin-top: 4px; }
+.atajos-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.siguiente-paso h2.fila-icono > svg { color: var(--orange); }
+.siguiente-paso.tranquilo h2.fila-icono > svg { color: var(--green); }
+/* Hoy sin mayúsculas ni monoespaciada en encabezados y datos (decisión 2). */
+.hoy h3 { font-family: inherit; text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; color: var(--grey); }
+.pendiente-dato.mono { font-family: inherit; }

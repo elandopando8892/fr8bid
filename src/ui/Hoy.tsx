@@ -13,6 +13,10 @@ function saludo(ahora = new Date()) {
   return h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches";
 }
 
+// «miércoles 5 nov», en la hora de Ciudad de México.
+const fechaDeHoy = (ahora = new Date()) =>
+  ahora.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "short", timeZone: "America/Mexico_City" }).replace(",", "").replace(" de ", " ").replace(".", "");
+
 const detalleRutas = (e: ResumenEvento) => {
   const n = cuantasRutas(e);
   return [resumenRutas(e.rutas) || null, n > 1 || (!e.rutas.length && n) ? plural(n, "ruta") : null].filter(Boolean).join(" · ");
@@ -28,7 +32,7 @@ function porQue(e: ResumenEvento): string {
 }
 
 export function Hoy() {
-  const { rol, modo, correo } = useSesion();
+  const { rol, modo } = useSesion();
   const { carga, leer } = useEventosCompartidos();
   const eventos = carga.tipo === "ok" ? carga.datos : [];
   const hoy = hoyMexico();
@@ -46,7 +50,7 @@ export function Hoy() {
         <div>
           <p className="miga">Hoy</p>
           <h1>{saludo()}</h1>
-          {correo && <p className="tenue">{correo}</p>}
+          <p className="tenue">{fechaDeHoy()}</p>
         </div>
       </header>
       {carga.tipo === "ok" && <Desactualizado leidoEn={carga.leidoEn} actualizar={leer} />}
@@ -55,8 +59,7 @@ export function Hoy() {
         <div className="hoy-columna">
           {primero ? (
             <div className="tarjeta siguiente-paso">
-              <div className="ceja">Evento RFx · siguiente paso</div>
-              <h2>{nombreEvento(primero)}</h2>
+              <h2 className="fila-icono"><I.Martillo size={20} />{nombreEvento(primero)}</h2>
               <p className="tenue">
                 {[primero.shipper !== "—" && !nombreEvento(primero).includes(primero.shipper) ? primero.shipper : null, detalleRutas(primero) || null, `folio ${primero.folio}`].filter(Boolean).join(" · ")}
                 {primero.prueba && <> <Prueba /></>}
@@ -70,8 +73,7 @@ export function Hoy() {
             </div>
           ) : (
             <div className="tarjeta siguiente-paso tranquilo">
-              <div className="ceja">Al día</div>
-              <h2>{esAdmin ? "Ningún evento espera una decisión tuya" : "Nada pendiente para tu rol"}</h2>
+              <h2 className="fila-icono"><I.Check size={20} />{esAdmin ? "Ningún evento espera una decisión tuya" : "Nada pendiente para tu rol"}</h2>
               <p className="tenue">{enCarriers.length ? `${plural(enCarriers.length, "evento")} ${enCarriers.length === 1 ? "espera" : "esperan"} ofertas de los carriers.` : "No hay eventos abiertos."}</p>
               {puedeCrear && (
                 <div>
@@ -119,22 +121,24 @@ export function Hoy() {
           </div>
           )}
 
-          <div className="atajos">
+          <div className="atajos-chips">
             {puedeCrear && (
-              <Liga a="/rfx/new" className="atajo">
-                <I.Martillo size={18} /> <span><b>Nuevo evento RFx</b><span className="tenue">Rutas, carriers, ofertas y adjudicación</span></span>
+              <Liga a="/rfx/new" className="chip-liga">
+                <I.Mas size={15} />Nuevo evento
               </Liga>
             )}
-            <Liga a="/quotedesk" className="atajo">
-              <I.Calculadora size={18} /> <span><b>QuoteDesk</b><span className="tenue">Cotiza un spot con tarifario y margen</span></span>
+            <Liga a="/quotedesk" className="chip-liga" title="Cotiza un spot con tarifario y margen">
+              <I.Calculadora size={15} />QuoteDesk
             </Liga>
-            <Liga a="/crm" className="atajo">
-              <I.Camion size={18} /> <span><b>Carrier CRM</b><span className="tenue">Ficha, etapa y contacto de cada carrier</span></span>
+            <Liga a="/crm" className="chip-liga" title="Ficha, etapa y contacto de cada carrier">
+              <I.Camion size={15} />Carrier CRM
             </Liga>
           </div>
           {(viejos > 0 || pruebas > 0) && (
             <p className="nota">
-              No cuentan como pendientes: {[viejos ? `${plural(viejos, "borrador")} con el plazo vencido` : null, pruebas ? `${plural(pruebas, "evento")} de prueba` : null].filter(Boolean).join(" y ")}. <Liga a="/eventos">Verlos en Eventos</Liga>.
+              <Liga a="/eventos" title="No cuentan como pendientes">
+                {[viejos ? `${plural(viejos, "borrador")} vencido${viejos === 1 ? "" : "s"}` : null, pruebas ? `${plural(pruebas, "evento")} de prueba` : null].filter(Boolean).join(" · ")}
+              </Liga>
             </p>
           )}
         </div>

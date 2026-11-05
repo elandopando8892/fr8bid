@@ -37,9 +37,9 @@ export function ir(ruta: string) {
   else window.location.assign(ruta);
 }
 
-export function Liga({ a, children, className }: { a: string; children: ReactNode; className?: string }) {
+export function Liga({ a, children, className, title }: { a: string; children: ReactNode; className?: string; title?: string }) {
   return (
-    <Link to={a} className={className}>
+    <Link to={a} className={className} title={title}>
       {children}
     </Link>
   );
