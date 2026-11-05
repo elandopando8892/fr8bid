@@ -315,3 +315,21 @@ a.btn-secundario, a.btn-primario, a.btn-secundario:hover, a.btn-primario:hover {
   .siguiente-paso { padding: 16px; }
   .pendiente { flex-wrap: wrap; }
 }
+
+/* Invitaciones y «Más del evento» a la altura de O-I (42 carriers). */
+.buscador.compacto { min-width: 0; max-width: 360px; margin: 6px 0 8px; }
+.buscador.compacto input { padding: 6px 0; font-size: 13px; }
+.tabla-compacta th, .tabla-compacta td { padding: 6px 8px; font-size: 13px; }
+.tabla-compacta td .pill { margin: 0 4px 0 0; }
+.tabla-compacta tr.detenida td { color: var(--muted); }
+.tabla-compacta .celda-accion { text-align: right; white-space: nowrap; }
+.tabla-compacta .celda-accion .btn-texto { padding: 0; font-size: 12.5px; }
+.tabla-compacta .fila-texto td { background: var(--subtle); font-size: 13px; }
+.tabla-compacta .fila-texto p { margin: 4px 0; }
+.mas-del-evento { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 18px; font-size: 12.5px; }
+.chip-liga { display: inline-flex; align-items: center; gap: 5px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px; color: var(--ink); }
+.chip-liga svg { color: var(--orange); }
+.chip-liga:hover { border-color: var(--grey); text-decoration: none; }
+@media (max-width: 860px) {
+  .tabla-compacta th:nth-child(2), .tabla-compacta td:nth-child(2) { display: none; }
+}

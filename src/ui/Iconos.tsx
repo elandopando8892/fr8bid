@@ -87,3 +87,6 @@ export const Externo = (p: Props) => <Icono {...p}><path d="M14 4.5h5.5V10M19.5 
 export const Lupa = (p: Props) => <Icono {...p}><circle cx={10.5} cy={10.5} r={6.5} /><path d="m15.5 15.5 5 5" /></Icono>;
 export const Mas = (p: Props) => <Icono {...p}><path d="M12 4.5v15M4.5 12h15" /></Icono>;
 export const Salir = (p: Props) => <Icono {...p}><path d="M9.5 20.5H5a.5.5 0 0 1-.5-.5V4a.5.5 0 0 1 .5-.5h4.5M15.5 7.5 20 12l-4.5 4.5M20 12H9.5" /></Icono>;
+export const Lapiz = (p: Props) => <Icono {...p}><path d="M4 20h4.5L19 9.5a1.5 1.5 0 0 0 0-2.1l-2.4-2.4a1.5 1.5 0 0 0-2.1 0L4 15.5zM13 6.5l4.5 4.5" /></Icono>;
+export const Chat = (p: Props) => <Icono {...p}><path d="M4 5.5h16v10H9l-4.5 4v-4H4z" /></Icono>;
+export const Candado = (p: Props) => <Icono {...p}><rect x={5} y={10.5} width={14} height={10} rx={1.5} /><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3M12 14.5v2.5" /></Icono>;

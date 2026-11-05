@@ -466,7 +466,11 @@ export class RatewareSimulado {
           .filter((lv) => lv.rfx_event_id === event.id && lv.invitation_status === "drafted")
           .filter((lv) => !this.mensajes.some((m) => m.rfx_lane_vendor_id === lv.id && m.metadata.notice_type === "rfx_invitation"));
         const omitidos = pendientes.filter((lv) => revisados && !revisados.has(lv.vendor_id));
-        const nuevos = pendientes.filter((lv) => !omitidos.includes(lv)).map((lv) => this.invitacionMensaje(event, lv));
+        // Como rateware-api con O-I: una invitación por carrier, con todas sus
+        // rutas del evento (rfx_lane_vendor_ids), no una por ruta.
+        const porVendor = new Map<string, Fila[]>();
+        for (const lv of pendientes.filter((lv) => !omitidos.includes(lv))) porVendor.set(lv.vendor_id, [...(porVendor.get(lv.vendor_id) || []), lv]);
+        const nuevos = [...porVendor.values()].map((grupo) => this.invitacionMensaje(event, grupo));
         return ok({
           generated: nuevos.length,
           skipped: omitidos.length,
@@ -923,18 +927,19 @@ export class RatewareSimulado {
     };
   }
 
-  private invitacionMensaje(event: Fila, lv: Fila): Fila {
+  private invitacionMensaje(event: Fila, grupo: Fila[]): Fila {
+    const [lv] = grupo;
     const vendor = this.vendors.find((v) => v.id === lv.vendor_id)!;
-    const lane = this.lanes.find((l) => l.id === lv.rfx_lane_id)!;
+    const lanes = grupo.map((x) => this.lanes.find((l) => l.id === x.rfx_lane_id)!);
     const prueba = /PRUEBA CONTROLADA/i.test(event.name) ? "[PRUEBA CONTROLADA] " : "";
-    const ruta = `${lane.origin_city} → ${lane.destination_city}`;
+    const rutas = lanes.map((lane) => `${lane.origin_city} → ${lane.destination_city}`);
     const m = this.filaMensaje(
       event,
       lv,
       vendor,
-      `${prueba}Invitación ${event.rfx_id} · ${ruta}`,
-      `${vendor.vendor_name}: le invitamos a cotizar la ruta ${ruta}, ${lane.equipment}. Plazo ${event.due_date ?? "por definir"}.${prueba ? " Prueba controlada, sin valor comercial." : ""} Liga: https://rateware.vercel.app/rfx-bid.html?token=${lv.invitation_token}`,
-      { notice_type: "rfx_invitation", rfx_lane_vendor_ids: [lv.id] }
+      `${prueba}Invitación ${event.rfx_id} · ${rutas.length === 1 ? rutas[0] : `${rutas.length} rutas`}`,
+      `${vendor.vendor_name}: le invitamos a cotizar ${rutas.length === 1 ? `la ruta ${rutas[0]}, ${lanes[0].equipment}` : `${rutas.length} rutas: ${rutas.join("; ")}`}. Plazo ${event.due_date ?? "por definir"}.${prueba ? " Prueba controlada, sin valor comercial." : ""} Liga: https://rateware.vercel.app/rfx-bid.html?token=${lv.invitation_token}`,
+      { notice_type: "rfx_invitation", rfx_lane_vendor_ids: grupo.map((x) => x.id) }
     );
     this.mensajes.push(m);
     this.bitacorar("sistema", "outreach.draft", "outreach_messages", m.id, null, "drafted", { notice_type: "rfx_invitation" });

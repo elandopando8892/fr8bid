@@ -257,15 +257,18 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
     paso("evento", 2, rutas.length ? "hecho" : "actual", rutas.length ? `${cuenta(rutas.length, "ruta")}${evento.cierre?.plazoOriginal ? ` · plazo original ${diaCorto(evento.cierre.plazoOriginal)}` : evento.plazo ? ` · plazo ${diaCorto(evento.plazo)}` : ""}` : "Agregar al menos una ruta", "Operador")
   );
   pasos.push(
-    paso("carriers", 3, !rutas.length ? "pendiente" : todas.length ? "hecho" : "actual", todas.length ? cuenta(todas.length, "carrier") : "Elegir carriers", "Operador")
+    paso("carriers", 3, !rutas.length ? "pendiente" : todas.length ? "hecho" : "actual", todas.length ? cuenta(new Set(todas.map((p) => p.carrierId)).size, "carrier") : "Elegir carriers", "Operador")
   );
   // Los carriers sin «Revisado» no se invitan y no detienen el paso; si la
   // revisión no se pudo consultar, nadie cuenta como omitido a propósito.
+  // Las cifras del riel cuentan carriers, no participaciones (carrier × ruta):
+  // una invitación por carrier, aunque tenga ocho rutas.
+  const carriers = (ps: { carrierId: string }[]) => new Set(ps.map((p) => p.carrierId)).size;
   const { aptas, omitidas } = audienciaInvitacion(detalle);
-  const porInvitar = detalle.revisiones ? aptas.length : preseleccionadas.length;
-  const invitadas = todas.length - preseleccionadas.length;
+  const porInvitar = detalle.revisiones ? carriers(aptas) : carriers(preseleccionadas);
+  const invitadas = carriers(todas.filter((p) => p.estado !== "preseleccionada"));
   const invitacionHecha = invitadas > 0 && porInvitar === 0 && evento.estado !== "borrador";
-  const sinRevision = detalle.revisiones && omitidas.length ? ` · ${omitidas.length} sin revisión (no se invitan)` : "";
+  const sinRevision = detalle.revisiones && omitidas.length ? ` · ${carriers(omitidas.map((o) => o.p))} sin revisión (no se invitan)` : "";
   pasos.push(
     paso(
       "invitacion",

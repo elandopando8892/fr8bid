@@ -28,6 +28,7 @@ import type { CarrierFit } from "../dominio/carrierFit";
 import type { Telefono } from "../dominio/telefonos";
 import type { ContactosCarrier } from "../dominio/contactos";
 import type { CorreoRevelado, PersonaApollo } from "../dominio/apollo";
+import * as I from "./Iconos";
 import { NOMBRE_FAMILIA, type HistorialSegmento } from "../dominio/segmento";
 import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
 import type { Aviso, Detalle, EntregaLocal, Participacion, Recibo, Ruta } from "../dominio/tipos";
@@ -223,24 +224,23 @@ export function Mesa({ id }: { id: string }) {
 
 // Las pantallas de Bidware del mismo evento, mientras se integran a la Mesa.
 function MasDelEvento({ id, borrador }: { id: string; borrador: boolean }) {
-  const ligas: [string, string][] = [
-    ...(borrador ? ([[`/rfx/new/${id}`, "Editar el borrador"]] as [string, string][]) : []),
-    [`/rfx/${id}/review`, "Revisión de contactos"],
-    [`/rfx/${id}/message`, "Mensaje a carriers"],
-    [`/rfx/${id}/delivery`, "Cola de envío"],
-    [`/rfx/${id}/chat`, "Chat del Bid Room"],
-    [`/rfx/${id}/detalle`, "Detalle completo"]
+  const ligas: { a: string; t: string; icono: (p: { size?: number }) => JSX.Element }[] = [
+    ...(borrador ? [{ a: `/rfx/new/${id}`, t: "Editar el borrador", icono: I.Lapiz }] : []),
+    { a: `/rfx/${id}/review`, t: "Revisión de contactos", icono: I.Lista },
+    { a: `/rfx/${id}/message`, t: "Mensaje a carriers", icono: I.Sobre },
+    { a: `/rfx/${id}/delivery`, t: "Cola de envío", icono: I.Bandeja },
+    { a: `/rfx/${id}/chat`, t: "Chat del Bid Room", icono: I.Chat },
+    { a: `/rfx/${id}/detalle`, t: "Detalle completo", icono: I.Libro }
   ];
   return (
-    <p className="mas-del-evento tenue">
-      Más del evento:{" "}
-      {ligas.map(([a, t], i) => (
-        <span key={a}>
-          {i > 0 && " · "}
-          <Liga a={a}>{t}</Liga>
-        </span>
+    <nav className="mas-del-evento" aria-label="Más del evento">
+      <span className="tenue">Más del evento</span>
+      {ligas.map(({ a, t, icono: Ic }) => (
+        <Liga key={a} a={a} className="chip-liga">
+          <Ic size={14} /> {t}
+        </Liga>
       ))}
-    </p>
+    </nav>
   );
 }
 
@@ -443,39 +443,14 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
           <button className="btn-texto" onClick={() => setVerEnviadas(!verEnviadas)}>{verEnviadas ? "Ocultar" : "Ver a quién"}</button>
         </p>
       )}
-      {verEnviadas && (
-        <ul className="lista-compacta">
-          {enviadas.map((a) => (
-            <li key={a.id}>
-              <b>{carrierDe(a)?.carrier}</b> · {a.destinatario} · <span className="tenue">{a.estado === "por_verificar" ? "aprobación no verificada" : ESTADO_INVITACION[a.estado] ?? a.estado}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      {verEnviadas && <TablaInvitaciones d={d} avisos={enviadas} carrierDe={carrierDe} />}
       {enviables.length > 0 && (
         <div className="aviso-caja">
-          <p><b>{plural(enviables.length, "invitación por enviar", "invitaciones por enviar")}</b> · Gmail desde sales@heymarksman.com</p>
-          <ul className="lista-compacta">
-            {enviables.map((a) => {
-              const p = carrierDe(a);
-              return (
-                <li key={a.id}>
-                  <b>{p?.carrier}</b> · {a.destinatario} · <span className="tenue">{a.estado === "por_verificar" ? "aprobación no verificada" : ESTADO_INVITACION[a.estado] ?? a.estado}</span>
-                  {a.estado === "en_cola" && <span className="tenue"> ({a.motivo && /dailyLimit|daily_cap|quota/i.test(a.motivo) ? "cuota diaria de Gmail" : a.motivo || "todavía no sale"})</span>}
-                  {p && !revisada(a) && <span className="pill">{MOTIVO_OMISION[estadoRevision(d, p.carrierId) as keyof typeof MOTIVO_OMISION]}</span>}
-                </li>
-              );
-            })}
-          </ul>
-          <button className="btn-texto" onClick={() => setVerTextos(!verTextos)}>{verTextos ? "Ocultar textos" : enviables.length > 1 ? "Ver los textos exactos" : "Ver el texto exacto"}</button>
-          {verTextos &&
-            enviables.map((a) => (
-              <div key={a.id} className="aviso-caja">
-                <p className="tenue">Para: {carrierDe(a)?.carrier} · {a.destinatario}</p>
-                <p><b>{a.asunto}</b></p>
-                <p className="texto-aviso">{a.cuerpo}</p>
-              </div>
-            ))}
+          <div className="fila">
+            <p><b>{plural(enviables.length, "invitación por enviar", "invitaciones por enviar")}</b> · Gmail desde sales@heymarksman.com</p>
+            <button className="btn-texto" onClick={() => setVerTextos(!verTextos)}>{verTextos ? "Ocultar textos" : enviables.length > 1 ? "Ver los textos exactos" : "Ver el texto exacto"}</button>
+          </div>
+          <TablaInvitaciones d={d} avisos={enviables} carrierDe={carrierDe} textos={verTextos} revisada={revisada} />
         </div>
       )}
       {detenidas.length > 0 && (
@@ -513,13 +488,83 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
         <div className="aviso-caja">
           <p>¿La invitación ya salió por otro canal (correo propio, WhatsApp, llamada)? Márcalos como invitados para poder capturar sus ofertas. Solo aparecen los carriers revisados.</p>
           <Confirmar
-            etiqueta={`Marcar ${plural(audiencia.aptas.length, "carrier", "carriers")} como invitados sin enviar`}
+            etiqueta={`Marcar ${plural(new Set(audiencia.aptas.map((x) => x.carrierId)).size, "carrier", "carriers")} como invitados sin enviar`}
             clase="btn-secundario"
-            advertencia={<>Solo cambia el estado en Rateware: {audiencia.aptas.map((x) => x.carrier).join(", ")}. Fr8Bid no envía nada. {ADVERTENCIA_REAL(s, d)}</>}
+            advertencia={<>Solo cambia el estado en Rateware: {[...new Set(audiencia.aptas.map((x) => x.carrier))].join(", ")}. Fr8Bid no envía nada. {ADVERTENCIA_REAL(s, d)}</>}
             onConfirmar={() => accion(() => s.api.marcarInvitadas(d.evento.id, audiencia.aptas.map((x) => x.id)), "Marcados como invitados.")}
           />
         </div>
       )}
+    </div>
+  );
+}
+
+
+// Invitaciones como tabla compacta con buscador: en O-I son 42 carriers, y una
+// lista de viñetas no se puede recorrer. El texto exacto se abre por fila.
+function TablaInvitaciones({ d, avisos, carrierDe, textos = false, revisada }: { d: Detalle; avisos: Aviso[]; carrierDe: (a: Aviso) => Participacion | undefined; textos?: boolean; revisada?: (a: Aviso) => boolean }) {
+  const [busca, setBusca] = useState("");
+  const [abierto, setAbierto] = useState<string | null>(null);
+  const q = busca.trim().toLowerCase();
+  const filas = avisos
+    .map((a) => ({ a, p: carrierDe(a) }))
+    .filter(({ a, p }) => !q || [p?.carrier, a.destinatario].some((x) => (x || "").toLowerCase().includes(q)))
+    .sort((x, y) => (x.p?.carrier || "").localeCompare(y.p?.carrier || ""));
+  const tono = (e: string) => (e === "aceptado" ? "ok" : e === "rebotado" || e === "fallido" ? "err" : e === "en_cola" || e === "incierto" || e === "por_verificar" ? "warn" : "");
+  const estadoDe = (a: Aviso) => (a.estado === "por_verificar" ? "aprobación no verificada" : ESTADO_INVITACION[a.estado] ?? a.estado);
+  return (
+    <div className="tabla-invitaciones">
+      {avisos.length > 6 && (
+        <label className="buscador compacto">
+          <I.Lupa size={14} />
+          <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar carrier o correo…" aria-label="Buscar invitaciones" />
+        </label>
+      )}
+      {q && <p className="tenue">{plural(filas.length, "coincidencia")} de {avisos.length}.</p>}
+      <div className="tabla-envoltura">
+        <table className="tabla tabla-compacta">
+          <thead>
+            <tr>
+              <th>Carrier</th>
+              <th>Correo</th>
+              {d.rutas.length > 1 && <th>Rutas</th>}
+              <th>Estado</th>
+              <th aria-label="Texto" />
+            </tr>
+          </thead>
+          <tbody>
+            {filas.map(({ a, p }) => {
+              const omision = p && revisada && !revisada(a) ? MOTIVO_OMISION[estadoRevision(d, p.carrierId) as keyof typeof MOTIVO_OMISION] : null;
+              const verTexto = textos || abierto === a.id;
+              return (
+                <Fragment key={a.id}>
+                  <tr className={omision ? "detenida" : ""}>
+                    <td><b>{p?.carrier ?? "—"}</b></td>
+                    <td className="mono tenue">{a.destinatario}</td>
+                    {d.rutas.length > 1 && <td className="tenue">{a.participaciones.length} de {d.rutas.length}</td>}
+                    <td>
+                      <span className={`pill ${tono(a.estado)}`}>{estadoDe(a)}</span>
+                      {a.estado === "en_cola" && <span className="tenue"> {a.motivo && /dailyLimit|daily_cap|quota/i.test(a.motivo) ? "cuota diaria de Gmail" : a.motivo || "todavía no sale"}</span>}
+                      {omision && <span className="pill warn">{omision}</span>}
+                    </td>
+                    <td className="celda-accion">
+                      {!textos && <button className="btn-texto" aria-expanded={verTexto} onClick={() => setAbierto(verTexto ? null : a.id)}>{verTexto ? "Ocultar" : "Texto"}</button>}
+                    </td>
+                  </tr>
+                  {verTexto && (
+                    <tr className="fila-texto">
+                      <td colSpan={d.rutas.length > 1 ? 5 : 4}>
+                        <p><b>{a.asunto}</b></p>
+                        <p className="texto-aviso">{a.cuerpo}</p>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

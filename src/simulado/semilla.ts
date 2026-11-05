@@ -71,3 +71,33 @@ export async function sembrarDemo(base = crearSimulado()) {
   await liga(c)({ action: "save_segment_confirmations", confirmations: [{ segment_key: "general", rubric_key: "carrier_requirements", answer: "disagree" }] });
   return { sim, carriers, eventId: event.id as string, participaciones: { A: a, B: b, C: c } };
 }
+
+// Para la vista local: además del evento de D5, un segundo evento en borrador
+// con varias rutas y una docena de carriers, como O-I, para ver Hoy, Eventos
+// y la invitación con volumen real. Las pruebas usan solo sembrarDemo().
+export async function sembrarDemoAmplia() {
+  const demo = await sembrarDemo();
+  const { sim } = demo;
+  const como = (clave: string) => (body: Record<string, unknown>) => sim.llamar("rateware-api", body, `Bearer sim:${clave}`).then((r) => r.body);
+  const op = como("operador");
+  const nombres = ["Transportes del Norte", "Fletes Monterrey", "Cargo Express Laredo", "Logística Bajío", "Autotransportes Saltillo", "Trailers del Golfo", "Mexus Freight", "Frontera Cargo", "Ruta 57 Transportes", "Dry Van Services", "Intermodal Noreste", "Fletes Industriales"];
+  const vendors = nombres.map((n) => sim.agregarVendor(ORG, n));
+  const { row: event } = await op({ action: "create_rfx_event", name: "Vidrio Industrial · 4 rutas", customer: "Vidrio Industrial", due_date: "2026-11-20", rfx_id: "RFX-0002-VIDR" });
+  const rutas = [
+    ["Monterrey", "NL", "Albany", "GA", 2900],
+    ["Tultitlán", "MX", "Houston", "TX", 2100],
+    ["Tultitlán", "MX", "Trenton", "OH", 3400],
+    ["Tultitlán", "MX", "Windsor", "CO", 3600]
+  ] as const;
+  const { rows: lanes } = await op({
+    action: "import_rfx_lanes",
+    event_id: event.id,
+    rows: rutas.map(([oc, os, dc, ds, t]) => ({ origin_city: oc, origin_state: os, origin_country: "MX", destination_city: dc, destination_state: ds, destination_country: "US", equipment: "Dry Van", weekly_volume: 2, target_rate: t, currency: "USD" }))
+  });
+  for (const l of lanes) await op({ action: "shortlist_rfx_lane_vendors", lane_id: l.id, vendor_ids: vendors.map((v) => v.id) });
+  // Diez revisados con borrador preparado; dos sin revisar, para ver la omisión.
+  const revisados = vendors.slice(0, 10);
+  for (const v of revisados) sim.revisar(event.id, v.id);
+  await op({ action: "generate_outreach_drafts", event_id: event.id, reviewed_vendor_ids: revisados.map((v) => v.id) });
+  return demo;
+}
