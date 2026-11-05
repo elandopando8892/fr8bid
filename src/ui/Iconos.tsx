@@ -90,3 +90,11 @@ export const Salir = (p: Props) => <Icono {...p}><path d="M9.5 20.5H5a.5.5 0 0 1
 export const Lapiz = (p: Props) => <Icono {...p}><path d="M4 20h4.5L19 9.5a1.5 1.5 0 0 0 0-2.1l-2.4-2.4a1.5 1.5 0 0 0-2.1 0L4 15.5zM13 6.5l4.5 4.5" /></Icono>;
 export const Chat = (p: Props) => <Icono {...p}><path d="M4 5.5h16v10H9l-4.5 4v-4H4z" /></Icono>;
 export const Candado = (p: Props) => <Icono {...p}><rect x={5} y={10.5} width={14} height={10} rx={1.5} /><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3M12 14.5v2.5" /></Icono>;
+export const Enviar = (p: Props) => <Icono {...p}><path d="M20.5 3.5 3.5 10.5l7 3 3 7zM20.5 3.5l-10 10" /></Icono>;
+export const Check = (p: Props) => <Icono {...p}><path d="m4.5 12.5 5 5 10-11" /></Icono>;
+export const Ojo = (p: Props) => <Icono {...p}><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx={12} cy={12} r={3} /></Icono>;
+export const Alerta = (p: Props) => <Icono {...p}><path d="M12 3.5 2.5 20h19zM12 10v4.5M12 17.5h.01" /></Icono>;
+export const Megafono = (p: Props) => <Icono {...p}><path d="M3.5 10v4h3l8 4.5v-13l-8 4.5zM6.5 14l1.5 5.5h2.5L9.5 15M18 9a4 4 0 0 1 0 6" /></Icono>;
+export const Usuarios = (p: Props) => <Icono {...p}><circle cx={9} cy={8.5} r={3.5} /><path d="M2.5 19.5c.8-3.2 3.4-5 6.5-5s5.7 1.8 6.5 5M16 5.2a3.5 3.5 0 0 1 0 6.6M18 14.8c1.7.7 3 2.4 3.5 4.7" /></Icono>;
+export const Reloj = (p: Props) => <Icono {...p}><circle cx={12} cy={12} r={8.5} /><path d="M12 7.5V12l3 2" /></Icono>;
+export const Mano = (p: Props) => <Icono {...p}><path d="M8 11V5.5a1.5 1.5 0 0 1 3 0V11M11 10V4.5a1.5 1.5 0 0 1 3 0V11M14 10.5V6a1.5 1.5 0 0 1 3 0v8a6.5 6.5 0 0 1-6.5 6.5h-.6a6 6 0 0 1-4.6-2.2L3 15.3a1.5 1.5 0 0 1 2.3-1.9L8 16.5V8a1.5 1.5 0 0 1 3 0" /></Icono>;

@@ -85,7 +85,7 @@ export function Hoy() {
 
           {resto.length > 0 && (
             <div className="tarjeta">
-              <h3>También te toca</h3>
+              <h3 className="fila-icono"><I.Mano size={16} />También te toca</h3>
               {resto.slice(0, 8).map((e) => (
                 <Liga key={e.id} a={`/eventos/${e.id}`} className="pendiente">
                   <span className="crece">
@@ -104,10 +104,10 @@ export function Hoy() {
             </div>
           )}
 
+          {enCarriers.length > 0 && (
           <div className="tarjeta">
-            <h3>Esperando a los carriers</h3>
-            {enCarriers.length ? (
-              enCarriers.slice(0, 8).map((e) => (
+            <h3 className="fila-icono"><I.Reloj size={16} />Esperando a los carriers</h3>
+            {enCarriers.slice(0, 8).map((e) => (
                 <Liga key={e.id} a={`/eventos/${e.id}`} className="pendiente">
                   <span className="crece">
                     <b>{nombreEvento(e)}</b>
@@ -115,11 +115,9 @@ export function Hoy() {
                   </span>
                   <span className="mono tenue pendiente-dato">{e.ofertas}/{e.participaciones} ofertas · plazo {fecha(e.plazo)}</span>
                 </Liga>
-              ))
-            ) : (
-              <p className="tenue">Ningún evento está abierto a ofertas.</p>
-            )}
+              ))}
           </div>
+          )}
 
           <div className="atajos">
             {puedeCrear && (

@@ -292,9 +292,11 @@ export function Confirmar({
   advertencia,
   onConfirmar,
   deshabilitado,
-  clase = "btn-primario"
+  clase = "btn-primario",
+  icono
 }: {
   etiqueta: string;
+  icono?: ReactNode;
   advertencia: ReactNode;
   onConfirmar: () => Promise<void> | void;
   deshabilitado?: boolean;
@@ -305,6 +307,7 @@ export function Confirmar({
   if (paso === "inicio")
     return (
       <button className={clase} disabled={deshabilitado} onClick={() => setPaso("confirmar")}>
+        {icono}
         {etiqueta}
       </button>
     );

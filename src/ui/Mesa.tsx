@@ -197,17 +197,17 @@ export function Mesa({ id }: { id: string }) {
         <div className="centro">
           <div className={`siguiente ${r.siguiente.teToca ? "te-toca" : ""}`}>
             {r.actual ? (
-              <span>
-                Siguiente: <b>{r.siguiente.accion}</b> · {r.siguiente.teToca ? "te toca a ti" : `le toca ${r.siguiente.quien === "Carriers" ? "a los carriers" : r.siguiente.quien === "Sistema" ? "a Loads" : `al ${r.siguiente.quien}`}`}
+              <span className="fila-icono">
+                {r.siguiente.teToca ? <I.Mano size={16} /> : <I.Reloj size={16} />}
+                <span>Siguiente: <b>{r.siguiente.accion}</b> · {r.siguiente.teToca ? "te toca a ti" : `le toca ${r.siguiente.quien === "Carriers" ? "a los carriers" : r.siguiente.quien === "Sistema" ? "a Loads" : `al ${r.siguiente.quien}`}`}</span>
               </span>
             ) : (
-              <span>✓ Recorrido completo</span>
+              <span className="fila-icono"><I.Check size={16} />Recorrido completo</span>
             )}
-            {actual !== etapaActual && r.actual && <button className="btn-texto" onClick={() => setVista(null)}>Ir al paso actual →</button>}
+            {actual !== etapaActual && r.actual && <button className="btn-texto con-icono" onClick={() => setVista(null)}>Ir al paso actual<I.Flecha size={14} /></button>}
           </div>
           {verInvitacion && <PanelInvitacion {...p} />}
-          {verInvitacion && <PanelCarrierFit {...p} />}
-          {verInvitacion && <PanelHistorialSegmento {...p} />}
+          {verInvitacion && <MasCarriers {...p} />}
           {actual === "evento" && <PanelEvento {...p} />}
           {actual === "ofertas" && d.evento.estado === "abierto" && <PanelSeguimiento d={d} ctx={ctx} accion={accion} />}
           {actual === "ofertas" && <PanelComparar {...p} />}
@@ -372,19 +372,49 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
   const tandas = planearTandas(porEnviar).length;
   const [verEnviadas, setVerEnviadas] = useState(false);
   const [verTextos, setVerTextos] = useState(false);
+  const [otroCanal, setOtroCanal] = useState(false);
   // Lo ya enviado se resume en una línea; el texto completo solo importa en lo
   // que falta aprobar (un texto de muestra y los demás a pedido).
   const enviadas = invitaciones.filter((a) => !enviables.includes(a));
   const porEstado = [...new Set(enviadas.map((a) => a.estado))].map((e) => `${enviadas.filter((a) => a.estado === e).length} ${ESTADO_ENVIADAS[e] ?? e}`).join(", ");
+  const ENVIAR = (
+    <>
+      {porEnviar.length > 0 && ctx.rol === "admin" && (
+        <Confirmar
+          etiqueta={`Aprobar y enviar ${plural(porEnviar.length, "invitación", "invitaciones")}`}
+          icono={<I.Enviar size={15} />}
+          advertencia={
+            <>
+              Se envían por Gmail desde sales@heymarksman.com, exactamente con el texto de «Ver textos»
+              {tandas > 1 ? `, en ${tandas} tandas de hasta ${TAMANO_TANDA} con un minuto entre tandas` : ""}. Si Gmail llega a su cuota diaria, el envío se detiene y lo pendiente queda en cola, sin reintentos automáticos. {ADVERTENCIA_REAL(s, d)}
+            </>
+          }
+          onConfirmar={() =>
+            accion(
+              async () => {
+                const r = await s.api.enviarPorTandas(d.evento.id, porEnviar, { alAvanzar: setAvance });
+                setAvance(r);
+                if (r.detenido) throw new Error(`${r.enviados} de ${porEnviar.length} aceptadas por Gmail. ${r.detenido}`);
+                return r;
+              },
+              (r) => `${plural(r.enviados, "invitación aceptada", "invitaciones aceptadas")} por Gmail.`
+            )
+          }
+        />
+      )}
+    </>
+  );
   return (
     <div className="tarjeta">
       <h2>Invitación</h2>
       {d.evento.estado === "borrador" && ctx.rol === "admin" && (
-        <div className="aviso-caja">
-          <p>El evento sigue en borrador: los carriers no pueden ofertar hasta publicarlo.</p>
+        <div className="linea-accion">
+          <span className="linea-icono"><I.Candado size={16} /></span>
+          <p>En borrador: los carriers no pueden ofertar hasta publicarlo.</p>
           <Confirmar
-            etiqueta="Publicar evento"
+            etiqueta="Publicar"
             clase="btn-secundario"
+            icono={<I.Megafono size={15} />}
             advertencia={<>Abre el evento a ofertas hasta el {fecha(d.evento.plazo)}. No envía nada. {ADVERTENCIA_REAL(s, d)}</>}
             onConfirmar={() => accion(() => s.api.publicar(d.evento.id), "Evento publicado.")}
           />
@@ -394,20 +424,24 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
         <p className="estado estado-error">No se pudo consultar qué carriers están revisados. No se prepara ni envía ninguna invitación hasta poder consultarlo.</p>
       )}
       {audiencia.omitidas.length > 0 && d.revisiones && (
-        <div className="aviso-caja">
-          <p>
-            <b>{resumenOmisiones(audiencia)}</b> Revisa su contacto y márcalos «Revisado» si deben recibirla.
-            {s.modo === "rateware" && <> <Liga a={`/rfx/${d.evento.id}/review`}>Revisar contactos →</Liga></>}
+        <div className="aviso-caja atencion">
+          <p className="fila-icono">
+            <I.Alerta size={16} />
+            <span>
+              <b>{resumenOmisiones(audiencia)}</b> Márcalos «Revisado» si deben recibirla.
+              {s.modo === "rateware" && <> <Liga a={`/rfx/${d.evento.id}/review`}>Revisar contactos</Liga></>}
+            </span>
           </p>
-          <ul>
+          <ul className="lista-limpia">
             {[...new Map(audiencia.omitidas.map((o) => [o.p.carrierId, o])).values()].map((o) => (
               <li key={o.p.carrierId}>
-                {o.p.carrier}: {o.motivo} · {o.p.correo || "sin correo en Rateware"}
+                <b>{o.p.carrier}</b> <span className="tenue">{o.motivo} · {o.p.correo || "sin correo en Rateware"}</span>
                 {!o.p.correo && ctx.rol !== "viewer" && <ContactosSugeridos vendorId={o.p.carrierId} />}
                 {ctx.rol === "admin" && o.estado === "sin_revision" && o.p.correo && (
                   <Confirmar
-                    etiqueta="Marcar «Revisado»"
-                    clase="btn-texto"
+                    etiqueta="Revisado"
+                    clase="btn-chico"
+                    icono={<I.Check size={14} />}
                     advertencia={<>Confirmas que revisaste el contacto de {o.p.carrier} ({o.p.correo}) y que puede recibir la invitación. Queda registrado en Rateware, igual que en Revisión de contactos. No envía nada. {ADVERTENCIA_REAL(s, d)}</>}
                     onConfirmar={() => accion(() => s.api.marcarRevisado(d.evento.id, o.p), `${o.p.carrier} marcado «Revisado».`)}
                   />
@@ -445,14 +479,16 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
       )}
       {verEnviadas && <TablaInvitaciones d={d} avisos={enviadas} carrierDe={carrierDe} />}
       {enviables.length > 0 && (
-        <div className="aviso-caja">
+        <div className="bloque-envio">
           <div className="fila">
-            <p><b>{plural(enviables.length, "invitación por enviar", "invitaciones por enviar")}</b> · Gmail desde sales@heymarksman.com</p>
-            <button className="btn-texto" onClick={() => setVerTextos(!verTextos)}>{verTextos ? "Ocultar textos" : enviables.length > 1 ? "Ver los textos exactos" : "Ver el texto exacto"}</button>
+            <p className="fila-icono"><I.Sobre size={16} /><span><b>{plural(enviables.length, "invitación por enviar", "invitaciones por enviar")}</b> <span className="tenue">· Gmail desde sales@heymarksman.com</span></span></p>
+            <button className="btn-texto con-icono" onClick={() => setVerTextos(!verTextos)}><I.Ojo size={15} />{verTextos ? "Ocultar textos" : enviables.length > 1 ? "Ver textos" : "Ver texto"}</button>
           </div>
+          {ENVIAR}
           <TablaInvitaciones d={d} avisos={enviables} carrierDe={carrierDe} textos={verTextos} revisada={revisada} />
         </div>
       )}
+      {enviables.length === 0 && ENVIAR}
       {detenidas.length > 0 && (
         <p className="tenue">{plural(detenidas.length, "borrador", "borradores")} no se envían porque su carrier no tiene «Revisado» vigente.</p>
       )}
@@ -462,31 +498,12 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
           {avance.inciertos ? `, ${avance.inciertos} incierta(s)` : ""}. {avance.detenido ?? ""}
         </p>
       )}
-      {porEnviar.length > 0 && ctx.rol === "admin" && (
-        <Confirmar
-          etiqueta={`Aprobar y enviar ${plural(porEnviar.length, "invitación", "invitaciones")}`}
-          advertencia={
-            <>
-              Se envían por Gmail desde sales@heymarksman.com, exactamente con el texto de «Ver los textos exactos»
-              {tandas > 1 ? `, en ${tandas} tandas de hasta ${TAMANO_TANDA} con un minuto entre tandas` : ""}. Si Gmail llega a su cuota diaria, el envío se detiene y lo pendiente queda en cola, sin reintentos automáticos. {ADVERTENCIA_REAL(s, d)}
-            </>
-          }
-          onConfirmar={() =>
-            accion(
-              async () => {
-                const r = await s.api.enviarPorTandas(d.evento.id, porEnviar, { alAvanzar: setAvance });
-                setAvance(r);
-                if (r.detenido) throw new Error(`${r.enviados} de ${porEnviar.length} aceptadas por Gmail. ${r.detenido}`);
-                return r;
-              },
-              (r) => `${plural(r.enviados, "invitación aceptada", "invitaciones aceptadas")} por Gmail.`
-            )
-          }
-        />
-      )}
       {audiencia.aptas.length > 0 && ctx.rol === "admin" && (
+        !otroCanal ? (
+          <p className="pie-panel"><button className="btn-texto con-icono" onClick={() => setOtroCanal(true)}><I.Chat size={15} />¿Ya los invitaste por otro canal?</button></p>
+        ) : (
         <div className="aviso-caja">
-          <p>¿La invitación ya salió por otro canal (correo propio, WhatsApp, llamada)? Márcalos como invitados para poder capturar sus ofertas. Solo aparecen los carriers revisados.</p>
+          <p>Márcalos como invitados (correo propio, WhatsApp, llamada) para capturar sus ofertas. Solo carriers revisados.</p>
           <Confirmar
             etiqueta={`Marcar ${plural(new Set(audiencia.aptas.map((x) => x.carrierId)).size, "carrier", "carriers")} como invitados sin enviar`}
             clase="btn-secundario"
@@ -494,6 +511,7 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
             onConfirmar={() => accion(() => s.api.marcarInvitadas(d.evento.id, audiencia.aptas.map((x) => x.id)), "Marcados como invitados.")}
           />
         </div>
+        )
       )}
     </div>
   );
@@ -512,6 +530,9 @@ function TablaInvitaciones({ d, avisos, carrierDe, textos = false, revisada }: {
     .sort((x, y) => (x.p?.carrier || "").localeCompare(y.p?.carrier || ""));
   const tono = (e: string) => (e === "aceptado" ? "ok" : e === "rebotado" || e === "fallido" ? "err" : e === "en_cola" || e === "incierto" || e === "por_verificar" ? "warn" : "");
   const estadoDe = (a: Aviso) => (a.estado === "por_verificar" ? "aprobación no verificada" : ESTADO_INVITACION[a.estado] ?? a.estado);
+  // La columna de rutas solo dice algo cuando no todos cubren todas las rutas.
+  const verRutas = d.rutas.length > 1 && avisos.some((a) => a.participaciones.length !== d.rutas.length);
+  const columnas = verRutas ? 5 : 4;
   return (
     <div className="tabla-invitaciones">
       {avisos.length > 6 && (
@@ -527,7 +548,7 @@ function TablaInvitaciones({ d, avisos, carrierDe, textos = false, revisada }: {
             <tr>
               <th>Carrier</th>
               <th>Correo</th>
-              {d.rutas.length > 1 && <th>Rutas</th>}
+              {verRutas && <th>Rutas</th>}
               <th>Estado</th>
               <th aria-label="Texto" />
             </tr>
@@ -540,20 +561,20 @@ function TablaInvitaciones({ d, avisos, carrierDe, textos = false, revisada }: {
                 <Fragment key={a.id}>
                   <tr className={omision ? "detenida" : ""}>
                     <td><b>{p?.carrier ?? "—"}</b></td>
-                    <td className="mono tenue">{a.destinatario}</td>
-                    {d.rutas.length > 1 && <td className="tenue">{a.participaciones.length} de {d.rutas.length}</td>}
+                    <td className="tenue">{a.destinatario}</td>
+                    {verRutas && <td className="tenue">{a.participaciones.length} de {d.rutas.length}</td>}
                     <td>
                       <span className={`pill ${tono(a.estado)}`}>{estadoDe(a)}</span>
                       {a.estado === "en_cola" && <span className="tenue"> {a.motivo && /dailyLimit|daily_cap|quota/i.test(a.motivo) ? "cuota diaria de Gmail" : a.motivo || "todavía no sale"}</span>}
                       {omision && <span className="pill warn">{omision}</span>}
                     </td>
                     <td className="celda-accion">
-                      {!textos && <button className="btn-texto" aria-expanded={verTexto} onClick={() => setAbierto(verTexto ? null : a.id)}>{verTexto ? "Ocultar" : "Texto"}</button>}
+                      {!textos && <button className="btn-icono" aria-expanded={verTexto} aria-label={verTexto ? "Ocultar texto" : "Ver texto"} title={verTexto ? "Ocultar texto" : "Ver texto"} onClick={() => setAbierto(verTexto ? null : a.id)}><I.Ojo size={16} /></button>}
                     </td>
                   </tr>
                   {verTexto && (
                     <tr className="fila-texto">
-                      <td colSpan={d.rutas.length > 1 ? 5 : 4}>
+                      <td colSpan={columnas}>
                         <p><b>{a.asunto}</b></p>
                         <p className="texto-aviso">{a.cuerpo}</p>
                       </td>
@@ -586,7 +607,27 @@ function SumarAlEvento({ d, ctx, accion, vendorId, nombre }: { d: Detalle; ctx: 
   );
 }
 
-function PanelCarrierFit({ d, ctx, accion }: Props) {
+// Carrier fit y Historial del segmento en una sola tarjeta: dos botones, y
+// cada uno consulta a Rateware al abrirlo (un clic en vez de dos).
+function MasCarriers(p: Props) {
+  const [abierto, setAbierto] = useState<"fit" | "historial" | null>(null);
+  return (
+    <div className="tarjeta">
+      <div className="fila">
+        <h2 className="fila-icono"><I.Usuarios size={17} />¿Faltan carriers?</h2>
+        <div className="fila-botones sin-margen">
+          <button className={`btn-chico ${abierto === "fit" ? "activo" : ""}`} aria-pressed={abierto === "fit"} onClick={() => setAbierto(abierto === "fit" ? null : "fit")}><I.Mira size={15} />Carrier fit</button>
+          <button className={`btn-chico ${abierto === "historial" ? "activo" : ""}`} aria-pressed={abierto === "historial"} onClick={() => setAbierto(abierto === "historial" ? null : "historial")}><I.Grafica size={15} />Historial del segmento</button>
+        </div>
+      </div>
+      {!abierto && <p className="tenue">Sugeridos por cotizaciones y ofertas anteriores, o por tarifas aprobadas del mismo segmento.</p>}
+      {abierto === "fit" && <PanelCarrierFit {...p} incrustado />}
+      {abierto === "historial" && <PanelHistorialSegmento {...p} incrustado />}
+    </div>
+  );
+}
+
+function PanelCarrierFit({ d, ctx, accion, incrustado }: Props & { incrustado?: boolean }) {
   const s = useSesion();
   type Estado = { tipo: "cargando" } | { tipo: "ok"; datos: CarrierFit } | { tipo: "error"; mensaje: string };
   const [fit, setFit] = useState<Estado | null>(null);
@@ -597,9 +638,11 @@ function PanelCarrierFit({ d, ctx, accion }: Props) {
       (e) => setFit({ tipo: "error", mensaje: e instanceof Error ? e.message : "Error desconocido" })
     );
   };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (incrustado) consultar(); }, []);
   return (
-    <div className="tarjeta">
-      <h2>Carriers sugeridos</h2>
+    <div className={incrustado ? "incrustado" : "tarjeta"}>
+      {!incrustado && <h2>Carriers sugeridos</h2>}
       <p className="tenue">
         Carriers con cotizaciones u ofertas anteriores en estas rutas («Carrier fit» de Rateware).
       </p>
@@ -779,7 +822,7 @@ function BuscarEnApollo({ dominio }: { dominio: string }) {
 // no confirma el equipo y no reemplaza la revisión en Bidware.
 const enEvento = (d: Detalle, vendorId: string) => d.rutas.some((r) => r.participaciones.some((p) => p.carrierId === vendorId));
 
-function PanelHistorialSegmento({ d, ctx, accion }: Props) {
+function PanelHistorialSegmento({ d, ctx, accion, incrustado }: Props & { incrustado?: boolean }) {
   const s = useSesion();
   type Estado = { tipo: "cargando" } | { tipo: "ok"; datos: HistorialSegmento[] } | { tipo: "error"; mensaje: string };
   const [h, setH] = useState<Estado | null>(null);
@@ -790,9 +833,11 @@ function PanelHistorialSegmento({ d, ctx, accion }: Props) {
       (e) => setH({ tipo: "error", mensaje: e instanceof Error ? e.message : "Error desconocido" })
     );
   };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (incrustado) consultar(); }, []);
   return (
-    <div className="tarjeta">
-      <h2>Historial del segmento</h2>
+    <div className={incrustado ? "incrustado" : "tarjeta"}>
+      {!incrustado && <h2>Historial del segmento</h2>}
       <p className="tenue">
         Carriers con tarifas aprobadas de la misma caja, puerta a puerta y con cruce. Es solo tarifa: confirma equipo y contacto antes de invitarlo.
       </p>
