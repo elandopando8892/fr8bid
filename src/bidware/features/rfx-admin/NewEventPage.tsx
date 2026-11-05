@@ -41,6 +41,12 @@ const CURRENCIES = ["USD", "MXN"] as const;
 
 type Screen = "details" | "lanes" | "launch";
 
+/** Nombre propuesto del evento: el mismo título que usa la página del evento. */
+function nombrePropuesto(shipper: string, rutas: number): string {
+  if (!shipper) return "";
+  return rutas > 0 ? `${shipper} · ${rutas} ${rutas === 1 ? "ruta" : "rutas"}` : shipper;
+}
+
 const text = (value: unknown) => String(value ?? "").trim();
 
 const optionOf = (row: Record<string, unknown>): ShipperOption => ({
@@ -91,6 +97,10 @@ export function NewEventPage() {
   const [eventType, setEventType] = useState<string>("rfx");
   // La cédula es opcional: cada rubro se abre a pedido para no llenar la vista.
   const [rubricasAbiertas, setRubricasAbiertas] = useState<string[]>([]);
+  // La cédula (opcional) va plegada bajo los datos; se abre a pedido o si ya tiene algo.
+  const [cedulaAbierta, setCedulaAbierta] = useState(false);
+  // El nombre se propone solo («Shipper · N rutas»); solo se guarda a mano si lo escribes.
+  const [nombreManual, setNombreManual] = useState(false);
   // Visibilidad, segmento, moneda y folio tienen buen valor por omisión: van en
   // una línea que se abre solo si hay que cambiarlos.
   const [masOpciones, setMasOpciones] = useState(false);
@@ -138,6 +148,7 @@ export function NewEventPage() {
     const rows = (detail.data?.lanes ?? []) as LaneWithInvitations[];
     const settings = loadDraftSettings(id);
     setName(text(loaded.name));
+    setNombreManual(Boolean(text(loaded.name)) && text(loaded.name) !== nombrePropuesto(text(loaded.customer), rows.length));
     setEventType(text(loaded.event_type) || "rfx");
     setDueDate(text(loaded.due_date).slice(0, 10));
     setStartDate(text(loaded.operation_start_date).slice(0, 10));
@@ -159,7 +170,8 @@ export function NewEventPage() {
     setHydrated(true);
   }, [id, hydrated, detail.data]);
 
-  const missingDetails = [!shipper && tr("text393"), !name.trim() && tr("text488"), !dueDate && tr("text489")].filter(
+  const nombreFinal = (nombreManual && name.trim()) || nombrePropuesto(shipperName, draftLanes.length);
+  const missingDetails = [!shipper && tr("text393"), !dueDate && tr("text489")].filter(
     Boolean,
   ) as string[];
 
@@ -174,7 +186,7 @@ export function NewEventPage() {
     setNotice(null);
     try {
       const fields: DraftFields = {
-        name: name.trim(),
+        name: nombreFinal,
         customer: shipperName || null,
         customer_id: shipper?.id ?? null,
         rfx_id: rfxId.trim() || undefined,
@@ -285,6 +297,11 @@ export function NewEventPage() {
       );
       setAliasesSaved((n) => n + saving - failed.length - conflicts.length);
       saveDraftSettings(id, { segment, currency, rubrics });
+      if (!nombreManual && res.inserted) {
+        const propuesto = nombrePropuesto(shipperName, draftLanes.length + res.inserted);
+        await updateDraft(id, { name: propuesto }).catch(() => undefined);
+        setName(propuesto);
+      }
       lanes.clear();
       detail.reload();
       const problems = [
@@ -401,11 +418,14 @@ export function NewEventPage() {
               <div className="nev-field">
                 <span>Shipper *</span>
                 <ShipperPicker value={shipper} onChange={setShipper} appearance="card" />
-                <em className="nev-hint">{tr("text523")}</em>
               </div>
               <label className="nev-field">
                 <span>{tr("text524")}</span>
-                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Manzanillo → GDL, MEX & MTY | FTL MX Drayage" />
+                <input
+                  value={nombreManual ? name : ""}
+                  onChange={(e) => { setName(e.target.value); setNombreManual(Boolean(e.target.value.trim())); }}
+                  placeholder={nombrePropuesto(shipperName, draftLanes.length) || "Se propone al elegir el shipper"}
+                />
               </label>
               <div className="nev-field">
                 <span>{tr("text525")}</span>
@@ -425,7 +445,6 @@ export function NewEventPage() {
                     </button>
                   ))}
                 </div>
-                <em className="nev-hint">{EVENT_TYPES.find((t) => t.key === eventType)?.hint}</em>
               </div>
               <div className="nev-pair">
                 <label className="nev-field">
@@ -469,7 +488,6 @@ export function NewEventPage() {
                   </select>
                 </label>
               </div>
-              <em className="nev-hint">{VISIBILITY_MODES.find((m) => m.key === visibility)?.hint}</em>
               <div className="nev-pair">
                 <label className="nev-field">
                   <span>{tr("text530")}</span>
@@ -488,12 +506,15 @@ export function NewEventPage() {
               </div>
                 </>
               )}
-              <em className="nev-hint">
-                {tr("text531")}
-                {draftLanes.length > 0 && ` ${tr("text532")}${draftLanes.length}${tr("text533")}`}
-              </em>
             </section>
 
+            {!cedulaAbierta && !anyRubric ? (
+              <button type="button" className="nev-opciones nev-cedula" onClick={() => setCedulaAbierta(true)}>
+                <I.Mas size={15} />
+                <span>{tr("text780")} <em className="tenue">· {tr("text782").toLowerCase()}</em></span>
+                <em>Agregar</em>
+              </button>
+            ) : (
             <section className="nev-card nev-step2">
               <header>
                 <b>{tr("text780")}</b>
@@ -531,6 +552,7 @@ export function NewEventPage() {
               })}
               {draftLanes.length > 0 && <p className="nev-note">{tr("text542")}{draftLanes.length}{tr("text543")}</p>}
             </section>
+            )}
           </div>
           <footer className="nev-foot">
             {messages}

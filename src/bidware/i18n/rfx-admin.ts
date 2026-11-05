@@ -2107,8 +2107,8 @@ export const copy = {
     "en": "From Shipper CRM. Create it here if missing."
   },
   "text524": {
-    "es": "Nombre del evento *",
-    "en": "Event name *"
+    "es": "Nombre del evento",
+    "en": "Event name"
   },
   "text525": {
     "es": "Tipo de evento *",
