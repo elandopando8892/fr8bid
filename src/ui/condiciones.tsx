@@ -54,7 +54,7 @@ type Fila = { usar: boolean; obligatoria: boolean; objetivo: string; nota: strin
 
 const aTexto = (v: unknown) => (v === null || v === undefined ? "" : typeof v === "boolean" ? (v ? "si" : "no") : String(v));
 
-export function EditorCondiciones({ d, ruta, accion }: { d: Detalle; ruta: Ruta; accion: (f: () => Promise<unknown>, ok?: string) => Promise<void> }) {
+export function EditorCondiciones({ d, ruta, accion, inicialAbierto = false }: { d: Detalle; ruta: Ruta; accion: (f: () => Promise<unknown>, ok?: string) => Promise<void>; inicialAbierto?: boolean }) {
   const s = useSesion();
   const [catalogo, setCatalogo] = useState<EntradaCatalogo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +64,7 @@ export function EditorCondiciones({ d, ruta, accion }: { d: Detalle; ruta: Ruta;
     return m;
   }, [ruta.condiciones]);
   const [filas, setFilas] = useState<Record<string, Fila>>(inicial);
-  const [abierto, setAbierto] = useState(false);
+  const [abierto, setAbierto] = useState(inicialAbierto);
   useEffect(() => setFilas(inicial), [inicial]);
   useEffect(() => {
     if (!abierto || catalogo) return;

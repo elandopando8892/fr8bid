@@ -156,16 +156,10 @@ export function Mesa({ id }: { id: string }) {
           </p>
           {/* Con varias rutas, el título es el shipper; las rutas van en chips. */}
           <h1>{d.rutas.length === 1 ? `${d.rutas[0].origen} → ${d.rutas[0].destino}` : d.rutas.length > 1 ? `${d.evento.shipper} · ${plural(d.rutas.length, "ruta")}` : d.evento.nombre}</h1>
+          {/* Una sola línea: el shipper solo cuando el título no lo dice ya. */}
           <p className="tenue">
-            {[...new Set(d.rutas.map((x) => x.equipo))].join(", ")} · {plural(d.rutas.length, "ruta")} · {d.evento.shipper} · plazo {fecha(d.evento.cierre?.plazoOriginal ?? d.evento.plazo)}
+            {[[...new Set(d.rutas.map((x) => x.equipo))].join(", "), plural(d.rutas.length, "ruta"), d.rutas.length === 1 ? d.evento.shipper : null, `plazo ${fecha(d.evento.cierre?.plazoOriginal ?? d.evento.plazo)}`].filter(Boolean).join(" · ")}
           </p>
-          {d.rutas.length > 1 && (
-            <ul className="chips-rutas" aria-label="Rutas del evento">
-              {d.rutas.map((x) => (
-                <li key={x.id}>{x.origen} → {x.destino}</li>
-              ))}
-            </ul>
-          )}
         </div>
         <div className="etiquetas">
           {d.evento.prueba && <Prueba />}
@@ -184,7 +178,7 @@ export function Mesa({ id }: { id: string }) {
                   <span className="marca-paso">{e.estado === "hecho" ? "✓" : e.n}</span>
                   <span>
                     <b>{e.titulo}</b>
-                    <small>{e.foco.detalle}</small>
+                    {e.estado === "actual" && <small>{e.foco.detalle}</small>}
                     {e.pasos.length > 1 && e.estado === "actual" && (
                       <span className="subpasos">
                         {e.pasos.map((x) => (
@@ -320,23 +314,52 @@ function LigasSimuladas({ d, ruta }: { d: Detalle; ruta?: Ruta }) {
 
 function PanelEvento({ d, ctx, accion }: Props) {
   const editable = ctx.rol !== "viewer" && ["borrador", "abierto"].includes(d.evento.estado);
+  // Una fila por ruta; las condiciones se abren debajo de su fila.
+  const [abierta, setAbierta] = useState<string | null>(null);
   return (
     <div className="tarjeta">
       <h2>Necesidad y evento</h2>
-      <p>
-        {d.evento.nombre} · shipper {d.evento.shipper} ·{" "}
-        {d.evento.cierre ? `cerrado a ofertas el ${fecha(d.evento.cierre.el)} (plazo original ${fecha(d.evento.cierre.plazoOriginal)})` : `plazo ${fecha(d.evento.plazo)}`}
-      </p>
-      {d.rutas.map((r) => (
-        <div key={r.id} className="ruta-evento">
-          <p>
-            Ruta {r.numero}: {r.origen} → {r.destino} · {r.equipo} · {r.volumenSemanal ?? "—"}/sem · objetivo {dinero(r.objetivo, r.moneda)}
-          </p>
-          <ListaCondiciones condiciones={r.condiciones} />
-          {editable && <EditorCondiciones d={d} ruta={r} accion={accion} />}
-        </div>
-      ))}
-      <p className="nota">En la opción (a) la necesidad entra como evento directo en Rateware; el RFI del shipper llega después del MVP.</p>
+      {d.evento.cierre && <p className="tenue">Cerrado a ofertas el {fecha(d.evento.cierre.el)} (plazo original {fecha(d.evento.cierre.plazoOriginal)}).</p>}
+      <div className="tabla-envoltura">
+        <table className="tabla tabla-rutas">
+          <thead>
+            <tr><th>Ruta</th><th>Equipo</th><th>Frecuencia</th><th>Objetivo</th><th>Condiciones</th></tr>
+          </thead>
+          <tbody>
+            {d.rutas.map((r) => {
+              const ver = abierta === r.id;
+              return (
+                <Fragment key={r.id}>
+                  <tr className={ver ? "abierta" : undefined}>
+                    <td><b>{r.origen} → {r.destino}</b></td>
+                    <td>{r.equipo}</td>
+                    <td>{r.volumenSemanal ?? "—"}/sem</td>
+                    <td className="cifra">{dinero(r.objetivo, r.moneda)}</td>
+                    <td>
+                      <span className="fila-icono">
+                        {r.condiciones.length ? <span className="pill info">{plural(r.condiciones.length, "condición", "condiciones")}</span> : <span className="tenue">sin condiciones</span>}
+                        {(editable || r.condiciones.length > 0) && (
+                          <button className="btn-chico" onClick={() => setAbierta(ver ? null : r.id)} aria-expanded={ver}>
+                            {ver ? "Cerrar" : editable ? (r.condiciones.length ? "Editar" : "Elegir") : "Ver"}
+                          </button>
+                        )}
+                      </span>
+                    </td>
+                  </tr>
+                  {ver && (
+                    <tr className="fila-detalle">
+                      <td colSpan={5}>
+                        <ListaCondiciones condiciones={r.condiciones} />
+                        {editable && <EditorCondiciones d={d} ruta={r} accion={accion} inicialAbierto={!r.condiciones.length} />}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

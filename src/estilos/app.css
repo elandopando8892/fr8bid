@@ -289,8 +289,6 @@ a.btn-secundario, a.btn-primario, a.btn-secundario:hover, a.btn-primario:hover {
 .atajo:hover { border-color: var(--grey); text-decoration: none; }
 
 /* Página del evento: con varias rutas, el título es el shipper y las rutas van en chips. */
-.chips-rutas { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 8px 0 0; }
-.chips-rutas li { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 12px; color: var(--grey); }
 
 @media (max-width: 1100px) {
   .fila-evento { grid-template-columns: minmax(0, 1fr) 120px 150px 18px; }
@@ -426,3 +424,10 @@ tr.mejor > td { background: #f6fbf7; }
 /* Hoy sin mayúsculas ni monoespaciada en encabezados y datos (decisión 2). */
 .hoy h3 { font-family: inherit; text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; color: var(--grey); }
 .pendiente-dato.mono { font-family: inherit; }
+
+/* Necesidad y evento: rutas en tabla (5-nov, decisión de Jose) */
+.tabla-rutas td, .tabla-rutas th { white-space: nowrap; }
+.tabla-rutas td:first-child { white-space: normal; }
+.tabla-rutas tr.abierta td { border-bottom-color: transparent; }
+.tabla-rutas .fila-detalle td { white-space: normal; background: #fafaf7; padding: 10px 12px 14px; }
+.tabla-rutas .fila-detalle .lista-condiciones { margin: 0 0 8px; }
