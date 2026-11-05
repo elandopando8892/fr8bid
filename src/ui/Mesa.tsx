@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ErrorApi, type AvanceEnvio } from "../cliente/api";
 import { proyeccionLoads } from "../dominio/loads";
 import { operacionAdjudicacion } from "../dominio/operacion";
@@ -405,37 +405,68 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
   // que falta aprobar (un texto de muestra y los demás a pedido).
   const enviadas = invitaciones.filter((a) => !enviables.includes(a));
   const porEstado = [...new Set(enviadas.map((a) => a.estado))].map((e) => `${enviadas.filter((a) => a.estado === e).length} ${ESTADO_ENVIADAS[e] ?? e}`).join(", ");
+  // La lista completa solo se despliega a pedido; sale sola cuando alguna
+  // invitación ya no es un simple borrador (en cola, fallida) o hay textos abiertos.
+  const [verLista, setVerLista] = useState(false);
+  const listaSola = enviables.some((a) => a.estado !== "borrador");
+  const mostrarLista = verLista || verTextos || listaSola;
+  const omitidas = [...new Map(audiencia.omitidas.map((o) => [o.p.carrierId, o])).values()];
+  // Un solo botón: si el evento sigue en borrador, primero lo publica y luego envía.
+  const publicarPrimero = d.evento.estado === "borrador";
   const ENVIAR = (
     <>
       {porEnviar.length > 0 && ctx.rol === "admin" && (
         <Confirmar
-          etiqueta={`Aprobar y enviar ${plural(porEnviar.length, "invitación", "invitaciones")}`}
-          icono={<I.Enviar size={15} />}
+          etiqueta={publicarPrimero ? `Publicar e invitar a ${plural(porEnviar.length, "carrier")}` : `Enviar ${plural(porEnviar.length, "invitación", "invitaciones")}`}
+          icono={publicarPrimero ? <I.Megafono size={15} /> : <I.Enviar size={15} />}
           advertencia={
             <>
-              Se envían por Gmail desde sales@heymarksman.com, exactamente con el texto de «Ver textos»
+              {publicarPrimero ? `Primero abre el evento a ofertas hasta el ${fecha(d.evento.plazo)}; luego se envían` : "Se envían"} {plural(porEnviar.length, "invitación", "invitaciones")} por Gmail desde sales@heymarksman.com, exactamente con el texto de «Ver textos»
               {tandas > 1 ? `, en ${tandas} tandas de hasta ${TAMANO_TANDA} con un minuto entre tandas` : ""}. Si Gmail llega a su cuota diaria, el envío se detiene y lo pendiente queda en cola, sin reintentos automáticos. {ADVERTENCIA_REAL(s, d)}
             </>
           }
           onConfirmar={() =>
             accion(
               async () => {
-                const r = await s.api.enviarPorTandas(d.evento.id, porEnviar, { alAvanzar: setAvance });
+                if (publicarPrimero) await s.api.publicar(d.evento.id);
+                let r: AvanceEnvio;
+                try {
+                  r = await s.api.enviarPorTandas(d.evento.id, porEnviar, { alAvanzar: setAvance });
+                } catch (e) {
+                  throw new Error(`${publicarPrimero ? "Evento publicado, pero no se pudo enviar: " : ""}${e instanceof Error ? e.message : String(e)}`);
+                }
                 setAvance(r);
-                if (r.detenido) throw new Error(`${r.enviados} de ${porEnviar.length} aceptadas por Gmail. ${r.detenido}`);
+                if (r.detenido) throw new Error(`${publicarPrimero ? "Evento publicado. " : ""}${r.enviados} de ${porEnviar.length} aceptadas por Gmail. ${r.detenido}`);
                 return r;
               },
-              (r) => `${plural(r.enviados, "invitación aceptada", "invitaciones aceptadas")} por Gmail.`
+              (r) => `${publicarPrimero ? "Evento publicado y " : ""}${plural(r.enviados, "invitación aceptada", "invitaciones aceptadas")} por Gmail.`
             )
           }
         />
       )}
     </>
   );
+  const accionOmitida = (o: (typeof omitidas)[number]) => (
+    <>
+      {!o.p.correo && ctx.rol !== "viewer" && <ContactosSugeridos vendorId={o.p.carrierId} />}
+      {ctx.rol === "admin" && o.estado === "sin_revision" && o.p.correo && (
+        <Confirmar
+          etiqueta="Revisado"
+          clase="btn-chico"
+          icono={<I.Check size={14} />}
+          advertencia={<>Confirmas que revisaste el contacto de {o.p.carrier} ({o.p.correo}) y que puede recibir la invitación. Queda registrado en Rateware, igual que en Revisión de contactos. No envía nada. {ADVERTENCIA_REAL(s, d)}</>}
+          onConfirmar={() => accion(() => s.api.marcarRevisado(d.evento.id, o.p), `${o.p.carrier} marcado «Revisado».`)}
+        />
+      )}
+    </>
+  );
+  const TABLA = mostrarLista && (enviables.length > 0 || omitidas.length > 0) && (
+    <TablaInvitaciones d={d} avisos={enviables} carrierDe={carrierDe} textos={verTextos} revisada={revisada} omitidas={omitidas} accionOmitida={accionOmitida} />
+  );
   return (
     <div className="tarjeta">
       <h2>Invitación</h2>
-      {d.evento.estado === "borrador" && ctx.rol === "admin" && (
+      {publicarPrimero && ctx.rol === "admin" && porEnviar.length === 0 && (
         <div className="linea-accion">
           <span className="linea-icono"><I.Candado size={16} /></span>
           <p>En borrador: los carriers no pueden ofertar hasta publicarlo.</p>
@@ -451,34 +482,16 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
       {!d.revisiones && (
         <p className="estado estado-error">No se pudo consultar qué carriers están revisados. No se prepara ni envía ninguna invitación hasta poder consultarlo.</p>
       )}
-      {audiencia.omitidas.length > 0 && d.revisiones && (
-        <div className="aviso-caja atencion">
-          <p className="fila-icono">
-            <I.Alerta size={16} />
-            <span>
-              <b>{resumenOmisiones(audiencia)}</b> Márcalos «Revisado» si deben recibirla.
-              {s.modo === "rateware" && <> <Liga a={`/rfx/${d.evento.id}/review`}>Revisar contactos</Liga></>}
-            </span>
-          </p>
-          <ul className="lista-limpia">
-            {[...new Map(audiencia.omitidas.map((o) => [o.p.carrierId, o])).values()].map((o) => (
-              <li key={o.p.carrierId}>
-                <b>{o.p.carrier}</b> <span className="tenue">{o.motivo} · {o.p.correo || "sin correo en Rateware"}</span>
-                {!o.p.correo && ctx.rol !== "viewer" && <ContactosSugeridos vendorId={o.p.carrierId} />}
-                {ctx.rol === "admin" && o.estado === "sin_revision" && o.p.correo && (
-                  <Confirmar
-                    etiqueta="Revisado"
-                    clase="btn-chico"
-                    icono={<I.Check size={14} />}
-                    advertencia={<>Confirmas que revisaste el contacto de {o.p.carrier} ({o.p.correo}) y que puede recibir la invitación. Queda registrado en Rateware, igual que en Revisión de contactos. No envía nada. {ADVERTENCIA_REAL(s, d)}</>}
-                    onConfirmar={() => accion(() => s.api.marcarRevisado(d.evento.id, o.p), `${o.p.carrier} marcado «Revisado».`)}
-                  />
-                )}
-              </li>
-            ))}
-          </ul>
-          {audiencia.omitidas.some((o) => o.estado === "revocada") && <p className="tenue">Una revisión revocada se vuelve a dar en Revisión de contactos.</p>}
-        </div>
+      {omitidas.length > 0 && d.revisiones && (
+        <p className="fila-icono aviso-linea">
+          <I.Alerta size={16} />
+          <span>
+            <b>{resumenOmisiones(audiencia)}</b>{" "}
+            {!listaSola && !verTextos && <button className="btn-texto" onClick={() => setVerLista(!verLista)}>{verLista ? "Ocultar" : "Ver y marcar «Revisado»"}</button>}
+            {s.modo === "rateware" && <> · <Liga a={`/rfx/${d.evento.id}/review`}>Revisar contactos</Liga></>}
+            {omitidas.some((o) => o.estado === "revocada") && <span className="tenue"> · Una revisión revocada se vuelve a dar en Revisión de contactos.</span>}
+          </span>
+        </p>
       )}
       {!invitaciones.length && !audiencia.aptas.length && !audiencia.omitidas.length && <p className="tenue">El Operador aún no prepara las invitaciones.</p>}
       {sinBorrador.length > 0 && ctx.rol !== "viewer" && (
@@ -510,13 +523,17 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
         <div className="bloque-envio">
           <div className="fila">
             <p className="fila-icono"><I.Sobre size={16} /><span><b>{plural(enviables.length, "invitación por enviar", "invitaciones por enviar")}</b> <span className="tenue">· Gmail desde sales@heymarksman.com</span></span></p>
-            <button className="btn-texto con-icono" onClick={() => setVerTextos(!verTextos)}><I.Ojo size={15} />{verTextos ? "Ocultar textos" : enviables.length > 1 ? "Ver textos" : "Ver texto"}</button>
+            <span className="acciones-linea">
+              {!listaSola && !verTextos && <button className="btn-texto con-icono" onClick={() => setVerLista(!verLista)}><I.Lista size={15} />{verLista ? "Ocultar lista" : `Ver ${enviables.length === 1 ? "la invitación" : `las ${enviables.length}`}`}</button>}
+              <button className="btn-texto con-icono" onClick={() => setVerTextos(!verTextos)}><I.Ojo size={15} />{verTextos ? "Ocultar textos" : enviables.length > 1 ? "Ver textos" : "Ver texto"}</button>
+            </span>
           </div>
           {ENVIAR}
-          <TablaInvitaciones d={d} avisos={enviables} carrierDe={carrierDe} textos={verTextos} revisada={revisada} />
+          {TABLA}
         </div>
       )}
       {enviables.length === 0 && ENVIAR}
+      {enviables.length === 0 && TABLA}
       {detenidas.length > 0 && (
         <p className="tenue">{plural(detenidas.length, "borrador", "borradores")} no se envían porque su carrier no tiene «Revisado» vigente.</p>
       )}
@@ -548,7 +565,8 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
 
 // Invitaciones como tabla compacta con buscador: en O-I son 42 carriers, y una
 // lista de viñetas no se puede recorrer. El texto exacto se abre por fila.
-function TablaInvitaciones({ d, avisos, carrierDe, textos = false, revisada }: { d: Detalle; avisos: Aviso[]; carrierDe: (a: Aviso) => Participacion | undefined; textos?: boolean; revisada?: (a: Aviso) => boolean }) {
+type Omitida = ReturnType<typeof audienciaInvitacion>["omitidas"][number];
+function TablaInvitaciones({ d, avisos, carrierDe, textos = false, revisada, omitidas = [], accionOmitida }: { d: Detalle; avisos: Aviso[]; carrierDe: (a: Aviso) => Participacion | undefined; textos?: boolean; revisada?: (a: Aviso) => boolean; omitidas?: Omitida[]; accionOmitida?: (o: Omitida) => ReactNode }) {
   const [busca, setBusca] = useState("");
   const [abierto, setAbierto] = useState<string | null>(null);
   const q = busca.trim().toLowerCase();
@@ -556,6 +574,8 @@ function TablaInvitaciones({ d, avisos, carrierDe, textos = false, revisada }: {
     .map((a) => ({ a, p: carrierDe(a) }))
     .filter(({ a, p }) => !q || [p?.carrier, a.destinatario].some((x) => (x || "").toLowerCase().includes(q)))
     .sort((x, y) => (x.p?.carrier || "").localeCompare(y.p?.carrier || ""));
+  // Los carriers que no se invitan van en la misma lista, con su motivo y su acción.
+  const filasOmitidas = omitidas.filter((o) => !q || [o.p.carrier, o.p.correo].some((x) => (x || "").toLowerCase().includes(q)));
   const tono = (e: string) => (e === "aceptado" ? "ok" : e === "rebotado" || e === "fallido" ? "err" : e === "en_cola" || e === "incierto" || e === "por_verificar" ? "warn" : "");
   const estadoDe = (a: Aviso) => (a.estado === "por_verificar" ? "aprobación no verificada" : ESTADO_INVITACION[a.estado] ?? a.estado);
   // La columna de rutas solo dice algo cuando no todos cubren todas las rutas.
@@ -563,13 +583,13 @@ function TablaInvitaciones({ d, avisos, carrierDe, textos = false, revisada }: {
   const columnas = verRutas ? 5 : 4;
   return (
     <div className="tabla-invitaciones">
-      {avisos.length > 6 && (
+      {avisos.length + omitidas.length > 6 && (
         <label className="buscador compacto">
           <I.Lupa size={14} />
           <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar carrier o correo…" aria-label="Buscar invitaciones" />
         </label>
       )}
-      {q && <p className="tenue">{plural(filas.length, "coincidencia")} de {avisos.length}.</p>}
+      {q && <p className="tenue">{plural(filas.length + filasOmitidas.length, "coincidencia")} de {avisos.length + omitidas.length}.</p>}
       <div className="tabla-envoltura">
         <table className="tabla tabla-compacta">
           <thead>
@@ -582,6 +602,15 @@ function TablaInvitaciones({ d, avisos, carrierDe, textos = false, revisada }: {
             </tr>
           </thead>
           <tbody>
+            {filasOmitidas.map((o) => (
+              <tr key={`om-${o.p.carrierId}`} className="detenida">
+                <td><b>{o.p.carrier}</b></td>
+                <td className="tenue">{o.p.correo || "sin correo en Rateware"}</td>
+                {verRutas && <td />}
+                <td><span className="pill warn">{o.motivo}</span></td>
+                <td className="celda-accion">{accionOmitida?.(o)}</td>
+              </tr>
+            ))}
             {filas.map(({ a, p }) => {
               const omision = p && revisada && !revisada(a) ? MOTIVO_OMISION[estadoRevision(d, p.carrierId) as keyof typeof MOTIVO_OMISION] : null;
               const verTexto = textos || abierto === a.id;

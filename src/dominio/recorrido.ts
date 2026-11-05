@@ -344,7 +344,7 @@ function siguientePaso(actual: Paso | null, rol: Rol): Recorrido["siguiente"] {
     necesidad: "Registrar la necesidad",
     evento: "Agregar rutas",
     carriers: "Elegir carriers",
-    invitacion: "Aprobar y enviar invitaciones",
+    invitacion: "Enviar las invitaciones",
     ofertas: "Esperar ofertas",
     comparar: "Comparar ofertas",
     cierre: "Cerrar a ofertas",
