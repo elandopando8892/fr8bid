@@ -6,6 +6,7 @@ import { confirmAsync, promptAsync } from "@/components/confirm";
 import { useAsync } from "@/components/useAsync";
 import { NEED_REASON } from "@/lib/roles";
 import { Dialog, Empty, ErrorBanner, InfoBanner, Spinner, TopBar, dateShort } from "@/components/ui";
+import { SIMULATED_MESSAGE } from "@/lib/api-client";
 import { buildCatalogIndex, valueLabel, type CatalogIndex } from "@/features/rfx-admin/laneImport";
 import { loadCatalogRows } from "@/features/rfx-admin/laneSources";
 import { RateEditDialog } from "@/features/rate-review/RateEditDialog";
@@ -203,6 +204,7 @@ export function RateBasePage() {
             />
           )}
           {page.error && <ErrorBanner message={page.error} />}
+          {page.error?.includes(SIMULATED_MESSAGE) && <Empty title={tr("text055")} hint={tr("text056")} />}
           {!page.loading && !page.error && (rows.length ? (
             <>
               <table className="data rate-base-table">

@@ -96,5 +96,6 @@ export const Ojo = (p: Props) => <Icono {...p}><path d="M2.5 12S6 5.5 12 5.5 21.
 export const Alerta = (p: Props) => <Icono {...p}><path d="M12 3.5 2.5 20h19zM12 10v4.5M12 17.5h.01" /></Icono>;
 export const Megafono = (p: Props) => <Icono {...p}><path d="M3.5 10v4h3l8 4.5v-13l-8 4.5zM6.5 14l1.5 5.5h2.5L9.5 15M18 9a4 4 0 0 1 0 6" /></Icono>;
 export const Usuarios = (p: Props) => <Icono {...p}><circle cx={9} cy={8.5} r={3.5} /><path d="M2.5 19.5c.8-3.2 3.4-5 6.5-5s5.7 1.8 6.5 5M16 5.2a3.5 3.5 0 0 1 0 6.6M18 14.8c1.7.7 3 2.4 3.5 4.7" /></Icono>;
+export const Recargar = (p: Props) => <Icono {...p}><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4.5h-4.5" /></Icono>;
 export const Reloj = (p: Props) => <Icono {...p}><circle cx={12} cy={12} r={8.5} /><path d="M12 7.5V12l3 2" /></Icono>;
 export const Mano = (p: Props) => <Icono {...p}><path d="M8 11V5.5a1.5 1.5 0 0 1 3 0V11M11 10V4.5a1.5 1.5 0 0 1 3 0V11M14 10.5V6a1.5 1.5 0 0 1 3 0v8a6.5 6.5 0 0 1-6.5 6.5h-.6a6 6 0 0 1-4.6-2.2L3 15.3a1.5 1.5 0 0 1 2.3-1.9L8 16.5V8a1.5 1.5 0 0 1 3 0" /></Icono>;
