@@ -2012,6 +2012,13 @@ textarea {
 .sr-crit-fold[open] > * + * {
   margin-top: 14px;
 }
+/* Spot's short form: its notes under the load, the rest folded below. */
+.sr-spot-notes {
+  margin-top: 10px;
+}
+.sr-more .sr-lane > .sr-grid3 {
+  margin-bottom: 6px;
+}
 .sr-multi {
   position: relative;
 }

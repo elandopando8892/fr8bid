@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { ErrorBanner, InfoBanner } from "@/components/ui";
 import { catalogLabel, EQUIPMENT_TYPES, TRUCK_TYPES } from "./catalog";
 import { downloadTemplate, importLanes } from "./excel";
-import { CatalogSelect, LaneForm } from "./LaneFields";
+import { CatalogSelect, Field, LaneForm, WeightInput } from "./LaneFields";
+import { PlaceField } from "./PlaceField";
 import type { Copy } from "./request.copy";
 import {
   answerKey,
@@ -12,6 +13,7 @@ import {
   isAnswered,
   laneProblems,
   placeText,
+  type LaneProblem,
   requestSegments,
   withDefaults,
   type Answer,
@@ -41,6 +43,8 @@ export interface FormProps {
   type: string | null;
   lang: Lang;
   copy: Copy;
+  /** The country new places start in: the link's, else Mexico. */
+  country: string;
   showProblems: boolean;
   update: (recipe: (draft: RequestDraft) => RequestDraft) => void;
   onSubmit: () => void;
@@ -116,8 +120,29 @@ function SegmentPicker({ value, lang, copy, onChange }: { value: string[]; lang:
   );
 }
 
-function Basics({ draft, type, lang, copy, update }: FormProps) {
-  const setContact = (patch: Partial<Contact>) => update((d) => ({ ...d, contact: { ...d.contact, ...patch } }));
+function CurrencyField({ draft, copy, update }: Pick<FormProps, "draft" | "copy" | "update">) {
+  return (
+    <label className="field">
+      <span className="sr-field-head">{copy.currency}</span>
+      <select value={draft.currency} onChange={(e) => update((d) => ({ ...d, currency: e.target.value as RequestDraft["currency"] }))}>
+        <option value="USD">USD</option>
+        <option value="MXN">MXN</option>
+      </select>
+    </label>
+  );
+}
+
+function SegmentsField({ draft, lang, copy, update }: Pick<FormProps, "draft" | "lang" | "copy" | "update">) {
+  return (
+    <div className="field">
+      <span className="sr-field-head">{copy.segments}</span>
+      <SegmentPicker value={draft.segments} lang={lang} copy={copy} onChange={(segments) => update((d) => ({ ...d, segments }))} />
+    </div>
+  );
+}
+
+function Basics(props: FormProps) {
+  const { draft, type, lang, copy, update } = props;
   return (
     <section className="sr-card sr-basics">
       <RequestType type={type} copy={copy} />
@@ -130,13 +155,20 @@ function Basics({ draft, type, lang, copy, update }: FormProps) {
           <span className="sr-field-head">{copy.standardEquipment}</span>
           <CatalogSelect list={EQUIPMENT_TYPES} value={draft.equipment} lang={lang} empty={copy.choose} onChange={(equipment) => update((d) => ({ ...d, equipment }))} />
         </label>
-        <div className="field">
-          <span className="sr-field-head">{copy.segments}</span>
-          <SegmentPicker value={draft.segments} lang={lang} copy={copy} onChange={(segments) => update((d) => ({ ...d, segments }))} />
-        </div>
+        <SegmentsField {...props} />
       </div>
+      <ContactFields {...props} withCurrency />
+    </section>
+  );
+}
+
+/** Who to answer: the link prefills company and name; the shipper adds the rest. */
+function ContactFields({ draft, copy, update, withCurrency }: FormProps & { withCurrency?: boolean }) {
+  const setContact = (patch: Partial<Contact>) => update((d) => ({ ...d, contact: { ...d.contact, ...patch } }));
+  return (
+    <>
       <h4 className="sr-sec-title">{copy.contact}</h4>
-      <div className="sr-grid5">
+      <div className={withCurrency ? "sr-grid5" : "sr-grid4"}>
         <label className="field">
           <span className="sr-field-head">{copy.company}</span>
           <input value={draft.contact.company} autoComplete="organization" onChange={(e) => setContact({ company: e.target.value })} />
@@ -153,15 +185,9 @@ function Basics({ draft, type, lang, copy, update }: FormProps) {
           <span className="sr-field-head">{copy.phone}</span>
           <input type="tel" value={draft.contact.phone} autoComplete="tel" onChange={(e) => setContact({ phone: e.target.value })} />
         </label>
-        <label className="field">
-          <span className="sr-field-head">{copy.currency}</span>
-          <select value={draft.currency} onChange={(e) => update((d) => ({ ...d, currency: e.target.value as RequestDraft["currency"] }))}>
-            <option value="USD">USD</option>
-            <option value="MXN">MXN</option>
-          </select>
-        </label>
+        {withCurrency && <CurrencyField draft={draft} copy={copy} update={update} />}
       </div>
-    </section>
+    </>
   );
 }
 
@@ -189,7 +215,7 @@ function laneEditors(update: FormProps["update"], kind: RequestDraft["kind"]) {
   };
 }
 
-function Lanes({ token, draft, lang, copy, showProblems, update }: FormProps) {
+function Lanes({ token, draft, lang, copy, country, showProblems, update }: FormProps) {
   const editors = laneEditors(update, draft.kind);
   // One lane open at a time, the design's way; the first one to start.
   const [openKey, setOpenKey] = useState<string | null>(draft.lanes[0]?.key ?? null);
@@ -297,6 +323,7 @@ function Lanes({ token, draft, lang, copy, showProblems, update }: FormProps) {
                 defaults={draft}
                 lang={lang}
                 copy={copy}
+                country={country}
                 problems={flagged ? problems : []}
                 onChange={(patch) => editors.patch(lane.key, patch)}
               />
@@ -452,17 +479,28 @@ function CriteriaCard({ category, effect, segments, props }: { category: RubricC
   );
 }
 
+/** Something in the optional questionnaire is answered: its fold opens. */
+const criteriaStarted = (draft: RequestDraft) => Object.values(draft.answers).some(isAnswered) || Boolean(draft.notes.trim());
+
 function Criteria(props: FormProps) {
-  const { draft, lang, copy } = props;
-  const segments = requestSegments(draft);
+  const { draft, copy } = props;
   // Optional: folded until the shipper wants it, or once something in it is answered.
-  const started = Object.values(draft.answers).some(isAnswered) || Boolean(draft.notes.trim());
   return (
-    <details className="sr-crit-fold" open={started || undefined}>
+    <details className="sr-crit-fold" open={criteriaStarted(draft) || undefined}>
       <summary className="sr-h">
         <h2>{copy.criteriaTitle}</h2>
         <span className="sr-hint">{copy.criteriaTag}</span>
       </summary>
+      <CriteriaBody {...props} />
+    </details>
+  );
+}
+
+function CriteriaBody(props: FormProps) {
+  const { draft, lang, copy } = props;
+  const segments = requestSegments(draft);
+  return (
+    <>
       <section className="sr-card sr-tip">
         <strong>{copy.tipTitle}</strong>
         <p className="widens">{copy.tipWide}</p>
@@ -481,7 +519,102 @@ function Criteria(props: FormProps) {
           <CriteriaCard key={card.category} category={card.category} effect={card.effect} segments={segments} props={props} />
         ))}
       </div>
-    </details>
+    </>
+  );
+}
+
+// ------------------------------------------------------------- spot
+
+/** The spot short form's own fields: everything else of the lane lives in the fold. */
+const SPOT_FIELDS = new Set<keyof LaneDraft>(["key", "origin", "destination", "equipment", "pickup_date", "weight", "weight_unit", "commodity", "notes", "daily", "extra"]);
+
+/** The shipper (or a restored draft) filled something of the fold: it opens. */
+const laneDetailed = (lane: LaneDraft, kind: RequestDraft["kind"]) => {
+  const blank = emptyLane(kind);
+  return (Object.keys(blank) as (keyof LaneDraft)[]).some((key) => !SPOT_FIELDS.has(key) && lane[key] !== blank[key]);
+};
+
+/**
+ * A spot is one load: who's asking, where from and to, the equipment, the
+ * pickup date, weight, commodity and notes. Everything else the template
+ * asks (per lane and for the whole request) waits in «more details».
+ */
+function SpotRequest(props: FormProps) {
+  const { token, draft, type, lang, copy, country, showProblems, update } = props;
+  const lane = draft.lanes[0];
+  const editors = laneEditors(update, draft.kind);
+  const patch = (next: Partial<LaneDraft>) => editors.patch(lane.key, next);
+  const sent = withDefaults(draft, lane);
+  const problems = filledLanes(draft).length ? laneProblems(sent) : [];
+  const flagged = showProblems && problems.length > 0;
+  const bad = (problem: LaneProblem) => flagged && problems.includes(problem);
+  const opened = criteriaStarted(draft) || draft.segments.length > 0 || draft.currency !== "USD" || laneDetailed(lane, draft.kind);
+  return (
+    <>
+      <section className="sr-card sr-basics">
+        <RequestType type={type} copy={copy} />
+        <ContactFields {...props} />
+      </section>
+      <section className={`sr-card sr-lane${flagged ? " sr-lane-bad" : ""}`}>
+        <h4 className="sr-sec-title">{copy.spotTitle}</h4>
+        <div className="sr-grid3">
+          <PlaceField token={token} label={copy.origin} value={lane.origin} lang={lang} defaultCountry={country} invalid={bad("origin")} onChange={(origin) => patch({ origin })} />
+          <PlaceField
+            token={token}
+            label={copy.destination}
+            value={lane.destination}
+            lang={lang}
+            defaultCountry={country}
+            invalid={bad("destination")}
+            onChange={(destination) => patch({ destination })}
+          />
+          <Field label={copy.equipment} copy={copy}>
+            <CatalogSelect list={EQUIPMENT_TYPES} value={lane.equipment} lang={lang} empty={copy.choose} invalid={bad("truck")} onChange={(equipment) => patch({ equipment })} />
+          </Field>
+          <Field label={copy.pickupDate} copy={copy}>
+            <input type="date" className="mono" value={lane.pickup_date} onChange={(e) => patch({ pickup_date: e.target.value })} />
+          </Field>
+          <WeightInput lane={lane} copy={copy} onChange={patch} />
+          <Field label={copy.commodity} copy={copy}>
+            <input value={lane.commodity} placeholder={copy.commodityHint} onChange={(e) => patch({ commodity: e.target.value })} />
+          </Field>
+        </div>
+        <label className="field sr-spot-notes">
+          <span className="sr-field-head">{copy.sections.notes}</span>
+          <textarea rows={2} value={lane.notes} placeholder={copy.spotNotesHint} onChange={(e) => patch({ notes: e.target.value })} />
+        </label>
+        {flagged && <p className="sr-problems">{problems.map((problem) => copy.problem[problem]).join(" · ")}</p>}
+      </section>
+      <details className="sr-crit-fold sr-more" open={opened || undefined}>
+        <summary className="sr-h">
+          <h2>{copy.moreDetails}</h2>
+          <span className="sr-hint">{copy.moreDetailsHint}</span>
+        </summary>
+        <section className="sr-card sr-lane">
+          {/* One load, one segment: the lane's own picker below covers it. */}
+          <div className="sr-grid3">
+            <CurrencyField draft={draft} copy={copy} update={update} />
+          </div>
+          <LaneForm
+            token={token}
+            lane={lane}
+            kind={draft.kind}
+            segments={draft.segments}
+            defaults={draft}
+            lang={lang}
+            copy={copy}
+            country={country}
+            problems={flagged ? problems : []}
+            onChange={patch}
+            rest
+          />
+        </section>
+        <CriteriaBody {...props} />
+        <button type="button" className="sr-add" onClick={() => editors.add(emptyLane(draft.kind))}>
+          + {copy.addLane}
+        </button>
+      </details>
+    </>
   );
 }
 
@@ -490,15 +623,24 @@ function Criteria(props: FormProps) {
 /**
  * Every request on one page, the design's way: what the shipper can tell us
  * about the whole request, its lanes, and rateware's questionnaire as the
- * project's criteria. Spot or RFQ only changes the volume columns.
+ * project's criteria. A spot opens on its short form; mini-bid, program and
+ * contract keep the whole template.
  */
 export function RequestForm(props: FormProps) {
-  const { copy, onSubmit, sending, error } = props;
+  const { copy, draft, onSubmit, sending, error } = props;
+  // A spot with more than one lane (added, imported or restored) gets the full form.
+  const short = draft.kind === "spot" && draft.lanes.length === 1;
   return (
     <div className="sr-form">
-      <Basics {...props} />
-      <Lanes {...props} />
-      <Criteria {...props} />
+      {short ? (
+        <SpotRequest {...props} />
+      ) : (
+        <>
+          <Basics {...props} />
+          <Lanes {...props} />
+          <Criteria {...props} />
+        </>
+      )}
       {error && <ErrorBanner message={error} />}
       <button type="button" className="primary sr-submit" disabled={sending} onClick={onSubmit}>
         {sending ? copy.sending : copy.submit}

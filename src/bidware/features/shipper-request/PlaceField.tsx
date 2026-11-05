@@ -28,6 +28,7 @@ export function PlaceField({
   lang,
   invalid,
   compact,
+  defaultCountry = "MX",
 }: {
   token: string;
   label: string;
@@ -36,8 +37,10 @@ export function PlaceField({
   lang: Lang;
   invalid?: boolean;
   compact?: boolean;
+  /** Where an empty place starts: the link says where the shipper is. */
+  defaultCountry?: string;
 }) {
-  const [country, setCountry] = useState(value?.country || "MX");
+  const [country, setCountry] = useState(value?.country || defaultCountry);
   const [query, setQuery] = useState(placeText(value));
   const [options, setOptions] = useState<Place[]>([]);
   const [open, setOpen] = useState(false);

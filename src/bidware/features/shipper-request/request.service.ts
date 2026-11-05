@@ -34,8 +34,12 @@ export async function searchPlaces(token: string, search: string, country?: stri
   return res.rows ?? [];
 }
 
-/** rfx-bid-api answers an unknown token with a raw database message. */
-export function explainRequestError(message: string, lang: Lang) {
+/** rfx-bid-api answers an unknown token with a raw database message; the contact is named after the link's brand. */
+export function explainRequestError(message: string, lang: Lang, brandName = "MARKSMAN") {
+  return explainIn(message, lang).replace(/MARKSMAN/g, brandName);
+}
+
+function explainIn(message: string, lang: Lang) {
   const text = message.toLowerCase();
   if (/expired/.test(text)) {
     return lang === "es"

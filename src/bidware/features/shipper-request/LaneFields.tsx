@@ -47,6 +47,13 @@ export interface LaneFieldProps {
   copy: Copy;
   problems: LaneProblem[];
   onChange: Patch;
+  /** The country new places start in (the link's). */
+  country: string;
+  /**
+   * Spot's short form already asks origin, destination, equipment, pickup
+   * date, weight, commodity and notes: this form then shows only the rest.
+   */
+  rest?: boolean;
 }
 
 /** A template list; a saved value outside it still shows (and stays) as its own option. */
@@ -87,7 +94,7 @@ export function CatalogSelect({
 /** "catálogo": the list is the RFI template's own. */
 
 /** A labelled control; `required` marks what the RFI template stars. */
-function Field({
+export function Field({
   label,
   required,
   wide,
@@ -132,7 +139,7 @@ function NumberInput({ value, placeholder, invalid, onChange }: { value: string;
   );
 }
 
-function WeightInput({ lane, copy, onChange }: { lane: LaneDraft; copy: Copy; onChange: Patch }) {
+export function WeightInput({ lane, copy, onChange }: { lane: LaneDraft; copy: Copy; onChange: Patch }) {
   return (
     <div className="field">
       <span className="sr-field-head">{copy.weight}</span>
@@ -178,7 +185,7 @@ function YesNo({ value, lang, copy, onChange }: { value: string; lang: Lang; cop
  * sections. Only what rfx-bid-api requires (origin, destination, equipment,
  * volume) is checked; the rest is as partial as the shipper likes.
  */
-export function LaneForm({ token, lane, kind, segments, defaults, lang, copy, problems, onChange }: LaneFieldProps) {
+export function LaneForm({ token, lane, kind, segments, defaults, lang, copy, problems, onChange, country, rest = false }: LaneFieldProps) {
   const bad = (problem: LaneProblem) => problems.includes(problem);
   // The template's marks only mean something on the RFQ, which follows the workbook.
   const marks = kind === "rfq";
@@ -205,7 +212,17 @@ export function LaneForm({ token, lane, kind, segments, defaults, lang, copy, pr
     <div className="sr-lane-form">
       <h4 className="sr-sec-title">{copy.sections.origin}</h4>
       <div className="sr-grid4">
-        <PlaceField token={token} label={copy.origin} value={lane.origin} lang={lang} invalid={bad("origin")} onChange={(origin) => onChange({ origin })} />
+        {!rest && (
+          <PlaceField
+            token={token}
+            label={copy.origin}
+            value={lane.origin}
+            lang={lang}
+            defaultCountry={country}
+            invalid={bad("origin")}
+            onChange={(origin) => onChange({ origin })}
+          />
+        )}
         <Field label={copy.postalCode} required={marks} copy={copy}>
           <PostalInput place={lane.origin} copy={copy} onChange={(origin) => onChange({ origin })} />
         </Field>
@@ -230,9 +247,11 @@ export function LaneForm({ token, lane, kind, segments, defaults, lang, copy, pr
         {/* A spot is one pickup: its date, loads and lead time belong here. */}
         {kind === "spot" && (
           <>
-            <Field label={copy.pickupDate} copy={copy}>
-              <input type="date" className="mono" value={lane.pickup_date} onChange={(e) => onChange({ pickup_date: e.target.value })} />
-            </Field>
+            {!rest && (
+              <Field label={copy.pickupDate} copy={copy}>
+                <input type="date" className="mono" value={lane.pickup_date} onChange={(e) => onChange({ pickup_date: e.target.value })} />
+              </Field>
+            )}
             {loads}
             {leadTime}
           </>
@@ -241,14 +260,17 @@ export function LaneForm({ token, lane, kind, segments, defaults, lang, copy, pr
 
       <h4 className="sr-sec-title">{copy.sections.destination}</h4>
       <div className="sr-grid4">
-        <PlaceField
-          token={token}
-          label={copy.destination}
-          value={lane.destination}
-          lang={lang}
-          invalid={bad("destination")}
-          onChange={(destination) => onChange({ destination })}
-        />
+        {!rest && (
+          <PlaceField
+            token={token}
+            label={copy.destination}
+            value={lane.destination}
+            lang={lang}
+            defaultCountry={country}
+            invalid={bad("destination")}
+            onChange={(destination) => onChange({ destination })}
+          />
+        )}
         <Field label={copy.postalCode} required={marks} copy={copy}>
           <PostalInput place={lane.destination} copy={copy} onChange={(destination) => onChange({ destination })} />
         </Field>
@@ -295,27 +317,33 @@ export function LaneForm({ token, lane, kind, segments, defaults, lang, copy, pr
         <Field label={copy.truck} required={marks} copy={copy}>
           <CatalogSelect list={TRUCK_TYPES} value={lane.truck} lang={lang} empty={copy.choose} invalid={bad("truck")} onChange={(truck) => onChange({ truck })} />
         </Field>
-        <Field label={copy.equipment} required={marks} copy={copy}>
-          <CatalogSelect
-            list={EQUIPMENT_TYPES}
-            value={lane.equipment}
-            lang={lang}
-            empty={defaults.equipment ? standard(catalogLabel(EQUIPMENT_TYPES, defaults.equipment, lang)) : copy.choose}
-            invalid={bad("truck")}
-            onChange={(equipment) => onChange({ equipment })}
-          />
-        </Field>
+        {!rest && (
+          <Field label={copy.equipment} required={marks} copy={copy}>
+            <CatalogSelect
+              list={EQUIPMENT_TYPES}
+              value={lane.equipment}
+              lang={lang}
+              empty={defaults.equipment ? standard(catalogLabel(EQUIPMENT_TYPES, defaults.equipment, lang)) : copy.choose}
+              invalid={bad("truck")}
+              onChange={(equipment) => onChange({ equipment })}
+            />
+          </Field>
+        )}
         <Field label={copy.config} required={marks} copy={copy}>
           <CatalogSelect list={CONFIG_TYPES} value={lane.config} lang={lang} empty={copy.choose} onChange={(config) => onChange({ config })} />
         </Field>
-        <WeightInput lane={lane} copy={copy} onChange={onChange} />
-        <Field label={copy.commodity} required={marks} copy={copy}>
-          <input
-            value={lane.commodity}
-            placeholder={defaults.commodity ? standard(defaults.commodity) : copy.commodityHint}
-            onChange={(e) => onChange({ commodity: e.target.value })}
-          />
-        </Field>
+        {!rest && (
+          <>
+            <WeightInput lane={lane} copy={copy} onChange={onChange} />
+            <Field label={copy.commodity} required={marks} copy={copy}>
+              <input
+                value={lane.commodity}
+                placeholder={defaults.commodity ? standard(defaults.commodity) : copy.commodityHint}
+                onChange={(e) => onChange({ commodity: e.target.value })}
+              />
+            </Field>
+          </>
+        )}
         <Field label={copy.packaging} required={marks} copy={copy}>
           <CatalogSelect list={PACKAGING_TYPES} value={lane.packaging} lang={lang} empty={copy.choose} onChange={(packaging) => onChange({ packaging })} />
         </Field>
@@ -446,8 +474,12 @@ export function LaneForm({ token, lane, kind, segments, defaults, lang, copy, pr
         </Field>
       </div>
 
-      <h4 className="sr-sec-title">{copy.sections.notes}</h4>
-      <textarea rows={2} value={lane.notes} placeholder={copy.notesHint} aria-label={copy.sections.notes} onChange={(e) => onChange({ notes: e.target.value })} />
+      {!rest && (
+        <>
+          <h4 className="sr-sec-title">{copy.sections.notes}</h4>
+          <textarea rows={2} value={lane.notes} placeholder={copy.notesHint} aria-label={copy.sections.notes} onChange={(e) => onChange({ notes: e.target.value })} />
+        </>
+      )}
     </div>
   );
 }

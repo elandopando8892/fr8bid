@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { confirmAsync } from "@/components/confirm";
 import { ErrorBanner, Spinner } from "@/components/ui";
-import { COPY, initialLang, rememberLang, type Copy } from "./request.copy";
+import { copyFor, initialLang, rememberLang, type Copy } from "./request.copy";
+import { keepLangInAddress, linkPrefs, type LinkPrefs } from "./link";
 import {
   draftFromResponse,
   draftProblems,
@@ -23,12 +24,12 @@ const dateShort = (value: string | null | undefined, lang: Lang) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(lang === "es" ? "es-MX" : "en-US", { day: "2-digit", month: "short", year: "numeric" });
 };
 
-function SaveStatus({ state, copy, lang, onRetry }: { state: SaveState; copy: Copy; lang: Lang; onRetry: () => void }) {
+function SaveStatus({ state, copy, lang, brand, onRetry }: { state: SaveState; copy: Copy; lang: Lang; brand: string; onRetry: () => void }) {
   const seconds = useSecondsSince(state.savedAt);
   if (state.status === "saving") return <span className="sr-save">{copy.saving}</span>;
   if (state.status === "error") {
     return (
-      <span className="sr-save bad" title={state.error ? explainRequestError(state.error, lang) : undefined}>
+      <span className="sr-save bad" title={state.error ? explainRequestError(state.error, lang, brand) : undefined}>
         {copy.saveFailed} ·{" "}
         <button type="button" className="sr-link" onClick={onRetry}>
           {copy.retry}
@@ -43,6 +44,7 @@ function SaveStatus({ state, copy, lang, onRetry }: { state: SaveState; copy: Co
 function Shell({
   lang,
   setLang,
+  brand,
   title,
   sub,
   meta,
@@ -51,18 +53,20 @@ function Shell({
 }: {
   lang: Lang;
   setLang: (lang: Lang) => void;
+  /** Whoever sent the link: the shipper sees the brand of the email they opened. */
+  brand: string;
   title: string;
   sub?: ReactNode;
   meta?: ReactNode;
   aside?: ReactNode;
   children: ReactNode;
 }) {
-  const copy = COPY[lang];
+  const copy = copyFor(lang, brand);
   return (
     <div className="sr-page">
       <div className="sr-bar">
         <span className="sr-mark" aria-hidden="true" />
-        <strong>MARKSMAN</strong>
+        <strong>{brand}</strong>
         <span className="spacer" />
         <span className="sr-bar-note">{copy.barNote}</span>
         <div className="profile-lang sr-lang" role="group" aria-label="Idioma / Language">
@@ -131,18 +135,22 @@ export function ShipperRequestPage() {
   const params = useParams();
   const [search] = useSearchParams();
   const token = (search.get("token") || params.token || "").trim();
-  return <ShipperRequestContent key={token} token={token} />;
+  // Read once per link: the shipper's own switch rewrites `lang` in the address.
+  const [prefs] = useState(() => linkPrefs(search));
+  return <ShipperRequestContent key={token} token={token} prefs={prefs} />;
 }
 
-function ShipperRequestContent({ token }: { token: string }) {
+function ShipperRequestContent({ token, prefs }: { token: string; prefs: LinkPrefs }) {
   const active = useRef(true);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
 
-  const [lang, setLangState] = useState<Lang>(initialLang);
-  const copy = COPY[lang];
+  const brand = prefs.brand.name;
+  const [lang, setLangState] = useState<Lang>(() => initialLang(prefs.lang));
+  const copy = useMemo(() => copyFor(lang, brand), [lang, brand]);
   const setLang = (next: Lang) => {
     setLangState(next);
     rememberLang(next);
+    if (prefs.lang) keepLangInAddress(next, prefs.country);
   };
 
   const [response, setResponse] = useState<RequestResponse | null>(null);
@@ -185,8 +193,8 @@ function ShipperRequestContent({ token }: { token: string }) {
   const done = alreadySent || Boolean(submittedAt);
 
   useEffect(() => {
-    document.title = `Marksman · ${copy.pageTitle}`;
-  }, [copy]);
+    document.title = `${brand} · ${copy.pageTitle}`;
+  }, [copy, brand]);
 
   const autosave = useAutosave(
     () => (draftRef.current ? saveRequest(token, draftRef.current, baseRef.current) : Promise.resolve()),
@@ -245,7 +253,7 @@ function ShipperRequestContent({ token }: { token: string }) {
         return;
       }
       autosave.reopen();
-      setError(explainRequestError(message, lang));
+      setError(explainRequestError(message, lang, brand));
     } finally {
       setSending(false);
     }
@@ -253,15 +261,15 @@ function ShipperRequestContent({ token }: { token: string }) {
 
   if (!token) {
     return (
-      <Shell lang={lang} setLang={setLang} title={copy.missingTitle} sub={copy.missingBody}>
+      <Shell lang={lang} setLang={setLang} brand={brand} title={copy.missingTitle} sub={copy.missingBody}>
         <span />
       </Shell>
     );
   }
   if (loadError) {
     return (
-      <Shell lang={lang} setLang={setLang} title={copy.loadError}>
-        <ErrorBanner message={explainRequestError(loadError, lang)} />
+      <Shell lang={lang} setLang={setLang} brand={brand} title={copy.loadError}>
+        <ErrorBanner message={explainRequestError(loadError, lang, brand)} />
       </Shell>
     );
   }
@@ -276,16 +284,17 @@ function ShipperRequestContent({ token }: { token: string }) {
   const project = response.project;
   const customer = project.customer_name || draft.contact.company || "";
   const due = project.due_date ? `${copy.due}: ${dateShort(project.due_date, lang)}` : "";
-  const formProps = { token, draft, type: project.opportunity_type, lang, copy, showProblems, update, onSubmit: submit, sending, error };
+  const formProps = { token, draft, type: project.opportunity_type, lang, copy, country: prefs.country, showProblems, update, onSubmit: submit, sending, error };
 
   return (
     <Shell
       lang={lang}
       setLang={setLang}
+      brand={brand}
       title={done ? customer || project.title || copy.pageTitle : copy.pageTitle}
       sub={done ? project.title || "" : copy.pageSub}
       meta={done ? null : [customer, due, copy.autosaves].filter(Boolean).join(" · ")}
-      aside={!done && !sending && <SaveStatus state={autosave.state} copy={copy} lang={lang} onRetry={() => void autosave.retry()} />}
+      aside={!done && !sending && <SaveStatus state={autosave.state} copy={copy} lang={lang} brand={brand} onRetry={() => void autosave.retry()} />}
     >
       {done ? (
         <Thanks kind={kind} draft={draft} copy={copy} lang={lang} submittedAt={submittedAt} readOnly={alreadySent} />

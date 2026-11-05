@@ -174,6 +174,11 @@ export const COPY = {
     sentOn: "Enviada",
     readOnly: "Esta solicitud ya se envió. Aquí puedes consultarla.",
     loadError: "No pudimos abrir tu solicitud.",
+    // Spot: one load, the short form
+    spotTitle: "Tu carga",
+    spotNotesHint: "Lo que el transportista deba saber: citas, maniobras, restricciones…",
+    moreDetails: "Más detalles",
+    moreDetailsHint: "opcional · instalaciones, horarios, servicio, cruce y requisitos",
   },
   en: {
     barNote: "Quote request · private link",
@@ -336,13 +341,31 @@ export const COPY = {
     sentOn: "Sent",
     readOnly: "This request was already sent. You can review it here.",
     loadError: "We couldn't open your request.",
+    spotTitle: "Your load",
+    spotNotesHint: "Anything the carrier should know: appointments, handling, restrictions…",
+    moreDetails: "More details",
+    moreDetailsHint: "optional · facilities, hours, service, border crossing and requirements",
   },
 };
 
 export type Copy = (typeof COPY)[Lang];
 
-/** Spanish unless the browser prefers English. */
-export function initialLang(): Lang {
+/**
+ * The copy as the shipper reads it: "your MARKSMAN contact" names whoever
+ * sent the link (XBF's campaigns say XBF).
+ */
+export function copyFor(lang: Lang, brandName: string): Copy {
+  const base = COPY[lang];
+  if (brandName === "MARKSMAN") return base;
+  const branded = Object.fromEntries(
+    Object.entries(base).map(([key, value]) => [key, typeof value === "string" ? value.replace(/MARKSMAN/g, brandName) : value]),
+  );
+  return branded as Copy;
+}
+
+/** The link's language first, then the shipper's last pick, then the browser; Spanish otherwise. */
+export function initialLang(fromLink: Lang | null = null): Lang {
+  if (fromLink) return fromLink;
   try {
     const saved = window.localStorage.getItem("bidware.request.lang");
     if (saved === "es" || saved === "en") return saved;
