@@ -1,6 +1,10 @@
 import { callRatewareApi } from "@/lib/api-client";
 import type { StagedRate } from "./readiness";
 
+/** Historical receipt only, through Fr8Bid's authenticated same-origin proxy. */
+export const getStagingReceipt = (stagingId: string) =>
+  callRatewareApi<unknown>("get_staging_receipt", { stagingId });
+
 /**
  * Rates waiting for review before they enter the rate base (rateware's
  * `rate_staging`, status pending_review). Approving one is setting its status

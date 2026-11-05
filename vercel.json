@@ -1,4 +1,5 @@
 {
   "framework": "vite",
+  "git": { "deploymentEnabled": { "codex/receipt-reader": false } },
   "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
 }

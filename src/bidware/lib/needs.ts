@@ -21,7 +21,7 @@ const READS: Record<string, Set<string>> = {
     "export_ratebook_routes", "get_carrier_list_template", "get_carrier_provider_advisory", "get_published_carrier_classification", "get_growth_campaign", "get_outreach_message",
     "get_outreach_tracking_summary", "get_rate_row_detail", "get_ratebook", "get_ratebook_audit",
     "get_ratebook_health", "get_ratebook_route_detail", "get_ratebook_route_quotes", "get_rateware_version",
-    "get_rfx_process_project", "get_saas_settings", "get_shipper", "get_upload_source_url",
+    "get_rfx_process_project", "get_saas_settings", "get_shipper", "get_staging_receipt", "get_upload_source_url",
     "get_vendor_relationship_activity", "get_whatsapp_connection_status", "growth_dashboard",
     "list_bid_room_chat", "list_carrier_list_templates", "list_catalog_values", "list_contact_history", "review_whatsapp_reply_association",
     "list_gmail_connections", "list_google_chat_connections", "list_google_chat_spaces",

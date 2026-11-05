@@ -15,6 +15,8 @@ import { blockersOf, isBlocking, ISSUE_LABEL, looksLikeTest, rateOf, reviewIssue
 import { normalizationPatch, rateValues, unknownValues, valuesSettled } from "./normalize";
 import { archiveRates, listPendingRates, updateRate, updateRates } from "./rateReview.service";
 import { RateEditDialog } from "./RateEditDialog";
+import { ReceiptEvidenceDialog } from "./ReceiptEvidenceDialog";
+import { currentReceiptRow } from "./receiptEvidence";
 
 interface Group {
   key: string;
@@ -82,6 +84,7 @@ function RateReviewContent() {
   const [choices, setChoices] = useState<Choices>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<StagedRate | null>(null);
+  const [receiptStageId, setReceiptStageId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -391,6 +394,10 @@ function RateReviewContent() {
                             )}
                           </td>
                           <td className="rr-action" role="cell">
+                            <button className="ne-link" onClick={() => setReceiptStageId(row.id)}>
+                              {lang === "en" ? "View receipt" : "Ver recibo"}
+                            </button>
+                            {" · "}
                             <button
                               className="ne-link"
                               disabled={!canWork}
@@ -434,6 +441,13 @@ function RateReviewContent() {
             {busy?.startsWith("approve") ? tr("text078", busy.split(":")[1] ?? "") : tr("text079", chosen.filter(approvable).length)}
           </button>
         </div>
+      )}
+
+      {receiptStageId && (
+        <ReceiptEvidenceDialog
+          row={currentReceiptRow(rows, receiptStageId, pending.loading, pending.error)}
+          onClose={() => setReceiptStageId(null)}
+        />
       )}
 
       {editing && (
