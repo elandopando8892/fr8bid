@@ -74,3 +74,41 @@
   .bw .crm-stages { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
   .bw .crm-stages > * { flex: 0 0 auto; }
 }
+
+/* ── Nuevo evento: ligero (5-nov) ───────────────────────────────────────── */
+.bw .nev-types button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-color: var(--line); }
+.bw .nev-types button.on { background: var(--orange-light, #fdeee6); color: var(--accent, #c94a14); border-color: #ea5e2755; box-shadow: none; }
+.bw .nev-rubric > span { font-family: inherit; text-transform: none; letter-spacing: 0; font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.bw .nev-rubric-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.bw .nev-rubric-chip { display: inline-flex; align-items: center; gap: 5px; background: var(--subtle, #f8f8f6); border: 1px solid transparent; border-radius: 999px; padding: 5px 12px; font-size: 12.5px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.bw .nev-rubric-chip:hover { background: var(--cloud, #efefea); }
+.bw .nev-info { background: transparent; border: 0; padding: 0; color: var(--muted); font-size: 12.5px; }
+.bw .nev-opciones { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: var(--subtle, #f8f8f6); border: 0; border-radius: 10px; padding: 10px 12px; margin: 2px 0 6px; cursor: pointer; color: var(--ink); font-size: 13px; }
+.bw .nev-opciones svg { color: var(--muted); flex: none; }
+.bw .nev-opciones span { flex: 1; }
+.bw .nev-opciones em { font-style: normal; color: var(--accent, #c94a14); font-weight: 600; font-size: 12.5px; }
+.bw .nev-opciones:hover { background: var(--cloud, #efefea); }
+
+/* ── Bandas de cifras y selección: claras, no negras (5-nov) ────────────── */
+/* Las cifras van en tarjetas claras, como el resto del marco; lo elegido se
+   marca en naranja suave en vez de negro. */
+.bw .kpis, .bw .qd-summary-bar, .bw .qd-summary, .bw .crm-band, .bw .rev-kpis, .bw .croom-kpis, .bw .dq-kpis {
+  background: var(--panel, #fff); border: 1px solid var(--line); box-shadow: none;
+}
+.bw .kpis span, .bw .qd-summary-bar span, .bw .qd-summary span, .bw .crm-band span, .bw .rev-kpis span, .bw .croom-kpis span, .bw .dq-kpis span {
+  font-family: inherit; text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--muted);
+}
+.bw .kpis strong, .bw .qd-summary-bar strong, .bw .qd-summary strong, .bw .crm-band strong, .bw .rev-kpis strong, .bw .croom-kpis strong, .bw .dq-kpis strong {
+  font-family: inherit; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink);
+}
+.bw .kpis strong.accent, .bw .qd-summary-bar strong.accent, .bw .qd-summary strong.accent, .bw .crm-band strong.accent, .bw .rev-kpis strong.accent, .bw .croom-kpis strong.signal { color: var(--accent, #c94a14); }
+.bw .qd-summary-bar strong.good, .bw .qd-summary strong.good, .bw .dq-kpis strong.ok { color: var(--green, #1f7a4d); }
+.bw .croom-kpis small { color: var(--muted); }
+.bw .profile-lang button.active, .bw .qd-country button.active, .bw .qd-segmented button.active,
+.bw .croom-seg button.on, .bw .msg-seg button.on, .bw .crm-stages button.on, .bw .tpl-filters button.on,
+.bw .tb-modes button.on, .bw .nev-segmented button.on, .bw .intake-segmented button.on {
+  background: var(--orange-light, #fdeee6); color: var(--accent, #c94a14); border-color: #ea5e2744; box-shadow: none;
+}
+.bw .crm-stages button.on span, .bw .crm-stages button.on b { color: inherit; }
+/* Paneles laterales con borde negro: mismo borde fino que las tarjetas. */
+.bw .gate, .bw .croom-side, .bw .crm-selection, .bw .crm-move, .bw .crm-side, .bw .an-gate { border-color: var(--line); }
