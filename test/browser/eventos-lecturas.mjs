@@ -68,7 +68,7 @@ async function advance(ms = 600001) { await page.evaluate(ms => qa.advance(ms), 
 async function check(name, fn) { const n = assertions; try { await fn(); results.push({ name, passed: true, assertions: assertions - n }); } catch (e) { results.push({ name, passed: false, assertions: assertions - n, error: e.message }); } }
 async function isB() {
   verify(await rows().count() === 2 && (await text()).includes('RFx-SYN-B') && !(await text()).includes('RFx-SYN-A'), 'Only current B rows');
-  const counters = await page.locator('.contadores').textContent(); verify(counters.includes('Te toca: 0') && counters.includes('Pruebas: 2') && counters.includes('Todos: 2'), 'Counters belong to current result');
+  const counters = await page.locator('.contadores').textContent(); verify(!counters.includes('Te toca:') && counters.includes('Pruebas: 2') && counters.includes('Todos: 2'), 'Counters belong to current result');
 }
 try {
   browser = await chromium.launch({ headless: true, channel: 'chrome' }); const context = await browser.newContext();

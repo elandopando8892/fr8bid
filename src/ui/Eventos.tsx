@@ -59,17 +59,19 @@ export function Eventos() {
   const eventos = carga.tipo === "ok" ? carga.datos : [];
   const esAdmin = rol === "admin";
   const hoy = hoyMexico();
-  const [filtro, setFiltro] = useState<Grupo>("todos");
+  // Abre en «Te toca» cuando hay algo que decidir; si no, en «Todos».
+  const [elegida, setFiltro] = useState<Grupo | null>(null);
   const [busca, setBusca] = useState("");
   const grupo = (e: ResumenEvento) => grupoDe(e, hoy, esAdmin);
   const cuenta = (g: Grupo) => eventos.filter((e) => grupo(e) === g).length;
   const teToca = cuenta("te_toca");
+  const filtro: Grupo = elegida ?? (esAdmin && teToca > 0 ? "te_toca" : "todos");
   const q = busca.trim().toLowerCase();
   const visibles = eventos
     .filter((e) => filtro === "todos" || grupo(e) === filtro)
     .filter((e) => !q || [e.folio, e.nombre, e.shipper, ...e.rutas].some((x) => x.toLowerCase().includes(q)))
     .sort(filtro === "te_toca" || filtro === "todos" ? porUrgencia : (a, b) => (a.plazo || "9999").localeCompare(b.plazo || "9999"));
-  const pestanas: { g: Grupo; texto: string; n: number }[] = [
+  const todas: { g: Grupo; texto: string; n: number }[] = [
     ...(esAdmin ? [{ g: "te_toca" as Grupo, texto: "Te toca", n: teToca }] : []),
     { g: "carriers", texto: "Esperando carriers", n: cuenta("carriers") },
     { g: "entregados", texto: "Entregados", n: cuenta("entregados") },
@@ -77,6 +79,7 @@ export function Eventos() {
     { g: "pruebas", texto: "Pruebas", n: cuenta("pruebas") },
     { g: "todos", texto: "Todos", n: eventos.length }
   ];
+  const pestanas = todas.filter((p) => p.n > 0 || p.g === "todos" || p.g === filtro); // sin pestañas en cero
   const vacio: Record<Grupo, string> = {
     te_toca: "Nada te espera: ningún evento necesita una decisión tuya.",
     carriers: "Ningún evento está esperando ofertas.",
@@ -92,7 +95,6 @@ export function Eventos() {
         <div>
           <p className="miga">Eventos RFx</p>
           <h1>Eventos</h1>
-          <p className="tenue">Cada evento es una página: invitar, comparar ofertas, adjudicar y entregar a Rateware.</p>
         </div>
         {modo === "rateware" && rol !== "viewer" && (
           <Liga a="/rfx/new" className="btn-primario">
@@ -151,7 +153,6 @@ export function Eventos() {
           })}
         </div>
       )}
-      <p className="nota">Solo eventos de tu organización.</p>
     </section>
   );
 }
