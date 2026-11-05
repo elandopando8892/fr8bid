@@ -118,3 +118,8 @@
 .bw .nev-step1, .bw .nev-step2 { width: auto; max-width: none; flex: none; }
 .bw .nev-cedula { margin: 0; }
 .bw .nev-cedula .tenue { color: var(--muted); font-weight: 400; }
+
+/* Shipper intake: solicitudes primero, la liga como botón (5-nov, decisión de Jose) */
+.bw .intake-cols { flex-direction: column; align-items: stretch; }
+.bw .intake-form { width: auto; }
+.bw .intake-drafts > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }

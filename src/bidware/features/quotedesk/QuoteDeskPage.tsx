@@ -82,12 +82,16 @@ export function QuoteDeskPage() {
 
   // The open stages carry their count on the tab itself, instead of a separate KPI band.
   const counts: Record<string, number | undefined> = data?.kpis.counts ?? {};
+  // Como en Eventos: las pestañas en cero se ocultan (salvo Activas y la elegida).
+  // Si el servidor no manda conteos, se muestran todas.
+  const hayConteos = Object.values(counts).some((n) => typeof n === "number");
+  const activas = ["new", "estimating", "quoted", "bid_room"].reduce((t, k) => t + (counts[k] ?? 0), 0);
+  const pestanas = FILTERS.filter((f) => !data || !hayConteos || f.key === "active" || f.key === filter || (counts[f.key] ?? 0) > 0);
 
   return (
     <>
       <TopBar
         title="QuoteDesk"
-        sub={tr("text191")}
         actions={
           <button className="primary" onClick={() => setCreating(true)}>
             {tr("text138")}</button>
@@ -97,12 +101,15 @@ export function QuoteDeskPage() {
         <div style={{ display: "grid", gap: 14 }}>
           <div className="row qd-filters">
             <div className="tabs">
-              {FILTERS.map((f) => (
-                <button key={f.key} className={filter === f.key ? "active" : undefined} onClick={() => setFilter(f.key)}>
-                  {f.label}
-                  {counts[f.key] ? <span className="tab-count">{counts[f.key]}</span> : null}
-                </button>
-              ))}
+              {pestanas.map((f) => {
+                const n = f.key === "active" ? activas : counts[f.key];
+                return (
+                  <button key={f.key} className={filter === f.key ? "active" : undefined} onClick={() => setFilter(f.key)}>
+                    {f.label}
+                    {n ? <span className="tab-count">{n}</span> : null}
+                  </button>
+                );
+              })}
             </div>
             <div className="spacer" />
             <input
@@ -188,11 +195,8 @@ export function QuoteDeskPage() {
               ) : (
                 <Empty
                   title={data.rows.length ? tr("text202") : tr("text203")}
-                  hint={
-                    data.rows.length
-                      ? tr("text204")
-                      : tr("text205")
-                  }
+                  hint={data.rows.length ? tr("text204") : undefined}
+                  action={!data.rows.length && <button className="primary" onClick={() => setCreating(true)}>{tr("text138")}</button>}
                 />
               )}
 
