@@ -43,16 +43,15 @@ const TONO_SEGUIMIENTO: Record<EstadoSeguimiento, string> = { oferto: "ok", sin_
 
 const SIN_ENTREGA: EntregaLocal = { estado: "sin_preparar", operationId: null, error: null };
 
-// Los 11 pasos se agrupan en seis etapas: cada etapa es una vista. Así cada
+// Los 11 pasos se agrupan en cinco etapas: cada etapa es una vista. Así cada
 // clic en el riel cambia lo que se ve y no hay pasos que muestren lo mismo.
-type ClaveEtapa = "evento" | "carriers" | "ofertas" | "entrega" | "aviso" | "loads";
+type ClaveEtapa = "evento" | "carriers" | "ofertas" | "entrega" | "aviso";
 const ETAPAS: { clave: ClaveEtapa; titulo: string; pasos: ClavePaso[] }[] = [
   { clave: "evento", titulo: "Necesidad y evento", pasos: ["necesidad", "evento"] },
   { clave: "carriers", titulo: "Carriers e invitación", pasos: ["carriers", "invitacion"] },
   { clave: "ofertas", titulo: "Ofertas y adjudicación", pasos: ["ofertas", "comparar", "cierre", "adjudicar"] },
-  { clave: "entrega", titulo: "Entrega a Rateware", pasos: ["entrega"] },
-  { clave: "aviso", titulo: "Aviso al carrier", pasos: ["aviso"] },
-  { clave: "loads", titulo: "Visible en Loads", pasos: ["loads"] }
+  { clave: "entrega", titulo: "Entrega a Rateware", pasos: ["entrega", "loads"] },
+  { clave: "aviso", titulo: "Aviso al carrier", pasos: ["aviso"] }
 ];
 const etapaDe = (clave: ClavePaso): ClaveEtapa => ETAPAS.find((e) => e.pasos.includes(clave))!.clave;
 
@@ -118,7 +117,7 @@ export function Mesa({ id }: { id: string }) {
 
   if (carga.tipo !== "ok" || !r) return <EstadoVista carga={carga} reintentar={leer} />;
   const d = carga.datos;
-  const etapaActual: ClaveEtapa = r.actual ? etapaDe(r.actual.clave) : "loads";
+  const etapaActual: ClaveEtapa = r.actual ? etapaDe(r.actual.clave) : "aviso";
   const actual = vista ?? etapaActual;
   // Falta profundidad (o hay carriers sumados por invitar): en Ofertas también
   // se ven los sugeridos y la invitación, para sumar sin cambiar de etapa.
@@ -212,8 +211,6 @@ export function Mesa({ id }: { id: string }) {
           {actual === "ofertas" && <PanelComparar {...p} />}
           {actual === "entrega" && <PanelEntrega {...p} />}
           {actual === "aviso" && <PanelAviso {...p} />}
-          {actual === "loads" && <PanelLoads d={d} />}
-          {r.entregaConfirmada && (actual === "entrega" || actual === "loads") && <Cadena d={d} recibo={recibo} entrega={entrega} />}
           {s.modo === "rateware" && <MasDelEvento id={id} borrador={d.evento.estado === "borrador"} />}
         </div>
       </div>
@@ -1842,8 +1839,15 @@ function PanelEntrega({ d, ctx, accion, entrega, setEntrega, recibo, setRecibo }
       if (res.entrega.estado !== "confirmada") throw new Error(res.entrega.error || "La entrega no se confirmó.");
     }, "Recibo de Rateware confirmado.");
 
+  const [verTraza, setVerTraza] = useState(false);
+  const candadosEntrega = [
+    { regla: "I4", ok: decidido, texto: decidido ? "Todas las rutas decididas" : "Faltan rutas por decidir" },
+    { regla: "I2", ok: d.rutas.flatMap((ruta) => ruta.participaciones).filter((p) => p.rol).every((p) => p.adjudicada && !versionMasReciente(p)), texto: d.rutas.some((ruta) => ruta.participaciones.some((p) => p.rol && !p.adjudicada)) ? "Revisa la adjudicación: versión no identificada" : "Lo adjudicado es la versión vigente" },
+    { regla: "I5", ok: entrega.estado !== "incierta", texto: entrega.estado === "incierta" ? "Incierta: concilia con la misma operación" : "Sin entregas inciertas" },
+    { regla: "rol", ok: ctx.rol === "admin", texto: ctx.rol === "admin" ? "Tu rol: Administrador" : "Solo el Administrador entrega" }
+  ];
   return (
-    <div className="dos-columnas">
+    <>
       <div className="tarjeta">
         <div className="fila">
           <h2>Entrega a Rateware</h2>
@@ -1879,6 +1883,7 @@ function PanelEntrega({ d, ctx, accion, entrega, setEntrega, recibo, setRecibo }
         {!r.entregaConfirmada && decidido && ctx.rol === "admin" && (entrega.estado === "sin_preparar" || entrega.estado === "rechazada") && (
           <OfrecerRespaldo d={d} ctx={ctx} accion={accion} abierta={respaldoAbierto} setAbierta={setRespaldoAbierto} />
         )}
+        {!r.entregaConfirmada && <Candados lista={candadosEntrega} />}
         {!r.entregaConfirmada && decidido && ctx.rol === "admin" && (
           <div className="fila-botones">
             {entrega.estado === "sin_preparar" || entrega.estado === "rechazada" ? (
@@ -1905,19 +1910,35 @@ function PanelEntrega({ d, ctx, accion, entrega, setEntrega, recibo, setRecibo }
           </div>
         )}
         {!decidido && <p className="tenue">Primero adjudica todas las rutas.</p>}
+        {!r.entregaConfirmada && decidido && <p className="nota">Nunca hay reintento automático.</p>}
+        {/* Loads y la trazabilidad se pliegan aquí: Fr8Bid no consulta a Loads, lo infiere del recibo. */}
+        {r.entregaConfirmada && (
+          <div className="pie-entrega">
+            <p className="fila-icono">
+              <I.Check size={16} className="ok-icono" />
+              <span>
+                <b>Visible en Loads</b> <span className="tenue">· inferido del recibo; Fr8Bid no consulta a Loads</span>{" "}
+                <button className="btn-texto" onClick={() => setVerTraza(!verTraza)}>{verTraza ? "Ocultar trazabilidad" : "Ver trazabilidad"}</button>
+              </span>
+            </p>
+            {verTraza && (
+              <>
+                {prims.map((p) => {
+                  const proy = proyeccionLoads(d, p.id);
+                  return proy ? (
+                    <details key={p.id}>
+                      <summary className="tenue">Datos que Loads puede mostrar de {p.carrier}</summary>
+                      <pre className="mono codigo">{JSON.stringify(proy, null, 2)}</pre>
+                    </details>
+                  ) : null;
+                })}
+                <Cadena d={d} recibo={recibo} entrega={entrega} incrustada />
+              </>
+            )}
+          </div>
+        )}
       </div>
-      <aside className="tarjeta lado">
-        <Candados
-          lista={[
-            { regla: "I4", ok: decidido, texto: decidido ? "Todas las rutas decididas" : "Faltan rutas por decidir" },
-            { regla: "I2", ok: d.rutas.flatMap((ruta) => ruta.participaciones).filter((p) => p.rol).every((p) => p.adjudicada && !versionMasReciente(p)), texto: d.rutas.some((ruta) => ruta.participaciones.some((p) => p.rol && !p.adjudicada)) ? "Revisa la adjudicación: versión no identificada" : "Lo adjudicado es la versión vigente" },
-            { regla: "I5", ok: entrega.estado !== "incierta", texto: entrega.estado === "incierta" ? "Incierta: concilia con la misma operación" : "Sin entregas inciertas" },
-            { regla: "rol", ok: ctx.rol === "admin", texto: ctx.rol === "admin" ? "Tu rol: Administrador" : "Solo el Administrador entrega" }
-          ]}
-        />
-        <p className="nota">Nunca hay reintento automático.</p>
-      </aside>
-    </div>
+    </>
   );
 }
 
@@ -1961,6 +1982,8 @@ function PanelAviso({ d, ctx, accion }: Props) {
   })).values()].filter((x) => x.a);
   const idsPrincipales = new Set(principales.map(({ a }) => a!.id));
   const otros = d.avisos.filter((a) => a.tipo === "adjudicacion" && a.resultado !== "adjudicado" && !idsPrincipales.has(a.id));
+  // Con el botón general, el de cada aviso solo sale si lo abres a propósito o tiene algo pendiente.
+  const general = ctx.rol === "admin" && avisosListos(d, ctx).length >= 2;
   return (
     <div className="tarjeta">
       <h2 className="fila-icono"><I.Megafono size={17} />Aviso de adjudicación</h2>
@@ -1979,7 +2002,7 @@ function PanelAviso({ d, ctx, accion }: Props) {
         <p className="nota">Textos de Rateware (en inglés en Rateware real; se editan en su Cola). Salen por Gmail desde sales@heymarksman.com.</p>
       )}
       {principales.map(({ p, a }) => {
-        return a ? <TarjetaAviso key={a.id} d={d} a={a} titulo={p.carrier} tipo="adjudicado" abierto ctx={ctx} accion={accion} /> : null;
+        return a ? <TarjetaAviso key={a.id} d={d} a={a} titulo={p.carrier} tipo="adjudicado" abierto general={general} ctx={ctx} accion={accion} /> : null;
       })}
       {otros.length > 0 && (
         <>
@@ -1990,6 +2013,7 @@ function PanelAviso({ d, ctx, accion }: Props) {
               a={a}
               titulo={d.rutas.flatMap((r) => r.participaciones).find((x) => x.id === a.participacionId)?.carrier ?? a.destinatario}
               tipo={a.resultado === "respaldo" ? "respaldo" : "no adjudicado"}
+              general={general}
               ctx={ctx}
               accion={accion}
             />
@@ -2003,13 +2027,14 @@ function PanelAviso({ d, ctx, accion }: Props) {
 // Todos los avisos listos (adjudicado, respaldo y no adjudicados) con una sola
 // confirmación, en tandas y con la versión exacta de cada uno. Los que tienen un
 // candado pendiente se quedan para aprobarse uno por uno.
+const avisosListos = (d: Detalle, ctx: Contexto) =>
+  d.avisos.filter((a) => a.tipo === "adjudicacion" && (a.estado === "borrador" || a.estado === "fallido" || a.estado === "en_cola") && candadosAviso(d, a, ctx).every((c) => c.ok));
+
 function AprobarTodos({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion: Props["accion"] }) {
   const s = useSesion();
   const [avance, setAvance] = useState<AvanceEnvio | null>(null);
   if (ctx.rol !== "admin") return null;
-  const listos = d.avisos.filter(
-    (a) => a.tipo === "adjudicacion" && (a.estado === "borrador" || a.estado === "fallido" || a.estado === "en_cola") && candadosAviso(d, a, ctx).every((c) => c.ok)
-  );
+  const listos = avisosListos(d, ctx);
   if (listos.length < 2) return null;
   const tandas = planearTandas(listos).length;
   return (
@@ -2047,11 +2072,15 @@ function AprobarTodos({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion: P
 // Un aviso con su texto exacto, candados y el botón de enviar esa versión.
 // Un renglón por aviso: quién, qué resultado y en qué va. El texto exacto se
 // abre con el ojo (el del adjudicado ya abierto) y se envía desde ahí.
-function TarjetaAviso({ d, a, titulo, tipo, abierto = false, ctx, accion }: { d: Detalle; a: Aviso; titulo: string; tipo: "adjudicado" | "respaldo" | "no adjudicado"; abierto?: boolean; ctx: Contexto; accion: Props["accion"] }) {
+function TarjetaAviso({ d, a, titulo, tipo, abierto = false, general = false, ctx, accion }: { d: Detalle; a: Aviso; titulo: string; tipo: "adjudicado" | "respaldo" | "no adjudicado"; abierto?: boolean; general?: boolean; ctx: Contexto; accion: Props["accion"] }) {
   const s = useSesion();
   const [ver, setVer] = useState(abierto);
+  const [aProposito, setAProposito] = useState(false);
   const candados = candadosAviso(d, a, ctx);
   const enviable = ctx.rol === "admin" && (a.estado === "borrador" || a.estado === "fallido" || a.estado === "en_cola");
+  const pendiente = !candados.every((c) => c.ok) || a.estado === "fallido" || a.estado === "en_cola";
+  // Sin botón general, cada aviso trae el suyo; con él, solo si lo abriste tú o tiene algo pendiente.
+  const conBoton = enviable && (!general ? ver || pendiente : aProposito || pendiente);
   const tono = a.estado === "aceptado" ? "ok" : a.estado === "rebotado" || a.estado === "fallido" ? "err" : a.estado === "en_cola" || a.estado === "por_verificar" ? "warn" : "";
   return (
     <div className={`renglon-aviso ${ver ? "abierto" : ""}`}>
@@ -2063,7 +2092,7 @@ function TarjetaAviso({ d, a, titulo, tipo, abierto = false, ctx, accion }: { d:
         </span>
         <span className="fila-botones sin-margen">
           <span className={`pill ${tono}`}>{a.estado === "por_verificar" ? "aprobación no verificada" : ESTADO_INVITACION[a.estado] ?? a.estado}</span>
-          <button className="btn-icono" aria-expanded={ver} aria-label={ver ? "Ocultar texto" : "Ver texto"} title={ver ? "Ocultar texto" : "Ver texto"} onClick={() => setVer(!ver)}><I.Ojo size={16} /></button>
+          <button className="btn-icono" aria-expanded={ver} aria-label={ver ? "Ocultar texto" : "Ver texto"} title={ver ? "Ocultar texto" : "Ver texto"} onClick={() => { setVer(!ver); setAProposito(!ver); }}><I.Ojo size={16} /></button>
         </span>
       </div>
       {ver && (
@@ -2074,8 +2103,8 @@ function TarjetaAviso({ d, a, titulo, tipo, abierto = false, ctx, accion }: { d:
         </div>
       )}
       {a.reciboProveedor && <p className="tenue">{a.estado === "aceptado" ? "Gmail aceptó el mensaje" : "Referencia del proveedor"} · id {a.reciboProveedor}</p>}
-      {enviable && (ver || !candados.every((c) => c.ok)) && <Candados lista={candados} />}
-      {enviable && (ver || !candados.every((c) => c.ok)) && (
+      {conBoton && <Candados lista={candados} />}
+      {conBoton && (
         <Confirmar
           etiqueta="Aprobar este texto y enviar"
           clase="btn-secundario"
@@ -2089,37 +2118,10 @@ function TarjetaAviso({ d, a, titulo, tipo, abierto = false, ctx, accion }: { d:
   );
 }
 
-function PanelLoads({ d }: { d: Detalle }) {
+function Cadena({ d, recibo, entrega, incrustada = false }: { d: Detalle; recibo: Recibo | null; entrega: EntregaLocal; incrustada?: boolean }) {
   const prims = d.rutas.map(primario).filter(Boolean) as Participacion[];
   return (
-    <div className="tarjeta">
-      <h2>Visible en Loads</h2>
-      <p className="tenue">Fr8Bid no consulta a Loads: este paso se deduce del recibo de Rateware. Confírmalo abriendo Loads.</p>
-      {prims.map((p) => {
-        const proy = proyeccionLoads(d, p.id);
-        return (
-          <div key={p.id}>
-            <p>
-              <b>{p.carrier}</b> {proy ? "debería verse «adjudicado» en Loads." : "todavía no: falta el recibo de Rateware."}
-            </p>
-            {proy && (
-              <details>
-                <summary className="tenue">Datos que Loads puede mostrar</summary>
-                <pre className="mono codigo">{JSON.stringify(proy, null, 2)}</pre>
-              </details>
-            )}
-          </div>
-        );
-      })}
-      {!prims.length && <p className="tenue">Sin primario todavía.</p>}
-    </div>
-  );
-}
-
-function Cadena({ d, recibo, entrega }: { d: Detalle; recibo: Recibo | null; entrega: EntregaLocal }) {
-  const prims = d.rutas.map(primario).filter(Boolean) as Participacion[];
-  return (
-    <div className="tarjeta cadena">
+    <div className={incrustada ? "cadena" : "tarjeta cadena"}>
       <h3>Trazabilidad</h3>
       {prims.map((p) => {
         const a = avisoDe(d, p.id, "adjudicacion");

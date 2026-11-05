@@ -58,9 +58,9 @@ try{
   await page.getByRole('button',{name:'Entregar a Rateware',exact:true}).click();await page.getByRole('button',{name:'Sí, confirmar',exact:true}).waitFor();
   check((await page.evaluate(()=>qa.writes)).length===0,'First UI step does not write');await page.getByRole('button',{name:'Cancelar',exact:true}).click();
   await page.getByRole('button',{name:/Aviso al carrier/}).click();
-  check(await page.locator('.aviso-caja').count()===1,'Grouped notice appears once');
-  check((await page.locator('.aviso-caja').innerText()).includes('aprobación no verificada'),'Unknown approval visible');
-  check((await page.locator('.aviso-caja').innerText()).includes('Referencia del proveedor'),'Provider reference not acceptance');
+  check(await page.locator('.renglon-aviso').count()===1,'Grouped notice appears once');
+  check((await page.locator('.renglon-aviso').innerText()).includes('aprobación no verificada'),'Unknown approval visible');
+  check((await page.locator('.renglon-aviso').innerText()).includes('Referencia del proveedor'),'Provider reference not acceptance');
   check(await page.getByRole('button',{name:'Aprobar este texto y enviar',exact:true}).count()===0,'Unknown approval not sendable');
   check(!(await page.locator('body').innerText()).includes('WHATSAPP NO GMAIL'),'WhatsApp not presented as Gmail');
   await page.screenshot({path:resolve(out,'avisos-'+width+'.png'),fullPage:true});

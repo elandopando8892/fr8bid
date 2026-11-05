@@ -445,3 +445,8 @@ tr.mejor > td { background: #f6fbf7; }
 .pie-adjudicar h3:not(:first-child) { margin-top: 14px; }
 .tabla-tarjetas .celda-accion { width: 36px; text-align: right; }
 .motivos .btn-texto { font-size: 12.5px; padding: 0 4px; }
+
+/* Entrega: candados dentro, Loads y trazabilidad al pie (5-nov, decisión de Jose) */
+.pie-entrega { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.pie-entrega .cadena { margin-top: 10px; }
+.pie-entrega details { margin: 6px 0; }
