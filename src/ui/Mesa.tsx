@@ -36,6 +36,11 @@ import { EditorCondiciones, ListaCondiciones, MatrizCondiciones } from "./condic
 import { aCarga, Confirmar, Desactualizado, dinero, EstadoVista, fecha, Liga, plural, Prueba, type Carga } from "./comun";
 import { useSesion } from "./sesion";
 
+// Fecha corta sin hora, para columnas angostas.
+const dia = (iso: string | null | undefined) =>
+  iso ? new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString("es-MX", { day: "numeric", month: "short", timeZone: "America/Mexico_City" }) : "—";
+const TONO_SEGUIMIENTO: Record<EstadoSeguimiento, string> = { oferto: "ok", sin_abrir: "warn", abrio: "warn", rebote: "err", respondio: "info", declino: "" };
+
 const SIN_ENTREGA: EntregaLocal = { estado: "sin_preparar", operationId: null, error: null };
 
 // Los 11 pasos se agrupan en seis etapas: cada etapa es una vista. Así cada
@@ -297,13 +302,13 @@ const ADVERTENCIA_REAL = (s: ReturnType<typeof useSesion>, d: Detalle) =>
     : `Esto escribe en rateware-prod.${d.evento.prueba ? " Evento simulado: requiere la aprobación del propietario para esta acción." : ""}`;
 
 // Solo en modo simulado: abrir la liga de cada carrier para probar el recorrido.
-function LigasSimuladas({ d }: { d: Detalle }) {
+function LigasSimuladas({ d, ruta }: { d: Detalle; ruta?: Ruta }) {
   const s = useSesion();
   if (!s.sim || d.evento.estado !== "abierto") return null;
   return (
     <div className="nota">
       Ligas de carrier (simulado):{" "}
-      {d.rutas.flatMap((r) => r.participaciones).map((p) => (
+      {(ruta ? [ruta] : d.rutas).flatMap((r) => r.participaciones).map((p) => (
         // Misma pestaña: el Rateware simulado vive en la memoria de esta página.
         <Liga key={p.id} a={`/bid/${s.sim!.tokenDe(p.id)}`} className="liga-sim">
           {p.carrier}
@@ -930,6 +935,8 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
   const ahora = new Date();
   const flacas = rutasSinProfundidad(d);
   const siguiente = new Map(filas.map((x) => [x.carrierId, siguienteIntento(d, x, ahora)]));
+  // La columna solo aparece si algún carrier tiene un intento por delante.
+  const conSiguiente = [...siguiente.values()].some(Boolean);
   const tocan = [...siguiente.values()].filter((x) => x?.vencido);
   const porPreparar = intentosPorPreparar(d, ahora, ctx.hoy);
   const muestra = porPreparar[0];
@@ -956,18 +963,20 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
   };
   return (
     <div className="tarjeta">
-      <h2>Seguimiento</h2>
-      <p className="tenue">
-        {plural(filas.length, "invitado")}: {conteo("oferto")} ofertaron
-        {conteo("abrio") ? `, ${conteo("abrio")} abrieron sin ofertar` : ""}
-        {conteo("sin_abrir") ? `, ${conteo("sin_abrir")} no han abierto la liga` : ""}
-        {conteo("respondio") ? `, ${conteo("respondio")} respondieron por otro canal` : ""}
-        {conteo("declino") ? `, ${conteo("declino")} declinaron` : ""}
-        {conteo("rebote") ? `, ${conteo("rebote")} rebotaron` : ""}.
+      <div className="fila">
+        <h2 className="fila-icono"><I.Usuarios size={17} />Seguimiento <span className="tenue">· {plural(filas.length, "invitado")}</span></h2>
         {!hayPendientes && (
-          <> <button className="btn-texto" onClick={() => setVerTabla(!verTabla)}>{verTabla ? "Ocultar detalle" : "Ver por carrier"}</button></>
+          <button className="btn-texto con-icono" onClick={() => setVerTabla(!verTabla)}><I.Lista size={15} />{verTabla ? "Ocultar detalle" : "Ver por carrier"}</button>
         )}
-      </p>
+      </div>
+      <ul className="conteos">
+        {conteo("oferto") > 0 && <li className="ok"><I.Check size={14} />{conteo("oferto")} ofertaron</li>}
+        {conteo("abrio") > 0 && <li className="warn"><I.Ojo size={14} />{conteo("abrio")} abrieron sin ofertar</li>}
+        {conteo("sin_abrir") > 0 && <li className="warn"><I.Reloj size={14} />{conteo("sin_abrir")} sin abrir la liga</li>}
+        {conteo("respondio") > 0 && <li><I.Chat size={14} />{conteo("respondio")} por otro canal</li>}
+        {conteo("declino") > 0 && <li><I.Salir size={14} />{conteo("declino")} declinaron</li>}
+        {conteo("rebote") > 0 && <li className="err"><I.Alerta size={14} />{conteo("rebote")} rebotaron</li>}
+      </ul>
       {d.respuestas === null && (
         <p className="aviso-caja">
           No se pudo revisar quién ya contestó por correo o en el chat del Bid Room. Mientras no se pueda, Fr8Bid no prepara intentos ni recordatorios.
@@ -1038,7 +1047,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
       <div className="tabla-envoltura">
       <table className="tabla tabla-tarjetas">
         <thead>
-          <tr><th>Carrier</th><th>Estado</th><th>Rutas</th><th>Invitado</th><th>Abrió</th><th>Siguiente intento</th><th></th></tr>
+          <tr><th>Carrier</th><th>Estado</th><th>Rutas</th><th>Actividad</th>{conSiguiente && <th>Siguiente intento</th>}<th></th></tr>
         </thead>
         <tbody>
           {ordenadas.map((x) => {
@@ -1048,61 +1057,65 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                 <tr>
                   <td><b>{x.carrier}</b></td>
                   <td data-etiqueta="Estado">
-                    {x.estado === "respondio" && x.respondioPor.length
-                      ? `respondió por ${x.respondioPor.map((c) => (c === "correo" ? "correo" : "chat del Bid Room")).join(" y ")}`
-                      : ETIQUETA_SEGUIMIENTO[x.estado]}
-                    {x.diasSinRespuesta !== null ? ` · ${plural(x.diasSinRespuesta, "día")}` : ""}
+                    <span className={`pill ${TONO_SEGUIMIENTO[x.estado]}`}>
+                      {x.estado === "respondio" && x.respondioPor.length
+                        ? `respondió por ${x.respondioPor.map((c) => (c === "correo" ? "correo" : "chat del Bid Room")).join(" y ")}`
+                        : ETIQUETA_SEGUIMIENTO[x.estado]}
+                    </span>
+                    {x.diasSinRespuesta ? <span className="tenue"> {plural(x.diasSinRespuesta, "día")}</span> : null}
                   </td>
                   <td data-etiqueta="Rutas">{x.estado === "oferto" && x.ofertadas < x.rutas ? `${x.ofertadas} de ${x.rutas}` : x.rutas}</td>
-                  <td data-etiqueta="Invitado">{fecha(x.invitadaEn)}</td>
-                  <td data-etiqueta="Abrió">{fecha(x.vistaEn)}</td>
-                  <td data-etiqueta="Siguiente intento">
+                  <td data-etiqueta="Actividad" className="tenue sin-salto">
+                    <span title="Invitado"><I.Enviar size={13} /> {dia(x.invitadaEn)}</span>
+                    {x.vistaEn && <span title="Abrió la liga"> · <I.Ojo size={13} /> {dia(x.vistaEn)}</span>}
+                  </td>
+                  {conSiguiente && <td data-etiqueta="Siguiente intento">
                     {(() => {
                       const sig = siguiente.get(x.carrierId);
                       if (!sig) return "—";
                       return <>{sig.intento}º por {sig.canal === "whatsapp" ? "WhatsApp" : "correo"} · {sig.enCola ? "borrador por aprobar" : sig.vencido ? <span className="pill alerta">ya toca</span> : fecha(sig.tocaEn)}</>;
                     })()}
-                  </td>
-                  <td>
+                  </td>}
+                  <td className="acciones-chicas">
                     {whatsappDe.get(x.carrierId)?.liga && ctx.rol !== "viewer" && (
-                      <a className="btn-texto" href={whatsappDe.get(x.carrierId)!.liga!} target="_blank" rel="noreferrer" title={`+${whatsappDe.get(x.carrierId)!.numero} · ${whatsappDe.get(x.carrierId)!.telefono.motivo}`}>
-                        WhatsApp{whatsappDe.get(x.carrierId)!.telefono.certeza === "dudoso" ? " (por confirmar)" : ""}
+                      <a className="btn-chico" href={whatsappDe.get(x.carrierId)!.liga!} target="_blank" rel="noreferrer" title={`+${whatsappDe.get(x.carrierId)!.numero} · ${whatsappDe.get(x.carrierId)!.telefono.motivo}`}>
+                        <I.Chat size={14} />WhatsApp{whatsappDe.get(x.carrierId)!.telefono.certeza === "dudoso" ? " (por confirmar)" : ""}
                       </a>
                     )}
                     {(x.estado === "rebote" || (whatsappDe.has(x.carrierId) && !whatsappDe.get(x.carrierId)!.liga)) && ctx.rol !== "viewer" && (
-                      <button className="btn-texto" onClick={() => setAbierto(abierto === `c:${x.carrierId}` ? null : `c:${x.carrierId}`)}>
-                        {abierto === `c:${x.carrierId}` ? "Ocultar" : "Otros contactos"}
+                      <button className="btn-chico" onClick={() => setAbierto(abierto === `c:${x.carrierId}` ? null : `c:${x.carrierId}`)}>
+                        <I.Usuarios size={14} />{abierto === `c:${x.carrierId}` ? "Ocultar" : "Otros contactos"}
                       </button>
                     )}
                     {r && ctx.rol !== "viewer" && (
-                      <button className="btn-texto" onClick={() => setAbierto(abierto === x.carrierId ? null : x.carrierId)}>
-                        {abierto === x.carrierId ? "Ocultar" : "Recordatorio"}
+                      <button className="btn-chico" onClick={() => setAbierto(abierto === x.carrierId ? null : x.carrierId)}>
+                        <I.Sobre size={14} />{abierto === x.carrierId ? "Ocultar" : "Recordatorio"}
                       </button>
                     )}
                     {(x.estado === "sin_abrir" || x.estado === "abrio") && ctx.rol !== "viewer" && d.evento.estado === "abierto" && (
-                      <button className="btn-texto" onClick={() => setAbierto(abierto === `r:${x.carrierId}` ? null : `r:${x.carrierId}`)}>
-                        {abierto === `r:${x.carrierId}` ? "Ocultar" : "Ya respondió"}
+                      <button className="btn-chico" onClick={() => setAbierto(abierto === `r:${x.carrierId}` ? null : `r:${x.carrierId}`)}>
+                        <I.Check size={14} />{abierto === `r:${x.carrierId}` ? "Ocultar" : "Ya respondió"}
                       </button>
                     )}
                   </td>
                 </tr>
                 {abierto === `c:${x.carrierId}` && (
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={conSiguiente ? 6 : 5}>
                       <ContactosSugeridos vendorId={x.carrierId} abrir />
                     </td>
                   </tr>
                 )}
                 {abierto === `r:${x.carrierId}` && (
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={conSiguiente ? 6 : 5}>
                       <YaRespondio d={d} s={x} accion={accion} />
                     </td>
                   </tr>
                 )}
                 {r && abierto === x.carrierId && (
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={conSiguiente ? 6 : 5}>
                       <div className="aviso-caja">
                         <p className="tenue">Para: {r.para} · Gmail</p>
                         <p><b>{r.asunto}</b></p>
@@ -1247,7 +1260,7 @@ function CapturaEquipo({ d, ruta, accion }: { d: Detalle; ruta: Ruta; accion: Pr
   const [f, setF] = useState<{ id: string; tarifa: string; moneda: string; vigencia: string; capacidad: string; transito: string; canal: "email" | "phone" | "whatsapp" | "other"; notas: string }>(vacio);
   const [abierto, setAbierto] = useState(false);
   if (s.rol === "viewer" || !candidatas.length || d.evento.estado === "adjudicado" || d.evento.estado === "archivado") return null;
-  if (!abierto) return <button className="btn-texto" onClick={() => setAbierto(true)}>Capturar oferta recibida por otro canal</button>;
+  if (!abierto) return <button className="btn-texto con-icono" onClick={() => setAbierto(true)}><I.Mas size={14} />Capturar oferta recibida por otro canal</button>;
   const tarifa = Number(f.tarifa.replace(/,/g, ""));
   const num = (x: string) => (x.trim() === "" ? null : Number(x));
   const valido = f.id && tarifa > 0 && [f.capacidad, f.transito].every((x) => x.trim() === "" || Number.isFinite(Number(x)));
@@ -1307,7 +1320,14 @@ function CapturaEquipo({ d, ruta, accion }: { d: Detalle; ruta: Ruta; accion: Pr
 
 function PanelComparar({ d, ctx, accion }: Props) {
   const s = useSesion();
-  const [elegido, setElegido] = useState<string | null>(null);
+  // Con una sola ruta cerrada y sin primario, la mejor oferta llega ya elegida:
+  // el formulario de adjudicar aparece sin buscarlo (se puede elegir otra).
+  const [elegido, setElegido] = useState<string | null>(() => {
+    const r = d.rutas.length === 1 ? d.rutas[0] : null;
+    if (!r || d.evento.estado !== "cerrado" || ctx.rol !== "admin" || primario(r)) return null;
+    const mejor = [...conOferta(r)].filter((x) => !x.rol).sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn)[0];
+    return mejor?.id ?? null;
+  });
   const [historial, setHistorial] = useState<string | null>(null);
   const [preguntaA, setPreguntaA] = useState<string | null>(null);
   const hayOfertas = d.rutas.some((r) => conOferta(r).length > 0);
@@ -1317,14 +1337,16 @@ function PanelComparar({ d, ctx, accion }: Props) {
   return (
     <>
       {abierto && ctx.rol === "admin" && hayOfertas && (
-        <div className="tarjeta accion-principal">
-          <p>
+        <div className="tarjeta accion-principal linea-cierre">
+          <p className="fila-icono">
+            <I.Candado size={16} />
             {pendientes
               ? `${plural(pendientes, "carrier")} sin ofertar todavía. Puedes esperar o cerrar ya para adjudicar.`
               : "Ya respondieron todos los invitados. Cierra a ofertas para adjudicar."}
           </p>
           <Confirmar
             etiqueta="Cerrar a ofertas"
+            icono={<I.Candado size={15} />}
             clase={pendientes ? "btn-secundario" : "btn-primario"}
             advertencia={<>La liga de cada carrier dejará de aceptar ofertas en todas las rutas. Así el importe que adjudiques no cambia sin otra decisión. {ADVERTENCIA_REAL(s, d)}</>}
             onConfirmar={() => accion(() => s.api.cerrarAOfertas(d.evento.id), "Evento cerrado a ofertas.")}
@@ -1348,10 +1370,10 @@ function PanelComparar({ d, ctx, accion }: Props) {
               <span className="tenue">Objetivo {dinero(ruta.objetivo, ruta.moneda)}</span>
             </div>
             {i === 0 && hayOfertas && (
-              <p className="tenue descargas">
-                Comparativo en Excel:{" "}
-                <button className="btn-texto" onClick={() => descargarComparativo(d, false)}>interno</button> ·{" "}
-                <button className="btn-texto" onClick={() => descargarComparativo(d, true)} title="Sin nombres de carrier, modelo comercial ni porcentajes">para el shipper (anónimo)</button>
+              <p className="descargas fila-botones sin-margen">
+                <span className="tenue">Excel:</span>
+                <button className="btn-chico" onClick={() => descargarComparativo(d, false)}><I.Carpeta size={14} />Interno</button>
+                <button className="btn-chico" onClick={() => descargarComparativo(d, true)} title="Sin nombres de carrier, modelo comercial ni porcentajes"><I.Carpeta size={14} />Para el shipper (anónimo)</button>
               </p>
             )}
             {filas.length > 0 && (
@@ -1375,6 +1397,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
                         key={p.id}
                         p={p}
                         ruta={ruta}
+                        mejor={filas.length > 1 && p.id === filas[0].id}
                         totalRubros={totalRubros}
                         elegido={elegido === p.id}
                         columnaElegir={puedeElegir}
@@ -1399,7 +1422,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
               <PreguntaCarrier d={d} ruta={ruta} p={ruta.participaciones.find((x) => x.id === preguntaA)!} onCerrar={() => setPreguntaA(null)} />
             )}
             {!prim && <CapturaEquipo d={d} ruta={ruta} accion={accion} />}
-            <LigasSimuladas d={d} />
+            <LigasSimuladas d={d} ruta={ruta} />
           </div>
         );
         // La tabla siempre a todo el ancho; lo que se decide va debajo, en la
@@ -1479,6 +1502,7 @@ function AdjudicarEnLote({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion
       </div>
       <label className="campo">
         <span>Motivo para todas (obligatorio)</span>
+        <MotivosRapidos opciones={MOTIVOS_LOTE} motivo={motivo} setMotivo={setMotivo} />
         <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={2} placeholder="Ej.: mejor all-in de cada ruta con candados en orden" />
       </label>
       <Confirmar
@@ -1518,40 +1542,60 @@ function ResumenCondiciones({ ruta, p }: { ruta: Ruta; p: Participacion }) {
   return <span title={r.marcadas.join(", ")}>{r.cumplidas}/{r.total}{r.marcadas.length ? ` · ${r.marcadas.length} con nota` : ""}</span>;
 }
 
-function FilaOferta({ p, ruta, totalRubros, elegido, columnaElegir, elegible, onElegir, onHistorial, onPreguntar }: { p: Participacion; ruta: Ruta; totalRubros: number; elegido: boolean; columnaElegir: boolean; elegible: boolean; onElegir: () => void; onHistorial: () => void; onPreguntar?: () => void }) {
+// Motivos de un clic: llenan el campo y se pueden editar antes de confirmar.
+const MOTIVOS_PRIMARIO = ["Mejor all-in con candados en orden", "Mejor capacidad semanal", "Mejor tránsito", "Desempeño previo con Marksman"];
+const MOTIVOS_RESPALDO = ["Siguiente mejor all-in, como respaldo", "Capacidad adicional para la ruta"];
+const MOTIVOS_LOTE = ["Mejor all-in de cada ruta con candados en orden"];
+function MotivosRapidos({ opciones, motivo, setMotivo }: { opciones: string[]; motivo: string; setMotivo: (x: string) => void }) {
+  return (
+    <span className="fila-botones sin-margen motivos">
+      {opciones.map((o) => (
+        <button key={o} type="button" className={`btn-chico ${motivo === o ? "activo" : ""}`} onClick={() => setMotivo(o)}>
+          {o}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+function FilaOferta({ p, ruta, mejor = false, totalRubros, elegido, columnaElegir, elegible, onElegir, onHistorial, onPreguntar }: { p: Participacion; ruta: Ruta; mejor?: boolean; totalRubros: number; elegido: boolean; columnaElegir: boolean; elegible: boolean; onElegir: () => void; onHistorial: () => void; onPreguntar?: () => void }) {
   const v = versionVigente(p)!;
   const rubros = Object.values(p.rubros);
   const negativa = rubros.includes("no_puedo");
   const deAcuerdo = rubros.filter((x) => x === "de_acuerdo").length;
   const anterior = p.versiones.find((x) => x.numero === v.numero - 1);
   const venta = tarifaVenta(v);
+  // Contra el objetivo de la ruta: lo que orienta de un vistazo.
+  const contraObjetivo = ruta.objetivo ? Math.round(((v.tarifaAllIn - ruta.objetivo) / ruta.objetivo) * 100) : null;
   return (
-    <tr className={elegido ? "elegida" : ""} onClick={elegible ? onElegir : undefined} style={elegible ? { cursor: "pointer" } : undefined}>
+    <tr className={`${elegido ? "elegida" : ""} ${mejor ? "mejor" : ""}`} onClick={elegible ? onElegir : undefined} style={elegible ? { cursor: "pointer" } : undefined}>
       {columnaElegir && <td>{elegible && <input type="radio" name={`oferta-${ruta.id}`} aria-label={`Elegir ${p.carrier}`} checked={elegido} onChange={onElegir} />}</td>}
       <td>
         <b>{p.carrier}</b>
+        {mejor && <span className="pill ok-pill con-icono"><I.Check size={12} />mejor</span>}
         {p.rol && <span className="pill ok-pill">{p.rol}</span>}
         <div className="acciones-fila">
           <button className="btn-texto" onClick={(e) => { e.stopPropagation(); onHistorial(); }} title="Historial de versiones">
             v{v.numero}{anterior ? ` · antes ${anterior.tarifaAllIn.toLocaleString("es-MX")}` : ""}
           </button>
           {onPreguntar && (
-            <button className="btn-texto" onClick={(e) => { e.stopPropagation(); onPreguntar(); }}>Preguntar</button>
+            <button className="btn-texto con-icono" onClick={(e) => { e.stopPropagation(); onPreguntar(); }}><I.Chat size={13} />Preguntar</button>
           )}
         </div>
       </td>
       <td data-etiqueta="All-in">
-        <span className="mono">{dinero(v.tarifaAllIn, v.moneda)}</span>
+        <span className="cifra">{dinero(v.tarifaAllIn, v.moneda)}</span>
+        {contraObjetivo !== null && <span className={`delta ${contraObjetivo <= 0 ? "bajo" : "sobre"}`} title="Contra el objetivo de la ruta">{contraObjetivo > 0 ? "+" : contraObjetivo < 0 ? "−" : "±"}{Math.abs(contraObjetivo)} %</span>}
         <div className="tenue" title={describirModelo(v)}>{modeloCorto(v)}</div>
       </td>
       <td data-etiqueta="Venta">
-        <span className="mono">{dinero(venta.venta, v.moneda)}</span>
+        <span className="cifra">{dinero(venta.venta, v.moneda)}</span>
         {venta.porDefecto && <div className="tenue">% por defecto</div>}
       </td>
       <td data-etiqueta="Cap./sem">{v.capacidadSemanal ?? "—"}</td>
       <td data-etiqueta="Tránsito">{v.transitoDias !== null ? `${v.transitoDias} d` : "—"}</td>
       <td data-etiqueta="Vigencia">{v.vigenteHasta ? fecha(v.vigenteHasta) : <span className="alerta">Sin vigencia</span>}</td>
-      <td data-etiqueta={ruta.condiciones.length ? "Condiciones" : "Rubros"}>{ruta.condiciones.length ? <ResumenCondiciones ruta={ruta} p={p} /> : negativa ? <span className="error-texto">No puedo</span> : `${deAcuerdo}/${totalRubros}`}</td>
+      <td data-etiqueta={ruta.condiciones.length ? "Condiciones" : "Rubros"}>{ruta.condiciones.length ? <ResumenCondiciones ruta={ruta} p={p} /> : negativa ? <span className="error-texto">No puedo</span> : totalRubros ? `${deAcuerdo}/${totalRubros}` : "—"}</td>
     </tr>
   );
 }
@@ -1642,6 +1686,7 @@ function FormAdjudicar({ d, ruta, sel, rol, ctx, accion }: { d: Detalle; ruta: R
       )}
       <label className="campo">
         <span>Motivo (obligatorio)</span>
+        <MotivosRapidos opciones={rol === "primario" ? MOTIVOS_PRIMARIO : MOTIVOS_RESPALDO} motivo={motivo} setMotivo={setMotivo} />
         <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={2} />
       </label>
       <Confirmar
@@ -1857,11 +1902,12 @@ function PanelAviso({ d, ctx, accion }: Props) {
   const otros = d.avisos.filter((a) => a.tipo === "adjudicacion" && a.resultado !== "adjudicado" && !idsPrincipales.has(a.id));
   return (
     <div className="tarjeta">
-      <h2>Aviso de adjudicación</h2>
-      {!r.entregaConfirmada && <p className="tenue">Requiere el recibo de Rateware (I8). El carrier no se entera de algo que Rateware no tiene.</p>}
+      <h2 className="fila-icono"><I.Megafono size={17} />Aviso de adjudicación</h2>
+      {!r.entregaConfirmada && <p className="tenue fila-icono"><I.Candado size={15} />Requiere el recibo de Rateware (I8). El carrier no se entera de algo que Rateware no tiene.</p>}
       {r.entregaConfirmada && faltan.length > 0 && ctx.rol === "admin" && (
         <Confirmar
           etiqueta="Preparar los avisos"
+          icono={<I.Sobre size={15} />}
           clase="btn-primario"
           advertencia={<>Rateware prepara un borrador por carrier que participó (adjudicado o no). No envía nada. {ADVERTENCIA_REAL(s, d)}</>}
           onConfirmar={() => accion(() => s.api.generarAvisosAdjudicacion(d.evento.id), "Avisos preparados. Revisa cada texto y apruébalo aquí.")}
@@ -1869,20 +1915,20 @@ function PanelAviso({ d, ctx, accion }: Props) {
       )}
       <AprobarTodos d={d} ctx={ctx} accion={accion} />
       {d.avisos.some((a) => a.tipo === "adjudicacion") && (
-        <p className="nota">El texto lo arma Rateware (en Rateware real sale en inglés) y se edita en su Cola; al volver, Fr8Bid muestra la versión nueva. Se envían desde sales@heymarksman.com por Gmail, que llega hasta «aceptado»; un rebote se muestra aquí.</p>
+        <p className="nota">Textos de Rateware (en inglés en Rateware real; se editan en su Cola). Salen por Gmail desde sales@heymarksman.com.</p>
       )}
       {principales.map(({ p, a }) => {
-        return a ? <TarjetaAviso key={a.id} d={d} a={a} titulo={p.carrier} ctx={ctx} accion={accion} /> : null;
+        return a ? <TarjetaAviso key={a.id} d={d} a={a} titulo={p.carrier} tipo="adjudicado" abierto ctx={ctx} accion={accion} /> : null;
       })}
       {otros.length > 0 && (
         <>
-          <h3>No adjudicados y respaldo</h3>
           {otros.map((a) => (
             <TarjetaAviso
               key={a.id}
               d={d}
               a={a}
-              titulo={`${d.rutas.flatMap((r) => r.participaciones).find((x) => x.id === a.participacionId)?.carrier ?? a.destinatario} · ${a.resultado === "respaldo" ? "respaldo" : "no adjudicado"}`}
+              titulo={d.rutas.flatMap((r) => r.participaciones).find((x) => x.id === a.participacionId)?.carrier ?? a.destinatario}
+              tipo={a.resultado === "respaldo" ? "respaldo" : "no adjudicado"}
               ctx={ctx}
               accion={accion}
             />
@@ -1906,8 +1952,8 @@ function AprobarTodos({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion: P
   if (listos.length < 2) return null;
   const tandas = planearTandas(listos).length;
   return (
-    <div className="aviso-caja">
-      <p><b>{plural(listos.length, "aviso listo", "avisos listos")}</b>: {listos.map((a) => d.rutas.flatMap((r) => r.participaciones).find((x) => x.id === a.participacionId)?.carrier ?? a.destinatario).join(", ")}. Revisa los textos abajo antes de aprobar.</p>
+    <div className="bloque-envio">
+      <p className="fila-icono"><I.Sobre size={16} /><span><b>{plural(listos.length, "aviso listo", "avisos listos")}</b> <span className="tenue">· revisa los textos abajo antes de aprobar</span></span></p>
       {avance && (
         <p className={avance.detenido ? "estado estado-error" : "tenue"}>
           Tanda {avance.hechas} de {avance.tandas}: {avance.enviados} aceptado(s) por Gmail{avance.enCola ? `, ${avance.enCola} en cola` : ""}. {avance.detenido ?? ""}
@@ -1915,6 +1961,7 @@ function AprobarTodos({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion: P
       )}
       <Confirmar
         etiqueta={`Aprobar y enviar los ${listos.length} avisos`}
+        icono={<I.Enviar size={15} />}
         advertencia={
           <>
             Se envían por Gmail exactamente los textos que ves abajo{tandas > 1 ? `, en ${tandas} tandas de hasta ${TAMANO_TANDA}` : ""}. Si alguien cambió uno en la Cola, Rateware lo rechaza y lo vuelves a revisar. {ADVERTENCIA_REAL(s, d)}
@@ -1937,24 +1984,41 @@ function AprobarTodos({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion: P
 }
 
 // Un aviso con su texto exacto, candados y el botón de enviar esa versión.
-function TarjetaAviso({ d, a, titulo, ctx, accion }: { d: Detalle; a: Aviso; titulo: string; ctx: Contexto; accion: Props["accion"] }) {
+// Un renglón por aviso: quién, qué resultado y en qué va. El texto exacto se
+// abre con el ojo (el del adjudicado ya abierto) y se envía desde ahí.
+function TarjetaAviso({ d, a, titulo, tipo, abierto = false, ctx, accion }: { d: Detalle; a: Aviso; titulo: string; tipo: "adjudicado" | "respaldo" | "no adjudicado"; abierto?: boolean; ctx: Contexto; accion: Props["accion"] }) {
   const s = useSesion();
+  const [ver, setVer] = useState(abierto);
   const candados = candadosAviso(d, a, ctx);
   const enviable = ctx.rol === "admin" && (a.estado === "borrador" || a.estado === "fallido" || a.estado === "en_cola");
+  const tono = a.estado === "aceptado" ? "ok" : a.estado === "rebotado" || a.estado === "fallido" ? "err" : a.estado === "en_cola" || a.estado === "por_verificar" ? "warn" : "";
   return (
-    <div className="aviso-caja">
+    <div className={`renglon-aviso ${ver ? "abierto" : ""}`}>
       <div className="fila">
-        <b>{titulo}</b>
-        <span className="pill">{a.estado === "por_verificar" ? "aprobación no verificada" : ESTADO_INVITACION[a.estado] ?? a.estado}</span>
+        <span className="fila-icono">
+          {tipo === "adjudicado" ? <I.Check size={16} className="ok-icono" /> : tipo === "respaldo" ? <I.Reloj size={16} /> : <I.Salir size={16} />}
+          <b>{titulo}</b>
+          <span className={`pill ${tipo === "adjudicado" ? "ok" : ""}`}>{tipo}</span>
+        </span>
+        <span className="fila-botones sin-margen">
+          <span className={`pill ${tono}`}>{a.estado === "por_verificar" ? "aprobación no verificada" : ESTADO_INVITACION[a.estado] ?? a.estado}</span>
+          <button className="btn-icono" aria-expanded={ver} aria-label={ver ? "Ocultar texto" : "Ver texto"} title={ver ? "Ocultar texto" : "Ver texto"} onClick={() => setVer(!ver)}><I.Ojo size={16} /></button>
+        </span>
       </div>
-      <p className="tenue">Para: {a.destinatario} · versión {fecha(a.version)}</p>
-      <p><b>{a.asunto}</b></p>
-      <p className="texto-aviso">{a.cuerpo}</p>
+      {ver && (
+        <div className="cuerpo-aviso">
+          <p className="tenue">Para: {a.destinatario} · versión {fecha(a.version)}</p>
+          <p><b>{a.asunto}</b></p>
+          <p className="texto-aviso">{a.cuerpo}</p>
+        </div>
+      )}
       {a.reciboProveedor && <p className="tenue">{a.estado === "aceptado" ? "Gmail aceptó el mensaje" : "Referencia del proveedor"} · id {a.reciboProveedor}</p>}
-      {enviable && <Candados lista={candados} />}
-      {enviable && (
+      {enviable && (ver || !candados.every((c) => c.ok)) && <Candados lista={candados} />}
+      {enviable && (ver || !candados.every((c) => c.ok)) && (
         <Confirmar
           etiqueta="Aprobar este texto y enviar"
+          clase="btn-secundario"
+          icono={<I.Enviar size={15} />}
           deshabilitado={!candados.every((c) => c.ok)}
           advertencia={<>Se envía por Gmail a {a.destinatario} exactamente esta versión. Si alguien la cambia en la Cola antes, Rateware la rechaza y la vuelves a revisar. {ADVERTENCIA_REAL(s, d)}</>}
           onConfirmar={() => accion(() => s.api.enviarAvisos(d.evento.id, [a]), "Aviso aceptado por Gmail.")}

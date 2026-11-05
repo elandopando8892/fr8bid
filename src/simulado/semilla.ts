@@ -76,10 +76,17 @@ export async function sembrarDemo(base = crearSimulado()) {
 // con varias rutas y una docena de carriers, como O-I, para ver Hoy, Eventos
 // y la invitación con volumen real. Las pruebas usan solo sembrarDemo().
 export async function sembrarDemoAmplia() {
-  const demo = await sembrarDemo();
+  // El evento de D5 cierra el 31 oct: sus ofertas se capturan «antes» del
+  // plazo para que la vista local muestre comparar y adjudicar con datos.
+  const base = crearSimulado();
+  const reloj = base.sim.hoy;
+  base.sim.hoy = () => "2026-10-25";
+  const demo = await sembrarDemo(base);
+  base.sim.hoy = reloj;
   const { sim } = demo;
   const como = (clave: string) => (body: Record<string, unknown>) => sim.llamar("rateware-api", body, `Bearer sim:${clave}`).then((r) => r.body);
   const op = como("operador");
+  const admin = como("admin");
   const nombres = ["Transportes del Norte", "Fletes Monterrey", "Cargo Express Laredo", "Logística Bajío", "Autotransportes Saltillo", "Trailers del Golfo", "Mexus Freight", "Frontera Cargo", "Ruta 57 Transportes", "Dry Van Services", "Intermodal Noreste", "Fletes Industriales"];
   const vendors = nombres.map((n) => sim.agregarVendor(ORG, n));
   const { row: event } = await op({ action: "create_rfx_event", name: "Vidrio Industrial · 4 rutas", customer: "Vidrio Industrial", due_date: "2026-11-20", rfx_id: "RFX-0002-VIDR" });
@@ -99,5 +106,38 @@ export async function sembrarDemoAmplia() {
   const revisados = vendors.slice(0, 10);
   for (const v of revisados) sim.revisar(event.id, v.id);
   await op({ action: "generate_outreach_drafts", event_id: event.id, reviewed_vendor_ids: revisados.map((v) => v.id) });
+
+  // Tercero: abierto con tres rutas y ofertas de seis carriers, para ver el
+  // comparativo con volumen mientras los carriers siguen respondiendo.
+  const seis = vendors.slice(0, 6);
+  const { row: acero } = await op({ action: "create_rfx_event", name: "Aceros del Norte · 3 rutas", customer: "Aceros del Norte", due_date: "2026-11-25", rfx_id: "RFX-0003-ACER" });
+  const rutasAcero = [
+    ["Monterrey", "NL", "Laredo", "TX", 1100],
+    ["Monterrey", "NL", "San Antonio", "TX", 1500],
+    ["Saltillo", "CO", "Dallas", "TX", 1900]
+  ] as const;
+  const { rows: lanesAcero } = await op({
+    action: "import_rfx_lanes",
+    event_id: acero.id,
+    rows: rutasAcero.map(([oc, os, dc, ds, t]) => ({ origin_city: oc, origin_state: os, origin_country: "MX", destination_city: dc, destination_state: ds, destination_country: "US", equipment: "Flatbed", weekly_volume: 3, target_rate: t, currency: "USD" }))
+  });
+  const filas: { lane: number; id: string }[] = [];
+  for (const [i, l] of lanesAcero.entries()) {
+    const { rows } = await op({ action: "shortlist_rfx_lane_vendors", lane_id: l.id, vendor_ids: seis.map((v) => v.id) });
+    for (const r of rows) filas.push({ lane: i, id: r.id });
+  }
+  await op({ action: "update_rfx_event", event_id: acero.id, patch: { status: "open" } });
+  for (const v of seis) sim.revisar(acero.id, v.id);
+  const { rows: msgs } = await op({ action: "generate_outreach_drafts", event_id: acero.id, reviewed_vendor_ids: seis.map((v) => v.id) });
+  await admin({ action: "send_outreach_messages", ids: msgs.map((m: any) => m.id), expected_versions: msgs.map((m: any) => ({ id: m.id, updated_at: m.updated_at })), confirmed: true, confirmation_action: "send_outreach_messages" });
+  const liga = (id: string) => (body: Record<string, unknown>) => sim.llamar("rfx-bid-api", { ...body, token: sim.tokenDe(id) }, null);
+  // Cuatro de seis responden; las tarifas rondan el objetivo de cada ruta.
+  const ajuste = [0.96, 1.02, 0.99, 1.08];
+  for (const [k, f] of filas.entries()) {
+    const v = k % 6;
+    if (v >= 4) continue;
+    await liga(f.id)({ action: "get_invitation" });
+    await liga(f.id)({ action: "submit_bid", bid_rate: Math.round((rutasAcero[f.lane][4] * ajuste[v]) / 5) * 5, currency: "USD", commercial_model: v % 2 ? "cost_plus" : "fee_plus", weekly_capacity: 2 + v, transit_days: 1 + f.lane, valid_through: "2026-12-31" });
+  }
   return demo;
 }
