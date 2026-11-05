@@ -196,7 +196,10 @@ export function CarrierCrmPage() {
   const columns: Column[] = ["sourcing", ...FUNNEL_STAGES, "archived"];
   const countPending = (c: Column) =>
     c === "sourcing" ? sourcing.loading && !sourcing.data : c === "archived" ? archived.loading && !archived.data : funnel.loading && !funnel.data;
-  const empties = funnel.data ? FUNNEL_STAGES.filter((s) => !(stageCounts.get(s) ?? 0)) : [];
+  // Como en Eventos (decisión de Jose, 5-nov): las etapas en cero se ocultan,
+  // salvo Prospección, la elegida y las que aún no contestan.
+  const pestanas = columns.filter((c) => c === "sourcing" || c === column || countPending(c) || (stageCounts.get(c) ?? 0) > 0);
+  const conFicha = !loading && Boolean(focused);
 
   return (
     <>
@@ -227,7 +230,7 @@ export function CarrierCrmPage() {
       )}
 
       <nav className="crm-stages" aria-label={tr("text078")}>
-        {columns.map((c) => (
+        {pestanas.map((c) => (
           <button
             key={c}
             className={column === c ? "on" : undefined}
@@ -241,12 +244,8 @@ export function CarrierCrmPage() {
           </button>
         ))}
       </nav>
-      <p className="crm-stage-hint">
-        <b>{STAGE_LABEL[column]}:</b> {STAGE_HINT[column]}
-        {empties.length > 0 && <> {tr("text079")}{empties.map((s) => STAGE_LABEL[s]).join(", ")}.</>}
-      </p>
 
-      <main className="crm-main">
+      <main className={conFicha ? "crm-main" : "crm-main sin-lado"}>
         <div className="crm-col">
           {notice && <InfoBanner>{notice}</InfoBanner>}
           {error && <ErrorBanner message={error} />}
@@ -377,8 +376,8 @@ export function CarrierCrmPage() {
 
         </div>
 
-        <CarrierCard
-          vendor={loading ? null : focused}
+        {conFicha && <CarrierCard
+          vendor={focused}
           version={cardVersion}
           templates={templates.data?.rows ?? null}
           selectedCount={selected.size}
@@ -387,7 +386,7 @@ export function CarrierCrmPage() {
           onStatus={(s) => focused && setStatus([focused.id], s, vendorLabel(focused))}
           onBulkStatus={(s) => setStatus([...selected], s, `${selected.size} carriers`, true)}
           onProfileLink={() => focused && setProfileFor(focused)}
-        />
+        />}
       </main>
     </>
   );

@@ -331,13 +331,6 @@ function CarrierFitContent() {
       <main className="main launch-main">
         {eventId && <LaunchTabs eventId={eventId} active="fit" />}
 
-        <div className="fit-intro">
-          <div>
-            <h2>{tr("text016")}</h2>
-            <p>{tr("text017")}</p>
-          </div>
-        </div>
-
         <div className="fit-start">
           <b>{tr("text020")}</b>
           {templateSelect}

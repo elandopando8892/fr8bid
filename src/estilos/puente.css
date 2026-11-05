@@ -123,3 +123,7 @@
 .bw .intake-cols { flex-direction: column; align-items: stretch; }
 .bw .intake-form { width: auto; }
 .bw .intake-drafts > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+/* Carriers (5-nov, decisión de Jose): la columna derecha solo existe al elegir; nota de plantillas del sistema. */
+.bw .crm-main.sin-lado, .bw .tpl-grid.sin-lado { grid-template-columns: minmax(0, 1fr); }
+.bw .nota-plantillas { margin: 0; font-size: 13px; color: var(--grey, #6b6b6b); }
