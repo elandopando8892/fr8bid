@@ -438,3 +438,10 @@ tr.mejor > td { background: #f6fbf7; }
 .acciones-linea { display: inline-flex; gap: 14px; flex-wrap: wrap; }
 .tabla-compacta tr.detenida td { background: #fffaf6; }
 .tabla-compacta .celda-accion { text-align: right; white-space: nowrap; }
+
+/* Ofertas y adjudicación: decisión al pie de la tabla (5-nov, decisión de Jose) */
+.pie-adjudicar { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.pie-adjudicar h3 { font-family: inherit; text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 600; color: var(--ink); }
+.pie-adjudicar h3:not(:first-child) { margin-top: 14px; }
+.tabla-tarjetas .celda-accion { width: 36px; text-align: right; }
+.motivos .btn-texto { font-size: 12.5px; padding: 0 4px; }

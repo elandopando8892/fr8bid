@@ -1441,6 +1441,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
                       <th>Tránsito</th>
                       <th>Vigencia</th>
                       <th>{ruta.condiciones.length ? "Condiciones" : "Rubros"}</th>
+                      <th aria-label="Preguntar" />
                     </tr>
                   </thead>
                   <tbody>
@@ -1457,6 +1458,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
                         onElegir={() => setElegido(p.id)}
                         onHistorial={() => setHistorial(historial === p.id ? null : p.id)}
                         onPreguntar={ctx.rol !== "viewer" && p.correo && d.evento.estado !== "adjudicado" ? () => setPreguntaA(preguntaA === p.id ? null : p.id) : undefined}
+                        preguntando={preguntaA === p.id}
                       />
                     ))}
                   </tbody>
@@ -1473,35 +1475,31 @@ function PanelComparar({ d, ctx, accion }: Props) {
             {preguntaA && ruta.participaciones.some((x) => x.id === preguntaA) && (
               <PreguntaCarrier d={d} ruta={ruta} p={ruta.participaciones.find((x) => x.id === preguntaA)!} onCerrar={() => setPreguntaA(null)} />
             )}
+            {/* Lo que se decide va al pie de la misma tarjeta, pegado a la tabla. */}
+            {!abierto && (prim || sel) && (
+              <div className="pie-adjudicar">
+                {prim ? (
+                  <>
+                    <PrimarioActual d={d} ruta={ruta} p={prim} ctx={ctx} accion={accion} />
+                    {respaldos.map((r) => (
+                      <Respaldo key={r.id} d={d} ruta={ruta} p={r} ctx={ctx} accion={accion} />
+                    ))}
+                    {sel && !sel.rol ? (
+                      <FormAdjudicar key={sel.id} d={d} ruta={ruta} sel={sel} rol="respaldo" ctx={ctx} accion={accion} />
+                    ) : (
+                      puedeElegir && <p className="tenue">Opcional: elige otra oferta para adjudicarla como respaldo.</p>
+                    )}
+                  </>
+                ) : (
+                  sel && <FormAdjudicar key={sel.id} d={d} ruta={ruta} sel={sel} rol="primario" ctx={ctx} accion={accion} />
+                )}
+              </div>
+            )}
             {!prim && <CapturaEquipo d={d} ruta={ruta} accion={accion} />}
             <LigasSimuladas d={d} ruta={ruta} />
           </div>
         );
-        // La tabla siempre a todo el ancho; lo que se decide va debajo, en la
-        // misma columna, para no apretar el comparativo.
-        if (abierto || (!prim && !sel)) return <Fragment key={ruta.id}>{tabla}</Fragment>;
-        return (
-          <Fragment key={ruta.id}>
-            {tabla}
-            <div className="tarjeta lado">
-              {prim ? (
-                <>
-                  <PrimarioActual d={d} ruta={ruta} p={prim} ctx={ctx} accion={accion} />
-                  {respaldos.map((r) => (
-                    <Respaldo key={r.id} d={d} ruta={ruta} p={r} ctx={ctx} accion={accion} />
-                  ))}
-                  {sel && !sel.rol ? (
-                    <FormAdjudicar key={sel.id} d={d} ruta={ruta} sel={sel} rol="respaldo" ctx={ctx} accion={accion} />
-                  ) : (
-                    puedeElegir && <p className="tenue">Opcional: elige otra oferta para adjudicarla como respaldo.</p>
-                  )}
-                </>
-              ) : (
-                sel && <FormAdjudicar key={sel.id} d={d} ruta={ruta} sel={sel} rol="primario" ctx={ctx} accion={accion} />
-              )}
-            </div>
-          </Fragment>
-        );
+        return <Fragment key={ruta.id}>{tabla}</Fragment>;
       })}
     </>
   );
@@ -1512,7 +1510,8 @@ function PanelComparar({ d, ctx, accion }: Props) {
 // ruta se puede quitar del lote y adjudicarse a mano abajo.
 function AdjudicarEnLote({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion: Props["accion"] }) {
   const s = useSesion();
-  const [motivo, setMotivo] = useState("");
+  const m = useMotivo();
+  const motivo = m.motivo;
   const [fuera, setFuera] = useState<Set<string>>(new Set());
   const propuesta = propuestaPrimarios(d, ctx);
   const elegibles = propuesta.filter((x) => x.p);
@@ -1552,14 +1551,10 @@ function AdjudicarEnLote({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion
           </tbody>
         </table>
       </div>
-      <label className="campo">
-        <span>Motivo para todas (obligatorio)</span>
-        <MotivosRapidos opciones={MOTIVOS_LOTE} motivo={motivo} setMotivo={setMotivo} />
-        <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={2} placeholder="Ej.: mejor all-in de cada ruta con candados en orden" />
-      </label>
+      <Motivo opciones={MOTIVOS_LOTE} m={m} etiqueta="Motivo para todas" placeholder="Ej.: mejor all-in de cada ruta con candados en orden" />
       <Confirmar
         etiqueta={`Adjudicar ${plural(lote.length, "ruta")} como primario`}
-        deshabilitado={!lote.length || !motivo.trim()}
+        deshabilitado={!lote.length || !motivo}
         advertencia={<>Se adjudican {lote.map((x) => `ruta ${x.ruta.numero} a ${x.p!.carrier}`).join(", ")}. No se envía nada al carrier; el aviso se desbloquea con el recibo de Rateware. {ADVERTENCIA_REAL(s, d)}</>}
         onConfirmar={() =>
           accion(async () => {
@@ -1594,23 +1589,38 @@ function ResumenCondiciones({ ruta, p }: { ruta: Ruta; p: Participacion }) {
   return <span title={r.marcadas.join(", ")}>{r.cumplidas}/{r.total}{r.marcadas.length ? ` · ${r.marcadas.length} con nota` : ""}</span>;
 }
 
-// Motivos de un clic: llenan el campo y se pueden editar antes de confirmar.
+// Motivos de un clic: un chip basta; el detalle es opcional.
 const MOTIVOS_PRIMARIO = ["Mejor all-in con candados en orden", "Mejor capacidad semanal", "Mejor tránsito", "Desempeño previo con Marksman"];
 const MOTIVOS_RESPALDO = ["Siguiente mejor all-in, como respaldo", "Capacidad adicional para la ruta"];
 const MOTIVOS_LOTE = ["Mejor all-in de cada ruta con candados en orden"];
-function MotivosRapidos({ opciones, motivo, setMotivo }: { opciones: string[]; motivo: string; setMotivo: (x: string) => void }) {
+// Un chip ya es el motivo; el texto libre se abre con «Agregar detalle» y se
+// suma al chip (o vale solo, si no se eligió ninguno).
+function useMotivo() {
+  const [chip, setChip] = useState("");
+  const [detalle, setDetalle] = useState("");
+  const [conDetalle, setConDetalle] = useState(false);
+  const motivo = [chip, detalle.trim()].filter(Boolean).join(" · ");
+  return { chip, setChip, detalle, setDetalle, conDetalle, setConDetalle, motivo };
+}
+
+function Motivo({ opciones, m, etiqueta = "Motivo", placeholder }: { opciones: string[]; m: ReturnType<typeof useMotivo>; etiqueta?: string; placeholder?: string }) {
   return (
-    <span className="fila-botones sin-margen motivos">
-      {opciones.map((o) => (
-        <button key={o} type="button" className={`btn-chico ${motivo === o ? "activo" : ""}`} onClick={() => setMotivo(o)}>
-          {o}
-        </button>
-      ))}
-    </span>
+    <div className="campo">
+      <span>{etiqueta}</span>
+      <span className="fila-botones sin-margen motivos">
+        {opciones.map((o) => (
+          <button key={o} type="button" className={`btn-chico ${m.chip === o ? "activo" : ""}`} aria-pressed={m.chip === o} onClick={() => m.setChip(m.chip === o ? "" : o)}>
+            {o}
+          </button>
+        ))}
+        {!m.conDetalle && <button type="button" className="btn-texto" onClick={() => m.setConDetalle(true)}>Agregar detalle</button>}
+      </span>
+      {m.conDetalle && <textarea value={m.detalle} onChange={(e) => m.setDetalle(e.target.value)} rows={2} autoFocus placeholder={placeholder} aria-label="Detalle del motivo" />}
+    </div>
   );
 }
 
-function FilaOferta({ p, ruta, mejor = false, totalRubros, elegido, columnaElegir, elegible, onElegir, onHistorial, onPreguntar }: { p: Participacion; ruta: Ruta; mejor?: boolean; totalRubros: number; elegido: boolean; columnaElegir: boolean; elegible: boolean; onElegir: () => void; onHistorial: () => void; onPreguntar?: () => void }) {
+function FilaOferta({ p, ruta, mejor = false, totalRubros, elegido, columnaElegir, elegible, onElegir, onHistorial, onPreguntar, preguntando = false }: { p: Participacion; ruta: Ruta; mejor?: boolean; totalRubros: number; elegido: boolean; columnaElegir: boolean; elegible: boolean; onElegir: () => void; onHistorial: () => void; onPreguntar?: () => void; preguntando?: boolean }) {
   const v = versionVigente(p)!;
   const rubros = Object.values(p.rubros);
   const negativa = rubros.includes("no_puedo");
@@ -1630,9 +1640,6 @@ function FilaOferta({ p, ruta, mejor = false, totalRubros, elegido, columnaElegi
           <button className="btn-texto" onClick={(e) => { e.stopPropagation(); onHistorial(); }} title="Historial de versiones">
             v{v.numero}{anterior ? ` · antes ${anterior.tarifaAllIn.toLocaleString("es-MX")}` : ""}
           </button>
-          {onPreguntar && (
-            <button className="btn-texto con-icono" onClick={(e) => { e.stopPropagation(); onPreguntar(); }}><I.Chat size={13} />Preguntar</button>
-          )}
         </div>
       </td>
       <td data-etiqueta="All-in">
@@ -1648,6 +1655,11 @@ function FilaOferta({ p, ruta, mejor = false, totalRubros, elegido, columnaElegi
       <td data-etiqueta="Tránsito">{v.transitoDias !== null ? `${v.transitoDias} d` : "—"}</td>
       <td data-etiqueta="Vigencia">{v.vigenteHasta ? fecha(v.vigenteHasta) : <span className="alerta">Sin vigencia</span>}</td>
       <td data-etiqueta={ruta.condiciones.length ? "Condiciones" : "Rubros"}>{ruta.condiciones.length ? <ResumenCondiciones ruta={ruta} p={p} /> : negativa ? <span className="error-texto">No puedo</span> : totalRubros ? `${deAcuerdo}/${totalRubros}` : "—"}</td>
+      <td className="celda-accion">
+        {onPreguntar && (
+          <button className="btn-icono" aria-expanded={preguntando} aria-label={`Preguntar a ${p.carrier}`} title={`Preguntar a ${p.carrier}`} onClick={(e) => { e.stopPropagation(); onPreguntar(); }}><I.Chat size={16} /></button>
+        )}
+      </td>
     </tr>
   );
 }
@@ -1717,7 +1729,8 @@ function Historial({ p }: { p: Participacion }) {
 
 function FormAdjudicar({ d, ruta, sel, rol, ctx, accion }: { d: Detalle; ruta: Ruta; sel: Participacion; rol: "primario" | "respaldo"; ctx: Contexto; accion: Props["accion"] }) {
   const s = useSesion();
-  const [motivo, setMotivo] = useState("");
+  const m = useMotivo();
+  const motivo = m.motivo;
   const [confirmaVigencia, setConfirmaVigencia] = useState(false);
   const candados = candadosAdjudicacion(d, ruta, sel, ctx, rol);
   const v = versionVigente(sel);
@@ -1736,14 +1749,10 @@ function FormAdjudicar({ d, ruta, sel, rol, ctx, accion }: { d: Detalle; ruta: R
           Confirmo adjudicar una oferta sin vigencia declarada (D4)
         </label>
       )}
-      <label className="campo">
-        <span>Motivo (obligatorio)</span>
-        <MotivosRapidos opciones={rol === "primario" ? MOTIVOS_PRIMARIO : MOTIVOS_RESPALDO} motivo={motivo} setMotivo={setMotivo} />
-        <textarea value={motivo} onChange={(e) => setMotivo(e.target.value)} rows={2} />
-      </label>
+      <Motivo opciones={rol === "primario" ? MOTIVOS_PRIMARIO : MOTIVOS_RESPALDO} m={m} />
       <Confirmar
         etiqueta={`Adjudicar como ${rol}`}
-        deshabilitado={!puedeAdjudicar(candados, confirmaVigencia) || !motivo.trim()}
+        deshabilitado={!puedeAdjudicar(candados, confirmaVigencia) || !motivo}
         advertencia={<>No se envía nada al carrier. El aviso se desbloquea cuando Rateware entregue el recibo. {ADVERTENCIA_REAL(s, d)}</>}
         onConfirmar={() =>
           accion(
