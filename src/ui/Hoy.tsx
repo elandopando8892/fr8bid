@@ -7,6 +7,28 @@ import { useEventosCompartidos } from "./Eventos";
 import { cuantasRutas, grupoDe, nombreEvento, porUrgencia, resumenRutas, siguiente } from "./eventosVista";
 import * as I from "./Iconos";
 import { useSesion } from "./sesion";
+import { useAsync } from "../bidware/components/useAsync";
+import { awaitsTeam, listShipperProjects } from "../bidware/features/shipper-intake/intake.service";
+import { dashboardSummary } from "../bidware/pages/dashboard.service";
+
+/** Lo que el Panel mostraba y Hoy no tenía (decisión de Jose, 5-nov): solo lo que espera al equipo, y solo si hay algo. */
+function Indicadores() {
+  const resumen = useAsync(dashboardSummary, []);
+  const proyectos = useAsync(listShipperProjects, []);
+  const solicitudes = proyectos.data?.filter(awaitsTeam).length ?? 0;
+  const tarifas = resumen.data?.pending_review ?? 0;
+  if (!solicitudes && !tarifas) return null;
+  return (
+    <div className="atajos-chips indicadores">
+      {solicitudes > 0 && (
+        <Liga a="/intake" className="chip-liga acento"><I.Bandeja size={15} />{plural(solicitudes, "solicitud", "solicitudes")} nuevas</Liga>
+      )}
+      {tarifas > 0 && (
+        <Liga a="/tarifas" className="chip-liga acento"><I.Etiqueta size={15} />{plural(tarifas, "tarifa")} por revisar</Liga>
+      )}
+    </div>
+  );
+}
 
 function saludo(ahora = new Date()) {
   const h = Number(ahora.toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone: "America/Mexico_City" }));
@@ -121,6 +143,7 @@ export function Hoy() {
           </div>
           )}
 
+          {modo === "rateware" && <Indicadores />}
           <div className="atajos-chips">
             {puedeCrear && (
               <Liga a="/rfx/new" className="chip-liga">

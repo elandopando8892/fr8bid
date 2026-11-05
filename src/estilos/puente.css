@@ -132,3 +132,13 @@
 .bw .btn-icono { border: 0; background: none; padding: 0; min-height: 0; width: 32px; height: 32px; }
 .bw .btn-icono:hover { background: var(--subtle, #f1ede8); color: var(--accent, #c94a14); }
 .bw .ayuda-campos { margin: 0; font-size: 13px; color: var(--grey, #6b6b6b); }
+
+/* Integraciones y Tablero público (5-nov, decisión de Jose). */
+.bw .ig-card.ig-plegada > :not(.ig-head):not(.ig-alert):not(.ig-actions) { display: none; }
+.bw .ig-card.ig-plegada .ig-actions { margin-top: 0; }
+.bw .ig-detalles { background: none; border: 0; padding: 0; min-height: 0; font-size: 12.5px; color: var(--accent, #c94a14); cursor: pointer; }
+.bw .ig-detalles:hover { text-decoration: underline; }
+.bw .pb-panel.dark .pb-steps { color: #b8b8b8; margin-top: 4px; }
+.bw .pb-panel.dark .pb-steps b { color: #fff; }
+.bw .pb-avisos { justify-self: start; background: transparent; color: #fff; border: 1px solid #555; }
+.bw .pb-panel.dark .pb-steps li { white-space: normal; overflow: visible; text-overflow: clip; border: 0; padding: 0; }

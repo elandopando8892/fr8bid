@@ -59,7 +59,8 @@ function Rutas() {
         {/* Los avisos de adjudicación salen solo de la página del evento. */}
         <Route path="/rfx/:id/notices" element={<AMesa />} />
         <Route path="/rfx/:id/chat" element={modulo(<P.Chat />)} />
-        <Route path="/panel" element={modulo(<P.Panel />)} />
+        {/* Panel repetía a Hoy (decisión de Jose, 5-nov): la ruta sigue viva y lleva a Hoy. */}
+        <Route path="/panel" element={<Navigate to="/" replace />} />
         <Route path="/intake" element={modulo(<P.Intake />)} />
         <Route path="/plantillas" element={modulo(<P.Plantillas />)} />
         <Route path="/plantillas/:id" element={modulo(<P.Plantilla />)} />

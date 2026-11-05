@@ -100,6 +100,19 @@ function Fact({ label, value, configured }: { label: string; value: ReactNode; c
  */
 export function IntegrationsPage() {
   useLang();
+  // Plegado por canal (decisión de Jose, 5-nov): se ve el estado y las acciones; los campos técnicos, a pedido.
+  const [detalles, setDetalles] = useState<Set<string>>(new Set());
+  const plegada = (k: string) => (detalles.has(k) ? "" : " ig-plegada");
+  const Detalles = ({ k }: { k: string }) => (
+    <button
+      type="button"
+      className="ig-detalles"
+      aria-expanded={detalles.has(k)}
+      onClick={() => setDetalles((d) => { const n = new Set(d); if (n.has(k)) n.delete(k); else n.add(k); return n; })}
+    >
+      {detalles.has(k) ? (locale() === "es-MX" ? "Ocultar detalles" : "Hide details") : (locale() === "es-MX" ? "Ver detalles" : "See details")}
+    </button>
+  );
   const gmail = useAsync(() => listGmailConnections(), []);
   const wa = useAsync(() => getWhatsappStatus(), []);
   const templates = useAsync(() => listWhatsappTemplates(), []);
@@ -224,10 +237,11 @@ export function IntegrationsPage() {
           {!loading && (
             <>
               {/* WhatsApp Business */}
-              <section className={`card ig-card${w.state === "down" ? " ig-down" : ""}`}>
+              <section className={`card ig-card${w.state === "down" ? " ig-down" : ""}${plegada("wa")}`}>
                 <div className="ig-head">
                   <h2>WhatsApp Business · Meta Cloud API</h2>
                   <Pill tone={HEALTH_TONE[w.state]}>{stateLabel()[w.state]}</Pill>
+                  <Detalles k="wa" />
                   <div className="spacer" />
                   <button
                     disabled={busy !== null}
@@ -329,10 +343,11 @@ export function IntegrationsPage() {
 
               <div className="ig-grid">
                 {/* WhatsApp groups */}
-                <section className="card ig-card ig-groups">
+                <section className={`card ig-card ig-groups${plegada("grupos")}`}>
                   <div className="ig-head">
                     <h2>{tr("text069")}</h2>
                     <Pill tone={groupsEnabled ? "green" : "amber"}>{groupsEnabled ? tr("text130") : tr("text131")}</Pill>
+                    <Detalles k="grupos" />
                   </div>
                   <p className="ig-note">
                     {groupsEnabled
@@ -383,10 +398,11 @@ export function IntegrationsPage() {
                 </section>
 
                 {/* Gmail */}
-                <section className={`card ig-card${g.state === "down" ? " ig-down" : ""}`}>
+                <section className={`card ig-card${g.state === "down" ? " ig-down" : ""}${plegada("gmail")}`}>
                   <div className="ig-head">
                     <h2>Gmail</h2>
                     <Pill tone={HEALTH_TONE[g.state]}>{stateLabel()[g.state]}</Pill>
+                    <Detalles k="gmail" />
                   </div>
                   {g.state !== "ok" && <p className="ig-alert">{g.detail}</p>}
                   <div className="ig-facts two">
@@ -443,10 +459,11 @@ export function IntegrationsPage() {
                 </section>
 
                 {/* Google Chat: added after the wireframe; the team's mirror of the Bid Room. */}
-                <section className={`card ig-card ig-wide${c.state === "down" ? " ig-down" : ""}`}>
+                <section className={`card ig-card ig-wide${c.state === "down" ? " ig-down" : ""}${plegada("chat")}`}>
                   <div className="ig-head">
                     <h2>Google Chat</h2>
                     <Pill tone={HEALTH_TONE[c.state]}>{stateLabel()[c.state]}</Pill>
+                    <Detalles k="chat" />
                   </div>
                   {chat.error && <ErrorBanner message={chat.error} />}
                   {c.state !== "ok" && <p className="ig-alert">{c.detail}</p>}

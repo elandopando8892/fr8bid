@@ -81,7 +81,6 @@ export const MENU: { grupo: string; plegado?: boolean; modulos: Modulo[] }[] = [
     grupo: "Más",
     plegado: true,
     modulos: [
-      { etiqueta: "Panel", a: "/panel", icono: I.Grafica },
       { etiqueta: "Integraciones", a: "/integraciones", icono: I.Enchufe },
       // La vista que ven los carriers: se abre aparte, sin el marco del equipo.
       { etiqueta: "Tablero público", a: "/board", icono: I.Pantalla, publica: true }

@@ -238,6 +238,7 @@ export function PublicBoardPage() {
             {summary?.live ?? "—"}{tr(summary?.live === 1 ? "text142" : "text120")}{liveEvents}{tr("text121")}{liveEvents === 1 ? "" : "s"} ·{" "}
             {summary?.total_quotes ?? "—"}{tr("text122")}</p>
         </div>
+        {(summary?.live ?? 0) > 0 && (
         <div className="pb-hero-tiles">
           <div className="accent">
             <span>{tr("text123")}</span>
@@ -260,8 +261,11 @@ export function PublicBoardPage() {
             <b>{summary?.expired ?? "—"}</b>
           </div>
         </div>
+        )}
       </section>
 
+      {/* Sin rutas en vivo no hay contadores ni movimiento que mostrar (decisión de Jose, 5-nov). */}
+      {ticker.length > 0 && (
       <div className="pb-ticker" aria-label={tr("text124")}>
         <span className="pb-ticker-label">{tr("text125")}</span>
         <div className="pb-ticker-window">
@@ -278,6 +282,7 @@ export function PublicBoardPage() {
           )}
         </div>
       </div>
+      )}
 
       <main className="pb-page">
         {notice && <InfoBanner>{notice}</InfoBanner>}
