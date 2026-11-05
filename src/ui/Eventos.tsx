@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ResumenEvento } from "../dominio/tipos";
 import { hoyMexico } from "../dominio/recorrido";
 import { aCarga, Desactualizado, EstadoVista, fecha, ir, Liga, plural, Prueba, type Carga } from "./comun";
@@ -6,10 +6,12 @@ import { cuantasRutas, ESTADO_EVENTO, grupoDe, nombreEvento, porUrgencia, resume
 import * as I from "./Iconos";
 import { useSesion } from "./sesion";
 
-// Lectura del listado, compartida por Hoy y Eventos. Retira los datos antes
-// de pintar otra fuente o cuenta y descarta respuestas viejas.
-export function useEventos() {
-  const { api, rol, listo, modo, correo, usuarioSimulado } = useSesion();
+// Lectura del listado, compartida por el menú, Hoy y Eventos. Retira los datos
+// antes de pintar otra fuente o cuenta y descarta respuestas viejas. Con
+// activo=false no lee: la pantalla usa la lectura que el marco ya comparte.
+export function useEventos(activo = true) {
+  const { api, rol, listo: sesionLista, modo, correo, usuarioSimulado } = useSesion();
+  const listo = sesionLista && activo;
   const [carga, setCarga] = useState<Carga<ResumenEvento[]>>({ tipo: "cargando" });
   const secuencia = useRef(0);
   const contexto = JSON.stringify([modo, rol, correo, usuarioSimulado]);
@@ -40,9 +42,20 @@ export function useEventos() {
   return { carga, leer };
 }
 
+export type LecturaEventos = ReturnType<typeof useEventos>;
+export const ContextoEventos = createContext<LecturaEventos | null>(null);
+
+// La lectura del marco si existe (una sola llamada a Rateware por página); si
+// no hay marco, como en las pruebas de navegador, la pantalla lee sola.
+export function useEventosCompartidos(): LecturaEventos {
+  const compartida = useContext(ContextoEventos);
+  const propia = useEventos(!compartida);
+  return compartida ?? propia;
+}
+
 export function Eventos() {
   const { rol, modo } = useSesion();
-  const { carga, leer } = useEventos();
+  const { carga, leer } = useEventosCompartidos();
   const eventos = carga.tipo === "ok" ? carga.datos : [];
   const esAdmin = rol === "admin";
   const hoy = hoyMexico();
@@ -114,7 +127,7 @@ export function Eventos() {
             const n = cuantasRutas(e);
             const rutas = resumenRutas(e.rutas);
             return (
-              <div key={e.id} className="fila-evento fila-liga" onClick={() => ir(`/eventos/${e.id}`)}>
+              <div key={e.id} className="fila-evento fila-liga" onClick={(ev) => { if ((ev.target as HTMLElement).closest("a")) return; ir(`/eventos/${e.id}`); }}>
                 <div className="fila-evento-principal">
                   <Liga a={`/eventos/${e.id}`}><b>{nombreEvento(e)}</b></Liga>
                   <div className="tenue">

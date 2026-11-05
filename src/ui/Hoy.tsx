@@ -3,7 +3,7 @@
 import { hoyMexico } from "../dominio/recorrido";
 import type { ResumenEvento } from "../dominio/tipos";
 import { Desactualizado, EstadoVista, fecha, ir, Liga, plural, Prueba } from "./comun";
-import { useEventos } from "./Eventos";
+import { useEventosCompartidos } from "./Eventos";
 import { cuantasRutas, grupoDe, nombreEvento, porUrgencia, resumenRutas, siguiente } from "./eventosVista";
 import * as I from "./Iconos";
 import { useSesion } from "./sesion";
@@ -29,7 +29,7 @@ function porQue(e: ResumenEvento): string {
 
 export function Hoy() {
   const { rol, modo, correo } = useSesion();
-  const { carga, leer } = useEventos();
+  const { carga, leer } = useEventosCompartidos();
   const eventos = carga.tipo === "ok" ? carga.datos : [];
   const hoy = hoyMexico();
   const esAdmin = rol === "admin";

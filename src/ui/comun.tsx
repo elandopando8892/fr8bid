@@ -6,6 +6,9 @@ import { setLang, useLang } from "@/i18n/language";
 import { tr } from "@/i18n/common";
 import { TEAM_ROLE_LABEL } from "@/lib/roles";
 import * as I from "./Iconos";
+import { ContextoEventos, useEventos } from "./Eventos";
+import { grupoDe } from "./eventosVista";
+import { hoyMexico } from "../dominio/recorrido";
 
 // ——— Rutas: react-router (las comparten la Mesa y los módulos de Bidware) ———
 export function useRuta(): string {
@@ -88,7 +91,7 @@ export const MENU: { grupo: string; plegado?: boolean; modulos: Modulo[] }[] = [
 
 const esActivo = (m: Modulo, ruta: string) => (m.activo ?? bajo(m.a))(ruta);
 
-function Entrada({ m, ruta }: { m: Modulo; ruta: string }) {
+function Entrada({ m, ruta, contador }: { m: Modulo; ruta: string; contador?: number }) {
   const Ic = m.icono;
   if (m.publica)
     return (
@@ -99,11 +102,12 @@ function Entrada({ m, ruta }: { m: Modulo; ruta: string }) {
   return (
     <Liga a={m.a} className={esActivo(m, ruta) ? "activo" : ""}>
       <Ic size={17} /> <span className="menu-texto">{m.etiqueta}</span>
+      {contador ? <span className="contador" title={`${contador} te toca`}>{contador}</span> : null}
     </Liga>
   );
 }
 
-function Menu({ ruta }: { ruta: string }) {
+function Menu({ ruta, teToca }: { ruta: string; teToca: number }) {
   const [abierto, setAbierto] = useState(false);
   const todos = MENU.flatMap((g) => g.modulos);
   const actual = todos.find((m) => !m.publica && esActivo(m, ruta));
@@ -129,7 +133,7 @@ function Menu({ ruta }: { ruta: string }) {
           ) : (
             <div key={g.grupo || "principal"} className="menu-grupo">
               {g.grupo && <span className="menu-titulo">{g.grupo}</span>}
-              {g.modulos.map((m) => <Entrada key={m.a} m={m} ruta={ruta} />)}
+              {g.modulos.map((m) => <Entrada key={m.a} m={m} ruta={ruta} contador={m.a === "/eventos" ? teToca : undefined} />)}
             </div>
           )
         )}
@@ -142,14 +146,18 @@ export function Marco({ children }: { children: ReactNode }) {
   const s = useSesion();
   useLang(); // el rol y el aviso cambian de idioma con los módulos
   const ruta = useRuta();
+  // Una sola lectura de eventos por página: la usan el contador del menú, Hoy y Eventos.
+  const eventos = useEventos();
+  const teToca = eventos.carga.tipo === "ok" && s.rol === "admin" ? eventos.carga.datos.filter((e) => grupoDe(e, hoyMexico(), true) === "te_toca").length : 0;
   return (
+    <ContextoEventos.Provider value={eventos}>
     <div className="marco">
       <aside className="lateral">
         <Liga a="/" className="marca">
           <span className="logo">MARKS<b>MAN</b></span>
           <span className="sub">Fr8Bid · Bid Room</span>
         </Liga>
-        <Menu ruta={ruta} />
+        <Menu ruta={ruta} teToca={teToca} />
         <div className="cuenta">
           {s.modo === "simulado" ? (
             <>
@@ -191,6 +199,7 @@ export function Marco({ children }: { children: ReactNode }) {
         {children}
       </main>
     </div>
+    </ContextoEventos.Provider>
   );
 }
 

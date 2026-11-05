@@ -151,7 +151,7 @@ try {
     await fresh(); await reply(); const link = page.getByRole('link', { name: 'Evento sintético A', exact: true });
     await page.getByRole('searchbox', { name: 'Buscar eventos' }).focus(); await page.keyboard.press('Tab'); verify(await link.evaluate(el => el === document.activeElement), 'Event link reachable');
     await page.keyboard.press('Shift+Tab'); verify(await page.getByRole('searchbox', { name: 'Buscar eventos' }).evaluate(el => el === document.activeElement), 'Reverse keyboard navigation');
-    await link.focus(); await page.keyboard.press('Enter'); verify(await page.getByRole('heading', { name: 'Destino /eventos/A', exact: true }).isVisible(), 'Correct destination'); verify(await page.evaluate(() => qa.writes.length) === 0, 'Navigation read-only');
+    await link.focus(); await page.keyboard.press('Enter'); await frames(); verify(await page.getByRole('heading', { name: 'Destino /eventos/A', exact: true }).isVisible(), 'Correct destination'); verify(await page.evaluate(() => qa.writes.length) === 0, 'Navigation read-only');
   });
   await check('Reload fetches once without replaying event actions', async () => {
     await fresh(); await reply(); await page.reload(); await page.getByRole('heading', { name: 'Eventos', exact: true }).waitFor(); await frames(); verify(await count() === 1 && await rows().count() === 0, 'Fresh lifecycle read only'); verify(await page.evaluate(() => qa.writes.length) === 0, 'No replay');

@@ -26,3 +26,51 @@
 @media (max-width: 860px) {
   .bw .bw-simulado, .bw .bw-cargando, .bw .bw-fallo { padding-left: 16px; padding-right: 16px; }
 }
+
+/* ——— Una sola cara: las pantallas de Bidware con el encabezado, los botones,
+   las píldoras y las tablas de la página del evento. Solo presentación. ——— */
+.bw { --radius: 10px; --line-strong: var(--line); }
+
+/* Encabezado de módulo: miga + título, sin barra blanca ni mono en mayúsculas. */
+.bw .topbar, .bw .identity { background: none; border-bottom: 0; padding: 24px 28px 8px; align-items: flex-start; flex-wrap: wrap; }
+.bw .topbar .crumb, .bw .identity .crumb { font-family: var(--font); font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.bw .topbar h1, .bw .identity h1 { font-size: 24px; letter-spacing: -.01em; margin: 2px 0; }
+.bw .topbar .sub, .bw .identity .sub { font-size: 12.5px; color: var(--muted); }
+.bw .main { padding: 8px 28px 40px; }
+
+/* Botones y píldoras como en Fr8Bid. */
+.bw .btn, .bw button.primary, .bw button:not(.link):not(.tabs button) { border-radius: 9px; font-size: 13px; }
+.bw .btn { padding: 8px 14px; font-weight: 600; }
+.bw button.primary { padding: 9px 16px; font-weight: 600; }
+.bw button.primary:hover { filter: none; background: var(--accent); border-color: var(--accent); }
+.bw .pill { border-radius: 999px; font-size: 11.5px; padding: 2px 9px; }
+
+/* Tablas: encabezados en caja baja, filas con aire. */
+.bw table.data th { font-family: var(--font); font-size: 11.5px; text-transform: none; letter-spacing: 0; background: none; }
+.bw table.data th, .bw table.data td { padding: 10px 12px; font-size: 13px; }
+.bw table.data td.num, .bw table.data td.mono { font-size: 12.5px; }
+
+/* Campos, pestañas y avisos. */
+.bw input, .bw select, .bw textarea { font-size: 13px; border-radius: 8px; background: var(--panel); }
+.bw .field label, .bw .field > span { font-size: 12.5px; font-weight: 500; }
+.bw .tabs button { font-size: 13px; }
+.bw .banner, .bw .empty { border-radius: 10px; }
+.bw .card { border-radius: var(--radius); box-shadow: var(--shadow); }
+
+@media (max-width: 860px) {
+  .bw .topbar, .bw .identity { padding: 16px 16px 4px; }
+  .bw .main { padding: 8px 16px 32px; }
+}
+/* Encabezado del asistente de evento y las cejas en mono mayúsculas: igual
+   que el resto del marco (sans, caja normal). Las vistas públicas (.bw-publica)
+   conservan su propia cara. */
+.bw:not(.bw-publica) .nev-head { background: none; border-bottom: 0; padding: 24px 28px 8px; }
+.bw:not(.bw-publica) .nev-crumb2 { font-family: var(--font); font-size: 12px; }
+.bw:not(.bw-publica) .nev-head h1 { font-size: 24px; }
+.bw:not(.bw-publica) .crm-kicker, .bw:not(.bw-publica) .nev-kicker, .bw:not(.bw-publica) .support-eyebrow, .bw:not(.bw-publica) .sr-sec-title, .bw:not(.bw-publica) .bld-fact-label {
+  font-family: var(--font); font-size: 11.5px; letter-spacing: .02em; text-transform: uppercase; color: var(--muted); font-weight: 600;
+}
+@media (max-width: 860px) {
+  .bw .crm-stages { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+  .bw .crm-stages > * { flex: 0 0 auto; }
+}

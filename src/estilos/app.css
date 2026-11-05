@@ -333,3 +333,12 @@ a.btn-secundario, a.btn-primario, a.btn-secundario:hover, a.btn-primario:hover {
 @media (max-width: 860px) {
   .tabla-compacta th:nth-child(2), .tabla-compacta td:nth-child(2) { display: none; }
 }
+
+/* Contador de pendientes en el menú, barra móvil de una línea, filtros del CRM. */
+.lateral nav a .contador { margin-left: auto; font-family: var(--mono); font-size: 11px; background: var(--orange); color: #fff; border-radius: 999px; padding: 0 7px; min-width: 20px; text-align: center; line-height: 18px; }
+@media (max-width: 860px) {
+  .lateral { flex-wrap: nowrap; gap: 8px; }
+  .menu-boton { max-width: 44vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cuenta select { font-size: 12px; padding: 4px 6px; max-width: 118px; }
+  .cuenta .inicial { width: 26px; height: 26px; flex-basis: 26px; font-size: 12px; }
+}
