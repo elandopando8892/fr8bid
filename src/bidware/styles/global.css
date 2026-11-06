@@ -8795,3 +8795,15 @@ table.data.uploads-table {
     width: 100% !important;
   }
 }
+
+/* El asistente dentro de Mensajes (decisión de Jose, 6-nov): fijo arriba de la conversación. */
+.support-assistant.inline {
+  position: static;
+  display: block;
+  margin-bottom: 14px;
+}
+.support-assistant.inline .support-panel {
+  width: auto;
+  max-height: none;
+  box-shadow: none;
+}

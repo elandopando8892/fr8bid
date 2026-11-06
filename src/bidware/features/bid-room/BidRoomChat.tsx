@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { listBidRoomChat, postBidRoomChatMessage, explainBidError } from "./bidroom.service";
 import { useAsync } from "@/components/useAsync";
 import { Spinner, ErrorBanner, dateShort } from "@/components/ui";
@@ -24,7 +24,7 @@ const when = (value: unknown) => {
  * emails. rfx-bid-api returns threads (private, lane, event), each with its
  * messages; what the carrier writes goes to its private thread.
  */
-export function BidRoomChat({ token }: { token: string }) {
+export function BidRoomChat({ token, assistant }: { token: string; /** The room's assistant, on top. */ assistant?: ReactNode }) {
   const { data, loading, error, reload } = useAsync(() => listBidRoomChat(token), [token]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -53,6 +53,7 @@ export function BidRoomChat({ token }: { token: string }) {
   return (
     <div className="croom-body side-narrow">
       <div className="croom-main">
+        {assistant}
         {error && <ErrorBanner message={error} />}
         {sendError && <ErrorBanner message={sendError} />}
         <section className="croom-card">

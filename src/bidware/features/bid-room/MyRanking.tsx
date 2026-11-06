@@ -305,11 +305,16 @@ export function MyRanking({
           </>
         ) : (
           <>
-            <div className="croom-eyebrow">Si no has cotizado</div>
-            <div className="croom-box">
-              <b>Tu score está bloqueado</b>
-              <p>Envía tu tarifa all-in con capacidad, ETA y datos de validación para desbloquearlo.</p>
-            </div>
+            {/* Solo a quien no ha cotizado (decisión de Jose, 6-nov). */}
+            {quoted.length === 0 && (
+              <>
+                <div className="croom-eyebrow">Si no has cotizado</div>
+                <div className="croom-box">
+                  <b>Tu score está bloqueado</b>
+                  <p>Envía tu tarifa all-in con capacidad, ETA y datos de validación para desbloquearlo.</p>
+                </div>
+              </>
+            )}
             <div className="croom-eyebrow">El score no es solo precio</div>
             <p className="croom-side-text">
               Una tarifa más alta con capacidad firme, ETA clara y equipo confirmado puede ganarle a una más barata sin

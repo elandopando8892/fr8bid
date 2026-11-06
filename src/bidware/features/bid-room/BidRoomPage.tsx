@@ -276,9 +276,9 @@ function BidRoomContent({ token }: { token: string }) {
           />
         )}
 
-        {phase === "chat" && <BidRoomChat token={token} />}
-
-        <BidSupportAssistant token={token} route={linkRoute} />
+        {phase === "chat" && (
+          <BidRoomChat token={token} assistant={<BidSupportAssistant token={token} route={linkRoute} inline />} />
+        )}
       </main>
     </div>
   );
