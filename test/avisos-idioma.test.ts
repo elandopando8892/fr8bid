@@ -9,6 +9,7 @@ describe("país del carrier", () => {
     expect(carrierCountry({ profile_data: { general: { operating_country: "México" } } })).toBe("MX");
     expect(carrierCountry({ profile_data: { general: { operating_country: ["Estados Unidos de America"] } } })).toBe("US");
     expect(carrierCountry({ profile_data: { general: { operating_country: "Canada" } } })).toBe("CA");
+    expect(carrierCountry({ operating_country: ["Mexico"] })).toBe("MX");
   });
 
   it("con México y EE. UU. el perfil no decide: sigue dominio y lada", () => {

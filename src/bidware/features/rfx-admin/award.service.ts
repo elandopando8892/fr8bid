@@ -248,7 +248,8 @@ const fold = (v: unknown) =>
  */
 export function carrierCountry(vendor: Record<string, unknown>): CarrierCountry | null {
   const general = ((vendor.profile_data as Record<string, unknown> | undefined)?.general ?? {}) as Record<string, unknown>;
-  const raw = general.operating_country;
+  // list_rfx_detail trae el país como vendors.operating_country (alias del perfil).
+  const raw = general.operating_country ?? vendor.operating_country;
   const listed = [...new Set((Array.isArray(raw) ? raw : raw == null ? [] : [raw]).map((v) => COUNTRY_NAMES[fold(v)]).filter(Boolean))];
   if (listed.length === 1) return listed[0];
   if (listed.length > 1 && !listed.includes("MX")) return listed[0];
