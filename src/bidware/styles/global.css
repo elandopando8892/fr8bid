@@ -2016,6 +2016,30 @@ textarea {
 .sr-spot-notes {
   margin-top: 10px;
 }
+/* The program lane: essentials above, the rest of the template folded. */
+.sr-lane-more {
+  margin-top: 14px;
+  border-top: 1px dashed var(--line);
+  padding-top: 12px;
+}
+.sr-lane-more > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+}
+.sr-lane-more > summary::-webkit-details-marker {
+  display: none;
+}
+.sr-lane-more > summary strong::before {
+  content: "▸ ";
+  color: var(--muted);
+}
+.sr-lane-more[open] > summary strong::before {
+  content: "▾ ";
+}
+.sr-lane-more[open] > summary {
+  margin-bottom: 6px;
+}
 .sr-more .sr-lane > .sr-grid3 {
   margin-bottom: 6px;
 }
@@ -2333,6 +2357,12 @@ textarea {
 @media (max-width: 560px) {
   .sr-bar-note {
     display: none;
+  }
+  .sr-page .croom-bar-note {
+    display: none;
+  }
+  .sr-page .croom-bar .sr-lang {
+    margin-left: auto;
   }
   .sr-head {
     flex-wrap: wrap;
