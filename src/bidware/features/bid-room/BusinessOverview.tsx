@@ -70,9 +70,9 @@ export function BusinessOverview({
     { done: 0, total: 0 },
   );
   const modeCopy = MODE_COPY[mode] ?? MODE_COPY.anonymous_rank;
-  // Solo los modelos de sus rutas (decisión de Jose, 6-nov); sin modelo guardado, los que puede elegir.
+  // Solo los modelos de sus rutas (decisión de Jose, 6-nov); sin modelo guardado, los que el panel le deja elegir.
   const ownModels = new Set(lanes.filter((l) => l.commercial_model).map((l) => modelKeyOf(l.commercial_model)));
-  const models = ownModels.size ? COMMERCIAL_MODELS.filter((m) => ownModels.has(m.key)) : COMMERCIAL_MODELS.filter((m) => m.key !== "xbf_buy_sell");
+  const models = ownModels.size ? COMMERCIAL_MODELS.filter((m) => ownModels.has(m.key)) : COMMERCIAL_MODELS;
 
   async function askAccess(laneId: string) {
     setError(null);
