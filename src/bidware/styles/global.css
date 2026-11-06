@@ -8807,3 +8807,50 @@ table.data.uploads-table {
   max-height: none;
   box-shadow: none;
 }
+
+/* Perfil del carrier (decisiones de Jose, 6-nov). */
+.profile-step-now {
+  display: none;
+}
+.profile-saving-as {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.profile-saving-as b {
+  color: var(--ink);
+}
+@media (max-width: 860px) {
+  .profile-step-now {
+    display: grid;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    padding: 12px 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    font-size: 13px;
+  }
+  .profile-step-now-bar {
+    display: block;
+    height: 4px;
+    background: var(--subtle);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .profile-step-now-bar i {
+    display: block;
+    height: 100%;
+    background: var(--orange);
+  }
+  .profile-steps,
+  .profile-steps.open {
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    overflow: visible;
+  }
+  .profile-steps:not(.open) {
+    display: none;
+  }
+}
