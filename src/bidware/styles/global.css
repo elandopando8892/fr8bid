@@ -3550,6 +3550,26 @@ a.btn:hover {
   font-size: 12px;
   color: var(--muted2);
 }
+/* /board: la barra del Bid Room con EN VIVO y Sonido a la derecha. */
+.pb-brandbar .pb-live {
+  margin-left: auto;
+}
+.pb-hero-line {
+  padding: 12px 48px 14px;
+}
+.pb-hero-line p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--cloud);
+}
+.pb-hero-line strong {
+  font-size: 18px;
+  color: #fff;
+}
+.pb-layout.wide .pb-side {
+  position: static;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
 .pb-ghost {
   background: none;
   border-color: #3a3f47;
@@ -4429,9 +4449,12 @@ a.btn:hover {
   .pb-layout {
     grid-template-columns: minmax(0, 1fr);
   }
+  /* La tarjeta «¿Ya te invitaron?» sube antes de las rutas (decisión de Jose, 6-nov). */
   .pb-side {
-    position: static;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    display: contents;
+  }
+  .pb-side > .pb-panel.dark {
+    order: -1;
   }
   .pb-pipeline {
     grid-template-columns: repeat(2, minmax(0, 1fr));

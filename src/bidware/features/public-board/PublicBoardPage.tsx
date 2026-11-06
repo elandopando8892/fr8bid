@@ -124,7 +124,6 @@ export function PublicBoardPage() {
   }, [rows, watched]);
 
   const liveRows = board.rows.filter((r) => r.board_status === "live" || r.board_status === "closing");
-  const liveEvents = new Set(liveRows.map((r) => r.event_id)).size;
   const weekly = weeklyLoads(liveRows);
   const summary = board.summary;
   const seconds = board.checkedAt ? Math.max(0, Math.round((now - board.checkedAt.getTime()) / 1000)) : null;
@@ -191,15 +190,11 @@ export function PublicBoardPage() {
 
   return (
     <div className="pb">
-      <header className="pb-top">
-        <div>
-          <div className="pb-brand">
-            <span className="dot" />
-            MARKSMAN
-          </div>
-          <p>{tr("text106")}</p>
-        </div>
-        <div className="spacer" />
+      {/* La misma barra oscura del Bid Room (decisión de Jose, 6-nov); buscar invitaciones y avisos viven en la tarjeta lateral. */}
+      <header className="croom-bar pb-brandbar">
+        <span className="croom-logo">
+          MARKS<b>MAN</b>
+        </span>
         <span className={`pb-live${auto ? "" : " paused"}`} title={tr("text107")}>
           <i />
           {auto ? tr("text108") : tr("text109")}
@@ -219,50 +214,31 @@ export function PublicBoardPage() {
         >
           {sound ? tr("text112") : tr("text113")}
         </button>
-        <button type="button" className="pb-ghost" aria-pressed={notify} onClick={toggleNotify}>
-          {notify ? tr("text114") : tr("text115")}
-        </button>
-        <button type="button" className="primary" onClick={() => setFinding(true)}>
-          {access ? tr("text116", access.email) : tr("text020")}
-        </button>
       </header>
 
-      <section className="pb-hero">
-        <div className="pb-hero-main">
-          <span className="pb-eyebrow">{tr("text117")}</span>
-          <strong>
-            {weekly ? loads(weekly) : summary?.live ?? "—"}
-            <small>{weekly ? tr("text118") : tr("text119")}</small>
-          </strong>
+      {/* Una línea con lo que importa, sin las cinco cajas (decisión de Jose, 6-nov). */}
+      {(summary?.live ?? 0) > 0 && (
+        <section className="pb-hero pb-hero-line">
           <p>
-            {summary?.live ?? "—"}{tr(summary?.live === 1 ? "text142" : "text120")}{liveEvents}{tr("text121")}{liveEvents === 1 ? "" : "s"} ·{" "}
-            {summary?.total_quotes ?? "—"}{tr("text122")}</p>
-        </div>
-        {(summary?.live ?? 0) > 0 && (
-        <div className="pb-hero-tiles">
-          <div className="accent">
-            <span>{tr("text123")}</span>
-            <b>{summary?.live ?? "—"}</b>
-          </div>
-          <div>
-            <span>{tr("text086")}</span>
-            <b>{summary?.total_quotes ?? "—"}</b>
-          </div>
-          <div>
-            <span>{tr("text060")}</span>
-            <b>{summary?.closing ?? "—"}</b>
-          </div>
-          <div>
-            <span>{tr("text062")}</span>
-            <b>{summary?.awarded ?? "—"}</b>
-          </div>
-          <div>
-            <span>{tr("text064")}</span>
-            <b>{summary?.expired ?? "—"}</b>
-          </div>
-        </div>
-        )}
-      </section>
+            {weekly > 0 && (
+              <>
+                <strong>
+                  {loads(weekly)}
+                  {tr("text118")}
+                </strong>
+                {" · "}
+              </>
+            )}
+            {[
+              tr("text143", summary?.live ?? 0),
+              summary?.closing ? tr("text144", summary.closing) : "",
+              tr("text145", summary?.total_quotes ?? 0),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </section>
+      )}
 
       {/* Sin rutas en vivo no hay contadores ni movimiento que mostrar (decisión de Jose, 5-nov). */}
       {ticker.length > 0 && (
@@ -366,16 +342,15 @@ export function PublicBoardPage() {
               />
             )}
           </div>
-          {view !== "sheet" && (
-            <BoardSide
-              rows={board.rows}
-              events={groupByEvent(board.rows)}
-              access={access}
-              notify={notify}
-              onFind={() => setFinding(true)}
-              onNotify={toggleNotify}
-            />
-          )}
+          <BoardSide
+            rows={board.rows}
+            events={groupByEvent(board.rows)}
+            access={access}
+            notify={notify}
+            onFind={() => setFinding(true)}
+            onNotify={toggleNotify}
+          />
+
         </div>
 
         <InfoBanner title={tr("text133")}>
