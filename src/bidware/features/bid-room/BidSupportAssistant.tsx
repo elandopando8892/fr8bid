@@ -78,7 +78,7 @@ export function BidSupportAssistant({ token, route }: { token: string; route?: s
         <div className="grow">
           <b>Asistente de la sala</b>
           <span>
-            Dudas de acceso, fechas, alcance de lanes o cómo cotizar. Si hace falta una persona, envía tu pregunta al
+            Dudas de acceso, fechas, alcance de rutas o cómo cotizar. Si hace falta una persona, envía tu pregunta al
             equipo.
           </span>
         </div>

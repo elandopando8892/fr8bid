@@ -71,7 +71,7 @@ function distanceCell(d: { value: string; sub: string }): string {
 function scoreOf(board: LiveBoard | null, mode: string): { value: string; sub: string } {
   if (mode === "private") return { value: "—", sub: "sin score en eventos privados" };
   if (!board || board.current_score == null) return { value: "—", sub: "" };
-  if (board.current_rank === 1) return { value: String(board.current_score), sub: "la mejor de este lane" };
+  if (board.current_rank === 1) return { value: String(board.current_score), sub: "la mejor de esta ruta" };
   return {
     value: String(board.current_score),
     sub: board.leader_score != null ? `la mejor está en ${board.leader_score}` : "",
@@ -123,7 +123,7 @@ export function MyRanking({
     return () => window.clearInterval(id);
   }, [load, refreshSeconds]);
 
-  if (!lanes.length) return <Empty title="Sin lanes en tu invitación" />;
+  if (!lanes.length) return <Empty title="Sin rutas en tu invitación" />;
 
   const selected = lanes.find((l) => l.rfx_lane_id === picked) ?? quoted[0] ?? lanes[0];
   const board = boards[selected.rfx_lane_id]?.board ?? null;
@@ -139,7 +139,7 @@ export function MyRanking({
       <div className="croom-main">
         <div className="croom-kpis">
           <div className="croom-kpis-lane">
-            {selected.lane_number != null ? `Lane ${String(selected.lane_number)} · ` : ""}
+            {selected.lane_number != null ? `Ruta ${String(selected.lane_number)} · ` : ""}
             {route(selected)}
           </div>
           <div>
@@ -158,7 +158,7 @@ export function MyRanking({
             <small>{score.sub}</small>
           </div>
           <div>
-            <span>Lanes cotizados</span>
+            <span>Rutas cotizadas</span>
             <strong>
               {quoted.length} de {lanes.length}
             </strong>
@@ -177,7 +177,7 @@ export function MyRanking({
             </colgroup>
             <thead>
               <tr>
-                <th>Lane</th>
+                <th>Ruta</th>
                 <th>Tu oferta</th>
                 <th>Vs mejor</th>
                 <th>Score</th>
@@ -281,11 +281,11 @@ export function MyRanking({
               <>
                 <div className="spacer" />
                 <button type="button" className="primary" onClick={() => onComplete(selected)}>
-                  {selected.bid_rate != null ? "Completar mi oferta" : "Cotizar este lane"}
+                  {selected.bid_rate != null ? "Completar mi oferta" : "Cotizar esta ruta"}
                 </button>
               </>
             ) : (
-              <span className="croom-soft">Este lane ya no admite cambios.</span>
+              <span className="croom-soft">Esta ruta ya no admite cambios.</span>
             )}
           </div>
         </section>

@@ -8,7 +8,7 @@ type Row = Record<string, unknown>;
 /** Who reads each kind of thread; the carrier writes in its private one. */
 const THREAD_LABEL: Record<string, string> = {
   carrier_private: "Privado con MARKSMAN",
-  lane_group: "Todos los carriers de tu lane",
+  lane_group: "Todos los carriers de tu ruta",
   event_group: "Todos los carriers del evento",
 };
 const ORDER = ["carrier_private", "lane_group", "event_group"];
@@ -110,7 +110,7 @@ export function BidRoomChat({ token }: { token: string }) {
           ligado a tu invitación.
         </p>
         <p className="croom-side-text">
-          <b>Carriers de tu lane o del evento:</b> avisos del equipo para todos los invitados. Lo que tú escribes no
+          <b>Carriers de tu ruta o del evento:</b> avisos del equipo para todos los invitados. Lo que tú escribes no
           se publica ahí.
         </p>
         <div className="croom-box">

@@ -37,7 +37,7 @@ import { Spinner, ErrorBanner, Empty, InfoBanner, Pill, dateShort } from "@/comp
  */
 const PHASES: { key: PrivateWorkspace; label: string }[] = [
   { key: "master", label: "El negocio" },
-  { key: "bids", label: "Cotizar lanes" },
+  { key: "bids", label: "Cotizar rutas" },
   { key: "award", label: "Mi ranking" },
   { key: "chat", label: "Mensajes" },
 ];
@@ -54,7 +54,7 @@ const BAND: Record<string, { tag: string; text: string }> = {
   },
   open_leaderboard: {
     tag: "TABLERO ABIERTO",
-    text: "Ves la posición, el nombre y la oferta de los carriers de cada lane, y ellos ven la tuya.",
+    text: "Ves la posición, el nombre y la oferta de los carriers de cada ruta, y ellos ven la tuya.",
   },
 };
 
@@ -67,6 +67,18 @@ function deadlineText(due: DueState): string {
   if (days <= 0) return "cierra hoy a las 23:59";
   if (days === 1) return "cierra mañana";
   return `cierra en ${days} días`;
+}
+
+/** La barra de marca: el carrier llega desde un correo y ve primero quién lo invita. */
+function MarcaCarrier() {
+  return (
+    <div className="croom-bar">
+      <span className="croom-logo">
+        MARKS<b>MAN</b>
+      </span>
+      <span className="croom-bar-note">Acceso privado de carrier</span>
+    </div>
+  );
 }
 
 export function BidRoomPage() {
@@ -126,8 +138,8 @@ function BidRoomContent({ token }: { token: string }) {
   if (!data) {
     return (
       <div className="croom">
+        <MarcaCarrier />
         <header className="croom-head closed">
-          <div className="croom-crumb">Acceso privado de carrier · Marksman</div>
           <h1>No pudimos abrir tu Bid Room</h1>
         </header>
         <main className="croom-page">
@@ -166,16 +178,17 @@ function BidRoomContent({ token }: { token: string }) {
 
   return (
     <div className="croom">
+      <MarcaCarrier />
       <header className="croom-head">
-        <div className="croom-crumb">
-          Acceso privado de carrier · Marksman{event.rfx_id ? ` · ${event.rfx_id}` : ""}
-        </div>
         <h1>{event.name || "Bid Room privado"}</h1>
+        {/* Una línea, sin chips (decisión de Jose, 6-nov). */}
         <div className="croom-meta">
-          {carrier && <Pill tone="amber">{carrier.toUpperCase()}</Pill>}
-          <Pill>{(MODE_COPY[mode] ?? MODE_COPY.anonymous_rank).label.toUpperCase()}</Pill>
           <span>
-            {lanes.length} lane{lanes.length === 1 ? "" : "s"} en tu invitación ·{" "}
+            {[carrier, (MODE_COPY[mode] ?? MODE_COPY.anonymous_rank).label.toLowerCase(), event.rfx_id]
+              .filter(Boolean)
+              .join(" · ")}
+            {" · "}
+            {lanes.length} ruta{lanes.length === 1 ? "" : "s"} ·{" "}
             <span className={due.status === "closing" ? "croom-closing" : undefined}>{deadline}</span>
             {event.operation_start_date ? ` · arranca el ${dateShort(event.operation_start_date)}` : ""}
           </span>
@@ -246,8 +259,8 @@ function BidRoomContent({ token }: { token: string }) {
             />
           ) : (
             <Empty
-              title="Sin lanes en tu invitación"
-              hint="Si crees que falta un lane, pide acceso en El negocio o escribe al equipo en Mensajes."
+              title="Sin rutas en tu invitación"
+              hint="Si crees que falta una ruta, pide acceso en El negocio o escribe al equipo en Mensajes."
             />
           ))}
 

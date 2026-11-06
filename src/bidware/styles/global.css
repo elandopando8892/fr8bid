@@ -2651,6 +2651,61 @@ table.data td {
   min-height: 100vh;
   background: var(--cloud);
 }
+/* Barra de marca del carrier (decisión de Jose, 6-nov): misma barra oscura que la liga del shipper. */
+.croom-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--ink);
+  color: #fff;
+  padding: 14px 28px;
+}
+.croom-logo {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-size: 16px;
+}
+.croom-logo b {
+  color: var(--orange);
+}
+.croom-bar-note {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted2);
+}
+.croom-progress-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.croom-progress-text {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.croom-progress-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.croom-progress-excel {
+  font-size: 12px;
+  color: var(--grey);
+}
+.croom-progress-row button {
+  padding: 4px 10px;
+  font-size: 12px;
+  min-height: 0;
+}
+.croom-gaps {
+  font-size: 12px;
+  color: var(--grey);
+  line-height: 1.45;
+  margin: 2px 0 0;
+}
+.croom-gaps b {
+  color: var(--ink);
+}
 .croom-head {
   display: grid;
   gap: 6px;
@@ -3326,6 +3381,9 @@ a.btn:hover {
   }
 }
 @media (max-width: 640px) {
+  .croom-bar {
+    padding: 12px 16px;
+  }
   .croom-head {
     padding: 16px 16px 0;
   }

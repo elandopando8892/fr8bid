@@ -54,7 +54,7 @@ async function run(browser,scenario,mobile=false){
   await page.goto(origin+'/bid/fixture-lane-1',{waitUntil:'networkidle',timeout:30000});
   if(scenario==='invalid'){await page.getByText('No pudimos abrir tu Bid Room').waitFor();assert.equal(calls.filter(c=>c.action==='submit_bid').length,0);return{scenario,mobile,passed:true};}
   if(scenario==='closed'){await page.getByRole('row').filter({hasText:'Monterrey'}).click();assert.equal(await panel().getByRole('button',{name:'Enviar oferta',exact:true}).count(),0);return{scenario,mobile,passed:true};}
-  await choose(1);await field('Equipo disponible').waitFor({state:'visible'});
+  await choose(1);assert.equal(await field('Equipo disponible').isVisible(),false,'las condiciones empiezan plegadas');
   await field('Tarifa all-in *').fill('1200');
   if(scenario==='share'){
    await field('Modelo comercial').selectOption('carrier_share');
@@ -65,8 +65,9 @@ async function run(browser,scenario,mobile=false){
    assert.equal(await panel().getByRole('note',{name:'Condición de facturación'}).count(),0);
   }
   const summary=page.getByRole('region',{name:'Revisión de información de la oferta'});
-  assert.ok((await summary.innerText()).includes('capacidad semanal'));
+  assert.ok((await summary.innerText()).includes('capacidad'));
   if(['complete','error'].includes(scenario)){
+   await panel().locator('summary').click();
    for(const [name,value] of [['Capacidad/sem','4'],['Tránsito (días)','2'],['Vigente hasta','2099-12-31'],['Ubicación actual de la unidad','Monterrey'],['Vacío al origen','0'],['Detalle de la unidad','Unidad controlada 2026'],['ETA de recolección','2099-06-01T10:00'],['ETA de entrega','2099-06-03T10:00'],['Notas para MARKSMAN','Condiciones controladas']])await field(name).fill(value);
    await field('Equipo disponible').selectOption('yes');await field('Unidad').selectOption('km');
    await field('Doy cuenta espejo de GPS para validar la unidad.').check();
@@ -75,7 +76,7 @@ async function run(browser,scenario,mobile=false){
    await summary.getByText('Datos recomendados completos').waitFor();
   }
   if(scenario==='switch'){
-   await panel().locator('summary').click();assert.equal(await field('Equipo disponible').isVisible(),false);await choose(2);await field('Equipo disponible').waitFor({state:'visible'});assert.equal(await field('Tarifa all-in *').inputValue(),'');assert.equal(calls.filter(c=>c.action==='submit_bid').length,0);
+   assert.equal(await field('Equipo disponible').isVisible(),false);await panel().locator('summary').click();await field('Equipo disponible').waitFor({state:'visible'});await choose(2);await field('Equipo disponible').waitFor({state:'hidden'});assert.equal(await field('Tarifa all-in *').inputValue(),'');assert.equal(calls.filter(c=>c.action==='submit_bid').length,0);
   }else{
    await summary.scrollIntoViewIfNeeded();await page.screenshot({path:path.join(output,`${scenario}-${mobile?'mobile':'desktop'}.png`),fullPage:false});
    await sendOffer('Enviar oferta');
@@ -89,7 +90,7 @@ async function run(browser,scenario,mobile=false){
     assert.equal(await field('Detalle de la unidad').inputValue(),'Unidad controlada 2026');assert.equal(await field('Equipo disponible').inputValue(),'yes');assert.equal(await field('Vacío al origen').inputValue(),'0');assert.equal(await field('ETA de recolección').inputValue(),'2099-06-01T10:00');assert.equal(await field('Condiciones').inputValue(),'Sujeto a disponibilidad');
     await field('Tarifa all-in *').fill('1250');await sendOffer('Actualizar oferta');
     assert.equal(lanes[0].unit_details,'Unidad controlada 2026');assert.equal(lanes[0].bid_rate,1250);assert.equal(lanes[1].bid_rate,undefined);
-   }else{assert.equal(lanes[0].weekly_capacity,null);assert.ok((await summary.innerText()).includes('capacidad semanal'));}
+   }else{assert.equal(lanes[0].weekly_capacity,null);assert.ok((await summary.innerText()).includes('capacidad'));}
   }
   assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);
   return{scenario,mobile,passed:true,syntheticWrites:calls.filter(c=>c.action==='submit_bid').length};

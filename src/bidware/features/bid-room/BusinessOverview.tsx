@@ -29,7 +29,7 @@ export const MODE_COPY: Record<string, { label: string; text: string }> = {
     label: "Ranking anónimo",
     text: "ves tu lugar, tu score y tu distancia a la mejor oferta; nunca quién cotizó ni a cuánto.",
   },
-  open_leaderboard: { label: "Tablero abierto", text: "ves la posición y la oferta de todos los carriers de cada lane." },
+  open_leaderboard: { label: "Tablero abierto", text: "ves la posición y la oferta de todos los carriers de cada ruta." },
 };
 
 const route = (lane: BookLane) => `${String(lane.origin ?? "—")} → ${String(lane.destination ?? "—")}`;
@@ -122,7 +122,7 @@ export function BusinessOverview({
               </div>
             )}
             <div>
-              <dt>Lanes</dt>
+              <dt>Rutas</dt>
               <dd>
                 {lanes.length} en tu invitación · {segments.length} segmento{segments.length === 1 ? "" : "s"}
               </dd>
@@ -142,11 +142,11 @@ export function BusinessOverview({
           </header>
           <ol className="croom-steps">
             <li>
-              <b>Cotiza cada lane</b> con su tarifa all-in, en el orden que quieras. Cada lane se guarda solo y lo
-              puedes corregir mientras la ventana siga abierta; cotizar uno no te compromete con los demás.
+              <b>Cotiza cada ruta</b> con su tarifa all-in, en el orden que quieras. Cada ruta se guarda sola y la
+              puedes corregir mientras la ventana siga abierta; cotizar una no te compromete con las demás.
             </li>
             <li>
-              <b>Confirma los términos</b> de cada segmento, debajo de tus lanes. Decir «con excepción» o «no puedo» no
+              <b>Confirma los términos</b> de cada segmento, debajo de tus rutas. Decir «con excepción» o «no puedo» no
               te saca del bid: nos dice dónde negociar.
             </li>
             <li>
@@ -217,7 +217,7 @@ export function BusinessOverview({
                         {String(other.name ?? "Evento")}
                       </td>
                       <td className="mono">
-                        {rows.length} lane{rows.length === 1 ? "" : "s"}
+                        {rows.length} ruta{rows.length === 1 ? "" : "s"}
                       </td>
                       <td className="mono">{other.due_date ? dateShort(other.due_date) : "—"}</td>
                       <td style={{ textAlign: "right" }}>
@@ -236,7 +236,7 @@ export function BusinessOverview({
         {openLanes.length > 0 && (
           <section className="croom-card">
             <header className="croom-card-head">
-              <b className="grow">Lanes abiertos a los que no te invitaron</b>
+              <b className="grow">Rutas abiertas a las que no te invitaron</b>
               <Pill>{openLanes.length}</Pill>
             </header>
             <p className="croom-card-note">Si los cubres, pide acceso: el equipo revisa y te invita.</p>
@@ -289,7 +289,7 @@ export function BusinessOverview({
             <b>
               {quoted} de {lanes.length}
             </b>{" "}
-            lanes cotizados
+            rutas cotizadas
           </div>
           <span>
             <i style={{ width: `${lanes.length ? (quoted / lanes.length) * 100 : 0}%` }} />
