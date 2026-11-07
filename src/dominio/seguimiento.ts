@@ -173,7 +173,7 @@ export function intentosPorPreparar(d: Detalle, ahora: Date, hoy: string): { s: 
 // Texto del intento. Rateware (draft_bid_room_carrier_message) lo pone como
 // pregunta dentro de su plantilla, con el resumen de la ruta y el botón a la
 // liga privada; acepta hasta 600 caracteres. «ruta» hace que Rateware arme el
-// cuerpo en español (el asunto «<folio> | Question about …» queda en inglés).
+// cuerpo en español, con asunto «Seguimiento <folio> · <origen> → <destino>».
 // Responde en el hilo solo si encuentra un correo del carrier; a quien no ha
 // contestado le llega como correo nuevo.
 export const LIMITE_TEXTO_INTENTO = 600;

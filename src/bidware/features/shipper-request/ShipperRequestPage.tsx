@@ -64,11 +64,10 @@ function Shell({
   const copy = copyFor(lang, brand);
   return (
     <div className="sr-page">
-      <div className="sr-bar">
-        <span className="sr-mark" aria-hidden="true" />
-        <strong>{brand}</strong>
-        <span className="spacer" />
-        <span className="sr-bar-note">{copy.barNote}</span>
+      {/* La misma barra oscura del Bid Room y los perfiles (decisión de Jose, 6-nov). */}
+      <div className="croom-bar">
+        <span className="croom-logo">{/^marksman$/i.test(brand) ? <>MARKS<b>MAN</b></> : brand}</span>
+        <span className="croom-bar-note">{copy.barNote}</span>
         <div className="profile-lang sr-lang" role="group" aria-label="Idioma / Language">
           {(["es", "en"] as Lang[]).map((code) => (
             <button key={code} type="button" className={lang === code ? "active" : ""} onClick={() => setLang(code)}>

@@ -2016,6 +2016,30 @@ textarea {
 .sr-spot-notes {
   margin-top: 10px;
 }
+/* The program lane: essentials above, the rest of the template folded. */
+.sr-lane-more {
+  margin-top: 14px;
+  border-top: 1px dashed var(--line);
+  padding-top: 12px;
+}
+.sr-lane-more > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+}
+.sr-lane-more > summary::-webkit-details-marker {
+  display: none;
+}
+.sr-lane-more > summary strong::before {
+  content: "▸ ";
+  color: var(--muted);
+}
+.sr-lane-more[open] > summary strong::before {
+  content: "▾ ";
+}
+.sr-lane-more[open] > summary {
+  margin-bottom: 6px;
+}
 .sr-more .sr-lane > .sr-grid3 {
   margin-bottom: 6px;
 }
@@ -2334,6 +2358,12 @@ textarea {
   .sr-bar-note {
     display: none;
   }
+  .sr-page .croom-bar-note {
+    display: none;
+  }
+  .sr-page .croom-bar .sr-lang {
+    margin-left: auto;
+  }
   .sr-head {
     flex-wrap: wrap;
   }
@@ -2650,6 +2680,61 @@ table.data td {
   --croom-note: #edf2fc;
   min-height: 100vh;
   background: var(--cloud);
+}
+/* Barra de marca del carrier (decisión de Jose, 6-nov): misma barra oscura que la liga del shipper. */
+.croom-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--ink);
+  color: #fff;
+  padding: 14px 28px;
+}
+.croom-logo {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-size: 16px;
+}
+.croom-logo b {
+  color: var(--orange);
+}
+.croom-bar-note {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted2);
+}
+.croom-progress-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.croom-progress-text {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.croom-progress-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.croom-progress-excel {
+  font-size: 12px;
+  color: var(--grey);
+}
+.croom-progress-row button {
+  padding: 4px 10px;
+  font-size: 12px;
+  min-height: 0;
+}
+.croom-gaps {
+  font-size: 12px;
+  color: var(--grey);
+  line-height: 1.45;
+  margin: 2px 0 0;
+}
+.croom-gaps b {
+  color: var(--ink);
 }
 .croom-head {
   display: grid;
@@ -3326,6 +3411,9 @@ a.btn:hover {
   }
 }
 @media (max-width: 640px) {
+  .croom-bar {
+    padding: 12px 16px;
+  }
   .croom-head {
     padding: 16px 16px 0;
   }
@@ -3461,6 +3549,26 @@ a.btn:hover {
   margin: 4px 0 0;
   font-size: 12px;
   color: var(--muted2);
+}
+/* /board: la barra del Bid Room con EN VIVO y Sonido a la derecha. */
+.pb-brandbar .pb-live {
+  margin-left: auto;
+}
+.pb-hero-line {
+  padding: 12px 48px 14px;
+}
+.pb-hero-line p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--cloud);
+}
+.pb-hero-line strong {
+  font-size: 18px;
+  color: #fff;
+}
+.pb-layout.wide .pb-side {
+  position: static;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 .pb-ghost {
   background: none;
@@ -4341,9 +4449,12 @@ a.btn:hover {
   .pb-layout {
     grid-template-columns: minmax(0, 1fr);
   }
+  /* La tarjeta «¿Ya te invitaron?» sube antes de las rutas (decisión de Jose, 6-nov). */
   .pb-side {
-    position: static;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    display: contents;
+  }
+  .pb-side > .pb-panel.dark {
+    order: -1;
   }
   .pb-pipeline {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -8735,5 +8846,64 @@ table.data.uploads-table {
   .upload-form > .field {
     min-width: 0 !important;
     width: 100% !important;
+  }
+}
+
+/* El asistente dentro de Mensajes (decisión de Jose, 6-nov): fijo arriba de la conversación. */
+.support-assistant.inline {
+  position: static;
+  display: block;
+  margin-bottom: 14px;
+}
+.support-assistant.inline .support-panel {
+  width: auto;
+  max-height: none;
+  box-shadow: none;
+}
+
+/* Perfil del carrier (decisiones de Jose, 6-nov). */
+.profile-step-now {
+  display: none;
+}
+.profile-saving-as {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.profile-saving-as b {
+  color: var(--ink);
+}
+@media (max-width: 860px) {
+  .profile-step-now {
+    display: grid;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    padding: 12px 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    font-size: 13px;
+  }
+  .profile-step-now-bar {
+    display: block;
+    height: 4px;
+    background: var(--subtle);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .profile-step-now-bar i {
+    display: block;
+    height: 100%;
+    background: var(--orange);
+  }
+  .profile-steps,
+  .profile-steps.open {
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    overflow: visible;
+  }
+  .profile-steps:not(.open) {
+    display: none;
   }
 }

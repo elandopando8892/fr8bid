@@ -8,14 +8,14 @@ import { canQuote, laneState, type Answer, type BookLane, type LaneState } from 
 type Tone = "" | "green" | "amber" | "red" | "blue";
 
 const STATE_PILL: Record<LaneState, { label: string; tone: Tone }> = {
-  quoted: { label: "COTIZADO", tone: "green" },
+  quoted: { label: "COTIZADA", tone: "green" },
   pending: { label: "PENDIENTE", tone: "amber" },
   declined: { label: "NO PARTICIPO", tone: "" },
   withdrawn: { label: "RETIRADA", tone: "" },
   closed: { label: "VENTANA CERRADA", tone: "red" },
-  awarded: { label: "ADJUDICADO", tone: "green" },
+  awarded: { label: "ADJUDICADA", tone: "green" },
   backup: { label: "RESPALDO", tone: "blue" },
-  not_awarded: { label: "NO ADJUDICADO", tone: "" },
+  not_awarded: { label: "NO ADJUDICADA", tone: "" },
 };
 
 /** The row's one action: price it, revise it, or just look at it once it can't change. */
@@ -32,7 +32,7 @@ function actionOf(lane: BookLane): { label: string; primary?: boolean } | null {
 export const wide = () => window.matchMedia("(min-width: 1001px)").matches;
 
 /**
- * "Cotizar lanes" (wireframe 24): the carrier's lanes of this event, the terms
+ * "Cotizar rutas" (wireframe 24): the carrier's lanes of this event, the terms
  * of their segments below, and the quote panel beside them.
  */
 export function QuoteLanes({
@@ -77,16 +77,20 @@ export function QuoteLanes({
     <div className="croom-body">
       <div className="croom-main">
         {notice && <InfoBanner>{notice}</InfoBanner>}
-        <QuoteExcel token={token} eventId={eventId} onBusy={setExcelBusy} onSettled={onReload} />
-        <div className="croom-note">
-          <b>
-            {quoted} de {lanes.length} lanes cotizados.
-          </b>
-          <span>
-            Puedes cotizar en cualquier orden y corregir mientras la ventana siga abierta. Cotizar un lane no te
-            compromete con los demás.
-          </span>
-        </div>
+        <QuoteExcel
+          token={token}
+          eventId={eventId}
+          onBusy={setExcelBusy}
+          onSettled={onReload}
+          progress={
+            <>
+              <b>
+                {quoted} de {lanes.length} rutas cotizadas.
+              </b>{" "}
+              <span>Cotiza en el orden que quieras; cada ruta va por separado.</span>
+            </>
+          }
+        />
 
         <fieldset disabled={excelBusy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <div className="croom-table">

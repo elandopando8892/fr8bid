@@ -15,6 +15,7 @@ import {
   offerForm,
   offerPayload,
   offerProblems,
+  offerGaps,
   offerWarnings,
   parseAmount,
   submitBid,
@@ -37,7 +38,7 @@ function lockedReason(lane: BookLane): string {
   if (state === "awarded") return "Esta ruta ya es tuya. Para renegociar una tarifa adjudicada, escribe al equipo.";
   if (state === "backup") return "Quedaste como respaldo en esta ruta. Si cambia algo, el equipo te escribe.";
   if (state === "not_awarded") return "Esta ruta se adjudicó a otro carrier. Gracias por cotizar.";
-  if (!lane.invitation_token) return "Este lane no trae su propio enlace. Pide acceso al equipo en Mensajes.";
+  if (!lane.invitation_token) return "Esta ruta no trae su propio enlace. Pide acceso al equipo en Mensajes.";
   return "La ventana de cotización cerró. Tu última oferta queda como está.";
 }
 
@@ -63,7 +64,7 @@ export function QuotePanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
-  const [extras, setExtras] = useState(true);
+  const [extras, setExtras] = useState(Boolean(extrasOpen));
   const active = useRef(false);
   const sending = useRef(false);
   const scopeToken = useRef(lane.invitation_token);
@@ -79,8 +80,8 @@ export function QuotePanel({
   useEffect(() => {
     if (extrasOpen) setExtras(true);
   }, [extrasOpen, lane]);
-  // A carrier may collapse the section, but every different lane starts visible.
-  useEffect(() => setExtras(true), [lane.invitation_token]);
+  // The extra conditions start folded on every lane (decision of Jose, 6-nov): four fields price a route.
+  useEffect(() => setExtras(Boolean(extrasOpen)), [lane.invitation_token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = (patch: Partial<OfferForm>) => setForm((f) => ({ ...f, ...patch }));
   const revision = isRevision(lane);
@@ -89,6 +90,7 @@ export function QuotePanel({
   const spec = modelSpec(form.commercial_model);
   const problems = offerProblems(form);
   const warnings = offerWarnings(form);
+  const gaps = offerGaps(form);
   const billing = billingNotice(form);
   const token = String(lane.invitation_token || "");
 
@@ -132,7 +134,7 @@ export function QuotePanel({
   const head = (
     <>
       <div className="croom-eyebrow">
-        Cotización{lane.lane_number != null ? ` · lane ${String(lane.lane_number)}` : ""}
+        Cotización{lane.lane_number != null ? ` · ruta ${String(lane.lane_number)}` : ""}
       </div>
       <h3 className="croom-panel-title">
         {editable ? (revision ? "Revisar" : "Cotizar") : "Tu oferta"} · {route(lane)}
@@ -268,18 +270,14 @@ export function QuotePanel({
 
       </>)}
 
-      <label className="croom-field">
-        <span>Notas para MARKSMAN</span>
-        <textarea rows={2} value={form.notes} placeholder="opcional" onChange={(e) => set({ notes: e.target.value })} />
-      </label>
-
       <details className="croom-extras" open={extras} onToggle={(e) => setExtras((e.target as HTMLDetailsElement).open)}>
         <summary>
-          Capacidad y condiciones de la oferta
+          Sumar puntos a tu oferta
           <span className="mono">
             {scored} de {SCORE_FACTORS.length}
           </span>
         </summary>
+        <p className="croom-hint">Equipo, ETA, GPS y vacío suben tu score; puedes completarlos después de enviar.</p>
         <div className="croom-fields">
           <label>
             <span>Equipo disponible</span>
@@ -366,6 +364,10 @@ export function QuotePanel({
             </label>
           </div>
         )}
+        <label className="croom-field">
+          <span>Notas para MARKSMAN</span>
+          <textarea rows={2} value={form.notes} placeholder="opcional" onChange={(e) => set({ notes: e.target.value })} />
+        </label>
       </details>
 
       <label className="croom-final">
@@ -377,14 +379,14 @@ export function QuotePanel({
 
       {tried && problems.length > 0 && <p className="croom-problems">{problems.join(" ")}</p>}
 
-      <section className={`croom-note${warnings.length ? " warn" : ""}`} aria-label="Revisión de información de la oferta">
-        <div>
-          <b>{warnings.length ? "Datos pendientes antes de enviar" : "Datos recomendados completos"}</b>
-          {warnings.length ? <>
-            <ul>{warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
-            <p>Puedes enviar tu oferta con estos datos pendientes y completarlos después, mientras siga abierta la cotización.</p>
-          </> : <p>Revisa que la capacidad y las condiciones correspondan a esta ruta antes de enviar.</p>}
-        </div>
+      <section className="croom-gaps" aria-label="Revisión de información de la oferta" title={warnings.join(" ")}>
+        {gaps.length ? (
+          <>
+            <b>Falta:</b> {gaps.join(", ")}. Puedes enviar así y completarlo después.
+          </>
+        ) : (
+          <b>Datos recomendados completos</b>
+        )}
       </section>
 
       {billing && <p className="croom-note" role="note" aria-label="Condición de facturación"><strong>{billing}</strong></p>}
@@ -407,7 +409,7 @@ export function QuotePanel({
             type="button"
             disabled={busy}
             onClick={async () => {
-              const reason = await promptAsync("Motivo (opcional) para no participar en este lane:");
+              const reason = await promptAsync("Motivo (opcional) para no participar en esta ruta:");
               if (reason === null) return;
               run(() => declineInvitation(token, reason), `Marcado como no participo · ${route(lane)}.`);
             }}
@@ -435,9 +437,9 @@ export function QuotePanelEmpty() {
   return (
     <aside className="croom-panel">
       <div className="croom-eyebrow">Cotización</div>
-      <h3 className="croom-panel-title">Elige un lane de la tabla</h3>
+      <h3 className="croom-panel-title">Elige una ruta de la tabla</h3>
       <p className="croom-hint">
-        Cada lane se cotiza por separado y se guarda solo: puedes parar y volver, y corregir mientras la ventana siga
+        Cada ruta se cotiza por separado y se guarda sola: puedes parar y volver, y corregir mientras la ventana siga
         abierta.
       </p>
     </aside>

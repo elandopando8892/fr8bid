@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ErrorBanner } from "@/components/ui";
 import { confirmAsync } from "@/components/confirm";
 import { billingNotice, eventLanes, getInvitation, modelSpec, isLockedBrokerage, offerPayload, submitBid, type BookLane } from "./bidroom.service";
 import { buildBidTemplate, currentOfferForSend, displayOfferValue, OFFER_COLUMNS, parseBidTemplate, type ImportedOffer } from "./bid-template";
 
-export function QuoteExcel({ token, eventId, onBusy, onSettled }: {
+export function QuoteExcel({ token, eventId, onBusy, onSettled, progress }: {
   token: string;
+  /** The progress line the two Excel buttons sit on (decision of Jose, 6-nov). */
+  progress?: ReactNode;
   eventId: string;
   onBusy: (busy: boolean) => void;
   onSettled: () => void;
@@ -109,12 +111,14 @@ export function QuoteExcel({ token, eventId, onBusy, onSettled }: {
     } finally { if (used.current) onSettled(); finish(); }
   }
 
-  return <section className="croom-note" aria-label="Cotizar con Excel" style={{ display: "block" }}>
-    <h3>Cotizar con Excel</h3>
-    <p>Descarga tus rutas, completa la plantilla y revisa las ofertas antes de enviarlas.</p>
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      <button type="button" disabled={busy || consumed} onClick={download}>Descargar plantilla</button>
-      <button type="button" disabled={busy || consumed} onClick={() => input.current?.click()}>Importar Excel</button>
+  return <section className="croom-note croom-progress" aria-label="Cotizar con Excel" style={{ display: "block" }}>
+    <div className="croom-progress-row">
+      <div className="croom-progress-text">{progress}</div>
+      <span className="croom-progress-actions">
+      <span className="croom-progress-excel">Excel:</span>
+      <button type="button" className="sm" disabled={busy || consumed} onClick={download} title="Descarga tus rutas en una plantilla para cotizarlas en Excel">Descargar plantilla</button>
+      <button type="button" className="sm" disabled={busy || consumed} onClick={() => input.current?.click()} title="Sube la plantilla llena; revisas las ofertas antes de enviarlas">Importar</button>
+      </span>
       <input ref={input} type="file" accept=".xlsx" aria-label="Archivo de ofertas Excel" hidden disabled={busy || consumed}
         onChange={e => { const file = e.target.files?.[0]; e.target.value = ""; if (file) void upload(file); }} />
     </div>

@@ -54,6 +54,8 @@ export interface LaneFieldProps {
    * date, weight, commodity and notes: this form then shows only the rest.
    */
   rest?: boolean;
+  /** Inside the program lane's fold: the essentials are already above it. */
+  folded?: boolean;
 }
 
 /** A template list; a saved value outside it still shows (and stays) as its own option. */
@@ -185,7 +187,68 @@ function YesNo({ value, lang, copy, onChange }: { value: string; lang: Lang; cop
  * sections. Only what rfx-bid-api requires (origin, destination, equipment,
  * volume) is checked; the rest is as partial as the shipper likes.
  */
-export function LaneForm({ token, lane, kind, segments, defaults, lang, copy, problems, onChange, country, rest = false }: LaneFieldProps) {
+export function LaneForm(props: LaneFieldProps) {
+  const { token, lane, kind, defaults, lang, copy, problems, onChange, country, rest = false } = props;
+  // Programa: lo esencial arriba y el resto plegado, como en spot (decisión de Jose, 6-nov).
+  if (kind === "rfq" && !rest) {
+    const bad = (problem: LaneProblem) => problems.includes(problem);
+    return (
+      <div className="sr-lane-form">
+        <h4 className="sr-sec-title">{copy.essentials}</h4>
+        <div className="sr-grid4">
+          <PlaceField
+            token={token}
+            label={copy.origin}
+            value={lane.origin}
+            lang={lang}
+            defaultCountry={country}
+            invalid={bad("origin")}
+            onChange={(origin) => onChange({ origin })}
+          />
+          <PlaceField
+            token={token}
+            label={copy.destination}
+            value={lane.destination}
+            lang={lang}
+            defaultCountry={country}
+            invalid={bad("destination")}
+            onChange={(destination) => onChange({ destination })}
+          />
+          <Field label={copy.equipment} required copy={copy}>
+            <CatalogSelect
+              list={EQUIPMENT_TYPES}
+              value={lane.equipment}
+              lang={lang}
+              empty={defaults.equipment ? `${copy.standard} · ${catalogLabel(EQUIPMENT_TYPES, defaults.equipment, lang)}` : copy.choose}
+              invalid={bad("truck")}
+              onChange={(equipment) => onChange({ equipment })}
+            />
+          </Field>
+          <Field label={copy.commodity} required copy={copy}>
+            <input
+              value={lane.commodity}
+              placeholder={defaults.commodity ? `${copy.standard} · ${defaults.commodity}` : copy.commodityHint}
+              onChange={(e) => onChange({ commodity: e.target.value })}
+            />
+          </Field>
+          <WeightInput lane={lane} copy={copy} onChange={onChange} />
+          <Field label={copy.loadsRfq} required copy={copy}>
+            <NumberInput value={lane.loads} placeholder="12" invalid={bad("loads")} onChange={(loads) => onChange({ loads })} />
+          </Field>
+        </div>
+        <details className="sr-lane-more">
+          <summary>
+            <strong>{copy.laneMore}</strong> <span className="sr-hint">{copy.laneMoreHint}</span>
+          </summary>
+          <LaneForm {...props} rest folded />
+        </details>
+      </div>
+    );
+  }
+  return <LaneFormAll {...props} />;
+}
+
+function LaneFormAll({ token, lane, kind, segments, defaults, lang, copy, problems, onChange, country, rest = false, folded = false }: LaneFieldProps) {
   const bad = (problem: LaneProblem) => problems.includes(problem);
   // The template's marks only mean something on the RFQ, which follows the workbook.
   const marks = kind === "rfq";
@@ -387,7 +450,7 @@ export function LaneForm({ token, lane, kind, segments, defaults, lang, copy, pr
         <>
           <h4 className="sr-sec-title">{copy.sections.volume}</h4>
           <div className="sr-grid4">
-            {loads}
+            {!folded && loads}
             <Field label={copy.shipmentKind} required copy={copy}>
               <CatalogSelect list={SHIPMENT_KINDS} value={lane.shipment_kind} lang={lang} empty={copy.choose} onChange={(shipment_kind) => onChange({ shipment_kind })} />
             </Field>
@@ -474,7 +537,7 @@ export function LaneForm({ token, lane, kind, segments, defaults, lang, copy, pr
         </Field>
       </div>
 
-      {!rest && (
+      {(!rest || folded) && (
         <>
           <h4 className="sr-sec-title">{copy.sections.notes}</h4>
           <textarea rows={2} value={lane.notes} placeholder={copy.notesHint} aria-label={copy.sections.notes} onChange={(e) => onChange({ notes: e.target.value })} />

@@ -3178,7 +3178,12 @@ export const copy = {
     "es": "Objetivo",
     "en": "Target"
   },
-  "text791": { "es": "Más", "en": "More" }
+  "text791": { "es": "Más", "en": "More" },
+  "text792": {
+    "es": " — cada carrier en el idioma de su país (perfil, dominio .mx/.ca o lada del WhatsApp); sin señal, el del evento. Uno por carrier, con todas sus rutas. Solo por correo.",
+    "en": " — each carrier in its country's language (profile, .mx/.ca domain or WhatsApp country code); with no signal, the event's. One per carrier with all its lanes. Email only."
+  },
+  "text793": { "es": "{0} en español · {1} en inglés", "en": "{0} in Spanish · {1} in English" }
 };
 
 export const tr = translator(copy);
