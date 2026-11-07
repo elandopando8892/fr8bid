@@ -7,7 +7,10 @@ import { clasificarTelefono, type PistaCarrier, type Telefono } from "./telefono
 import { versionVigente } from "./recorrido.js";
 import type { Aviso, Detalle, Participacion, Ruta } from "./tipos.js";
 
-export type EstadoSeguimiento = "rebote" | "sin_abrir" | "abrio" | "respondio" | "oferto" | "declino";
+export type EstadoSeguimiento = "rebote" | "sin_abrir" | "abrio_correo" | "abrio" | "respondio" | "oferto" | "declino";
+
+// Quien sigue sin responder: aún recibe intentos y recordatorios.
+export const esperaRespuesta = (estado: EstadoSeguimiento) => estado === "sin_abrir" || estado === "abrio_correo" || estado === "abrio";
 
 export interface SeguimientoCarrier {
   carrierId: string;
@@ -22,8 +25,14 @@ export interface SeguimientoCarrier {
   ultimoEnvio: string | null;
   borradorEnCola: boolean; // ya hay un intento preparado en la Cola sin enviar
   vistaEn: string | null;
-  // Canales donde Rateware vio su respuesta (correo, chat del Bid Room).
-  respondioPor: ("correo" | "chat")[];
+  // Píxel de apertura de los correos que Gmail aceptó (7-nov-2026). correoMedido:
+  // al menos uno salió con píxel, así que «sin_abrir» quiere decir que no abrió el correo.
+  correoMedido: boolean;
+  correoAbiertoEn: string | null;
+  // Solo precarga de Apple Mail u otro cliente: no confirma que lo leyó.
+  aperturaPosibleEn: string | null;
+  // Canales donde Rateware vio su respuesta (correo, chat del Bid Room, WhatsApp de Meta).
+  respondioPor: ("correo" | "chat" | "whatsapp")[];
   diasSinRespuesta: number | null;
   pendientes: { participacion: Participacion; ruta: Ruta }[];
   invitacion: Aviso | null;
@@ -35,11 +44,21 @@ export interface SeguimientoCarrier {
 export const ETIQUETA_SEGUIMIENTO: Record<EstadoSeguimiento, string> = {
   rebote: "rebotó la invitación",
   sin_abrir: "no ha abierto la liga",
+  abrio_correo: "abrió el correo, no la liga",
   abrio: "abrió la liga, sin oferta",
   respondio: "ya respondió por otro canal",
   oferto: "ofertó",
   declino: "declinó"
 };
+
+const CANAL: Record<"correo" | "chat" | "whatsapp", string> = { correo: "correo", chat: "chat del Bid Room", whatsapp: "WhatsApp" };
+
+// Etiqueta del renglón: con píxel, «sin_abrir» ya dice que no abrió el correo.
+export function etiquetaSeguimiento(s: Pick<SeguimientoCarrier, "estado" | "correoMedido" | "aperturaPosibleEn" | "respondioPor">): string {
+  if (s.estado === "respondio" && s.respondioPor.length) return `respondió por ${s.respondioPor.map((c) => CANAL[c]).join(" y ")}`;
+  if (s.estado === "sin_abrir" && s.correoMedido) return s.aperturaPosibleEn ? "sin apertura confirmada (Apple Mail precarga)" : "no abrió el correo";
+  return ETIQUETA_SEGUIMIENTO[s.estado];
+}
 
 const dia = (iso: string) => iso.slice(0, 10);
 
@@ -71,6 +90,9 @@ export function seguimiento(d: Detalle, hoy: string): SeguimientoCarrier[] {
     const contestadas = filas.map((f) => d.respuestas?.[f.participacion.id]).filter((r): r is NonNullable<typeof r> => Boolean(r));
     const respondioPor = [...new Set(contestadas.flatMap((r) => r.canales))];
     const vista = Boolean(vistaEn) || filas.some((f) => ["vista", "respondio"].includes(f.participacion.estado));
+    const medidas = aceptadas.filter((a) => a.apertura);
+    const correoAbiertoEn = minimo(medidas.map((a) => a.apertura!.abiertoEn));
+    const aperturaPosibleEn = minimo(medidas.map((a) => a.apertura!.posibleEn));
     const estado: EstadoSeguimiento =
       ofertadas > 0 ? "oferto"
       : declinadas === filas.length ? "declino"
@@ -80,6 +102,7 @@ export function seguimiento(d: Detalle, hoy: string): SeguimientoCarrier[] {
       : filas.some((f) => f.participacion.estado === "respondio") || contestadas.length > 0 ? "respondio"
       : suyas.some((a) => a.estado === "rebotado") && !aceptadas.length ? "rebote"
       : vista ? "abrio"
+      : correoAbiertoEn ? "abrio_correo"
       : "sin_abrir";
     const invitadaEn = minimo(aceptadas.map((a) => a.enviadoEn));
     const envios = aceptadas.map((a) => a.enviadoEn).filter((x): x is string => Boolean(x)).sort();
@@ -96,8 +119,11 @@ export function seguimiento(d: Detalle, hoy: string): SeguimientoCarrier[] {
       ultimoEnvio: envios[envios.length - 1] ?? null,
       borradorEnCola: suyas.some((a) => a.estado === "borrador" || a.estado === "en_cola"),
       vistaEn,
+      correoMedido: medidas.length > 0,
+      correoAbiertoEn,
+      aperturaPosibleEn,
       respondioPor,
-      diasSinRespuesta: invitadaEn && (estado === "sin_abrir" || estado === "abrio") ? diasEntre(invitadaEn, hoy) : null,
+      diasSinRespuesta: invitadaEn && esperaRespuesta(estado) ? diasEntre(invitadaEn, hoy) : null,
       pendientes: filas.filter((f) => f.participacion.estado !== "declino" && !versionVigente(f.participacion)),
       invitacion: aceptadas[0] ?? suyas[0] ?? null,
       whatsapp: suyas.map((a) => a.whatsapp).find((x): x is string => Boolean(x)) ?? null,
@@ -109,7 +135,7 @@ export function seguimiento(d: Detalle, hoy: string): SeguimientoCarrier[] {
 // Solo con el evento abierto, a quien no ha ofertado ni declinado y tiene correo.
 export function candidatosRecordatorio(d: Detalle, hoy: string): SeguimientoCarrier[] {
   if (d.evento.estado !== "abierto" || d.respuestas === null) return [];
-  return seguimiento(d, hoy).filter((s) => (s.estado === "sin_abrir" || s.estado === "abrio") && s.correo);
+  return seguimiento(d, hoy).filter((s) => esperaRespuesta(s.estado) && s.correo);
 }
 
 // Cadencia de Jose (23-oct-2026) cuando una ruta no junta suficientes ofertas:
@@ -147,7 +173,7 @@ export function rutasSinProfundidad(d: Detalle, minimoOfertas = PROFUNDIDAD_MINI
 // Siguiente paso para un carrier que sigue sin responder en alguna ruta sin
 // profundidad. null: no le toca seguimiento o ya se agotó la cadencia.
 export function siguienteIntento(d: Detalle, s: SeguimientoCarrier, ahora: Date, minimoOfertas = PROFUNDIDAD_MINIMA): SiguienteIntento | null {
-  if (!(s.estado === "sin_abrir" || s.estado === "abrio") || !s.ultimoEnvio) return null;
+  if (!esperaRespuesta(s.estado) || !s.ultimoEnvio) return null;
   const flacas = new Set(rutasSinProfundidad(d, minimoOfertas).map((x) => x.ruta.id));
   if (!s.pendientes.some((f) => flacas.has(f.ruta.id))) return null;
   const paso = CADENCIA.find((c) => c.intento === s.intentos + 1);

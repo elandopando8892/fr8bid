@@ -144,6 +144,16 @@ export interface Aviso {
   // Rateware responde en el hilo solo si encuentra un correo del carrier; si
   // no, el intento sale como correo nuevo (gmail_reply_mode «new_email»).
   enHilo?: boolean;
+  // Píxel de apertura (Rateware, 7-nov-2026). Sin el campo: el correo salió sin
+  // píxel (antes del cambio) y no se sabe si lo abrieron.
+  apertura?: AperturaCorreo;
+}
+
+// abiertoEn: el proxy de imágenes de Gmail bajó el píxel (la persona abrió el
+// correo). posibleEn: Apple Mail u otro cliente lo precargó (puede no haberlo leído).
+export interface AperturaCorreo {
+  abiertoEn: string | null;
+  posibleEn: string | null;
 }
 
 export interface Recibo {
@@ -186,7 +196,7 @@ export interface Detalle {
 
 export interface RespuestaCarrier {
   participacionId: string;
-  canales: ("correo" | "chat")[];
+  canales: ("correo" | "chat" | "whatsapp")[];
   primeraEn: string;
   ultimaEn: string;
 }

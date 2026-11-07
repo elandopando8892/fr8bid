@@ -10,6 +10,7 @@ import { hoyMexico } from "../dominio/recorrido.js";
 import { revisionesVigentes } from "../dominio/revision.js";
 import { leerCierre } from "../dominio/cierre.js";
 import type {
+  AperturaCorreo,
   Aviso,
   CondicionRuta,
   Detalle,
@@ -220,7 +221,17 @@ function ruta(l: Fila, confirmaciones: Fila[], condiciones: Fila[] = []): Ruta {
 // generate_rfx_award_notices: metadata.notice_type «rfx_award_closeout», un
 // mensaje por carrier (metadata.rfx_lane_vendor_ids) y award_summary con el
 // conteo awarded/backup/not_awarded/no_award.
-export function aviso(m: Fila): Aviso {
+// list_rfx_carrier_replies.opens (píxel de Rateware): un renglón por mensaje que
+// salió con píxel. Sin renglón, el correo salió antes del cambio.
+export function aperturas(filas: Fila[] = []): Map<string, AperturaCorreo> {
+  return new Map(
+    filas
+      .filter((f) => f && f.outreach_message_id)
+      .map((f) => [String(f.outreach_message_id), { abiertoEn: f.first_opened_at || null, posibleEn: f.first_possible_at || null }])
+  );
+}
+
+export function aviso(m: Fila, abiertos: Map<string, AperturaCorreo> = new Map()): Aviso {
   const meta: Fila = m.metadata && typeof m.metadata === "object" ? m.metadata : {};
   const base = { destinatario: String(m.recipient_email || ""), asunto: String(m.subject || ""), cuerpo: String(m.text_body || "") };
   const esAdjudicacion = meta.notice_type === "rfx_award_closeout";
@@ -245,7 +256,8 @@ export function aviso(m: Fila): Aviso {
     whatsapp: vendor.whatsapp_phone ? String(vendor.whatsapp_phone) : null,
     whatsappNoContactar: vendor.whatsapp_do_not_contact === true,
     intento: meta.source === "bid_room_carrier_ask",
-    enHilo: meta.gmail_reply_mode === "thread_reply"
+    enHilo: meta.gmail_reply_mode === "thread_reply",
+    ...(abiertos.has(String(m.id)) ? { apertura: abiertos.get(String(m.id))! } : {})
   };
 }
 
@@ -266,8 +278,9 @@ export function detalle(
   crudo: Fila,
   mensajes: Fila[] = [],
   reciboCrudo: Fila | null = null,
-  extra: { hoy?: string; rubros?: Fila[]; condiciones?: Fila[]; revisiones?: Fila[] | null; respuestas?: Fila[] | null } = {}
+  extra: { hoy?: string; rubros?: Fila[]; condiciones?: Fila[]; revisiones?: Fila[] | null; respuestas?: Fila[] | null; aperturas?: Fila[] } = {}
 ): Detalle {
+  const abiertos = aperturas(extra.aperturas);
   const hoy = extra.hoy ?? hoyMexico();
   const e = crudo.event || {};
   if (esProtegido(e.id)) throw new Error("Evento protegido");
@@ -284,7 +297,7 @@ export function detalle(
       cierre: ["cerrado", "adjudicado", "archivado"].includes(estadoEvento(e, hoy)) ? leerCierre(e.notes) : null
     },
     rutas: (crudo.lanes || []).map((l: Fila) => ruta(l, extra.rubros || [], extra.condiciones || [])).sort((a: Ruta, b: Ruta) => a.numero - b.numero),
-    avisos: mensajes.filter((m) => !m.channel || m.channel === "email" || m.channel === "gmail").map(aviso),
+    avisos: mensajes.filter((m) => !m.channel || m.channel === "email" || m.channel === "gmail").map((m) => aviso(m, abiertos)),
     recibo: reciboCrudo ? recibo(reciboCrudo) : null,
     revisiones: extra.revisiones ? revisionesVigentes(extra.revisiones) : null,
     ...(extra.respuestas === undefined ? {} : { respuestas: extra.respuestas === null ? null : respuestas(extra.respuestas) })
@@ -292,15 +305,15 @@ export function detalle(
 }
 
 // list_rfx_carrier_replies (R2): un renglón por rfx_lane_vendor con los
-// canales donde el carrier contestó (email, bid_room_chat).
+// canales donde el carrier contestó (email, bid_room_chat, whatsapp de Meta).
 export function respuestas(filas: Fila[]): Record<string, RespuestaCarrier> {
   const salida: Record<string, RespuestaCarrier> = {};
   for (const f of filas) {
     const id = String(f.rfx_lane_vendor_id || "");
     if (!id) continue;
     const canales = (Array.isArray(f.channels) ? f.channels : [])
-      .map((c: string) => (c === "email" ? "correo" : c === "bid_room_chat" ? "chat" : null))
-      .filter((c: string | null): c is "correo" | "chat" => Boolean(c));
+      .map((c: string) => (c === "email" ? "correo" : c === "bid_room_chat" ? "chat" : c === "whatsapp" ? "whatsapp" : null))
+      .filter((c: string | null): c is "correo" | "chat" | "whatsapp" => Boolean(c));
     salida[id] = { participacionId: id, canales, primeraEn: String(f.first_reply_at || ""), ultimaEn: String(f.last_reply_at || f.first_reply_at || "") };
   }
   return salida;

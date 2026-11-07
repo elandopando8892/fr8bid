@@ -22,7 +22,7 @@ import {
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
 import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
 import { cambiosComerciales, describirModelo, modeloCorto, tarifaVenta } from "../dominio/modelo";
-import { candidatosRecordatorio, claveIntento, ETIQUETA_SEGUIMIENTO, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
+import { candidatosRecordatorio, claveIntento, esperaRespuesta, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
 import type { CarrierFit } from "../dominio/carrierFit";
 import type { Telefono } from "../dominio/telefonos";
@@ -39,7 +39,7 @@ import { useSesion } from "./sesion";
 // Fecha corta sin hora, para columnas angostas.
 const dia = (iso: string | null | undefined) =>
   iso ? new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString("es-MX", { day: "numeric", month: "short", timeZone: "America/Mexico_City" }) : "—";
-const TONO_SEGUIMIENTO: Record<EstadoSeguimiento, string> = { oferto: "ok", sin_abrir: "warn", abrio: "warn", rebote: "err", respondio: "info", declino: "" };
+const TONO_SEGUIMIENTO: Record<EstadoSeguimiento, string> = { oferto: "ok", sin_abrir: "warn", abrio_correo: "warn", abrio: "warn", rebote: "err", respondio: "info", declino: "" };
 
 const SIN_ENTREGA: EntregaLocal = { estado: "sin_preparar", operationId: null, error: null };
 
@@ -976,10 +976,11 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
   const filas = seguimiento(d, ctx.hoy);
   if (!filas.length) return null;
   // Si nadie está pendiente, la tabla por carrier no pide nada: se abre a pedido.
-  const hayPendientes = filas.some((x) => x.estado === "sin_abrir" || x.estado === "abrio" || x.estado === "rebote");
+  const hayPendientes = filas.some((x) => esperaRespuesta(x.estado) || x.estado === "rebote");
   const candidatos = new Set(candidatosRecordatorio(d, ctx.hoy).map((x) => x.carrierId));
   const conteo = (e: EstadoSeguimiento) => filas.filter((x) => x.estado === e).length;
-  const orden: EstadoSeguimiento[] = ["sin_abrir", "abrio", "rebote", "respondio", "declino", "oferto"];
+  const orden: EstadoSeguimiento[] = ["sin_abrir", "abrio_correo", "abrio", "rebote", "respondio", "declino", "oferto"];
+  const sinAbrirMedidos = filas.filter((x) => x.estado === "sin_abrir" && x.correoMedido).length;
   const ordenadas = [...filas].sort((a, b) => orden.indexOf(a.estado) - orden.indexOf(b.estado) || (b.diasSinRespuesta ?? 0) - (a.diasSinRespuesta ?? 0));
   const ahora = new Date();
   const flacas = rutasSinProfundidad(d);
@@ -1021,7 +1022,9 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
       <ul className="conteos">
         {conteo("oferto") > 0 && <li className="ok"><I.Check size={14} />{conteo("oferto")} ofertaron</li>}
         {conteo("abrio") > 0 && <li className="warn"><I.Ojo size={14} />{conteo("abrio")} abrieron sin ofertar</li>}
-        {conteo("sin_abrir") > 0 && <li className="warn"><I.Reloj size={14} />{conteo("sin_abrir")} sin abrir la liga</li>}
+        {conteo("abrio_correo") > 0 && <li className="warn"><I.Sobre size={14} />{conteo("abrio_correo")} abrieron el correo, no la liga</li>}
+        {sinAbrirMedidos > 0 && <li className="warn"><I.Reloj size={14} />{sinAbrirMedidos} no abrieron el correo</li>}
+        {conteo("sin_abrir") - sinAbrirMedidos > 0 && <li className="warn"><I.Reloj size={14} />{conteo("sin_abrir") - sinAbrirMedidos} sin abrir la liga</li>}
         {conteo("respondio") > 0 && <li><I.Chat size={14} />{conteo("respondio")} por otro canal</li>}
         {conteo("declino") > 0 && <li><I.Salir size={14} />{conteo("declino")} declinaron</li>}
         {conteo("rebote") > 0 && <li className="err"><I.Alerta size={14} />{conteo("rebote")} rebotaron</li>}
@@ -1107,15 +1110,14 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                   <td><b>{x.carrier}</b></td>
                   <td data-etiqueta="Estado">
                     <span className={`pill ${TONO_SEGUIMIENTO[x.estado]}`}>
-                      {x.estado === "respondio" && x.respondioPor.length
-                        ? `respondió por ${x.respondioPor.map((c) => (c === "correo" ? "correo" : "chat del Bid Room")).join(" y ")}`
-                        : ETIQUETA_SEGUIMIENTO[x.estado]}
+                      {etiquetaSeguimiento(x)}
                     </span>
                     {x.diasSinRespuesta ? <span className="tenue"> {plural(x.diasSinRespuesta, "día")}</span> : null}
                   </td>
                   <td data-etiqueta="Rutas">{x.estado === "oferto" && x.ofertadas < x.rutas ? `${x.ofertadas} de ${x.rutas}` : x.rutas}</td>
                   <td data-etiqueta="Actividad" className="tenue sin-salto">
                     <span title="Invitado"><I.Enviar size={13} /> {dia(x.invitadaEn)}</span>
+                    {x.correoAbiertoEn && <span title="Abrió el correo (Gmail)"> · <I.Sobre size={13} /> {dia(x.correoAbiertoEn)}</span>}
                     {x.vistaEn && <span title="Abrió la liga"> · <I.Ojo size={13} /> {dia(x.vistaEn)}</span>}
                   </td>
                   {conSiguiente && <td data-etiqueta="Siguiente intento">
@@ -1141,7 +1143,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                         <I.Sobre size={14} />{abierto === x.carrierId ? "Ocultar" : "Recordatorio"}
                       </button>
                     )}
-                    {(x.estado === "sin_abrir" || x.estado === "abrio") && ctx.rol !== "viewer" && d.evento.estado === "abierto" && (
+                    {esperaRespuesta(x.estado) && ctx.rol !== "viewer" && d.evento.estado === "abierto" && (
                       <button className="btn-chico" onClick={() => setAbierto(abierto === `r:${x.carrierId}` ? null : `r:${x.carrierId}`)}>
                         <I.Check size={14} />{abierto === `r:${x.carrierId}` ? "Ocultar" : "Ya respondió"}
                       </button>
@@ -1202,7 +1204,7 @@ function IntentosPorEnviar({ d, ctx, accion }: { d: Detalle; ctx: Contexto; acci
     return Boolean(p && estadoRevision(d, p.carrierId) === "revisado");
   };
   // Si el carrier ya ofertó, declinó o contestó, el borrador ya no se manda.
-  const vigentes = new Set(seguimiento(d, ctx.hoy).filter((x) => x.estado === "sin_abrir" || x.estado === "abrio").map((x) => x.carrierId));
+  const vigentes = new Set(seguimiento(d, ctx.hoy).filter((x) => esperaRespuesta(x.estado)).map((x) => x.carrierId));
   const sigue = (a: Aviso) => vigentes.has(carrierDe(a)?.carrierId ?? "");
   const porEnviar = intentos.filter((a) => revisado(a) && sigue(a));
   const detenidos = intentos.filter((a) => !porEnviar.includes(a));
@@ -1381,7 +1383,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
   const [preguntaA, setPreguntaA] = useState<string | null>(null);
   const hayOfertas = d.rutas.some((r) => conOferta(r).length > 0);
   const abierto = d.evento.estado === "abierto";
-  const pendientes = seguimiento(d, ctx.hoy).filter((x) => x.estado === "sin_abrir" || x.estado === "abrio").length;
+  const pendientes = seguimiento(d, ctx.hoy).filter((x) => esperaRespuesta(x.estado)).length;
 
   return (
     <>
