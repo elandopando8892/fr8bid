@@ -185,6 +185,8 @@ export interface NoticeRecipient {
   email: string | null;
   group: NoticeGroup;
   quoted: boolean;
+  /** The carrier's country as Rateware reads it for the notice's language (null: no signal). */
+  country: CarrierCountry | null;
 }
 
 const PARTICIPATED = ["invited", "viewed", "responded", "quoted", "bid_submitted", "awarded"];
@@ -217,6 +219,7 @@ export function noticeAudience(lanes: { invitations?: Offer[]; no_award_at?: unk
           email: String(vendor.primary_email ?? "").trim() || null,
           group,
           quoted,
+          country: carrierCountry(vendor),
         });
       } else {
         if (GROUP_RANK[group] < GROUP_RANK[prev.group]) prev.group = group;
@@ -225,6 +228,44 @@ export function noticeAudience(lanes: { invitations?: Offer[]; no_award_at?: unk
     }
   }
   return [...byVendor.values()];
+}
+
+export type CarrierCountry = "MX" | "US" | "CA";
+
+const COUNTRY_NAMES: Record<string, CarrierCountry> = {
+  mx: "MX", mexico: "MX", "estados unidos mexicanos": "MX",
+  us: "US", usa: "US", "united states": "US", "estados unidos": "US", "estados unidos de america": "US", "united states of america": "US",
+  ca: "CA", canada: "CA",
+};
+const fold = (v: unknown) =>
+  String(v ?? "").normalize("NFD").replace(/\p{M}/gu, "").replace(/[.]/g, "").trim().toLowerCase();
+
+/**
+ * The carrier's country, as Rateware's _shared/carrier-email-language.mjs reads it
+ * (decisión de Jose, 6-nov: los avisos salen en el idioma del país del carrier):
+ * 1) profile_data.general.operating_country, unless it lists Mexico together with US/CA;
+ * 2) a .mx or .ca email domain; 3) a WhatsApp number with its country code (52 / 1).
+ */
+export function carrierCountry(vendor: Record<string, unknown>): CarrierCountry | null {
+  const general = ((vendor.profile_data as Record<string, unknown> | undefined)?.general ?? {}) as Record<string, unknown>;
+  // list_rfx_detail trae el país como vendors.operating_country (alias del perfil).
+  const raw = general.operating_country ?? vendor.operating_country;
+  const listed = [...new Set((Array.isArray(raw) ? raw : raw == null ? [] : [raw]).map((v) => COUNTRY_NAMES[fold(v)]).filter(Boolean))];
+  if (listed.length === 1) return listed[0];
+  if (listed.length > 1 && !listed.includes("MX")) return listed[0];
+  const domain = String(vendor.domain || String(vendor.primary_email ?? "").split("@")[1] || "").trim().toLowerCase();
+  if (domain.endsWith(".mx")) return "MX";
+  if (domain.endsWith(".ca")) return "CA";
+  // A 10-digit number without its country code says nothing.
+  const digits = String(vendor.whatsapp_phone ?? "").replace(/\D/g, "").replace(/^00/, "");
+  if (/^52\d{10,11}$/.test(digits)) return "MX";
+  if (/^1\d{10}$/.test(digits)) return "US";
+  return null;
+}
+
+/** MX → español, US/CA → inglés; sin señal, el idioma del evento. */
+export function recipientLanguage(r: Pick<NoticeRecipient, "country">, eventLanguage: "es" | "en"): "es" | "en" {
+  return r.country === "MX" ? "es" : r.country ? "en" : eventLanguage;
 }
 
 /** The handler writes Spanish only when the event reads Spanish (bidRoomFollowUpLanguage). */

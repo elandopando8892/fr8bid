@@ -1069,7 +1069,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
             <>
               <p className="tenue">
                 Texto del {muestra.paso.intento}º intento. Rateware lo pone dentro de su plantilla con el resumen de la ruta y el botón a la liga privada. Va en el hilo solo si el carrier ya
-                escribió; si no, sale como correo nuevo con asunto «{d.evento.folio} | Question about …» (el asunto lo fija Rateware, en inglés):
+                escribió; si no, sale como correo nuevo con asunto «Seguimiento {d.evento.folio} · origen → destino»:
               </p>
               <p className="texto-aviso">{textoIntento(d, muestra.ruta, muestra.paso)}</p>
               <Confirmar

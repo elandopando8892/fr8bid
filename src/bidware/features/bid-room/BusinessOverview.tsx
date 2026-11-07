@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ErrorBanner, Pill, dateShort } from "@/components/ui";
 import {
   COMMERCIAL_MODELS,
+  modelKeyOf,
   isLockedBrokerage,
   explainBidError,
   requestLaneAccess,
@@ -13,23 +14,13 @@ import {
   type BookLane,
 } from "./bidroom.service";
 
-const EVENT_TYPE: Record<string, string> = {
-  spot: "Spot",
-  mini_bid: "Mini-bid",
-  minibid: "Mini-bid",
-  rfq: "RFQ",
-  rfp: "RFP",
-  rfi: "RFI",
-  tender: "Licitación",
-};
-
 export const MODE_COPY: Record<string, { label: string; text: string }> = {
   private: { label: "Privado", text: "solo ves tu propia oferta; MARKSMAN compara todas." },
   anonymous_rank: {
     label: "Ranking anónimo",
     text: "ves tu lugar, tu score y tu distancia a la mejor oferta; nunca quién cotizó ni a cuánto.",
   },
-  open_leaderboard: { label: "Tablero abierto", text: "ves la posición y la oferta de todos los carriers de cada lane." },
+  open_leaderboard: { label: "Tablero abierto", text: "ves la posición y la oferta de todos los carriers de cada ruta." },
 };
 
 const route = (lane: BookLane) => `${String(lane.origin ?? "—")} → ${String(lane.destination ?? "—")}`;
@@ -79,6 +70,9 @@ export function BusinessOverview({
     { done: 0, total: 0 },
   );
   const modeCopy = MODE_COPY[mode] ?? MODE_COPY.anonymous_rank;
+  // Solo los modelos de sus rutas (decisión de Jose, 6-nov); sin modelo guardado, los que el panel le deja elegir.
+  const ownModels = new Set(lanes.filter((l) => l.commercial_model).map((l) => modelKeyOf(l.commercial_model)));
+  const models = ownModels.size ? COMMERCIAL_MODELS.filter((m) => ownModels.has(m.key)) : COMMERCIAL_MODELS;
 
   async function askAccess(laneId: string) {
     setError(null);
@@ -101,14 +95,6 @@ export function BusinessOverview({
           </header>
           <dl className="croom-facts pad">
             <div>
-              <dt>Evento</dt>
-              <dd>{[event.rfx_id, event.name].filter(Boolean).join(" · ") || "—"}</dd>
-            </div>
-            <div>
-              <dt>Tipo</dt>
-              <dd>{EVENT_TYPE[String(event.event_type ?? "").toLowerCase()] ?? (event.event_type || "—")}</dd>
-            </div>
-            <div>
               <dt>Cierre</dt>
               <dd>
                 {event.due_date ? `${dateShort(event.due_date)} · ` : ""}
@@ -122,12 +108,12 @@ export function BusinessOverview({
               </div>
             )}
             <div>
-              <dt>Lanes</dt>
+              <dt>Rutas</dt>
               <dd>
                 {lanes.length} en tu invitación · {segments.length} segmento{segments.length === 1 ? "" : "s"}
               </dd>
             </div>
-            <div className="wide">
+            <div>
               <dt>Qué ves de los demás</dt>
               <dd>
                 <b>{modeCopy.label}:</b> {modeCopy.text}
@@ -142,11 +128,11 @@ export function BusinessOverview({
           </header>
           <ol className="croom-steps">
             <li>
-              <b>Cotiza cada lane</b> con su tarifa all-in, en el orden que quieras. Cada lane se guarda solo y lo
-              puedes corregir mientras la ventana siga abierta; cotizar uno no te compromete con los demás.
+              <b>Cotiza cada ruta</b> con su tarifa all-in, en el orden que quieras. Cada ruta se guarda sola y la
+              puedes corregir mientras la ventana siga abierta; cotizar una no te compromete con las demás.
             </li>
             <li>
-              <b>Confirma los términos</b> de cada segmento, debajo de tus lanes. Decir «con excepción» o «no puedo» no
+              <b>Confirma los términos</b> de cada segmento, debajo de tus rutas. Decir «con excepción» o «no puedo» no
               te saca del bid: nos dice dónde negociar.
             </li>
             <li>
@@ -160,7 +146,7 @@ export function BusinessOverview({
           <p className="pad">Cotiza tu tarifa de venta a XBF. Las demás modalidades no aplican en esta etapa.</p>
         </section> : (        <section className="croom-card">
           <header className="croom-card-head">
-            <b className="grow">Modelos comerciales</b>
+            <b className="grow">{models.length === 1 ? "Tu modelo comercial" : "Modelos comerciales"}</b>
           </header>
           <div className="croom-table flat">
             <table className="data fixed">
@@ -177,7 +163,7 @@ export function BusinessOverview({
                 </tr>
               </thead>
               <tbody>
-                {COMMERCIAL_MODELS.map((m) => (
+                {models.map((m) => (
                   <tr key={m.key}>
                     <td>
                       <b>{m.label}</b>
@@ -217,7 +203,7 @@ export function BusinessOverview({
                         {String(other.name ?? "Evento")}
                       </td>
                       <td className="mono">
-                        {rows.length} lane{rows.length === 1 ? "" : "s"}
+                        {rows.length} ruta{rows.length === 1 ? "" : "s"}
                       </td>
                       <td className="mono">{other.due_date ? dateShort(other.due_date) : "—"}</td>
                       <td style={{ textAlign: "right" }}>
@@ -236,7 +222,7 @@ export function BusinessOverview({
         {openLanes.length > 0 && (
           <section className="croom-card">
             <header className="croom-card-head">
-              <b className="grow">Lanes abiertos a los que no te invitaron</b>
+              <b className="grow">Rutas abiertas a las que no te invitaron</b>
               <Pill>{openLanes.length}</Pill>
             </header>
             <p className="croom-card-note">Si los cubres, pide acceso: el equipo revisa y te invita.</p>
@@ -289,7 +275,7 @@ export function BusinessOverview({
             <b>
               {quoted} de {lanes.length}
             </b>{" "}
-            lanes cotizados
+            rutas cotizadas
           </div>
           <span>
             <i style={{ width: `${lanes.length ? (quoted / lanes.length) * 100 : 0}%` }} />

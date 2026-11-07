@@ -181,7 +181,7 @@ describe("§9 recorrido de la rebanada", () => {
     let d = await admin.detalle(eventId);
     const intento = d.avisos.find((a) => a.id === r.outreach_message.id)!;
     expect(intento).toMatchObject({ tipo: "invitacion", intento: true, enHilo: false, estado: "borrador" });
-    expect(intento.asunto).toMatch(/\| Question about /);
+    expect(intento.asunto).toMatch(/^Seguimiento /);
     // Ya no cuenta como invitación original pendiente.
     expect(d.avisos.filter((a) => a.tipo === "invitacion" && !a.intento).some((a) => a.id === intento.id)).toBe(false);
     const p = part(d, ids.A);

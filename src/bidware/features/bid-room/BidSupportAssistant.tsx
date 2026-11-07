@@ -11,8 +11,13 @@ import { confirmAsync } from "@/components/confirm";
  * carrier's profile support log. Before this, carriers invited through Bidware
  * had no way to open a ticket — only rateware's Bid Room had the box.
  */
-export function BidSupportAssistant({ token, route }: { token: string; route?: string }) {
-  const [open, setOpen] = useState(false);
+/**
+ * `inline`: inside Mensajes, always open and without the floating bar (decision of Jose, 6-nov:
+ * one place to ask, the assistant on top and the conversation with the team below).
+ */
+export function BidSupportAssistant({ token, route, inline = false }: { token: string; route?: string; inline?: boolean }) {
+  const [openState, setOpen] = useState(false);
+  const open = inline || openState;
   const [draft, setDraft] = useState("");
   const [asked, setAsked] = useState<string | null>(null);
   const [reply, setReply] = useState<SupportReply | null>(null);
@@ -21,8 +26,8 @@ export function BidSupportAssistant({ token, route }: { token: string; route?: s
   const input = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (open) window.setTimeout(() => input.current?.focus(), 40);
-  }, [open]);
+    if (open && !inline) window.setTimeout(() => input.current?.focus(), 40);
+  }, [open, inline]);
 
   const starters = [
     "Resumen de la oportunidad",
@@ -74,20 +79,20 @@ export function BidSupportAssistant({ token, route }: { token: string; route?: s
   return (
     <>
       {/* The room's assistant bar (wireframe 11); the panel floats over the page. */}
-      <div className="croom-assist">
+      {!inline && <div className="croom-assist">
         <div className="grow">
           <b>Asistente de la sala</b>
           <span>
-            Dudas de acceso, fechas, alcance de lanes o cómo cotizar. Si hace falta una persona, envía tu pregunta al
+            Dudas de acceso, fechas, alcance de rutas o cómo cotizar. Si hace falta una persona, envía tu pregunta al
             equipo.
           </span>
         </div>
         <button type="button" className="primary" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
           {open ? "Cerrar" : "Preguntar"}
         </button>
-      </div>
+      </div>}
       {open && (
-        <div className="support-assistant open">
+        <div className={`support-assistant ${inline ? "inline" : "open"}`}>
           <section className="support-panel" role="dialog" aria-label="Asistente del Bid Room">
             <header className="support-head">
               <div>
@@ -98,9 +103,11 @@ export function BidSupportAssistant({ token, route }: { token: string; route?: s
                   persona, envía tu pregunta al equipo.
                 </p>
               </div>
-              <button type="button" onClick={() => setOpen(false)} aria-label="Cerrar asistente">
-                ✕
-              </button>
+              {!inline && (
+                <button type="button" onClick={() => setOpen(false)} aria-label="Cerrar asistente">
+                  ✕
+                </button>
+              )}
             </header>
 
             <div className="support-body">

@@ -545,7 +545,11 @@ export const copy = {
   "text139": { "es": "Rutas", "en": "Lanes" },
   "text140": { "es": "EN VIVO", "en": "LIVE" },
   "text141": { "es": "{0} ruta{1}", "en": "{0} lane{1}" },
-  "text142": { "es": " ruta en vivo en ", "en": " live lane in " }
+  "text142": { "es": " ruta en vivo en ", "en": " live lane in " },
+  "text143": { "es": "{0} rutas en vivo", "en": "{0} live lanes" },
+  "text144": { "es": "{0} cierran hoy", "en": "{0} closing today" },
+  "text145": { "es": "{0} ofertas", "en": "{0} quotes" },
+  "text146": { "es": "🔕 Desactivar avisos", "en": "🔕 Turn off alerts" }
 };
 
 export const tr = translator(copy);

@@ -67,10 +67,9 @@ export function BoardSide({
           <li>
             <b>{tr("text053")}</b>{tr("text054")}</li>
         </ol>
-        {!notify && (
-          <button type="button" className="pb-avisos" onClick={onNotify}>
-            {tr("text057")}</button>
-        )}
+        <button type="button" className="pb-avisos" aria-pressed={notify} onClick={onNotify}>
+          {notify ? tr("text146") : tr("text057")}
+        </button>
       </section>
 
       {hot.length > 0 && (

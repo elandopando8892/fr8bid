@@ -17,6 +17,7 @@ import {
   noticeAudience,
   noticeCopy,
   noticeLanguage,
+  recipientLanguage,
   type NoticeGroup,
   type NoticesResult,
 } from "./award.service";
@@ -141,11 +142,16 @@ export function AwardNoticesPage() {
         ) : (
           <>
             <p className="an-lang">
-              {tr("text023")}<b>{language === "es" ? tr("text024") : tr("text025")}</b> {tr("text026")}</p>
+              {tr("text023")}
+              <b>{tr("text793", audience.filter((r) => recipientLanguage(r, language) === "es").length, audience.filter((r) => recipientLanguage(r, language) === "en").length)}</b>
+              {tr("text792")}
+            </p>
             <div className="an-grid">
               {GROUPS.filter((g) => g.key !== "no_award" || inGroup(g.key).length).map((g) => {
                 const people = inGroup(g.key);
-                const copy = noticeCopy(g.key, language, rfxKey);
+                // The preview speaks the language most of the group will read.
+                const spanish = people.filter((p) => recipientLanguage(p, language) === "es").length;
+                const copy = noticeCopy(g.key, people.length ? (spanish * 2 >= people.length ? "es" : "en") : language, rfxKey);
                 const quotedOnly = people.filter((p) => p.quoted).length;
                 const missing = people.filter((p) => !p.email).length;
                 return (

@@ -265,11 +265,6 @@ function Lanes({ token, draft, lang, copy, country, showProblems, update }: Form
     <>
       <div className="sr-h">
         <h2>{copy.lanesTitle}</h2>
-        {draft.kind === "rfq" && (
-          <span className="sr-hint">
-            <i className="sr-req">•</i> {copy.templateMark}
-          </span>
-        )}
         <span className="spacer" />
         {filled.length > 0 && <span className="sr-count">{copy.lanesComplete(complete, filled.length)}</span>}
         <button type="button" className="sr-link" onClick={() => void downloadTemplate(lang)}>

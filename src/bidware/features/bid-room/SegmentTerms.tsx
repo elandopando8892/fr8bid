@@ -102,7 +102,7 @@ export function SegmentTerms({
               </Pill>
             </header>
             <p className="croom-card-note">
-              {segment.lanes.length > 1 ? `Aplica a tus ${segment.lanes.length} lanes de este segmento. ` : ""}
+              {segment.lanes.length > 1 ? `Aplica a tus ${segment.lanes.length} rutas de este segmento. ` : ""}
               Decir «con excepción» o «no puedo» no te saca del bid: nos dice dónde negociar.
             </p>
 

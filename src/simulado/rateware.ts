@@ -495,10 +495,11 @@ export class RatewareSimulado {
         const vendor = this.vendors.find((v) => v.id === lv.vendor_id)!;
         // Como rateware-api: responde en el hilo solo si encuentra un correo
         // del carrier; si no (el caso de quien no ha respondido), sale como
-        // correo nuevo con asunto en inglés «<folio> | Question about …».
+        // correo nuevo. Asunto «Seguimiento <folio> · <origen> → <destino>»
+        // (decisión de Jose, 6-nov; «Follow-up …» si el mensaje va en inglés).
         const lane = this.lanes.find((l) => l.id === lv.rfx_lane_id);
-        const ruta = [lane?.origin_city, lane?.destination_city].filter(Boolean).join(" -> ") || "this RFx";
-        const m = this.filaMensaje(event, lv, vendor, `${event.rfx_id} | Question about ${ruta}`, texto, {
+        const ruta = [lane?.origin_city, lane?.destination_city].filter(Boolean).join(" → ");
+        const m = this.filaMensaje(event, lv, vendor, `Seguimiento ${event.rfx_id}${ruta ? ` · ${ruta}` : ""}`, texto, {
           source: "bid_room_carrier_ask",
           bid_room_request_key: clave,
           rfx_lane_vendor_ids: [lv.id],
