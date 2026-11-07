@@ -24,7 +24,7 @@ import type { Detalle, EntregaLocal, Participacion } from "../src/dominio/tipos"
 import { hojaComparativo, nombreArchivo } from "../src/dominio/exportar";
 import { cambiosComerciales, describirModelo, tarifaVenta } from "../src/dominio/modelo";
 import { audienciaInvitacion } from "../src/dominio/revision";
-import { candidatosRecordatorio, diasEntre, preguntaAlCarrier, recordatorio, seguimiento } from "../src/dominio/seguimiento";
+import { candidatosRecordatorio, diasEntre, etiquetaSeguimiento, preguntaAlCarrier, recordatorio, seguimiento } from "../src/dominio/seguimiento";
 import { crearXlsx } from "../src/dominio/xlsx";
 import { configCarrierFit } from "../src/dominio/carrierFit";
 import { operacionTanda, planearTandas } from "../src/dominio/tandas";
@@ -866,6 +866,55 @@ describe("seguimiento por carrier y recordatorio", () => {
     await adm.cerrarAOfertas(id);
     d = await adm.detalle(id);
     expect(candidatosRecordatorio(d, s.hoy())).toEqual([]);
+  });
+
+  it("con el píxel distingue «no abrió el correo» de «abrió el correo, no la liga» y para a quien contestó por WhatsApp", async () => {
+    const { s, carriers, op, adm, eventId: id } = await eventoConTres();
+    for (const c of [carriers.A, carriers.B, carriers.C]) s.revisar(id, c.id);
+    await op.prepararInvitaciones(id, [carriers.A.id, carriers.B.id, carriers.C.id]);
+    let d = await adm.detalle(id);
+    await adm.enviarAvisos(id, d.avisos);
+    const lvDe = (vendorId: string) => s.laneVendors.find((x) => x.rfx_event_id === id && x.vendor_id === vendorId)!.id;
+    const mensajeDe = (vendorId: string) => s.mensajes.find((m) => m.rfx_event_id === id && m.rfx_lane_vendor_id === lvDe(vendorId))!.id;
+    // A abrió el correo en Gmail; B solo tiene la precarga de Apple Mail; C salió con píxel y no lo abrió.
+    s.aperturasCorreo.push(
+      { outreach_message_id: mensajeDe(carriers.A.id), open_count: 2, first_opened_at: "2026-10-24T16:00:00.000Z", possible_count: 0, first_possible_at: null },
+      { outreach_message_id: mensajeDe(carriers.B.id), open_count: 0, first_opened_at: null, possible_count: 1, first_possible_at: "2026-10-24T15:30:00.000Z" },
+      { outreach_message_id: mensajeDe(carriers.C.id), open_count: 0, first_opened_at: null, possible_count: 0, first_possible_at: null }
+    );
+    d = await adm.detalle(id);
+    let filas = seguimiento(d, "2026-10-25");
+    const de = (nombre: string) => filas.find((x) => x.carrier === nombre)!;
+    expect(de("Carrier Prueba A")).toMatchObject({ estado: "abrio_correo", correoMedido: true, correoAbiertoEn: "2026-10-24T16:00:00.000Z" });
+    expect(etiquetaSeguimiento(de("Carrier Prueba A"))).toBe("abrió el correo, no la liga");
+    expect(de("Carrier Prueba B").estado).toBe("sin_abrir");
+    expect(etiquetaSeguimiento(de("Carrier Prueba B"))).toBe("sin apertura confirmada (Apple Mail precarga)");
+    expect(etiquetaSeguimiento(de("Carrier Prueba C"))).toBe("no abrió el correo");
+    // Abrir el correo no es responder: siguen recibiendo recordatorios.
+    expect(candidatosRecordatorio(d, "2026-10-25").map((x) => x.carrier)).toEqual(["Carrier Prueba A", "Carrier Prueba B", "Carrier Prueba C"]);
+
+    // Abrir la liga gana sobre abrir el correo.
+    await s.llamar("rfx-bid-api", { action: "get_invitation", token: s.tokenDe(lvDe(carriers.A.id)) }, null);
+    // C contesta por WhatsApp (Meta): Rateware lo trae en la revisión de respuestas y ya no se le insiste.
+    s.respuestasCarrier.push({ rfx_lane_vendor_id: lvDe(carriers.C.id), vendor_id: carriers.C.id, channels: ["whatsapp"], count: 1, first_reply_at: "2026-10-24T18:00:00.000Z", last_reply_at: "2026-10-24T18:00:00.000Z" });
+    d = await adm.detalle(id);
+    filas = seguimiento(d, "2026-10-25");
+    expect(de("Carrier Prueba A").estado).toBe("abrio");
+    expect(de("Carrier Prueba C")).toMatchObject({ estado: "respondio", respondioPor: ["whatsapp"] });
+    expect(etiquetaSeguimiento(de("Carrier Prueba C"))).toBe("respondió por WhatsApp");
+    expect(candidatosRecordatorio(d, "2026-10-25").map((x) => x.carrier)).toEqual(["Carrier Prueba A", "Carrier Prueba B"]);
+  });
+
+  it("sin píxel (correos de antes) sigue diciendo «no ha abierto la liga»", async () => {
+    const { s, carriers, op, adm, eventId: id } = await eventoConTres();
+    s.revisar(id, carriers.C.id);
+    await op.prepararInvitaciones(id, [carriers.C.id]);
+    let d = await adm.detalle(id);
+    await adm.enviarAvisos(id, d.avisos);
+    d = await adm.detalle(id);
+    const c = seguimiento(d, "2026-10-25")[0];
+    expect(c).toMatchObject({ estado: "sin_abrir", correoMedido: false });
+    expect(etiquetaSeguimiento(c)).toBe("no ha abierto la liga");
   });
 
   it("cuenta días completos entre la invitación y hoy", () => {

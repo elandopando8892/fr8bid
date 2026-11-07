@@ -103,6 +103,8 @@ export class RatewareSimulado {
   ];
   // Lo que list_rfx_carrier_replies (R2) encontraría en Gmail y en el chat.
   respuestasCarrier: Fila[] = [];
+  // outreach_email_opens: aperturas del píxel por mensaje (7-nov-2026).
+  aperturasCorreo: Fila[] = [];
   // Resultado de send_outreach_messages por operation_id (repetirlo no reenvía).
   operacionesEnvio = new Map<string, Fila>();
   // cuotaGmail: cuántos mensajes más acepta Gmail hoy (null = sin límite).
@@ -299,7 +301,15 @@ export class RatewareSimulado {
         const event = this.evento(u, body.event_id);
         if (this.fallas.fallarRespuestas) throw new Falla(500, "Gmail reply lookup failed", "REPLIES_UNAVAILABLE");
         const ids = new Set(this.laneVendors.filter((lv) => lv.rfx_event_id === event.id).map((lv) => lv.id));
-        return ok({ event_id: event.id, checked_at: this.ahora(), email_status: "checked", rows: this.respuestasCarrier.filter((r) => ids.has(r.rfx_lane_vendor_id)).map((r) => ({ ...r })) });
+        const mensajes = new Set(this.mensajes.filter((m) => m.rfx_event_id === event.id).map((m) => m.id));
+        return ok({
+          event_id: event.id,
+          checked_at: this.ahora(),
+          email_status: "checked",
+          rows: this.respuestasCarrier.filter((r) => ids.has(r.rfx_lane_vendor_id)).map((r) => ({ ...r })),
+          opens_status: "checked",
+          opens: this.aperturasCorreo.filter((a) => mensajes.has(a.outreach_message_id)).map((a) => ({ ...a }))
+        });
       }
       case "list_vendors": {
         // Como list_vendors con lightweight: por ids o búsqueda (nombre o dominio).

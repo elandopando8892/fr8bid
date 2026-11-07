@@ -169,7 +169,7 @@ export class MesaApi {
   }
 
   async detalle(eventId: string, recibo: Recibo | null = null): Promise<Detalle> {
-    const [crudo, mensajes, rubros, condiciones, revisiones, respuestas] = await Promise.all([
+    const [crudo, mensajes, rubros, condiciones, revisiones, revision] = await Promise.all([
       this.rw({ action: "list_rfx_detail", event_id: eventId }),
       this.rw({ action: "list_outreach_messages", rfx_event_id: eventId, channel: "email" }),
       this.rw({ action: "list_rfx_segment_confirmations", event_id: eventId }),
@@ -178,7 +178,8 @@ export class MesaApi {
       this.respuestasDe(eventId)
     ]);
     if (mensajes.has_more === true) throw new ErrorApi(409, "LECTURA_INCOMPLETA", "Hay más avisos de los que devuelve esta lectura. Consulta la cola de Rateware antes de continuar.");
-    const d = mapear.detalle(crudo, mapear.filasListado(mensajes, "messages"), null, { hoy: this.hoy(), rubros: rubros.rows || [], condiciones, revisiones, respuestas });
+    const { respuestas, aperturas } = revision;
+    const d = mapear.detalle(crudo, mapear.filasListado(mensajes, "messages"), null, { hoy: this.hoy(), rubros: rubros.rows || [], condiciones, revisiones, respuestas, aperturas });
     return { ...d, recibo };
   }
 
@@ -201,16 +202,19 @@ export class MesaApi {
       return null;
     }
   }
-  // Quién ya contestó por correo o en el chat del Bid Room (parche R2). Si
-  // Rateware todavía no tiene la acción, no se consultó (undefined) y queda el
-  // botón «Ya respondió»; si falla, null: la Mesa no prepara intentos.
-  private async respuestasDe(eventId: string): Promise<Record<string, unknown>[] | null | undefined> {
+  // Quién ya contestó por correo, en el chat del Bid Room o por WhatsApp de
+  // Meta (parche R2). Si Rateware todavía no tiene la acción, no se consultó
+  // (undefined) y queda el botón «Ya respondió»; si falla, null: la Mesa no
+  // prepara intentos. La misma lectura trae las aperturas del correo (píxel,
+  // 7-nov-2026); sin ellas, el seguimiento sigue como antes.
+  private async respuestasDe(eventId: string): Promise<{ respuestas: Record<string, unknown>[] | null | undefined; aperturas: Record<string, unknown>[] }> {
     try {
       const r = await this.rw({ action: "list_rfx_carrier_replies", event_id: eventId });
-      return r.email_status === "checked" ? r.rows || [] : null;
+      const aperturas = r.opens_status === "checked" && Array.isArray(r.opens) ? r.opens : [];
+      return { respuestas: r.email_status === "checked" ? r.rows || [] : null, aperturas };
     } catch (e) {
-      if (e instanceof ErrorApi && e.code === "PASO_EN_RATEWARE") return undefined;
-      return null;
+      if (e instanceof ErrorApi && e.code === "PASO_EN_RATEWARE") return { respuestas: undefined, aperturas: [] };
+      return { respuestas: null, aperturas: [] };
     }
   }
   // Contactos que Rateware ya conoce del carrier y de otros registros con su
