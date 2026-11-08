@@ -9,6 +9,7 @@ import { NEED_REASON } from "@/lib/roles";
 import { newOperationId } from "@/lib/operation-id";
 import { env } from "@/config/env";
 import { ErrorBanner, InfoBanner, Pill, Spinner } from "@/components/ui";
+import * as I from "../../../ui/Iconos";
 import { fetchRfxDetail } from "@/features/rfx-admin/rfx.service";
 import { gmailHealth, listGmailConnections } from "@/features/integrations/integrations.service";
 import {
@@ -364,16 +365,16 @@ function MessageContent() {
         {draftAudience.unresolved && <ErrorBanner message={generationText("selectionUnavailable")} />}
 
         <div className="msg-audience">
-          <Pill tone="dark">{tr("text167")}</Pill>
+          <span title={tr("text167")} aria-label={tr("text167")} style={{ display: "inline-flex" }}><I.Usuarios size={18} /></span>
           <b>
             {generationText("reviewedCount", audience.length, draftAudience.selected)}
           </b>
-          <span>
+          <span className="ayuda">
             {tr("text169")}{lanes.length} lane{lanes.length === 1 ? "" : "s"}{tr("text170")}</span>
           <div className="spacer" />
           <Link to={`/rfx/${id}/review`}>{generationText("reviewContacts")}</Link>
         </div>
-        {!loading && <p className="msg-hint">{generationText("audienceRule", draftAudience.total)} {audience.length === 0 && generationText("noReviewed")}</p>}
+        {!loading && <p className="msg-hint"><span className="ayuda">{generationText("audienceRule", draftAudience.total)} </span>{audience.length === 0 && generationText("noReviewed")}</p>}
 
         {loading ? (
           <Spinner label={tr("text172")} />
@@ -423,9 +424,9 @@ function MessageContent() {
                       )}
                     </>
                   ) : (
-                    tr("text179")
+                    <span className="ayuda">{tr("text179")}</span>
                   )}
-                  {template && !editable && tr("text180")}
+                  {template && !editable && <span className="ayuda">{tr("text180")}</span>}
                 </p>
                 <label className="msg-field">
                   <span>{tr("text181")}</span>
@@ -505,11 +506,11 @@ function MessageContent() {
                   />
                   <span className="grow">
                     <b>{tr("text190")}</b>
-                    <small>{tr("text191")}</small>
+                    <small className="ayuda">{tr("text191")}</small>
                   </span>
-                  <Pill tone="amber">MANUAL ONLY</Pill>
+                  <Pill tone="amber">Manual</Pill>
                 </label>
-                <p className="msg-hint">{tr("text192")}</p>
+                <p className="msg-hint ayuda">{tr("text192")}</p>
               </section>
             </div>
 
@@ -525,7 +526,7 @@ function MessageContent() {
                   {/* The template is HTML; the sandbox renders it without running anything. */}
                   <iframe title={tr("text194")} sandbox="" srcDoc={previewDocument(preview.html)} />
                 </div>
-                <p className="msg-hint">{tr("text195")}</p>
+                <p className="msg-hint ayuda">{tr("text195")}</p>
               </section>
 
               {channels.has("whatsapp") && meta && !metaApproved && (
@@ -541,7 +542,7 @@ function MessageContent() {
                 </section>
               )}
 
-              <section className="msg-go">
+              <section className="msg-go ayuda">
                 <b>{tr("text152")}</b>
                 <p>
                   {tr("text201")}{audience.length}{tr("text202")}{audience.length === 1 ? "" : "es"}{tr("text203")}{[...channels].map((c) => CHANNEL_LABEL[c]).join(" + ") || tr("text204")}{tr("text205")}</p>

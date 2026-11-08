@@ -221,7 +221,7 @@ export function ContactReviewPage() {
       />
       <main className="main launch-main">
         <LaunchTabs eventId={id} active="review" />
-        <p className="rev-intro">{tr("text276")}</p>
+        <p className="rev-intro ayuda">{tr("text276")}</p>
 
         {!canWork && (
           <InfoBanner title={tr("text022")}>{tr("text023")}</InfoBanner>

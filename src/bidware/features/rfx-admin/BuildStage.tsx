@@ -325,7 +325,7 @@ export function BuildStage({
                 <span className="bld-rubric-empty">{tr("text101")}{r.placeholder.replace(/^—/, " —")}</span>
               )}
               {r.value && r.differ > 0 && (
-                <span className="bld-rubric-note">
+                <span className="bld-rubric-note ayuda">
                   {r.differ} {tr("text102")}{lanes.length} {tr("text103")}</span>
               )}
             </div>

@@ -142,7 +142,7 @@ export function HygienePage() {
         </div>
       </header>
 
-      <div className="crm-rule">
+      <div className="crm-rule ayuda">
         <b>{tr("text157")}</b>
         <span>
           {tr("text158")}{" "}{tr("text244")}
@@ -207,7 +207,7 @@ export function HygienePage() {
 
             {showQueue && (
               <div className="hyg-queue">
-                <p className="hyg-queue-note">
+                <p className="hyg-queue-note ayuda">
                   {tr("text171")}</p>
                 {all.loading ? (
                   <Spinner label={tr("text172")} />
@@ -230,7 +230,7 @@ export function HygienePage() {
                     </div>
                   ))
                 ) : (
-                  <p className="hyg-queue-note">{tr("text175")}</p>
+                  <p className="hyg-queue-note ayuda">{tr("text175")}</p>
                 )}
               </div>
             )}
@@ -294,7 +294,7 @@ export function HygienePage() {
             )}
 
             <footer className="hyg-foot">
-              <span>
+              <span className="ayuda">
                 {tr("text189")}</span>
               {clusters.length > CONTACTS_SHOWN && (
                 <button onClick={() => setShowContacts((v) => !v)}>

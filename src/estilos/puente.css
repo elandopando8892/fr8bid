@@ -142,3 +142,13 @@
 .bw .pb-panel.dark .pb-steps b { color: #fff; }
 .bw .pb-avisos { justify-self: start; background: transparent; color: #fff; border: 1px solid #555; }
 .bw .pb-panel.dark .pb-steps li { white-space: normal; overflow: visible; text-overflow: clip; border: 0; padding: 0; }
+
+/* Menos texto (8-nov, Jose): las explicaciones (.ayuda) salen solo con «?» en el menú.
+   Solo en el marco del equipo; carriers y shippers no se tocan. */
+html:not(.ver-ayudas) .marco .ayuda { display: none !important; }
+.cuenta-acciones .boton-ayudas { display: inline-flex; align-items: center; padding: 0; color: #9a9a95; margin-left: auto; margin-right: 10px; }
+.cuenta-acciones .boton-ayudas:hover, .cuenta-acciones .boton-ayudas[aria-pressed="true"] { color: var(--accent, #f15a22); }
+.info-titulo { display: inline-flex; vertical-align: middle; margin-left: 8px; color: #b3b0aa; cursor: help; }
+.info-titulo:hover { color: var(--accent, #f15a22); }
+.marco .banner.info.plegado > span { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+@media (max-width: 860px) { .cuenta-acciones .boton-ayudas { display: none; } }

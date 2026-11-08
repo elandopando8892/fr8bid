@@ -358,7 +358,7 @@ export function TemplateBuilderPage() {
             <Link to="/templates">{getLang() === "es" ? "Listas de carriers" : "Carrier lists"}</Link>
           </div>
           <h1>{editing ? tr("text049", name || "—") : tr("text050")}</h1>
-          <p className="sub">
+          <p className="sub ayuda">
             {editing
               ? tr("text051", version ?? 1, (version ?? 1) + 1)
               : tr("text052")}
@@ -419,10 +419,10 @@ export function TemplateBuilderPage() {
                 <button className={lifecycle === "active" ? "on" : undefined} onClick={() => setLifecycle("active")}>
                   {tr("text064")}</button>
               </div>
-              <small>
+              <small className="ayuda">
                 {tr("text065")}<b>{tr("text066")}</b>{tr("text067")}</small>
             </div>
-            <small>{tr("text016")} {tr("text068")}</small>
+            <small className="ayuda">{tr("text016")} {tr("text068")}</small>
           </section>
         )}
 
@@ -525,7 +525,7 @@ export function TemplateBuilderPage() {
                   <div className="tb-upload-file">
                     <div>
                       <b>{tr("text089")}</b>
-                      <small>
+                      <small className="ayuda">
                         {tr("text090")}{TEMPLATE_IMPORT_MAX_ROWS.toLocaleString()}{tr("text091")}</small>
                     </div>
                     <input
@@ -547,7 +547,7 @@ export function TemplateBuilderPage() {
                     />
                   </label>
                   <div className="tb-upload-go">
-                    <span>
+                    <span className="ayuda">
                       {tr("text094")}<b>{tr("text095")}</b>{tr("text096")}</span>
                     <button disabled={importing || !paste.trim()} onClick={() => runImport(paste)}>
                       {importing ? tr("text097") : tr("text098")}
