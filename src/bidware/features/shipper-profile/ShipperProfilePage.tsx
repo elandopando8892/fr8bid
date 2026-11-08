@@ -10,6 +10,7 @@ import {
   type PublicLocation,
   type Section,
 } from "./shipperProfile.service";
+import { BotonAyudas } from "../../../ui/BotonAyudas";
 
 /**
  * A shipper's own profile, from the private link the team creates on the
@@ -183,6 +184,7 @@ export function ShipperProfilePage() {
           MARKS<b>MAN</b>
         </span>
         <span className="croom-bar-note">{c(COPY.eyebrow)}</span>
+        <BotonAyudas en={lang === "en"} className="boton-ayudas-publica" />
         <div className="profile-lang sr-lang" role="group" aria-label="Idioma / Language">
           {(["es", "en"] as Lang[]).map((l) => (
             <button key={l} type="button" className={lang === l ? "active" : ""} onClick={() => setLang(l)}>
@@ -195,7 +197,7 @@ export function ShipperProfilePage() {
         <div className="public-head">
           <div>
             <h1>{str(original?.shipper.shipper_name) || c(COPY.eyebrow)}</h1>
-            {sub && <p className="sub">{sub}</p>}
+            {sub && <p className="sub ayuda">{sub}</p>}
           </div>
         </div>
         <div style={{ display: "grid", gap: 14 }}>{children}</div>
@@ -244,7 +246,7 @@ export function ShipperProfilePage() {
       <div className="row" style={{ marginBottom: 12 }}>
         <div>
           <h2 style={{ fontSize: 16, margin: "0 0 4px" }}>{title}</h2>
-          <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>{help}</p>
+          <p className="ayuda" style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>{help}</p>
         </div>
         <div className="spacer" />
         {action}
@@ -285,7 +287,7 @@ export function ShipperProfilePage() {
   return shell(
     <>
       <InfoBanner title={`${c(COPY.expires)} ${expires}.`}>
-        {c(COPY.intro)} {c(COPY.privacy)}
+        <span className="ayuda">{c(COPY.intro)} {c(COPY.privacy)}</span>
       </InfoBanner>
       {error && <ErrorBanner message={error} />}
       {notice && <InfoBanner>{notice}</InfoBanner>}
@@ -318,7 +320,7 @@ export function ShipperProfilePage() {
               </button>
             ))}
           </nav>
-          <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 2px 0" }}>{c(COPY.privacy)}</p>
+          <p className="ayuda" style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 2px 0" }}>{c(COPY.privacy)}</p>
         </aside>
 
         <div style={{ display: "grid", gap: 14, alignContent: "start" }}>

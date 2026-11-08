@@ -17,6 +17,7 @@ import {
 } from "./carrierProfile.service";
 import { ALL_STEPS, COMPANY_STEP, OPTION_LABEL, type FieldSpec, type Lang, type StepSpec } from "./profile.schema";
 import { Spinner, ErrorBanner, InfoBanner, Pill } from "@/components/ui";
+import { BotonAyudas } from "../../../ui/BotonAyudas";
 
 /**
  * Carrier profile, reached from the "keep your carrier profile up to date"
@@ -286,7 +287,7 @@ export function CarrierProfilePage() {
             })}
           </nav>
 
-          <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 2px 0" }}>{t.privacy}</p>
+          <p className="ayuda" style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 2px 0" }}>{t.privacy}</p>
         </aside>
 
         <div style={{ display: "grid", gap: 14, alignContent: "start" }}>
@@ -394,6 +395,7 @@ function Shell({
         MARKS<b>MAN</b>
       </span>
       <span className="croom-bar-note">{COPY[lang].eyebrow}</span>
+      <BotonAyudas en={lang === "en"} className="boton-ayudas-publica" />
       <div className="profile-lang sr-lang" role="group" aria-label="Idioma / Language">
         {(["es", "en"] as Lang[]).map((l) => (
           <button key={l} type="button" className={lang === l ? "active" : ""} onClick={() => setLang(l)}>
@@ -406,7 +408,7 @@ function Shell({
       <div className="public-head">
         <div>
           <h1>{title}</h1>
-          {sub && <p className="sub">{sub}</p>}
+          {sub && <p className="sub ayuda">{sub}</p>}
         </div>
         <div className="spacer" />
         {aside && <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>{aside}</div>}
@@ -443,7 +445,7 @@ function StepCard({
     <section className="card">
       <div style={{ marginBottom: 14 }}>
         <h2 style={{ fontSize: 16, margin: "0 0 4px" }}>{step.label[lang]}</h2>
-        <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>{step.help[lang]}</p>
+        <p className="ayuda" style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>{step.help[lang]}</p>
       </div>
       <div className="profile-grid">
         {step.fields.map((field) => {
@@ -579,7 +581,7 @@ function SupportLog({
       <div className="row" style={{ marginBottom: 10 }}>
         <div style={{ flex: 1 }}>
           <h2 style={{ fontSize: 14, margin: "0 0 2px" }}>{t.support}</h2>
-          <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>{t.supportHelp}</p>
+          <p className="ayuda" style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>{t.supportHelp}</p>
         </div>
         <Pill>{tickets.length}</Pill>
       </div>

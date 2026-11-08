@@ -21,6 +21,7 @@ import { BidSupportAssistant } from "./BidSupportAssistant";
 import { MyRanking } from "./MyRanking";
 import { useAsync } from "@/components/useAsync";
 import { Spinner, ErrorBanner, Empty, InfoBanner, Pill, dateShort } from "@/components/ui";
+import { BotonAyudas } from "../../../ui/BotonAyudas";
 
 /**
  * Carrier private Bid Room (wireframes 11, 24 and 27). The token is the
@@ -77,6 +78,7 @@ function MarcaCarrier() {
         MARKS<b>MAN</b>
       </span>
       <span className="croom-bar-note">Acceso privado de carrier</span>
+      <BotonAyudas className="boton-ayudas-publica" />
     </div>
   );
 }
@@ -208,7 +210,7 @@ function BidRoomContent({ token }: { token: string }) {
       </header>
 
       {phase === "award" && (
-        <div className="croom-band">
+        <div className="croom-band ayuda">
           <Pill tone="indigo">{band.tag}</Pill>
           <span>{band.text}</span>
         </div>

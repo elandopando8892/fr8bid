@@ -8,6 +8,7 @@ import { EventCards, Pipeline, Sheet, ago, clock, type Actions } from "./BoardVi
 import { BoardSide } from "./BoardSide";
 import { FindInvitationsDialog, RequestAccessDialog, readAccess, type Access } from "./AccessDialogs";
 import { equipmentOf, groupByEvent, loads, matches, weeklyLoads, type BoardEvent } from "./publicBoard.service";
+import { BotonAyudas } from "../../../ui/BotonAyudas";
 
 /**
  * Public Bid Room board (wireframe 10, pushed further so carriers stay and
@@ -214,6 +215,7 @@ export function PublicBoardPage() {
         >
           {sound ? tr("text112") : tr("text113")}
         </button>
+        <BotonAyudas className="boton-ayudas-publica" />
       </header>
 
       {/* Una línea con lo que importa, sin las cinco cajas (decisión de Jose, 6-nov). */}
@@ -353,8 +355,10 @@ export function PublicBoardPage() {
 
         </div>
 
-        <InfoBanner title={tr("text133")}>
-          {tr("text134")}</InfoBanner>
+        <div className="ayuda">
+          <InfoBanner title={tr("text133")}>
+            {tr("text134")}</InfoBanner>
+        </div>
       </main>
 
       {requesting && (

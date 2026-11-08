@@ -98,7 +98,7 @@ export function BidSupportAssistant({ token, route, inline = false }: { token: s
               <div>
                 <p className="support-eyebrow">Asistente de puja</p>
                 <h3>Pregunta sobre esta oportunidad</h3>
-                <p className="support-help">
+                <p className="support-help ayuda">
                   Responde con el evento, tus rutas, las reglas visibles y tu ranking. Si hace falta una
                   persona, envía tu pregunta al equipo.
                 </p>

@@ -87,7 +87,7 @@ export function QuoteLanes({
               <b>
                 {quoted} de {lanes.length} rutas cotizadas.
               </b>{" "}
-              <span>Cotiza en el orden que quieras; cada ruta va por separado.</span>
+              <span className="ayuda">Cotiza en el orden que quieras; cada ruta va por separado.</span>
             </>
           }
         />
