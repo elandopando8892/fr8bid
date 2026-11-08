@@ -142,7 +142,7 @@ export function ClientFeeAcceptancePanel({ canOperate, scopeKey = "" }: ClientFe
 
   return <section className="card" aria-label={tr("title")} aria-busy={busy}>
     <div className="qd-card-head"><h2>{tr("title")}</h2><Pill>{tr("off")}</Pill></div>
-    <p className="qd-muted">{tr("intro")}</p>
+    <p className="qd-muted ayuda">{tr("intro")}</p>
     <form onSubmit={submit}>
       <fieldset disabled={busy || view.locked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <div className="qd-two">

@@ -272,7 +272,7 @@ export function UploadsPage() {
                 {busy === "upload" ? tr("text034") : tr("text035")}
               </button>
             </div>
-            <p className="ayuda-campos">{tr("text027")}</p>
+            <p className="ayuda-campos ayuda">{tr("text027")}</p>
             {file && !pickedType && <ErrorBanner message={tr("text036", file.name)} />}
           </div>
 

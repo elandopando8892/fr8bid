@@ -446,7 +446,7 @@ export function LaneEditor({
         <div className="qd-card-head">
           <h2>{tr("text027")}</h2>
         </div>
-        <p className="qd-muted qd-small">
+        <p className="qd-muted qd-small ayuda">
           {tr("text028")}</p>
         <div className="qd-two">
           <LocationField label={tr("text029")} value={draft.origin} disabled={locked} onChange={(p) => set({ origin: p })} />
@@ -563,7 +563,7 @@ export function LaneEditor({
                 ))}
             </ul>
           )}
-          <p className="qd-muted qd-small">
+          <p className="qd-muted qd-small ayuda">
             {context?.google_routes_enabled
               ? tr("text052")
               : tr("text053")}
@@ -633,7 +633,7 @@ export function LaneEditor({
             </div>
           )}
           {fcmBase && (
-            <p className="qd-muted qd-small" style={{ margin: "6px 0 0" }}>
+            <p className="qd-muted qd-small ayuda" style={{ margin: "6px 0 0" }}>
               {tr("text068")}{" "}
               {new Date(fcmBase.synced_at).toLocaleString(locale(), { dateStyle: "medium", timeStyle: "short" })} {tr("text069")}{fcmBases?.engine_check?.status === "ok" &&
                 tr("text070", fcmBases.engine_check.fcm_release ? tr("text071", fcmBases.engine_check.fcm_release) : "")}
@@ -704,7 +704,7 @@ export function LaneEditor({
             good
           />
         </div>
-        <p className="qd-muted qd-small" style={{ margin: "8px 0 0" }}>
+        <p className="qd-muted qd-small ayuda" style={{ margin: "8px 0 0" }}>
           {tr("text087")}</p>
         <button className="qd-wide" disabled={locked} onClick={() => setModal(true)}>
           {tr("text088")}</button>

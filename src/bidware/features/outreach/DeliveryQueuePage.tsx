@@ -461,12 +461,6 @@ function DeliveryQueueContent() {
         eventId={id}
         event={detail.data?.event}
         title={tr("text090")}
-        tags={
-          <>
-            <Pill tone="blue">LAUNCH</Pill>
-            <Pill tone="orange">{tr("text091")}</Pill>
-          </>
-        }
         actions={
           <>
             <BulkEmailReview eventId={id} scope={scope} drafts={draftRows} detail={detail.data ?? undefined} reviews={reviews.data ?? undefined} refreshVersion={evidenceRefresh} disabled={busy || queue.loading || !!queue.error || detail.loading || !!detail.error || reviews.loading || !!reviews.error} onReview={messageId => { forget([messageId]); setReviewMessage({ id: messageId, scope }); }} />
@@ -495,7 +489,7 @@ function DeliveryQueueContent() {
               {sentSoFar
                 ? tr("text095", sentSoFar === 1 ? tr("text096") : tr("text097", sentSoFar))
                 : tr("text098")}
-              {tr("text099")}
+              <span className="ayuda">{tr("text099")}</span>
             </> : queueRefreshText(queue.loading ? "updating" : "unavailable")}</span>
         </div>
 
@@ -504,8 +498,7 @@ function DeliveryQueueContent() {
             <b>{tr("text100")}</b>
             <span>
               {unreviewedReady
-                ? tr("text101", unreviewedReady, readyCarriers.length) +
-                  tr("text102")
+                ? <>{tr("text101", unreviewedReady, readyCarriers.length)}<span className="ayuda">{tr("text102")}</span></>
                 : tr("text103", readyCarriers.length)}
             </span>
             {unreviewedReady > 0 && <Link to={`/rfx/${id}/review`}>{tr("text104")}</Link>}
@@ -521,7 +514,7 @@ function DeliveryQueueContent() {
               <option value={5}>{batchText("five")}</option>
             </select>
           </label>
-          <span>{batchText("help")}</span>
+          <span className="ayuda">{batchText("help")}</span>
         </div>
 
 

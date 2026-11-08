@@ -197,7 +197,7 @@ export function Mesa({ id }: { id: string }) {
             {r.actual ? (
               <span className="fila-icono">
                 {r.siguiente.teToca ? <I.Mano size={16} /> : <I.Reloj size={16} />}
-                <span>Siguiente: <b>{r.siguiente.accion}</b> · {r.siguiente.teToca ? "te toca a ti" : `le toca ${r.siguiente.quien === "Carriers" ? "a los carriers" : r.siguiente.quien === "Sistema" ? "a Loads" : `al ${r.siguiente.quien}`}`}</span>
+                <span>{r.siguiente.teToca ? "Te toca" : r.siguiente.quien === "Carriers" ? "Esperando a los carriers" : r.siguiente.quien === "Sistema" ? "Esperando a Loads" : `Le toca al ${r.siguiente.quien}`}: <b>{r.siguiente.accion}</b></span>
               </span>
             ) : (
               <span className="fila-icono"><I.Check size={16} />Recorrido completo</span>
@@ -674,7 +674,7 @@ function MasCarriers(p: Props) {
           <button className={`btn-chico ${abierto === "historial" ? "activo" : ""}`} aria-pressed={abierto === "historial"} onClick={() => setAbierto(abierto === "historial" ? null : "historial")}><I.Grafica size={15} />Historial del segmento</button>
         </div>
       </div>
-      {!abierto && <p className="tenue">Sugeridos por cotizaciones y ofertas anteriores, o por tarifas aprobadas del mismo segmento.</p>}
+      {!abierto && <p className="tenue ayuda">Sugeridos por cotizaciones y ofertas anteriores, o por tarifas aprobadas del mismo segmento.</p>}
       {abierto === "fit" && <PanelCarrierFit {...p} incrustado />}
       {abierto === "historial" && <PanelHistorialSegmento {...p} incrustado />}
     </div>
@@ -697,7 +697,7 @@ function PanelCarrierFit({ d, ctx, accion, incrustado }: Props & { incrustado?: 
   return (
     <div className={incrustado ? "incrustado" : "tarjeta"}>
       {!incrustado && <h2>Carriers sugeridos</h2>}
-      <p className="tenue">
+      <p className="tenue ayuda">
         Carriers con cotizaciones u ofertas anteriores en estas rutas («Carrier fit» de Rateware).
       </p>
       {!fit || fit.tipo === "error" ? (
@@ -892,7 +892,7 @@ function PanelHistorialSegmento({ d, ctx, accion, incrustado }: Props & { incrus
   return (
     <div className={incrustado ? "incrustado" : "tarjeta"}>
       {!incrustado && <h2>Historial del segmento</h2>}
-      <p className="tenue">
+      <p className="tenue ayuda">
         Carriers con tarifas aprobadas de la misma caja, puerta a puerta y con cruce. Es solo tarifa: confirma equipo y contacto antes de invitarlo.
       </p>
       {!h || h.tipo === "error" ? (
@@ -1070,7 +1070,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
           )}
           {muestra && ctx.rol !== "viewer" && (
             <>
-              <p className="tenue">
+              <p className="tenue ayuda">
                 Texto del {muestra.paso.intento}º intento. Rateware lo pone dentro de su plantilla con el resumen de la ruta y el botón a la liga privada. Va en el hilo solo si el carrier ya
                 escribió; si no, sale como correo nuevo con asunto «Seguimiento {d.evento.folio} · origen → destino»:
               </p>
@@ -1171,7 +1171,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                         <p className="tenue">Para: {r.para} · Gmail</p>
                         <p><b>{r.asunto}</b></p>
                         <p className="texto-aviso">{r.cuerpo}</p>
-                        <p className="tenue">Fr8Bid no envía este recordatorio. «Abrir en Gmail» crea el borrador en tu cuenta; revísalo y envíalo tú si estás de acuerdo.</p>
+                        <p className="tenue ayuda">Fr8Bid no envía este recordatorio. «Abrir en Gmail» crea el borrador en tu cuenta; revísalo y envíalo tú si estás de acuerdo.</p>
                         <a className="btn-secundario" href={r.gmail} target="_blank" rel="noreferrer">Abrir en Gmail</a>
                       </div>
                     </td>
@@ -1466,7 +1466,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
             )}
             {!filas.length && <p className="tenue">Aún no llegan ofertas en esta ruta.</p>}
             {!abierto && !prim && !sel && filas.length > 0 && (
-              <p className="tenue">{puedeElegir ? "Elige la oferta a adjudicar como primario: sus candados y el motivo aparecen abajo." : ctx.rol !== "admin" ? "Solo el Administrador adjudica." : ""}</p>
+              <p className={puedeElegir ? "tenue ayuda" : "tenue"}>{puedeElegir ? "Elige la oferta a adjudicar como primario: sus candados y el motivo aparecen abajo." : ctx.rol !== "admin" ? "Solo el Administrador adjudica." : ""}</p>
             )}
             {declinaron.length > 0 && <p className="tenue">Declinaron: {declinaron.join(", ")}.</p>}
             <MatrizCondiciones ruta={ruta} carriers={filas} />
@@ -1486,7 +1486,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
                     {sel && !sel.rol ? (
                       <FormAdjudicar key={sel.id} d={d} ruta={ruta} sel={sel} rol="respaldo" ctx={ctx} accion={accion} />
                     ) : (
-                      puedeElegir && <p className="tenue">Opcional: elige otra oferta para adjudicarla como respaldo.</p>
+                      puedeElegir && <p className="tenue ayuda">Opcional: elige otra oferta para adjudicarla como respaldo.</p>
                     )}
                   </>
                 ) : (
@@ -1525,7 +1525,7 @@ function AdjudicarEnLote({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion
   return (
     <div className="tarjeta">
       <h2>Adjudicar la mejor oferta de cada ruta</h2>
-      <p className="tenue">La más barata de cada ruta que pasa todos sus candados. Quita las que quieras decidir a mano abajo.</p>
+      <p className="tenue ayuda">La más barata de cada ruta que pasa todos sus candados. Quita las que quieras decidir a mano abajo.</p>
       <div className="tabla-envoltura">
         <table className="tabla tabla-tarjetas">
           <thead>
@@ -1690,7 +1690,7 @@ function PreguntaCarrier({ d, ruta, p, onCerrar }: { d: Detalle; ruta: Ruta; p: 
           <p className="texto-aviso">{r.cuerpo}</p>
         </>
       )}
-      <p className="tenue">Fr8Bid no envía la pregunta: «Abrir en Gmail» crea el borrador en tu cuenta y tú decides si lo envías.</p>
+      <p className="tenue ayuda">Fr8Bid no envía la pregunta: «Abrir en Gmail» crea el borrador en tu cuenta y tú decides si lo envías.</p>
       <div className="fila-botones">
         {texto.trim() ? (
           <a className="btn-secundario" href={r.gmail} target="_blank" rel="noreferrer">Abrir en Gmail</a>
@@ -1739,7 +1739,7 @@ function FormAdjudicar({ d, ruta, sel, rol, ctx, accion }: { d: Detalle; ruta: R
       <p>
         <b>{sel.carrier}</b> · {dinero(v?.tarifaAllIn, v?.moneda)} all-in · v{v?.numero}
       </p>
-      {v && <p className="tenue">{describirModelo(v)}. Se adjudica el all-in; el porcentaje no lo modifica.</p>}
+      {v && <p className="tenue ayuda">{describirModelo(v)}. Se adjudica el all-in; el porcentaje no lo modifica.</p>}
       {rol === "respaldo" && <p className="tenue">El respaldo cubre la ruta si el primario no tiene capacidad. Se entrega a Rateware junto con el primario.</p>}
       <Candados lista={candados} />
       {candados.some((c) => c.confirmable) && (

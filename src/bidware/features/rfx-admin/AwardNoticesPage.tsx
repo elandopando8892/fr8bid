@@ -108,7 +108,7 @@ export function AwardNoticesPage() {
         }
       />
       <main className="main launch-main">
-        <p className="rev-intro">
+        <p className="rev-intro ayuda">
           {tr("text012")}</p>
         <div className="rev-contract">
           <Pill tone="amber">{tr("text013")}</Pill>

@@ -400,7 +400,7 @@ export function NewEventLaunch({
               <dd className="bad">{template ? (loadingMembers ? "…" : unavailable) : "—"}</dd>
             </div>
           </dl>
-          <p className="nev-note">{tr("text467")}</p>
+          <p className="nev-note ayuda">{tr("text467")}</p>
         </section>
 
         <section className="nev-card">

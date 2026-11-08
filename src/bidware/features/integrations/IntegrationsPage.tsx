@@ -546,7 +546,7 @@ export function IntegrationsPage() {
                 </section>
               </div>
 
-              <div className="ig-gate">
+              <div className="ig-gate ayuda">
                 <Pill tone="orange">{tr("text124")}</Pill>
                 <span>
                   {tr("text125")}</span>

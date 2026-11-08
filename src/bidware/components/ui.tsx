@@ -1,6 +1,7 @@
 import { tr } from "@/i18n/common";
 import { useLang, locale, formatCurrency } from "@/i18n/language";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import * as I from "../../ui/Iconos";
 import { SIMULATED_MESSAGE } from "@/lib/api-client";
 
 export function Spinner({ label }: { label?: string }) {
@@ -27,8 +28,11 @@ export function ErrorBanner({ message }: { message: string }) {
 
 export function InfoBanner({ title, children }: { title?: string; children: ReactNode }) {
   useLang();
+  // Menos texto (8-nov): un aviso largo ocupa una línea y se abre al tocarlo.
+  const [abierto, setAbierto] = useState(false);
+  const largo = typeof children === "string" && children.length > 110;
   return (
-    <div className="banner info">
+    <div className={largo && !abierto ? "banner info plegado" : "banner info"} onClick={largo ? () => setAbierto((a) => !a) : undefined} title={largo && !abierto ? children as string : undefined}>
       {title && <b>{title}</b>}
       <span>{children}</span>
     </div>
@@ -128,8 +132,11 @@ export function TopBar({
     <header className="topbar">
       <div>
         {crumb && <div className="crumb">{crumb}</div>}
-        <h1>{title}</h1>
-        {sub && <p className="sub">{sub}</p>}
+        <h1>
+          {title}
+          {sub && <span className="info-titulo" title={sub} aria-label={sub}><I.Info size={16} /></span>}
+        </h1>
+        {sub && <p className="sub ayuda">{sub}</p>}
       </div>
       <div className="spacer" />
       {actions}

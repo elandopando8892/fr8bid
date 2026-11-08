@@ -253,7 +253,7 @@ function RateReviewContent() {
                 {tr("text049")}{" "}
                 {unknown.some((item) => !item.choice) && <Pill tone="amber">{unknown.filter((item) => !item.choice).length}{tr("text050")}</Pill>}
               </h2>
-              <p className="cell-sub" style={{ margin: "2px 0 8px" }}>
+              <p className="cell-sub ayuda" style={{ margin: "2px 0 8px" }}>
                 {tr("text051")}</p>
               <div className="row" style={{ marginBottom: 8 }}>
                 <span className="spacer" />

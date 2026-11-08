@@ -323,7 +323,7 @@ function CarrierFitContent() {
         <header className="identity crm-head">
           <div className="crm-head-main">
             <h1>Carrier fit</h1>
-            <p className="sub">{tr("text015")}</p>
+            <p className="sub ayuda">{tr("text015")}</p>
           </div>
         </header>
       )}

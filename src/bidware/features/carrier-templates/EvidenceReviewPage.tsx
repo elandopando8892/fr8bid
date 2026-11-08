@@ -93,13 +93,13 @@ function EvidenceReviewContent({ org }: { org: string }) {
     <header className="identity crm-head"><div className="crm-head-main">
       <div className="crumb"><Link to="/templates">{text("Listas de carriers", "Carrier lists")}</Link></div>
       <h1>{text("Revisión de evidencia", "Evidence review")}</h1>
-      <p className="sub">{text("Fuentes publicadas, lotes documentales y clasificador original", "Published evidence, documentary batches and original classifier")}</p>
+      <p className="sub ayuda">{text("Fuentes publicadas, lotes documentales y clasificador original", "Published evidence, documentary batches and original classifier")}</p>
     </div></header>
     <div className="evidence-review tpl-body">
       <InfoBanner>{text("Las propuestas conservan sus fuentes y pendientes de identidad. Revisar no aplica cambios. Las incorporaciones requieren plan y confirmación separados; no autorizan operación o contacto.", "Proposals retain their sources and identity issues. Reviewing makes no changes. Additions require a separate plan and confirmation; they do not authorize operations or contact.")}</InfoBanner>
       <section aria-label={text("Listas actuales", "Current lists")}>
         <h2>{text("Listas actuales", "Current lists")}</h2>
-        <p>{text("Principal: carriers con oferta real o cotización propia. Ampliada: carriers con tarifa histórica compatible (clasificador de ChatGPT/Codex); no es tarifa vigente.", "Main: carriers with a real offer or their own quote. Extended: carriers with a compatible historical rate (ChatGPT/Codex classifier); not a current rate.")}</p>
+        <p className="ayuda">{text("Principal: carriers con oferta real o cotización propia. Ampliada: carriers con tarifa histórica compatible (clasificador de ChatGPT/Codex); no es tarifa vigente.", "Main: carriers with a real offer or their own quote. Extended: carriers with a compatible historical rate (ChatGPT/Codex classifier); not a current rate.")}</p>
         {tiersError && <ErrorBanner message={text("No se pudieron leer las listas.", "The lists could not be read.")} />}
         {!tiers && !tiersError && <p role="status">{text("Cargando…", "Loading…")}</p>}
         {tiers && <div className="crm-table-wrap"><table className="data evidence-table"><thead><tr>
@@ -115,23 +115,23 @@ function EvidenceReviewContent({ org }: { org: string }) {
       </section>
       <PublishedClassification org={org} />
       <BatchReview />
-      <h2>{text("Revisión local del clasificador (opcional)", "Local classifier review (optional)")}</h2>
+      <details className="evidence-local"><summary><b>{text("Revisión local del clasificador (opcional)", "Local classifier review (optional)")}</b></summary>
       <section className="evidence-steps" aria-label={text("Preparar revisión", "Prepare review")}>
         <div><h2>1. {text("Corte actual", "Current cut")}</h2>
-          <p>{text("Descarga versiones y miembros desde tu organización en Rateware.", "Download versions and members from your organization in Rateware.")}</p>
+          <p className="ayuda">{text("Descarga versiones y miembros desde tu organización en Rateware.", "Download versions and members from your organization in Rateware.")}</p>
           <button disabled={busy || !org} onClick={exportCut}>{text("Exportar corte", "Export cut")}</button>
         </div>
         <div><h2>2. {text("Clasificador original", "Original classifier")}</h2>
-          <p>{text("Ejecuta el motor local con ese corte y el archivo de evidencia existente. Conserva el catálogo aprobado y sus referencias.", "Run the local engine with that cut and the existing evidence file. Keep the approved catalog and its references.")}</p>
+          <p className="ayuda">{text("Ejecuta el motor local con ese corte y el archivo de evidencia existente. Conserva el catálogo aprobado y sus referencias.", "Run the local engine with that cut and the existing evidence file. Keep the approved catalog and its references.")}</p>
           <details><summary>{text("Comando local", "Local command")}</summary><pre>python tools/carrier-evidence/review.py build --input evidencia.json --snapshot bidware-carrier-cut.json --output revision-nueva</pre></details>
         </div>
         <div><h2>3. {text("Revisar propuestas", "Review proposals")}</h2>
-          <p>{text("Importa review.json. Se verificará contra una lectura nueva; puedes guardar el archivo y abrirlo de nuevo después.", "Import review.json. It will be checked against a fresh read; save the file to reopen it later.")}</p>
+          <p className="ayuda">{text("Importa review.json. Se verificará contra una lectura nueva; puedes guardar el archivo y abrirlo de nuevo después.", "Import review.json. It will be checked against a fresh read; save the file to reopen it later.")}</p>
           <label className="evidence-file">{text("Importar revisión", "Import review")}
             <input type="file" accept=".json,application/json" disabled={busy || !org} onChange={e => { const f = e.currentTarget.files?.[0]; e.currentTarget.value = ""; void importFile(f); }} />
           </label>
         </div>
-      </section>
+      </section></details>
       {!org && <ErrorBanner message={text("La sesión debe pertenecer a una organización.", "This session must belong to an organization.")} />}
       {error && <ErrorBanner message={error} />}
       {busy && <p role="status">{text("Verificando…", "Verifying…")}</p>}

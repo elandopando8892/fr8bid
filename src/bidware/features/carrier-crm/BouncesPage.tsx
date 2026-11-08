@@ -121,8 +121,8 @@ export function BouncesPage() {
       <main className="main">
         <div style={{ display: "grid", gap: 14 }}>
           {search.get("comprobar") === "s15" && <Sprint15ReplayCheck />}
-          <InfoBanner title={tr("text013")}>
-            {tr("text014")}</InfoBanner>
+          <div className="ayuda"><InfoBanner title={tr("text013")}>
+            {tr("text014")}</InfoBanner></div>
           {notice && <InfoBanner>{notice}</InfoBanner>}
           {rows.length > 0 && (
             <Kpis
