@@ -151,3 +151,4 @@ html:not(.ver-ayudas) .marco .ayuda { display: none !important; }
 .info-titulo { display: inline-flex; vertical-align: middle; margin-left: 8px; color: #b3b0aa; cursor: help; }
 .info-titulo:hover { color: var(--accent, #f15a22); }
 .marco .banner.info.plegado > span { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+@media (max-width: 860px) { .cuenta-acciones .boton-ayudas { display: none; } }
