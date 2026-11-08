@@ -260,11 +260,11 @@ export function TemplateEditorPage() {
                                 {tr("text242")}</button>
                             )}
                         </div>
-                        <p className="cell-sub" style={{ marginBottom: 0 }}>
+                        <p className="cell-sub ayuda" style={{ marginBottom: 0 }}>
                           {tr("text243")}</p>
                       </>
                     ) : (
-                      <p className="cell-sub" style={{ margin: 0 }}>
+                      <p className="cell-sub ayuda" style={{ margin: 0 }}>
                         {tr("text244")}</p>
                     )}
                   </div>

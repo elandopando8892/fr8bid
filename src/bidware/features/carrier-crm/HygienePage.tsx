@@ -294,7 +294,7 @@ export function HygienePage() {
             )}
 
             <footer className="hyg-foot">
-              <span>
+              <span className="ayuda">
                 {tr("text189")}</span>
               {clusters.length > CONTACTS_SHOWN && (
                 <button onClick={() => setShowContacts((v) => !v)}>

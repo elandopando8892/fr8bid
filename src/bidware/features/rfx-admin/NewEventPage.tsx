@@ -522,7 +522,7 @@ export function NewEventPage() {
                   {coreDone === 3 ? tr("text346") : anyRubric ? tr("text781", coreDone) : tr("text782")}
                 </Pill>
               </header>
-              <p className="nev-info">{tr("text783")}</p>
+              <p className="nev-info ayuda">{tr("text783")}</p>
               <div className="nev-rubric-chips">
                 {RUBRICS.filter((r) => !Boolean(text(rubrics[r.key])) && !rubricasAbiertas.includes(r.key)).map((r) => (
                   <button key={r.key} type="button" className="nev-rubric-chip" onClick={() => setRubricasAbiertas((x) => [...x, r.key])}>

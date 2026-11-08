@@ -44,7 +44,7 @@ export function Empty({ title, hint, action }: { title: string; hint?: string; a
   return (
     <div className="empty">
       <strong>{title}</strong>
-      {hint && <p style={{ margin: "6px 0 0" }}>{hint}</p>}
+      {hint && <p className="ayuda" style={{ margin: "6px 0 0" }}>{hint}</p>}
       {action && <div style={{ marginTop: 12 }}>{action}</div>}
     </div>
   );

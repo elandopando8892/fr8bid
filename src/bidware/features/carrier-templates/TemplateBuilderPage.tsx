@@ -525,7 +525,7 @@ export function TemplateBuilderPage() {
                   <div className="tb-upload-file">
                     <div>
                       <b>{tr("text089")}</b>
-                      <small>
+                      <small className="ayuda">
                         {tr("text090")}{TEMPLATE_IMPORT_MAX_ROWS.toLocaleString()}{tr("text091")}</small>
                     </div>
                     <input
@@ -547,7 +547,7 @@ export function TemplateBuilderPage() {
                     />
                   </label>
                   <div className="tb-upload-go">
-                    <span>
+                    <span className="ayuda">
                       {tr("text094")}<b>{tr("text095")}</b>{tr("text096")}</span>
                     <button disabled={importing || !paste.trim()} onClick={() => runImport(paste)}>
                       {importing ? tr("text097") : tr("text098")}

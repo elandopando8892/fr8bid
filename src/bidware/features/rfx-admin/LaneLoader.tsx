@@ -392,7 +392,7 @@ function LaneSources({ state, shipperId, shipperName }: { state: LaneReviewState
           </div>
         ) : (
           <div className="nev-drop">
-            <p>
+            <p className="ayuda">
               {tr("text302")}</p>
             <div className="row" style={{ gap: 8 }}>
               <button className="primary" disabled={busy} onClick={() => fileInput.current?.click()}>
@@ -429,7 +429,7 @@ function LaneSources({ state, shipperId, shipperName }: { state: LaneReviewState
             <button disabled={busy || !(manual.origin.trim() && manual.destination.trim())} onClick={addManual}>
               {tr("text307")}</button>
           </div>
-          <p className="cell-sub">{tr("text308")}</p>
+          <p className="cell-sub ayuda">{tr("text308")}</p>
           <details className="nev-paste">
             <summary>{tr("text309")}</summary>
             <label className="nev-field">
@@ -484,7 +484,7 @@ function LaneSources({ state, shipperId, shipperName }: { state: LaneReviewState
             >
               {tr("text317")}</button>
           </div>
-          <p className="cell-sub">{tr("text318")}</p>
+          <p className="cell-sub ayuda">{tr("text318")}</p>
         </div>
       )}
 
@@ -808,7 +808,7 @@ export function LaneLoader({
             )}
             {pendingKeys.length > 0 && <button onClick={() => state.omitMany(pendingKeys)}>{tr("text359")}</button>}
           </header>
-          <p>
+          <p className="ayuda">
             {tr("text360")}</p>
           {values.map((item) => (
             <MapValueRow
