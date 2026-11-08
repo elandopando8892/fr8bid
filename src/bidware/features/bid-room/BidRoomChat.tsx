@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { listBidRoomChat, postBidRoomChatMessage, explainBidError } from "./bidroom.service";
 import { useAsync } from "@/components/useAsync";
 import { Spinner, ErrorBanner, dateShort } from "@/components/ui";
+import * as I from "../../../ui/Iconos";
 
 type Row = Record<string, unknown>;
 
@@ -105,16 +106,17 @@ export function BidRoomChat({ token, assistant }: { token: string; /** The room'
       </div>
 
       <aside className="croom-side">
-        <div className="croom-eyebrow">Quién lee esto</div>
-        <p className="croom-side-text">
-          <b>Privado con MARKSMAN:</b> lo que escribas aquí solo lo ven tu empresa y el equipo de MARKSMAN, y queda
-          ligado a tu invitación.
+        <div className="croom-eyebrow ayuda">Quién lee esto</div>
+        <p className="croom-side-text croom-privado">
+          <I.Candado size={15} /> <b>Privado con MARKSMAN</b>
+          <span className="ayuda">: lo que escribas aquí solo lo ven tu empresa y el equipo de MARKSMAN, y queda
+          ligado a tu invitación.</span>
         </p>
-        <p className="croom-side-text">
+        <p className="croom-side-text ayuda">
           <b>Carriers de tu ruta o del evento:</b> avisos del equipo para todos los invitados. Lo que tú escribes no
           se publica ahí.
         </p>
-        <div className="croom-box">
+        <div className="croom-box ayuda">
           <b>Mejor que un correo suelto</b>
           <p>Para dudas de precio o alcance, la respuesta queda junto a tu oferta.</p>
         </div>

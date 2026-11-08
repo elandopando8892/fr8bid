@@ -238,7 +238,7 @@ export function LaneForm(props: LaneFieldProps) {
         </div>
         <details className="sr-lane-more">
           <summary>
-            <strong>{copy.laneMore}</strong> <span className="sr-hint">{copy.laneMoreHint}</span>
+            <strong>{copy.laneMore}</strong> <span className="sr-hint ayuda">{copy.laneMoreHint}</span>
           </summary>
           <LaneForm {...props} rest folded />
         </details>

@@ -17,6 +17,7 @@ import {
 import { explainRequestError, isAlreadySubmitted, loadRequest, saveRequest, submitRequest } from "./request.service";
 import { RequestForm, routeText, unitText } from "./RequestForm";
 import { useAutosave, useSecondsSince, type SaveState } from "./useAutosave";
+import { BotonAyudas } from "../../../ui/BotonAyudas";
 
 const dateShort = (value: string | null | undefined, lang: Lang) => {
   if (!value) return "";
@@ -68,6 +69,7 @@ function Shell({
       <div className="croom-bar">
         <span className="croom-logo">{/^marksman$/i.test(brand) ? <>MARKS<b>MAN</b></> : brand}</span>
         <span className="croom-bar-note">{copy.barNote}</span>
+        <BotonAyudas en={lang === "en"} className="boton-ayudas-publica" />
         <div className="profile-lang sr-lang" role="group" aria-label="Idioma / Language">
           {(["es", "en"] as Lang[]).map((code) => (
             <button key={code} type="button" className={lang === code ? "active" : ""} onClick={() => setLang(code)}>
@@ -292,7 +294,7 @@ function ShipperRequestContent({ token, prefs }: { token: string; prefs: LinkPre
       brand={brand}
       title={done ? customer || project.title || copy.pageTitle : copy.pageTitle}
       sub={done ? project.title || "" : copy.pageSub}
-      meta={done ? null : [customer, due, copy.autosaves].filter(Boolean).join(" · ")}
+      meta={done ? null : <>{[customer, due].filter(Boolean).join(" · ")}<span className="ayuda"> · {copy.autosaves}</span></>}
       aside={!done && !sending && <SaveStatus state={autosave.state} copy={copy} lang={lang} brand={brand} onRetry={() => void autosave.retry()} />}
     >
       {done ? (

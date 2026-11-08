@@ -122,7 +122,7 @@ export function BusinessOverview({
           </dl>
         </section>
 
-        <section className="croom-card">
+        <section className="croom-card ayuda">
           <header className="croom-card-head">
             <b className="grow">Cómo se cotiza</b>
           </header>
@@ -152,13 +152,13 @@ export function BusinessOverview({
             <table className="data fixed">
               <colgroup>
                 <col style={{ width: 190 }} />
-                <col />
+                <col className="ayuda" />
                 <col style={{ width: 170 }} />
               </colgroup>
               <thead>
                 <tr>
                   <th>Modelo</th>
-                  <th>Qué capturas y qué pasa</th>
+                  <th className="ayuda">Qué capturas y qué pasa</th>
                   <th>Porcentaje</th>
                 </tr>
               </thead>
@@ -168,7 +168,7 @@ export function BusinessOverview({
                     <td>
                       <b>{m.label}</b>
                     </td>
-                    <td className="croom-wrap">
+                    <td className="croom-wrap ayuda">
                       {m.enter} {m.effect}
                     </td>
                     <td className="mono">

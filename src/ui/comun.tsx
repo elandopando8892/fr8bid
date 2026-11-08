@@ -9,7 +9,7 @@ import * as I from "./Iconos";
 import { ContextoEventos, useEventos } from "./Eventos";
 import { grupoDe } from "./eventosVista";
 import { hoyMexico } from "../dominio/recorrido";
-import { useAyudas } from "./ayudas";
+import { BotonAyudas } from "./BotonAyudas";
 
 // ——— Rutas: react-router (las comparten la Mesa y los módulos de Bidware) ———
 export function useRuta(): string {
@@ -205,16 +205,6 @@ export function Marco({ children }: { children: ReactNode }) {
 }
 
 // «?»: muestra u oculta las explicaciones de los módulos (ocultas por defecto).
-function BotonAyudas() {
-  const [ver, alternar] = useAyudas();
-  const t = ver ? "Ocultar ayudas" : "Ver ayudas";
-  return (
-    <button type="button" className="btn-texto boton-ayudas" aria-pressed={ver} title={t} aria-label={t} onClick={alternar}>
-      <I.Pregunta size={16} />
-    </button>
-  );
-}
-
 // Idioma de los módulos traídos de Bidware (el equipo trabaja en español o en
 // inglés); la página del evento sigue en español.
 function Idioma() {

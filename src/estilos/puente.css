@@ -143,9 +143,22 @@
 .bw .pb-avisos { justify-self: start; background: transparent; color: #fff; border: 1px solid #555; }
 .bw .pb-panel.dark .pb-steps li { white-space: normal; overflow: visible; text-overflow: clip; border: 0; padding: 0; }
 
-/* Menos texto (8-nov, Jose): las explicaciones (.ayuda) salen solo con «?» en el menú.
-   Solo en el marco del equipo; carriers y shippers no se tocan. */
-html:not(.ver-ayudas) .marco .ayuda { display: none !important; }
+/* Menos texto (8-nov, Jose): las explicaciones (.ayuda) salen solo con «?».
+   En el marco del equipo y, desde la segunda ronda, en las páginas de carriers y shippers. */
+html:not(.ver-ayudas) .marco .ayuda,
+html:not(.ver-ayudas) .bw-publica .ayuda { display: none !important; }
+.croom-bar .boton-ayudas-publica { display: inline-flex; align-items: center; padding: 4px; color: #9a9a95; background: transparent; border: 0; cursor: pointer; }
+.croom-bar .boton-ayudas-publica:hover, .croom-bar .boton-ayudas-publica[aria-pressed="true"] { color: var(--orange, #f15a22); }
+/* El candado de «Privado con MARKSMAN» en Mensajes del Bid Room. */
+.croom-privado svg { vertical-align: -2px; margin-right: 4px; }
+@media (max-width: 560px) {
+  .sr-page .croom-bar .boton-ayudas-publica { margin-left: auto; }
+  .sr-page .croom-bar .profile-lang.sr-lang { margin-left: 0; }
+  /* Tablero en el celular: cabe el «?» sin partir «EN VIVO». */
+  .pb-brandbar { gap: 8px; }
+  .pb-brandbar .pb-live { white-space: nowrap; }
+  .pb-brandbar .pb-live small { display: none; }
+}
 .cuenta-acciones .boton-ayudas { display: inline-flex; align-items: center; padding: 0; color: #9a9a95; margin-left: auto; margin-right: 10px; }
 .cuenta-acciones .boton-ayudas:hover, .cuenta-acciones .boton-ayudas[aria-pressed="true"] { color: var(--accent, #f15a22); }
 .info-titulo { display: inline-flex; vertical-align: middle; margin-left: 8px; color: #b3b0aa; cursor: help; }

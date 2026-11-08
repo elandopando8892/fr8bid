@@ -267,13 +267,13 @@ export function MyRanking({
           <div className={`croom-check-row${selected.bid_rate != null ? " ok" : ""}`}>
             <span className="mark">{selected.bid_rate != null ? "✓" : "○"}</span>
             <span className="grow">Tarifa all-in declarada</span>
-            <span className="hint">{selected.bid_rate != null ? "ya la tienes" : "sin tarifa no hay score"}</span>
+            <span className="hint ayuda">{selected.bid_rate != null ? "ya la tienes" : "sin tarifa no hay score"}</span>
           </div>
           {factors.map((f) => (
             <div key={f.label} className={`croom-check-row${f.ok ? " ok" : ""}`}>
               <span className="mark">{f.ok ? "✓" : "○"}</span>
               <span className="grow">{f.label}</span>
-              <span className="hint">{f.hint}</span>
+              <span className="hint ayuda">{f.hint}</span>
             </div>
           ))}
           <div className="croom-card-foot">
@@ -315,8 +315,8 @@ export function MyRanking({
                 </div>
               </>
             )}
-            <div className="croom-eyebrow">El score no es solo precio</div>
-            <p className="croom-side-text">
+            <div className="croom-eyebrow ayuda">El score no es solo precio</div>
+            <p className="croom-side-text ayuda">
               Una tarifa más alta con capacidad firme, ETA clara y equipo confirmado puede ganarle a una más barata sin
               respaldo. Por eso ves el score junto a la distancia, y no solo la distancia.
             </p>

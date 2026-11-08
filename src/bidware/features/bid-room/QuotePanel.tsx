@@ -264,7 +264,7 @@ export function QuotePanel({
           />
         </label>
       </div>
-      <p className="croom-hint">
+      <p className="croom-hint ayuda">
         {spec.enter} {spec.effect}
       </p>
 
@@ -277,7 +277,7 @@ export function QuotePanel({
             {scored} de {SCORE_FACTORS.length}
           </span>
         </summary>
-        <p className="croom-hint">Equipo, ETA, GPS y vacío suben tu score; puedes completarlos después de enviar.</p>
+        <p className="croom-hint ayuda">Equipo, ETA, GPS y vacío suben tu score; puedes completarlos después de enviar.</p>
         <div className="croom-fields">
           <label>
             <span>Equipo disponible</span>
@@ -438,7 +438,7 @@ export function QuotePanelEmpty() {
     <aside className="croom-panel">
       <div className="croom-eyebrow">Cotización</div>
       <h3 className="croom-panel-title">Elige una ruta de la tabla</h3>
-      <p className="croom-hint">
+      <p className="croom-hint ayuda">
         Cada ruta se cotiza por separado y se guarda sola: puedes parar y volver, y corregir mientras la ventana siga
         abierta.
       </p>
