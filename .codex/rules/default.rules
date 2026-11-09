@@ -1,0 +1,48 @@
+# Reglas de comandos de Codex en fr8bid (execpolicy, sintaxis Starlark).
+# Probar: codex execpolicy check --rules .codex/rules/default.rules git push origin main
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "forbidden",
+    justification = "Solo Claude sube ramas, y con OK de Jose (AGENTS.md).",
+)
+prefix_rule(
+    pattern = ["git", "merge"],
+    decision = "forbidden",
+    justification = "Integrar trabajo delegado es de scripts/agentes/codex.mjs integrar; a main solo por PR.",
+)
+prefix_rule(
+    pattern = ["git", "commit"],
+    decision = "prompt",
+    justification = "En tareas delegadas el arnés hace el commit; fuera de ellas, confirma con la persona.",
+)
+prefix_rule(
+    pattern = ["git", "reset", "--hard"],
+    decision = "forbidden",
+    justification = "Borra trabajo sin vuelta atrás.",
+)
+prefix_rule(
+    pattern = [["vercel", "vc"]],
+    decision = "forbidden",
+    justification = "Producción = main desplegado por Vercel desde Git; nadie despliega a mano.",
+)
+prefix_rule(
+    pattern = ["npx", ["vercel", "supabase", "supabase@2.122.1"]],
+    decision = "forbidden",
+    justification = "Ni despliegues ni rateware-prod desde aquí (AGENTS.md reglas 3 y 5).",
+)
+prefix_rule(
+    pattern = ["supabase"],
+    decision = "forbidden",
+    justification = "Migraciones y Edge Functions van por PR al repo rateware.",
+)
+prefix_rule(
+    pattern = ["gh", "pr", "merge"],
+    decision = "forbidden",
+    justification = "Fusionar a main es decisión de Jose.",
+)
+prefix_rule(
+    pattern = [["cat", "type", "Get-Content"], [".env", ".env.local", ".env.production"]],
+    decision = "forbidden",
+    justification = "Secretos fuera del alcance de los agentes.",
+)
