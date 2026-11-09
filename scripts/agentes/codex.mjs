@@ -20,6 +20,7 @@ import {
   leerVeredicto,
   motivosParaNoIntegrar,
   ramaDeTrabajo,
+  ramaPermitidaParaIntegrar,
   rutasSensibles,
   validarNombre
 } from "./nucleo.mjs";
@@ -50,6 +51,13 @@ function git(args, cwd) {
   const r = correr("git", args, { cwd, silencioso: true });
   if (r.codigo !== 0) throw new Error(`git ${args.join(" ")} falló:\n${r.error}`);
   return r.salida.trim();
+}
+
+/** Rutas separadas por NUL (-z): sin comillas ni escapes, también con acentos. */
+function lista(args, cwd) {
+  const r = correr("git", args, { cwd, silencioso: true });
+  if (r.codigo !== 0) throw new Error(`git ${args.join(" ")} falló:\n${r.error}`);
+  return r.salida.split("\0").filter(Boolean);
 }
 
 function opciones(argv) {
@@ -143,8 +151,10 @@ function cmdVerificar(o) {
 function diffDelArbol(dir, base) {
   const mb = git(["merge-base", "HEAD", base], dir);
   let diff = git(["diff", mb], dir);
-  for (const f of git(["ls-files", "--others", "--exclude-standard"], dir).split("\n").filter(Boolean)) {
-    diff += "\n" + correr("git", ["diff", "--no-index", "--", WIN ? "NUL" : "/dev/null", f], { cwd: dir, silencioso: true }).salida;
+  for (const f of lista(["ls-files", "-z", "--others", "--exclude-standard"], dir)) {
+    const r = correr("git", ["diff", "--no-index", "--", WIN ? "NUL" : "/dev/null", f], { cwd: dir, silencioso: true });
+    if (r.codigo !== 1) throw new Error(`No pude armar el diff del archivo nuevo ${f}:\n${r.error}`); // 1 = hay diferencias
+    diff += "\n" + r.salida;
   }
   return diff;
 }
@@ -194,7 +204,8 @@ function cmdDelegar(o) {
   const dir = carpetaTrabajo(nombre);
   if (existsSync(dir)) throw new Error(`Ya existe ${dir}. Integra o borra ese trabajo antes (git worktree remove).`);
   if (!foto(ORIGEN).limpio) throw new Error("Tu checkout tiene cambios sin commit (o archivos nuevos): haz commit antes de delegar, para que Codex parta de lo mismo que tú.");
-  const baseRama = git(["branch", "--show-current"], ORIGEN) || "HEAD";
+  const baseRama = git(["branch", "--show-current"], ORIGEN);
+  if (!ramaPermitidaParaIntegrar(baseRama)) throw new Error(`No se delega desde «${baseRama || "HEAD suelto"}»: trabaja en una rama propia (nunca main).`);
   const baseSha = git(["rev-parse", "HEAD"], ORIGEN);
   mkdirSync(dirname(dir), { recursive: true });
   git(["worktree", "add", "-b", rama, dir, baseSha], ORIGEN);
@@ -230,10 +241,16 @@ function cmdIntegrar(o) {
     throw new Error(`El trabajo «${nombre}» salió de ${trabajo.origen}; intégralo desde ese checkout, no desde ${ORIGEN}.`);
   }
   const rama = git(["branch", "--show-current"], ORIGEN);
+  if (rama !== trabajo.baseRama) {
+    throw new Error(`El trabajo «${nombre}» salió de la rama ${trabajo.baseRama}; estás en ${rama || "HEAD suelto"}. Cambia a esa rama para integrar.`);
+  }
+  if (correr("git", ["merge-base", "--is-ancestor", trabajo.baseSha, "HEAD"], { cwd: ORIGEN, silencioso: true }).codigo !== 0) {
+    throw new Error(`${trabajo.baseRama} ya no contiene el commit del que partió Codex (${trabajo.baseSha.slice(0, 8)}); no se integra.`);
+  }
   if (!foto(ORIGEN).limpio) throw new Error("Tu checkout tiene cambios sin commit o archivos nuevos; guárdalos antes de integrar.");
   const sha = git(["rev-parse", trabajo.rama], ORIGEN);
   if (!foto(carpetaTrabajo(nombre)).limpio) throw new Error("El worktree de Codex tiene cambios sin commit; verifica y revisa de nuevo.");
-  const archivos = git(["diff", "--name-only", `${trabajo.baseSha}..${sha}`], ORIGEN).split("\n").filter(Boolean);
+  const archivos = lista(["diff", "-z", "--name-only", `${trabajo.baseSha}..${sha}`], ORIGEN);
   const motivos = motivosParaNoIntegrar({
     rama,
     sha,
