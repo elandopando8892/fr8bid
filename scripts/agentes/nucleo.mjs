@@ -103,22 +103,49 @@ export function leerVeredicto(texto) {
 }
 
 /**
+ * Argumento para un comando que en Windows corre con shell (npm, npx y los lanzadores .cmd de Codex).
+ * Rechaza metacaracteres de cmd.exe y entrecomilla los que llevan espacios. Los textos libres
+ * (la tarea, el diff) nunca van como argumento: van por stdin o por archivo.
+ */
+export function argShell(arg, win) {
+  const a = String(arg);
+  if (!win) return a;
+  if (/[&|<>^%"!\r\n`]/.test(a)) throw new Error(`Argumento no permitido para la línea de comandos de Windows: ${a}`);
+  return /\s/.test(a) ? `"${a}"` : a;
+}
+
+const VEREDICTOS_QUE_PASAN = ["APROBADO", "CON_CAMBIOS"];
+
+/**
  * Definición de terminado para integrar un trabajo delegado.
  * Devuelve la lista de motivos por los que NO se puede integrar (vacía = se puede).
+ * Un registro incompleto o raro cuenta como ausente: el candado falla cerrado.
  */
 export function motivosParaNoIntegrar({ rama, sha, verificacion, revision, sensibles = [], aceptarSensibles = false }) {
   const motivos = [];
   if (!ramaPermitidaParaIntegrar(rama)) motivos.push(`La rama actual «${rama}» no admite integraciones: todo entra por PR.`);
-  if (!verificacion) motivos.push("No hay verificación del trabajo.");
+
+  if (!verificacion || typeof verificacion !== "object") motivos.push("No hay verificación del trabajo.");
   else {
     if (verificacion.sha !== sha) motivos.push("La verificación es de otro commit; vuelve a verificar.");
-    if (!verificacion.ok) motivos.push(`La verificación falló: ${verificacion.pasos.filter((p) => !p.ok).map((p) => p.nombre).join(", ")}.`);
+    if (verificacion.limpio !== true) motivos.push("La verificación se hizo con cambios sin commit.");
+    const pasos = Array.isArray(verificacion.pasos) ? verificacion.pasos : [];
+    const fallidos = PASOS_VERIFICACION.map((p) => p.nombre).filter(
+      (n) => !pasos.some((r) => r && r.nombre === n && r.ok === true)
+    );
+    if (fallidos.length || verificacion.ok !== true) {
+      motivos.push(`La verificación no pasó completa: ${fallidos.join(", ") || "ok=false"}.`);
+    }
   }
-  if (!revision) motivos.push("No hay revisión de diff del trabajo (agentes:revisar --nombre).");
+
+  if (!revision || typeof revision !== "object") motivos.push("No hay revisión de diff del trabajo (agentes:revisar --nombre).");
   else {
     if (revision.sha !== sha) motivos.push("La revisión es de otro commit; vuelve a revisar.");
-    if (revision.veredicto === "BLOQUEA") motivos.push("La revisión dio BLOQUEA.");
+    if (revision.limpio !== true) motivos.push("La revisión se hizo con cambios sin commit.");
+    if (revision.completo !== true) motivos.push("La revisión no cubrió el diff completo; parte la tarea en trabajos más chicos.");
+    if (!VEREDICTOS_QUE_PASAN.includes(revision.veredicto)) motivos.push(`La revisión dio ${revision.veredicto ?? "sin veredicto"}.`);
   }
+
   if (sensibles.length && !aceptarSensibles) {
     motivos.push(`Toca rutas sensibles (${sensibles.join(", ")}); revísalas a mano y repite con --acepto-sensibles.`);
   }

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
+  PASOS_VERIFICACION,
+  argShell,
   construirPromptDelegacion,
   construirPromptRevision,
   leerVeredicto,
@@ -11,8 +13,13 @@ import {
   validarNombre
 } from "../scripts/agentes/nucleo.mjs";
 
-const verde = { sha: "abc", ok: true, pasos: [{ nombre: "typecheck", ok: true }] };
-const aprobada = { sha: "abc", veredicto: "APROBADO" as const };
+const verde = {
+  sha: "abc",
+  ok: true,
+  limpio: true,
+  pasos: PASOS_VERIFICACION.map((p) => ({ nombre: p.nombre, ok: true }))
+};
+const aprobada = { sha: "abc", veredicto: "APROBADO" as const, limpio: true, completo: true };
 
 describe("arnés Claude + Codex", () => {
   it("el skill canónico y la copia de Claude son idénticos", () => {
@@ -66,10 +73,35 @@ describe("arnés Claude + Codex", () => {
       motivosParaNoIntegrar({
         rama: "claude/x",
         sha: "abc",
-        verificacion: { ...verde, ok: false, pasos: [{ nombre: "build", ok: false }] },
-        revision: { sha: "abc", veredicto: "BLOQUEA" }
+        verificacion: { ...verde, ok: false, pasos: verde.pasos.map((p) => ({ ...p, ok: p.nombre !== "build" })) },
+        revision: { ...aprobada, veredicto: "BLOQUEA" }
       })
-    ).toEqual(["La verificación falló: build.", "La revisión dio BLOQUEA."]);
+    ).toEqual(["La verificación no pasó completa: build.", "La revisión dio BLOQUEA."]);
+  });
+
+  it("registros incompletos o raros fallan cerrado", () => {
+    const ok = { rama: "claude/x", sha: "abc" };
+    // verificación con un solo paso, aunque diga ok
+    expect(
+      motivosParaNoIntegrar({ ...ok, verificacion: { sha: "abc", ok: true, limpio: true, pasos: [{ nombre: "typecheck", ok: true }] }, revision: aprobada })
+    ).toEqual(["La verificación no pasó completa: pruebas, pruebas-bidware, build."]);
+    // revisión sin veredicto, con veredicto inventado, truncada o sobre árbol sucio
+    expect(motivosParaNoIntegrar({ ...ok, verificacion: verde, revision: { sha: "abc", limpio: true, completo: true } as any })).toEqual([
+      "La revisión dio sin veredicto."
+    ]);
+    expect(motivosParaNoIntegrar({ ...ok, verificacion: verde, revision: { ...aprobada, veredicto: "OK" } })).toHaveLength(1);
+    expect(motivosParaNoIntegrar({ ...ok, verificacion: verde, revision: { ...aprobada, completo: false } })).toHaveLength(1);
+    expect(motivosParaNoIntegrar({ ...ok, verificacion: verde, revision: { ...aprobada, limpio: false } })).toHaveLength(1);
+    expect(motivosParaNoIntegrar({ ...ok, verificacion: { ...verde, limpio: false }, revision: aprobada })).toHaveLength(1);
+  });
+
+  it("argumentos para la shell de Windows: sin metacaracteres y con comillas si hay espacios", () => {
+    expect(argShell("a & calc", false)).toBe("a & calc");
+    expect(argShell("D:\\andre\\mi repo", true)).toBe('"D:\\andre\\mi repo"');
+    expect(argShell("approval_policy=never", true)).toBe("approval_policy=never");
+    for (const malo of ["a & calc", "x|y", "a>b", "%PATH%", 'di"jo', "^x", "a\nb", "!x"]) {
+      expect(() => argShell(malo, true)).toThrow();
+    }
   });
 
   it("rutas sensibles exigen aceptación explícita", () => {
