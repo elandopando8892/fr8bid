@@ -26,6 +26,8 @@ npm run agentes:revisar -- --base main --enfoque "candados de adjudicación"
 
 Sale con código 2 si el veredicto es `BLOQUEA` o el diff quedó incompleto. El comando muestra la ruta del informe. Claude lee cada hallazgo y lo resuelve o justifica.
 
+El arnés rechaza índices con `assume-unchanged` o `skip-worktree`. Antes de construir el diff también bloquea rutas `.env*` distintas de `.env.example`, incluso si se borraron o renombraron.
+
 Delegar una tarea (Codex en `workspace-write` solo dentro de `.agentes/trabajos/<nombre>`, rama `codex/<nombre>`):
 
 ```bash

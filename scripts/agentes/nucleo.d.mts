@@ -9,6 +9,7 @@ export function validarNombre(nombre: string): string;
 export function ramaDeTrabajo(nombre: string): string;
 export function ramaPermitidaParaIntegrar(rama: string | null | undefined): boolean;
 export function rutasSensibles(archivos: string[]): string[];
+export function rutasSecretos(archivos: string[]): string[];
 export function construirPromptDelegacion(o: { tarea: string; rama: string; base: string }): string;
 export function construirPromptRevision(o: { base: string; diff: string; enfoque?: string }): string;
 export function argShell(arg: string, win: boolean): string;

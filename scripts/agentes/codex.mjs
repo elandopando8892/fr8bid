@@ -24,6 +24,7 @@ import {
   motivosRevision,
   ramaDeTrabajo,
   ramaPermitidaParaIntegrar,
+  rutasSecretos,
   rutasSensibles,
   validarNombre
 } from "./nucleo.mjs";
@@ -109,7 +110,15 @@ function archivosTrabajo(trabajo, sha) {
 
 /** Commit y limpieza (incluye archivos sin seguimiento no ignorados). */
 function foto(dir) {
-  return { sha: git(["rev-parse", "HEAD"], dir), limpio: git(["status", "--porcelain"], dir) === "" };
+  // Con -v Git marca skip-worktree con S y assume-unchanged con minúsculas.
+  // `git status` puede ocultar cambios en esas entradas incluso si HEAD no se mueve.
+  if (lista(["ls-files", "-v", "-z"], dir).some((entrada) => /^[Sa-z] /.test(entrada))) {
+    throw new Error("El índice contiene archivos con assume-unchanged o skip-worktree. Quita esas marcas antes de revisar, verificar o integrar.");
+  }
+  return {
+    sha: git(["rev-parse", "HEAD"], dir),
+    limpio: git(["status", "--porcelain", "--untracked-files=all", "--ignore-submodules=none"], dir) === ""
+  };
 }
 
 function exigirCodex() {
@@ -186,12 +195,28 @@ function cmdVerificar(o) {
 }
 
 // ---------- revisar ----------
+const OPCIONES_DIFF = ["--no-ext-diff", "--no-textconv"];
+
+function exigirDiffSinSecretos(dir, revisiones, archivosNuevos = []) {
+  // Consulta los nombres sin parches. Sin renombres, un .env borrado o movido
+  // aparece con su ruta anterior y también se bloquea.
+  const rutas = lista(["diff", ...OPCIONES_DIFF, "--no-renames", "--name-only", "-z", ...revisiones, "--"], dir);
+  const secretos = rutasSecretos([...rutas, ...archivosNuevos]);
+  if (secretos.length) {
+    throw new Error(`Revisión detenida antes de construir el diff. Quita los archivos de entorno de la revisión: ${secretos.map((ruta) => JSON.stringify(ruta)).join(", ")}.`);
+  }
+  return rutas;
+}
+
 /** Diff del árbol de trabajo contra la base (para revisar antes de un PR, con o sin commit). */
 function diffDelArbol(dir, base) {
   const mb = git(["merge-base", "HEAD", base], dir);
-  let diff = git(["diff", mb], dir);
-  for (const f of lista(["ls-files", "-z", "--others", "--exclude-standard"], dir)) {
-    const r = correr("git", ["diff", "--no-index", "--", WIN ? "NUL" : "/dev/null", f], { cwd: dir, silencioso: true });
+  const archivosNuevos = lista(["ls-files", "-z", "--others", "--exclude-standard"], dir);
+  const rutas = exigirDiffSinSecretos(dir, [mb], archivosNuevos);
+  // El árbol es mutable. Solo se comparan las rutas que pasaron la guarda.
+  let diff = rutas.length ? git(["--literal-pathspecs", "diff", ...OPCIONES_DIFF, mb, "--", ...rutas], dir) : "";
+  for (const f of archivosNuevos) {
+    const r = correr("git", ["diff", ...OPCIONES_DIFF, "--no-index", "--", WIN ? "NUL" : "/dev/null", f], { cwd: dir, silencioso: true });
     if (r.codigo !== 1) throw new Error(`No pude armar el diff del archivo nuevo ${f}:\n${r.error}`); // 1 = hay diferencias
     diff += "\n" + r.salida;
   }
@@ -215,7 +240,8 @@ function cmdRevisar(o) {
     if (correr("git", ["merge-base", "--is-ancestor", base, f0.sha], { cwd: dir, silencioso: true }).codigo !== 0) {
       throw new Error("El trabajo delegado ya no desciende de su base.");
     }
-    diff = git(["diff", "--no-ext-diff", "--no-textconv", base, f0.sha], dir);
+    exigirDiffSinSecretos(dir, [base, f0.sha]);
+    diff = git(["diff", ...OPCIONES_DIFF, base, f0.sha, "--"], dir);
   } else {
     f0 = antes();
     diff = diffDelArbol(dir, base);

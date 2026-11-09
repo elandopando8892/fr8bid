@@ -38,7 +38,7 @@ else { for await (const chunk of process.stdin) { /* consume el prompt como el C
   }, 30_000);
 });
 
-it('el arnés prueba solo después de revisar ese commit e invalida la verificación al revisar de nuevo', () => {
+function crearTrabajoDelegado() {
   const dir = mkdtempSync(join(tmpdir(), 'fr8bid-gate-'));
   onTestFinished(() => rmSync(dir, { recursive: true, force: true, maxRetries: 5 }));
   const git = (args: string[], cwd = dir) => {
@@ -61,6 +61,7 @@ it('el arnés prueba solo después de revisar ese commit e invalida la verificac
       }
     });
     expect(result.status, `${args[0]}: ${result.error ?? ''}\n${result.stderr ?? ''}${result.stdout ?? ''}`).toBe(expected);
+    return result;
   };
   {
     mkdirSync(join(dir, 'scripts/agentes'), { recursive: true });
@@ -75,6 +76,7 @@ if (process.argv[2] === 'exec') {
   for await (const chunk of process.stdin) { /* consume prompt */ }
   const output = process.argv[process.argv.indexOf('--output-last-message') + 1];
   if (process.argv.includes('workspace-write')) writeFileSync('delegado.txt', 'delegado');
+  else writeFileSync(output + '.invocado', 'se recibió el prompt');
   writeFileSync(output, 'VEREDICTO: APROBADO');
 }`);
     writeFileSync(join(dir, win ? 'fake.cmd' : 'fake'), win ? '@echo off\r\nnode "%~dp0fake.mjs" %*\r\n' : '#!/bin/sh\nexec node "$(dirname "$0")/fake.mjs" "$@"\n', { mode: 0o755 });
@@ -89,15 +91,21 @@ if (process.argv[2] === 'exec') {
     git(['config', 'core.hooksPath', '/dev/null']);
     git(['add', '.']);
     git(['commit', '--quiet', '-m', 'base']);
-    const args = ['--nombre', 'fixture'];
-    run(['delegar', ...args, '--tarea', 'Fixture'], 0);
+  }
+  const args = ['--nombre', 'fixture'];
+  const revision = () => JSON.parse(readFileSync(join(record, 'fixture.revision.json'), 'utf8')).id as string;
+  run(['delegar', ...args, '--tarea', 'Fixture'], 0);
+  return { dir, work, record, marker, git, run, args, revision };
+}
+
+it('el arnés prueba solo después de revisar ese commit e invalida la verificación al revisar de nuevo', () => {
+    const { dir, work, marker, git, run, args, revision } = crearTrabajoDelegado();
     expect(existsSync(marker)).toBe(false);
     run(['verificar', ...args], 1);
     run(['verificar'], 1, work);
     expect(existsSync(marker)).toBe(false);
 
     run(['revisar', ...args], 0);
-    const revision = () => JSON.parse(readFileSync(join(record, 'fixture.revision.json'), 'utf8')).id;
     const primera = revision();
     git(['commit', '--quiet', '--allow-empty', '-m', 'cambio de commit'], work);
     run(['verificar', ...args, '--revision', primera], 1);
@@ -110,5 +118,41 @@ if (process.argv[2] === 'exec') {
     run(['verificar', ...args, '--revision', revision()], 0);
     run(['integrar', ...args], 0);
     expect(readFileSync(join(dir, 'delegado.txt'), 'utf8')).toBe('delegado');
-  }
 }, 90_000);
+
+it.each(['assume-unchanged', 'skip-worktree'])('bloquea pruebas cuando Git oculta un cambio con %s', flag => {
+  const { work, record, marker, git, run, args, revision } = crearTrabajoDelegado();
+  run(['revisar', ...args], 0);
+  git(['update-index', `--${flag}`, '--', 'probe.cjs'], work);
+  writeFileSync(join(work, 'probe.cjs'), 'require("node:fs").mkdirSync(".agentes", { recursive: true }); require("node:fs").writeFileSync(".agentes/pruebas.txt", "sin revisar");');
+  expect(git(['status', '--porcelain'], work)).toBe('');
+
+  const result = run(['verificar', ...args, '--revision', revision()], 1);
+  expect(result.stderr).toMatch(/assume-unchanged|skip-worktree/);
+  expect(existsSync(marker)).toBe(false);
+  expect(existsSync(join(record, 'fixture.verificacion.json'))).toBe(false);
+}, 45_000);
+
+it('bloquea un .env incluido a la fuerza en un commit antes de invocar al revisor', () => {
+  const { work, record, git, run, args } = crearTrabajoDelegado();
+  mkdirSync(join(work, 'nested'));
+  writeFileSync(join(work, 'nested/.env'), 'ONLY_FIXTURE=SYNTHETIC_SECRET_44\n');
+  git(['add', '-f', '--', 'nested/.env'], work);
+  git(['commit', '--quiet', '-m', 'fixture sensible'], work);
+
+  const result = run(['revisar', ...args], 1);
+  expect(result.stderr).toContain('nested/.env');
+  expect(result.stderr + result.stdout).not.toContain('SYNTHETIC_SECRET_44');
+  expect(existsSync(join(record, 'fixture.revision.md.invocado'))).toBe(false);
+  expect(existsSync(join(record, 'fixture.revision.json'))).toBe(false);
+}, 45_000);
+
+it('bloquea un .env.local sin seguimiento al revisar el árbol actual', () => {
+  const { dir, record, run } = crearTrabajoDelegado();
+  writeFileSync(join(dir, '.env.local'), 'ONLY_FIXTURE=SYNTHETIC_SECRET_44\n');
+
+  const result = run(['revisar', '--base', 'HEAD'], 1);
+  expect(result.stderr).toContain('.env.local');
+  expect(result.stderr + result.stdout).not.toContain('SYNTHETIC_SECRET_44');
+  expect(readdirSync(record).some(name => name.endsWith('.revision.md.invocado'))).toBe(false);
+}, 45_000);

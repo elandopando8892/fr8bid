@@ -25,9 +25,13 @@ export function ramaPermitidaParaIntegrar(rama) {
   return !!rama && rama !== "HEAD" && rama !== "main" && rama !== "master";
 }
 
+/** Rutas cuyo contenido no se envía al revisor. Los ejemplos de entorno sí se revisan. */
+export function rutasSecretos(archivos) {
+  return archivos.filter((ruta) => /(?:^|\/)\.env(?!\.example$)/i.test(ruta.replace(/\\/g, "/")));
+}
+
 /** Archivos que un trabajo delegado no debe tocar sin que Claude lo revise a mano. */
 const RUTAS_SENSIBLES = [
-  /^\.env(?!\.example$)/,
   /^\.claude\/settings(\.local)?\.json$/,
   /^\.codex\//,
   /^\.github\/workflows\//,
@@ -39,7 +43,8 @@ const RUTAS_SENSIBLES = [
 ];
 
 export function rutasSensibles(archivos) {
-  return archivos.filter((a) => RUTAS_SENSIBLES.some((r) => r.test(a.replace(/\\/g, "/"))));
+  const secretos = new Set(rutasSecretos(archivos));
+  return archivos.filter((a) => secretos.has(a) || RUTAS_SENSIBLES.some((r) => r.test(a.replace(/\\/g, "/"))));
 }
 
 export function construirPromptDelegacion({ tarea, rama, base }) {

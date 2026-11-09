@@ -45,6 +45,8 @@ Un trabajo de Codex entra a la rama de Claude **solo** si, sobre el mismo commit
 
 La verificación ejecuta código local. Antes de preparar dependencias o correr pruebas de un trabajo delegado, revisa también sus scripts, configuración y dependencias. El filtro de variables limita lo que heredan los procesos, pero estos conservan acceso al disco y a la red que tenga la cuenta local. Mantén secretos y datos de producción fuera del worktree. El ID enlaza los registros de forma cooperativa.
 
+El arnés exige un índice sin marcas `assume-unchanged` o `skip-worktree` para comprobar el estado del checkout. Antes de construir el diff, `agentes:revisar` comprueba las rutas y detiene revisiones que incluyan archivos `.env*` distintos de `.env.example`, incluso si se borraron o renombraron.
+
 ### Si eres Codex y recibiste una tarea delegada
 
 - Trabaja solo dentro del directorio que te dieron. No hagas commit, push, merge ni despliegues: el arnés hace el commit.
