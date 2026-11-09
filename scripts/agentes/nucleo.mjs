@@ -5,7 +5,7 @@ export const PASOS_VERIFICACION = [
   { nombre: "typecheck", comando: "npm", args: ["run", "typecheck"] },
   { nombre: "pruebas", comando: "npm", args: ["test"] },
   { nombre: "pruebas-bidware", comando: "npm", args: ["run", "test:bidware"] },
-  { nombre: "build", comando: "npx", args: ["vite", "build"] }
+  { nombre: "build", comando: "npx", args: ["--no-install", "vite", "build"] }
 ];
 
 const NOMBRE_VALIDO = /^[a-z0-9][a-z0-9-]{1,47}$/;
@@ -59,7 +59,7 @@ export function construirPromptDelegacion({ tarea, rama, base }) {
     "- No leas .env ni secretos. No tienes red.",
     "- Si la tarea pide algo de la lista de límites de AGENTS.md, no lo hagas: explícalo en PENDIENTE.",
     "- Agrega o ajusta pruebas cuando cambies comportamiento.",
-    "- Antes de terminar corre `npm run typecheck` y `npm test` y reporta el resultado REAL.",
+    "- Deja pendientes los comandos que ejecutan código del trabajo, incluidas las pruebas y la instalación de dependencias. El orquestador los ejecuta después de revisar el commit.",
     "",
     "Termina tu respuesta exactamente con estas secciones:",
     "RESUMEN: <qué hiciste, 1-3 líneas>",
@@ -105,6 +105,16 @@ export function leerVeredicto(texto) {
   return v === "APROBADO" || v === "CON_CAMBIOS" ? v : "BLOQUEA";
 }
 
+export function codigoRevision(veredicto, completo) {
+  return completo && (veredicto === "APROBADO" || veredicto === "CON_CAMBIOS") ? 0 : 2;
+}
+
+/** Lista positiva: no heredar credenciales ni NODE_OPTIONS/npm_config_* del orquestador. */
+export function entornoVerificacion(entorno) {
+  const permitidas = /^(path|systemroot|windir|comspec|pathext|temp|tmp|home|userprofile|localappdata|appdata|codex_home)$/i;
+  return Object.fromEntries(Object.entries(entorno).filter(([clave, valor]) => permitidas.test(clave) && valor !== undefined));
+}
+
 /**
  * Argumento para un comando que en Windows corre con shell (npm, npx y los lanzadores .cmd de Codex).
  * Rechaza metacaracteres de cmd.exe y entrecomilla los que llevan espacios. Los textos libres
@@ -119,12 +129,23 @@ export function argShell(arg, win) {
 
 const VEREDICTOS_QUE_PASAN = ["APROBADO", "CON_CAMBIOS"];
 
+export function motivosRevision({ sha, base, revision }) {
+  if (!revision || typeof revision !== "object") return ["No hay revisión de diff del trabajo (agentes:revisar --nombre)."];
+  const motivos = [];
+  if (revision.sha !== sha) motivos.push("La revisión es de otro commit; vuelve a revisar.");
+  if (revision.base !== base || !revision.id) motivos.push("La revisión no identifica la base o no tiene ID; vuelve a revisar.");
+  if (revision.limpio !== true) motivos.push("La revisión se hizo con cambios sin commit.");
+  if (revision.completo !== true) motivos.push("La revisión no cubrió el diff completo; parte la tarea en trabajos más chicos.");
+  if (!VEREDICTOS_QUE_PASAN.includes(revision.veredicto)) motivos.push(`La revisión dio ${revision.veredicto ?? "sin veredicto"}.`);
+  return motivos;
+}
+
 /**
  * Definición de terminado para integrar un trabajo delegado.
  * Devuelve la lista de motivos por los que NO se puede integrar (vacía = se puede).
  * Un registro incompleto o raro cuenta como ausente: el candado falla cerrado.
  */
-export function motivosParaNoIntegrar({ rama, sha, verificacion, revision, sensibles = [], aceptarSensibles = false }) {
+export function motivosParaNoIntegrar({ rama, sha, base, verificacion, revision, sensibles = [], aceptarSensibles = false }) {
   const motivos = [];
   if (!ramaPermitidaParaIntegrar(rama)) motivos.push(`La rama actual «${rama}» no admite integraciones: todo entra por PR.`);
 
@@ -132,6 +153,7 @@ export function motivosParaNoIntegrar({ rama, sha, verificacion, revision, sensi
   else {
     if (verificacion.sha !== sha) motivos.push("La verificación es de otro commit; vuelve a verificar.");
     if (verificacion.limpio !== true) motivos.push("La verificación se hizo con cambios sin commit.");
+    if (revision?.id && verificacion.revisionId !== revision.id) motivos.push("La verificación no corresponde a la revisión vigente; vuelve a verificar.");
     const pasos = Array.isArray(verificacion.pasos) ? verificacion.pasos : [];
     const fallidos = PASOS_VERIFICACION.map((p) => p.nombre).filter(
       (n) => !pasos.some((r) => r && r.nombre === n && r.ok === true)
@@ -141,13 +163,7 @@ export function motivosParaNoIntegrar({ rama, sha, verificacion, revision, sensi
     }
   }
 
-  if (!revision || typeof revision !== "object") motivos.push("No hay revisión de diff del trabajo (agentes:revisar --nombre).");
-  else {
-    if (revision.sha !== sha) motivos.push("La revisión es de otro commit; vuelve a revisar.");
-    if (revision.limpio !== true) motivos.push("La revisión se hizo con cambios sin commit.");
-    if (revision.completo !== true) motivos.push("La revisión no cubrió el diff completo; parte la tarea en trabajos más chicos.");
-    if (!VEREDICTOS_QUE_PASAN.includes(revision.veredicto)) motivos.push(`La revisión dio ${revision.veredicto ?? "sin veredicto"}.`);
-  }
+  motivos.push(...motivosRevision({ sha, base, revision }));
 
   if (sensibles.length && !aceptarSensibles) {
     motivos.push(`Toca rutas sensibles (${sensibles.join(", ")}); revísalas a mano y repite con --acepto-sensibles.`);

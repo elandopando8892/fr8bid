@@ -28,7 +28,8 @@ Claude Code orquesta; Codex implementa lo que Claude le delega o revisa el diff 
 | Comando | Qué hace | Permiso de Codex |
 | --- | --- | --- |
 | `npm run agentes:verificar` | typecheck, pruebas, pruebas de Bidware y build | no usa Codex |
-| `npm run agentes:revisar -- [--base main]` | revisión adversarial del diff actual | `read-only`, sin red |
+| `npm run agentes:revisar -- [--base main \| --nombre <slug>]` | revisión adversarial del diff actual o del commit delegado | `read-only` desde el checkout de origen |
+| `npm run agentes:verificar -- --nombre <slug> --revision <id>` | pruebas locales tras la revisión de ese commit | entorno filtrado, permisos locales del equipo |
 | `npm run agentes:delegar -- --nombre <slug> --tarea "<qué>"` | Codex trabaja en `.agentes/trabajos/<slug>` (rama `codex/<slug>`) | `workspace-write` solo en ese worktree, sin red, sin aprobaciones interactivas |
 | `npm run agentes:integrar -- --nombre <slug>` | fusiona `codex/<slug>` a la rama actual solo si pasa la definición de terminado | no usa Codex |
 
@@ -36,15 +37,17 @@ Claude Code orquesta; Codex implementa lo que Claude le delega o revisa el diff 
 
 Un trabajo de Codex entra a la rama de Claude **solo** si, sobre el mismo commit:
 
-1. `agentes:verificar` sale en verde (typecheck, `npm test`, `npm run test:bidware`, `npx vite build`).
-2. Hay una revisión de diff (`agentes:revisar`) cuyo veredicto no es `BLOQUEA`, y Claude leyó cada hallazgo.
+1. `agentes:revisar -- --nombre <slug>` cubre el diff completo y devuelve `APROBADO` o `CON_CAMBIOS`. Claude lee el diff y resuelve o justifica cada hallazgo antes de usar el ID de revisión.
+2. `agentes:verificar -- --nombre <slug> --revision <id>` se ejecuta desde el checkout de origen y sale en verde (typecheck, pruebas, pruebas Bidware y build). El commit revisado debe permanecer limpio y una revisión nueva invalida la verificación anterior.
 3. El diff solo toca lo que pidió la tarea y nada de la lista de límites.
 
 `agentes:integrar` comprueba 1 y 2 y se niega si falta algo o si la rama actual es `main`. Después de integrar se vuelve a verificar la rama completa. La prueba (salida de verificación y resumen de la revisión) va en la descripción del PR; no se suben archivos de evidencia al repo (`.agentes/` está en `.gitignore`).
+
+La verificación ejecuta código local. Antes de preparar dependencias o correr pruebas de un trabajo delegado, revisa también sus scripts, configuración y dependencias. El filtro de variables limita lo que heredan los procesos, pero estos conservan acceso al disco y a la red que tenga la cuenta local. Mantén secretos y datos de producción fuera del worktree. El ID enlaza los registros de forma cooperativa.
 
 ### Si eres Codex y recibiste una tarea delegada
 
 - Trabaja solo dentro del directorio que te dieron. No hagas commit, push, merge ni despliegues: el arnés hace el commit.
 - No tienes red; si algo la necesita, dilo y para.
-- Antes de terminar corre `npm run typecheck` y `npm test` y reporta el resultado real, incluidos los fallos.
+- Deja pendientes las pruebas y la instalación de dependencias. El orquestador verifica el código después de revisarlo.
 - Termina con el bloque `RESUMEN`, `ARCHIVOS`, `PRUEBAS`, `PENDIENTE` que te pide el arnés.

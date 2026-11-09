@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   PASOS_VERIFICACION,
+  entornoVerificacion,
+  codigoRevision,
   argShell,
   construirPromptDelegacion,
   construirPromptRevision,
@@ -15,13 +17,25 @@ import {
 
 const verde = {
   sha: "abc",
+  revisionId: "revision-fixture",
   ok: true,
   limpio: true,
   pasos: PASOS_VERIFICACION.map((p) => ({ nombre: p.nombre, ok: true }))
 };
-const aprobada = { sha: "abc", veredicto: "APROBADO" as const, limpio: true, completo: true };
+const aprobada = { sha: "abc", base: "base-fixture", id: "revision-fixture", veredicto: "APROBADO" as const, limpio: true, completo: true };
+const base = aprobada.base;
 
 describe("arnés Claude + Codex", () => {
+  it("una revisión incompleta nunca devuelve éxito", () => {
+    expect(codigoRevision("APROBADO", false)).toBe(2);
+    expect(codigoRevision("CON_CAMBIOS", false)).toBe(2);
+    expect(codigoRevision("APROBADO", true)).toBe(0);
+    expect(codigoRevision("BLOQUEA", true)).toBe(2);
+  });
+
+  it("las pruebas no heredan credenciales ni opciones de inyección del proceso padre", () => {
+    expect(entornoVerificacion({ Path: "bin", SystemRoot: "Windows", TEMP: "tmp", OPENAI_API_KEY: "synthetic", CUSTOM_CREDENTIAL: "synthetic", NODE_OPTIONS: "--require injected.cjs", npm_config_registry: "https://invalid" })).toEqual({ Path: "bin", SystemRoot: "Windows", TEMP: "tmp" });
+  });
   it("el skill canónico y la copia de Claude son idénticos", () => {
     const canonico = readFileSync(".agents/skills/delegar-a-codex/SKILL.md", "utf8");
     const claude = readFileSync(".claude/skills/delegar-a-codex/SKILL.md", "utf8");
@@ -29,7 +43,7 @@ describe("arnés Claude + Codex", () => {
   });
 
   it("CLAUDE.md importa AGENTS.md", () => {
-    expect(readFileSync("CLAUDE.md", "utf8").split("\n")[0]).toBe("@AGENTS.md");
+    expect(readFileSync("CLAUDE.md", "utf8").split(/\r?\n/)[0]).toBe("@AGENTS.md");
   });
 
   it("los nombres de trabajo no permiten rutas ni ramas raras", () => {
@@ -66,16 +80,17 @@ describe("arnés Claude + Codex", () => {
   });
 
   it("definición de terminado: verde + revisión del mismo commit", () => {
-    expect(motivosParaNoIntegrar({ rama: "claude/x", sha: "abc", verificacion: verde, revision: aprobada })).toEqual([]);
-    expect(motivosParaNoIntegrar({ rama: "main", sha: "abc", verificacion: verde, revision: aprobada })).toHaveLength(1);
-    expect(motivosParaNoIntegrar({ rama: "claude/x", sha: "abc", verificacion: null, revision: aprobada })).toHaveLength(1);
-    expect(motivosParaNoIntegrar({ rama: "claude/x", sha: "abc", verificacion: verde, revision: null })).toHaveLength(1);
+    expect(motivosParaNoIntegrar({ base, rama: "claude/x", sha: "abc", verificacion: verde, revision: aprobada })).toEqual([]);
+    expect(motivosParaNoIntegrar({ base, rama: "main", sha: "abc", verificacion: verde, revision: aprobada })).toHaveLength(1);
+    expect(motivosParaNoIntegrar({ base, rama: "claude/x", sha: "abc", verificacion: null, revision: aprobada })).toHaveLength(1);
+    expect(motivosParaNoIntegrar({ base, rama: "claude/x", sha: "abc", verificacion: verde, revision: null })).toHaveLength(1);
     expect(
-      motivosParaNoIntegrar({ rama: "claude/x", sha: "def", verificacion: verde, revision: aprobada })
+      motivosParaNoIntegrar({ base, rama: "claude/x", sha: "def", verificacion: verde, revision: aprobada })
     ).toHaveLength(2);
     expect(
       motivosParaNoIntegrar({
         rama: "claude/x",
+        base,
         sha: "abc",
         verificacion: { ...verde, ok: false, pasos: verde.pasos.map((p) => ({ ...p, ok: p.nombre !== "build" })) },
         revision: { ...aprobada, veredicto: "BLOQUEA" }
@@ -84,13 +99,13 @@ describe("arnés Claude + Codex", () => {
   });
 
   it("registros incompletos o raros fallan cerrado", () => {
-    const ok = { rama: "claude/x", sha: "abc" };
+    const ok = { base, rama: "claude/x", sha: "abc" };
     // verificación con un solo paso, aunque diga ok
     expect(
-      motivosParaNoIntegrar({ ...ok, verificacion: { sha: "abc", ok: true, limpio: true, pasos: [{ nombre: "typecheck", ok: true }] }, revision: aprobada })
+      motivosParaNoIntegrar({ ...ok, verificacion: { ...verde, pasos: [{ nombre: "typecheck", ok: true }] }, revision: aprobada })
     ).toEqual(["La verificación no pasó completa: pruebas, pruebas-bidware, build."]);
     // revisión sin veredicto, con veredicto inventado, truncada o sobre árbol sucio
-    expect(motivosParaNoIntegrar({ ...ok, verificacion: verde, revision: { sha: "abc", limpio: true, completo: true } as any })).toEqual([
+    expect(motivosParaNoIntegrar({ ...ok, verificacion: verde, revision: { ...aprobada, veredicto: undefined } as any })).toEqual([
       "La revisión dio sin veredicto."
     ]);
     expect(motivosParaNoIntegrar({ ...ok, verificacion: verde, revision: { ...aprobada, veredicto: "OK" } })).toHaveLength(1);
@@ -109,9 +124,9 @@ describe("arnés Claude + Codex", () => {
   });
 
   it("rutas sensibles exigen aceptación explícita", () => {
-    const base = { rama: "claude/x", sha: "abc", verificacion: verde, revision: aprobada, sensibles: ["vercel.json"] };
-    expect(motivosParaNoIntegrar(base)).toHaveLength(1);
-    expect(motivosParaNoIntegrar({ ...base, aceptarSensibles: true })).toEqual([]);
+    const entrada = { base, rama: "claude/x", sha: "abc", verificacion: verde, revision: aprobada, sensibles: ["vercel.json"] };
+    expect(motivosParaNoIntegrar(entrada)).toHaveLength(1);
+    expect(motivosParaNoIntegrar({ ...entrada, aceptarSensibles: true })).toEqual([]);
   });
 
   it("los prompts llevan las reglas y el formato de cierre", () => {

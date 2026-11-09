@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createRequire} from 'node:module';
 import {build} from 'esbuild';
-const out=path.resolve('../lab/unit');fs.mkdirSync(out,{recursive:true});
+const out=path.resolve('.test-output/draft-preparation');fs.mkdirSync(out,{recursive:true});
 await build({entryPoints:['src/bidware/features/outreach/draft-preparation.ts'],outfile:path.join(out,'draft-preparation.cjs'),bundle:true,platform:'node',format:'cjs'});
 const {draftReceipt,prepareDraftChannels}=createRequire(import.meta.url)(path.join(out,'draft-preparation.cjs'));
 const channels=['email','whatsapp','whatsapp_group'];
