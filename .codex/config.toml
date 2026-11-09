@@ -1,0 +1,22 @@
+# Permisos de Codex para fr8bid. Los de Claude Code están en .claude/settings.json.
+# Codex aplica este archivo solo si el proyecto es de confianza; en ~/.codex/config.toml:
+#   [projects.'D:\andre\repos\fr8bid']
+#   trust_level = "trusted"
+# Reglas de comandos: .codex/rules/default.rules. Reglas del repo: AGENTS.md.
+
+# Sesión interactiva (Jose o Codex trabajando skills y arneses): pide permiso antes de salir del sandbox.
+approval_policy = "on-request"
+# Escribe solo dentro del repo; sin red para comandos.
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = false
+
+# Los comandos que corre Codex no heredan llaves ni tokens del entorno.
+[shell_environment_policy]
+inherit = "core"
+exclude = ["*KEY*", "*TOKEN*", "*SECRET*", "*PASSWORD*", "SUPABASE_*", "VERCEL_*", "FR8BID_*", "OPENAI_*", "ANTHROPIC_*"]
+
+# El arnés (scripts/agentes/codex.mjs) no usa estos valores: pasa sus propios flags en cada llamada.
+#   delegar  -> --sandbox workspace-write, approval_policy=never, sin red, dentro de .agentes/trabajos/<nombre>
+#   revisar  -> --sandbox read-only, approval_policy=never, sin red

@@ -8,7 +8,11 @@
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:bidware": "node --test \"test/bidware/*.test.mjs\" \"test/bidware/*.test.cjs\""
+    "test:bidware": "node --test \"test/bidware/*.test.mjs\" \"test/bidware/*.test.cjs\"",
+    "agentes:verificar": "node scripts/agentes/codex.mjs verificar",
+    "agentes:revisar": "node scripts/agentes/codex.mjs revisar",
+    "agentes:delegar": "node scripts/agentes/codex.mjs delegar",
+    "agentes:integrar": "node scripts/agentes/codex.mjs integrar"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
