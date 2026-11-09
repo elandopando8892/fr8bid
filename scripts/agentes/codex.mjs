@@ -195,7 +195,7 @@ function cmdIntegrar(o) {
   const trabajo = leerJson(archivoRegistro(nombre, "trabajo.json"));
   if (!trabajo) throw new Error(`No hay trabajo «${nombre}».`);
   const rama = git(["branch", "--show-current"], RAIZ);
-  if (git(["status", "--porcelain"], RAIZ) !== "") throw new Error("El checkout principal tiene cambios sin commit; guárdalos antes de integrar.");
+  if (git(["status", "--porcelain", "--untracked-files=no"], RAIZ) !== "") throw new Error("El checkout principal tiene cambios sin commit; guárdalos antes de integrar.");
   if (git(["status", "--porcelain"], carpetaTrabajo(nombre)) !== "") throw new Error("El worktree de Codex tiene cambios sin commit; verifica de nuevo.");
   const sha = git(["rev-parse", trabajo.rama], RAIZ);
   const archivos = git(["diff", "--name-only", `${trabajo.baseSha}..${sha}`], RAIZ).split("\n").filter(Boolean);
