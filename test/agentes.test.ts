@@ -59,6 +59,10 @@ describe("arnés Claude + Codex", () => {
     expect(leerVeredicto("VEREDICTO: APROBADO\n...\nVEREDICTO: BLOQUEA")).toBe("BLOQUEA");
     expect(leerVeredicto("todo bien")).toBe("BLOQUEA");
     expect(leerVeredicto("VEREDICTO: QUIZÁ")).toBe("BLOQUEA");
+    expect(leerVeredicto("VEREDICTO: APROBADO | BLOQUEA")).toBe("BLOQUEA");
+    expect(leerVeredicto("VEREDICTO: BLOQUEA | CON_CAMBIOS | APROBADO")).toBe("BLOQUEA");
+    expect(leerVeredicto("VEREDICTO: APROBADO, aunque...")).toBe("BLOQUEA");
+    expect(leerVeredicto("VEREDICTO: **CON_CAMBIOS**\r\n")).toBe("CON_CAMBIOS");
   });
 
   it("definición de terminado: verde + revisión del mismo commit", () => {

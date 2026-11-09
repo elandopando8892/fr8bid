@@ -193,6 +193,7 @@ function cmdDelegar(o) {
   const rama = ramaDeTrabajo(nombre);
   const dir = carpetaTrabajo(nombre);
   if (existsSync(dir)) throw new Error(`Ya existe ${dir}. Integra o borra ese trabajo antes (git worktree remove).`);
+  if (!foto(ORIGEN).limpio) throw new Error("Tu checkout tiene cambios sin commit (o archivos nuevos): haz commit antes de delegar, para que Codex parta de lo mismo que tú.");
   const baseRama = git(["branch", "--show-current"], ORIGEN) || "HEAD";
   const baseSha = git(["rev-parse", "HEAD"], ORIGEN);
   mkdirSync(dirname(dir), { recursive: true });
@@ -229,7 +230,7 @@ function cmdIntegrar(o) {
     throw new Error(`El trabajo «${nombre}» salió de ${trabajo.origen}; intégralo desde ese checkout, no desde ${ORIGEN}.`);
   }
   const rama = git(["branch", "--show-current"], ORIGEN);
-  if (git(["status", "--porcelain", "--untracked-files=no"], ORIGEN) !== "") throw new Error("Tu checkout tiene cambios sin commit; guárdalos antes de integrar.");
+  if (!foto(ORIGEN).limpio) throw new Error("Tu checkout tiene cambios sin commit o archivos nuevos; guárdalos antes de integrar.");
   const sha = git(["rev-parse", trabajo.rama], ORIGEN);
   if (!foto(carpetaTrabajo(nombre)).limpio) throw new Error("El worktree de Codex tiene cambios sin commit; verifica y revisa de nuevo.");
   const archivos = git(["diff", "--name-only", `${trabajo.baseSha}..${sha}`], ORIGEN).split("\n").filter(Boolean);
@@ -249,8 +250,8 @@ function cmdIntegrar(o) {
   console.log(`Integrado ${trabajo.rama} (${sha.slice(0, 8)}) en ${rama}. Verificando la rama completa…`);
   const v = verificar(ORIGEN);
   guardar(archivoRegistro(ACTUAL, "verificacion.json"), v);
-  if (!v.ok) {
-    console.error(`La rama ${rama} quedó ROJA tras integrar. Para deshacer: git reset --merge ORIG_HEAD (lo decide Claude).`);
+  if (!v.ok || !v.limpio) {
+    console.error(`La rama ${rama} quedó ${v.ok ? "con archivos cambiados por la verificación" : "ROJA"} tras integrar. Para deshacer: git reset --merge ORIG_HEAD (lo decide Claude).`);
     return 1;
   }
   git(["worktree", "remove", carpetaTrabajo(nombre)], ORIGEN);

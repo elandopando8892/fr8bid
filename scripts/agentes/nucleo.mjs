@@ -94,11 +94,14 @@ export function construirPromptRevision({ base, diff, enfoque }) {
   ].join("\n");
 }
 
-/** Lee el veredicto de la última línea «VEREDICTO:». Sin veredicto claro = BLOQUEA. */
+/**
+ * Lee el veredicto de la última línea «VEREDICTO:». La línea debe traer exactamente un valor
+ * válido; cualquier otra cosa (ausente, ambiguo como «APROBADO | BLOQUEA», inventado) = BLOQUEA.
+ */
 export function leerVeredicto(texto) {
-  const lineas = String(texto ?? "").match(/^\s*VEREDICTO:\s*([A-Z_]+)/gm);
-  if (!lineas) return "BLOQUEA";
-  const v = lineas[lineas.length - 1].replace(/^\s*VEREDICTO:\s*/, "").trim();
+  const lineas = String(texto ?? "").split(/\r?\n/).filter((l) => /^\s*VEREDICTO\s*:/.test(l));
+  if (!lineas.length) return "BLOQUEA";
+  const v = lineas[lineas.length - 1].replace(/^\s*VEREDICTO\s*:/, "").replace(/[*`]/g, "").trim();
   return v === "APROBADO" || v === "CON_CAMBIOS" ? v : "BLOQUEA";
 }
 
