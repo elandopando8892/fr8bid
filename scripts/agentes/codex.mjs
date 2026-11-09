@@ -214,7 +214,10 @@ function cmdDelegar(o) {
   const prompt = construirPromptDelegacion({ tarea: o.tarea, rama, base: `${baseRama} @ ${baseSha.slice(0, 8)}` });
   const salida = archivoRegistro(nombre, "respuesta.md");
   const { codigo } = codexExec({ cwd: dir, prompt, sandbox: "workspace-write", salida, modelo: o.modelo });
-  if (codigo !== 0) console.error(`Codex terminó con código ${codigo}; se verifica igual lo que dejó.`);
+  if (codigo !== 0) {
+    console.error(`Codex terminó con código ${codigo}: el cierre es incierto. No se hace commit ni se verifica; mira ${dir} y ${salida}, y borra el trabajo (git worktree remove --force) o reintenta.`);
+    return 1;
+  }
 
   git(["add", "-A"], dir);
   const hayCambios = correr("git", ["diff", "--cached", "--quiet"], { cwd: dir, silencioso: true }).codigo !== 0;
@@ -250,7 +253,7 @@ function cmdIntegrar(o) {
   if (!foto(ORIGEN).limpio) throw new Error("Tu checkout tiene cambios sin commit o archivos nuevos; guárdalos antes de integrar.");
   const sha = git(["rev-parse", trabajo.rama], ORIGEN);
   if (!foto(carpetaTrabajo(nombre)).limpio) throw new Error("El worktree de Codex tiene cambios sin commit; verifica y revisa de nuevo.");
-  const archivos = lista(["diff", "-z", "--name-only", `${trabajo.baseSha}..${sha}`], ORIGEN);
+  const archivos = lista(["diff", "-z", "--no-renames", "--name-only", `${trabajo.baseSha}..${sha}`], ORIGEN);
   const motivos = motivosParaNoIntegrar({
     rama,
     sha,
