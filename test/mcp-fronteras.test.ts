@@ -38,6 +38,13 @@ describe("fronteras adicionales del MCP de lectura", () => {
     const s = await leer("seguimiento_evento", { event_id: evento });
     expect(s.filas.every((f: { ofertadas: number }) => f.ofertadas === 0)).toBe(true);
   });
+  it("una revisión nueva inválida no resucita la revisión anterior como vigente", async () => {
+    const inv = { id: "rev", vendor_id: "c1", vendors: { vendor_name: "Carrier" }, bid_rate: "", currency: "USD", bid_revisions: [
+      { id: "v1", bid_rate: 120, currency: "USD", created_at: "2026-11-01T00:00:00Z" },
+      { id: "v2", bid_rate: "", currency: "USD", created_at: "2026-11-02T00:00:00Z" }] };
+    const o = await lecturaDetalle([inv])("ofertas_evento", { event_id: evento });
+    expect(o.rutas[0].ofertas[0]).toMatchObject({ tarifa: null, estado_tarifa: "sin_tarifa", diferencia_objetivo: null });
+  });
   it.each([{}, { recommendations: {} }, { recommendations: [null] }, { recommendations: ["carrier"] }])("rechaza recomendaciones malformadas en vez de informar cero sugerencias: %j", async body => {
     await expect(lecturaDetalle([], body)("carriers_sugeridos", { event_id: evento })).rejects.toMatchObject({ code: "RESPUESTA_INVALIDA" });
   });

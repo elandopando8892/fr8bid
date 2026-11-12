@@ -49,12 +49,19 @@ export function crearLecturas(t: Transporte, ahora: () => Date = () => new Date(
         if (!objeto(b.event) || typeof b.event.id !== "string" || b.event.id.toLowerCase() !== String(body.event_id).toLowerCase() ||
             !filas(b.lanes) || b.lanes.some((l: any) => !filas(l.invitations))) throw new Error("Detalle inválido");
         // El mapper compartido usa Number(): un vacío no debe convertirse en cero.
-        // Importe ausente o inválido = null: el mapper no crea versión y ningún estado (seguimiento, recorrido, ofertas) lo cuenta como oferta.
+        // Regla conservadora: si la oferta trae un importe presente pero inválido, o alguna revisión no trae importe válido,
+        // la participación queda sin versiones («sin tarifa»). Así no hay oferta de cero, no cuenta como oferta
+        // en seguimiento/recorrido y no resucita una revisión anterior como vigente.
         const importe = (x: unknown) => (typeof x === "number" || typeof x === "string" && x.trim() !== "") && Number.isFinite(Number(x)) ? Number(x) : null;
-        const oferta = (p: Record<string, any>) => ({ ...p, bid_rate: importe(p.bid_rate) });
+        const invalido = (x: unknown) => x !== null && x !== undefined && importe(x) === null;
+        const participacion = (p: Record<string, any>) => {
+          const revisiones: unknown[] = Array.isArray(p.bid_revisions) ? p.bid_revisions : [];
+          if (invalido(p.bid_rate) || revisiones.some(v => !objeto(v) || importe(v.bid_rate) === null))
+            return { ...p, bid_rate: null, ...(Array.isArray(p.bid_revisions) ? { bid_revisions: [] } : {}) };
+          return { ...p, bid_rate: importe(p.bid_rate) };
+        };
         return { ...r, body: sinProtegidos(sinSecretos({ ...b, lanes: b.lanes.map((l: any) => ({ ...l,
-          invitations: l.invitations.map((p: any) => ({ ...oferta(p),
-            ...(Array.isArray(p.bid_revisions) ? { bid_revisions: p.bid_revisions.map(oferta).filter((v: Record<string, any>) => v.bid_rate !== null) } : {}) }))
+          invitations: l.invitations.map(participacion)
         })) })) };
       } else if (body.action === "list_rfx_events") {
         if (!filas(b.rows ?? b.events)) throw new Error("Listado inválido");
