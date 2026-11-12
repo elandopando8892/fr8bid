@@ -54,7 +54,7 @@ export function crearLecturas(t: Transporte, ahora: () => Date = () => new Date(
         const oferta = (p: Record<string, any>) => ({ ...p, bid_rate: importe(p.bid_rate) });
         return { ...r, body: sinProtegidos(sinSecretos({ ...b, lanes: b.lanes.map((l: any) => ({ ...l,
           invitations: l.invitations.map((p: any) => ({ ...oferta(p),
-            ...(Array.isArray(p.bid_revisions) ? { bid_revisions: p.bid_revisions.map(oferta) } : {}) }))
+            ...(Array.isArray(p.bid_revisions) ? { bid_revisions: p.bid_revisions.map(oferta).filter((v: Record<string, any>) => v.bid_rate !== null) } : {}) }))
         })) })) };
       } else if (body.action === "list_rfx_events") {
         if (!filas(b.rows ?? b.events)) throw new Error("Listado inválido");

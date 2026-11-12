@@ -30,6 +30,14 @@ describe("fronteras adicionales del MCP de lectura", () => {
     const con = await lecturaDetalle([{ id: "valida", vendor_id: "c1", vendors: { vendor_name: "Carrier" }, bid_rate: "150" }])("seguimiento_evento", { event_id: evento });
     expect(s.filas.length).toBe(con.filas.length);
   });
+  it.each(["", null, "no numerico"])("una revisión con bid_rate %j no se vuelve oferta de cero", async bid_rate => {
+    const inv = { id: "rev", vendor_id: "c1", vendors: { vendor_name: "Carrier" }, bid_rate, bid_revisions: [{ id: "r1", bid_rate, created_at: "2026-11-01T00:00:00Z" }] };
+    const leer = lecturaDetalle([inv]);
+    const o = await leer("ofertas_evento", { event_id: evento });
+    expect(o.rutas[0].ofertas[0]).toMatchObject({ tarifa: null, estado_tarifa: "sin_tarifa", diferencia_objetivo: null });
+    const s = await leer("seguimiento_evento", { event_id: evento });
+    expect(s.filas.every((f: { ofertadas: number }) => f.ofertadas === 0)).toBe(true);
+  });
   it.each([{}, { recommendations: {} }, { recommendations: [null] }, { recommendations: ["carrier"] }])("rechaza recomendaciones malformadas en vez de informar cero sugerencias: %j", async body => {
     await expect(lecturaDetalle([], body)("carriers_sugeridos", { event_id: evento })).rejects.toMatchObject({ code: "RESPUESTA_INVALIDA" });
   });
