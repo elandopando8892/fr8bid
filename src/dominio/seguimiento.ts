@@ -196,19 +196,21 @@ export function intentosPorPreparar(d: Detalle, ahora: Date, hoy: string): { s: 
   });
 }
 
-// Texto del intento. Rateware (draft_bid_room_carrier_message) lo pone como
-// pregunta dentro de su plantilla, con el resumen de la ruta y el botón a la
-// liga privada; acepta hasta 600 caracteres. «ruta» hace que Rateware arme el
-// cuerpo en español, con asunto «Seguimiento <folio> · <origen> → <destino>».
-// Responde en el hilo solo si encuentra un correo del carrier; a quien no ha
-// contestado le llega como correo nuevo.
+// Texto del intento. Es del bid completo, no de una ruta: Rateware
+// (draft_bid_room_carrier_message con scope «event») lo pone como pregunta dentro
+// de su plantilla, con el libro de rutas del evento y el botón a la liga privada;
+// acepta hasta 600 caracteres. El asunto sale «Seguimiento <folio> · <evento> ·
+// N rutas». Responde en el hilo solo si encuentra un correo del carrier; a quien
+// no ha contestado le llega como correo nuevo.
 export const LIMITE_TEXTO_INTENTO = 600;
 
-export function textoIntento(d: Detalle, ruta: Ruta, paso: Pick<PasoCadencia, "intento">): string {
-  const corta = (x: string) => x.split(",")[0].trim();
+export function textoIntento(d: Detalle, paso: Pick<PasoCadencia, "intento">): string {
+  const rutas = d.rutas.length;
+  const moneda = d.rutas.find((r) => r.moneda)?.moneda;
+  const cuales = rutas === 1 ? "la ruta" : `las ${rutas} rutas`;
   const texto = [
-    `${paso.intento === 2 ? "Seguimos" : "Último aviso: seguimos"} buscando tarifa all-in en ${ruta.moneda} para la ruta ${corta(ruta.origen)} → ${corta(ruta.destino)} · ${ruta.equipo}.`,
-    `¿Nos comparte su oferta con el botón «Abrir Private Bid Room»? También puede responder a este correo con su tarifa y la capturamos.`,
+    `${paso.intento === 2 ? "Seguimos" : "Último aviso: seguimos"} buscando su tarifa all-in${moneda ? ` en ${moneda}` : ""} para ${rutas > 0 ? cuales : "las rutas"} de este evento.`,
+    `¿Nos comparte su oferta con el botón «Abrir Private Bid Room»? Puede cotizar solo las rutas que le convengan. También puede responder a este correo con su tarifa y la capturamos.`,
     "Si no tiene unidad disponible, responda «sin unidad» y no le volvemos a escribir por este evento."
   ].join(" ");
   return texto.length > LIMITE_TEXTO_INTENTO ? texto.slice(0, LIMITE_TEXTO_INTENTO - 1) + "…" : texto;

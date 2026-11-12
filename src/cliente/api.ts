@@ -12,6 +12,7 @@ import { MAX_PAGINAS, POR_PAGINA, claveSegmento, consultaSegmento, leerHistorial
 import { campanaDelEvento, campanaFr8bid, elegirPlantilla } from "../dominio/invitacion";
 import { operacionEntrega } from "../dominio/operacion";
 import { notasConCierre } from "../dominio/cierre";
+import { env } from "../bidware/config/env";
 import { hoyMexico, primario, versionMasReciente, versionVigente } from "../dominio/recorrido";
 import { ESPERA_ENTRE_TANDAS_MS, esCuota, leerResultado, operacionTanda, planearTandas, requiereAtencion, type ResultadoEnvio } from "../dominio/tandas";
 import type { Aviso, Detalle, EntregaLocal, Recibo, ResumenEvento } from "../dominio/tipos";
@@ -327,13 +328,17 @@ export class MesaApi {
   }
   // 2º/3º intento: rateware-api deja un borrador en la Cola como respuesta en
   // el hilo de Gmail de la invitación (con la liga privada). No envía: el envío
-  // se aprueba en la Cola de Rateware.
+  // se aprueba en la Cola. scope «event»: el seguimiento es del bid completo, no
+  // de una ruta. app_origin: la liga del Bid Room sale con el dominio de Fr8Bid
+  // (sin él Rateware usa rateware.vercel.app).
   prepararIntento(eventId: string, participacionId: string, texto: string, clave: string) {
     return this.rw({
       action: "draft_bid_room_carrier_message",
       event_id: eventId,
       rfx_event_id: eventId,
       rfx_lane_vendor_id: participacionId,
+      scope: "event",
+      app_origin: env.appOrigin,
       body: texto,
       idempotency_key: clave,
       confirmed: true,
