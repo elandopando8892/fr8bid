@@ -1071,10 +1071,10 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
           {muestra && ctx.rol !== "viewer" && (
             <>
               <p className="tenue ayuda">
-                Texto del {muestra.paso.intento}º intento. Rateware lo pone dentro de su plantilla con el resumen de la ruta y el botón a la liga privada. Va en el hilo solo si el carrier ya
-                escribió; si no, sale como correo nuevo con asunto «Seguimiento {d.evento.folio} · origen → destino»:
+                Texto del {muestra.paso.intento}º intento, del bid completo. Rateware lo pone dentro de su plantilla con todas las rutas y el botón a la liga privada. Va en el hilo solo si el carrier ya
+                escribió; si no, sale como correo nuevo con asunto «Seguimiento {d.evento.folio} · {d.evento.nombre} · {d.rutas.length} rutas»:
               </p>
-              <p className="texto-aviso">{textoIntento(d, muestra.ruta, muestra.paso)}</p>
+              <p className="texto-aviso">{textoIntento(d, muestra.paso)}</p>
               <Confirmar
                 etiqueta={`Preparar ${plural(porPreparar.length, "intento", "intentos")}`}
                 clase="btn-secundario"
@@ -1083,7 +1083,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                   accion(async () => {
                     let listos = 0;
                     for (const x of porPreparar) {
-                      await s.api.prepararIntento(d.evento.id, x.participacion.id, textoIntento(d, x.ruta, x.paso), claveIntento(d.evento.id, x.participacion.id, x.paso.intento));
+                      await s.api.prepararIntento(d.evento.id, x.participacion.id, textoIntento(d, x.paso), claveIntento(d.evento.id, x.participacion.id, x.paso.intento));
                       listos++;
                     }
                     return listos;
