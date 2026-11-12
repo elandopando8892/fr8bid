@@ -2,23 +2,23 @@
 // recorrido usan esta misma capa; solo cambia el transporte (HTTP a /api o el
 // Rateware simulado detrás del mismo proxy).
 
-import type { ConsultaTelefono, Telefono } from "../dominio/telefonos";
-import { MAX_TELEFONOS, revisarTelefonos } from "../servidor/telefonos";
-import type { CorreoRevelado, PersonaApollo } from "../dominio/apollo";
-import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier } from "../dominio/contactos";
-import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit";
-import type { EntradaCatalogo } from "../dominio/condiciones-r1";
-import { MAX_PAGINAS, POR_PAGINA, claveSegmento, consultaSegmento, leerHistorialSegmento, segmentoDeRuta, type HistorialSegmento, type Segmento } from "../dominio/segmento";
-import { campanaDelEvento, campanaFr8bid, elegirPlantilla } from "../dominio/invitacion";
-import { operacionEntrega } from "../dominio/operacion";
-import { notasConCierre } from "../dominio/cierre";
-import { env } from "../bidware/config/env";
-import { hoyMexico, primario, versionMasReciente, versionVigente } from "../dominio/recorrido";
-import { ESPERA_ENTRE_TANDAS_MS, esCuota, leerResultado, operacionTanda, planearTandas, requiereAtencion, type ResultadoEnvio } from "../dominio/tandas";
-import type { Aviso, Detalle, EntregaLocal, Recibo, ResumenEvento } from "../dominio/tipos";
-import { manejar, type Respuesta, type Servicio } from "../servidor/proxy";
-import type { RatewareSimulado } from "../simulado/rateware";
-import * as mapear from "./mapear";
+import type { ConsultaTelefono, Telefono } from "../dominio/telefonos.js";
+import { MAX_TELEFONOS, revisarTelefonos } from "../servidor/telefonos.js";
+import type { CorreoRevelado, PersonaApollo } from "../dominio/apollo.js";
+import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier } from "../dominio/contactos.js";
+import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit.js";
+import type { EntradaCatalogo } from "../dominio/condiciones-r1.js";
+import { MAX_PAGINAS, POR_PAGINA, claveSegmento, consultaSegmento, leerHistorialSegmento, segmentoDeRuta, type HistorialSegmento, type Segmento } from "../dominio/segmento.js";
+import { campanaDelEvento, campanaFr8bid, elegirPlantilla } from "../dominio/invitacion.js";
+import { operacionEntrega } from "../dominio/operacion.js";
+import { notasConCierre } from "../dominio/cierre.js";
+import { env } from "../bidware/config/env.js";
+import { hoyMexico, primario, versionMasReciente, versionVigente } from "../dominio/recorrido.js";
+import { ESPERA_ENTRE_TANDAS_MS, esCuota, leerResultado, operacionTanda, planearTandas, requiereAtencion, type ResultadoEnvio } from "../dominio/tandas.js";
+import type { Aviso, Detalle, EntregaLocal, Recibo, ResumenEvento } from "../dominio/tipos.js";
+import { manejar, type Respuesta, type Servicio } from "../servidor/proxy.js";
+import type { RatewareSimulado } from "../simulado/rateware.js";
+import * as mapear from "./mapear.js";
 
 export type Transporte = (servicio: Servicio, body: Record<string, unknown>) => Promise<Respuesta>;
 

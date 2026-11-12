@@ -15,8 +15,8 @@ import {
   RFX_CONDITION_CATALOG,
   RFX_CONDITION_CATALOG_VERSION,
   sameRequirement
-} from "../dominio/condiciones-r1";
-import { UUID_RATEWARE } from "../dominio/operacion";
+} from "../dominio/condiciones-r1.js";
+import { UUID_RATEWARE } from "../dominio/operacion.js";
 
 export type Servicio = "rateware-api" | "rfx-bid-api";
 
