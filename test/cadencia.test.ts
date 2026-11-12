@@ -104,6 +104,9 @@ describe("cadencia por falta de profundidad", () => {
     expect(textoIntento(d, { intento: 3 })).toMatch(/^Último aviso/);
     expect(texto).not.toMatch(/token=/);
     expect(claveIntento("e", "a", 2)).toBe(claveIntento("e", "a", 2));
+    // No choca con las claves del seguimiento por ruta (sin sufijo), ya archivadas.
+    expect(claveIntento("e", "a", 2)).toBe("fr8bid-intento-2-e-a-bid");
+    expect(claveIntento("e", "a", 2).startsWith("fr8bid-intento-")).toBe(true);
   });
 
   it("el 4º intento abre WhatsApp con número y texto; sin número o «no contactar» no hay liga", () => {
