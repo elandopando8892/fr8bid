@@ -1,5 +1,5 @@
 // Copia del catálogo de condiciones de ruta del parche R1 de Rateware
-// (_shared/rfx-lane-conditions.mjs, docs/parches/R1-rateware-condiciones-de-ruta.md).
+// (_shared/rfx-lane-conditions.mjs).
 // Mantener idéntico al de Rateware: la Mesa, la liga y el simulado leen esta
 // lista; Rateware valida con la suya.
 
