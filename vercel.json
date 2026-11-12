@@ -1,5 +1,9 @@
 {
   "framework": "vite",
-  "git": { "deploymentEnabled": { "codex/receipt-reader": false } },
-  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
+  "git": { "deploymentEnabled": { "codex/receipt-reader": false, "codex/mcp-lectura-2": false } },
+  "rewrites": [
+    { "source": "/.well-known/oauth-protected-resource/api/mcp", "destination": "/api/mcp-metadata" },
+    { "source": "/.well-known/oauth-protected-resource", "destination": "/api/mcp-metadata" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
 }
