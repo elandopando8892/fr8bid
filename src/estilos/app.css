@@ -69,6 +69,43 @@ button, input, select, textarea { font: inherit; }
 .btn-texto:disabled, .btn-secundario:disabled { opacity: .5; cursor: not-allowed; }
 .confirmar { background: var(--orange-light); border: 1px solid #ea5e2740; border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
 .campo { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; font-size: 12.5px; color: var(--grey); }
+.contactos-empresa h2 { margin: 0; font-size: 18px; }
+.contactos-empresa h3 { margin: 20px 0 4px; font-size: 20px; text-transform: none; letter-spacing: normal; }
+.contactos-empresa h4 { margin: 0; }
+.contactos-empresa header p { margin: 5px 0 16px; }
+.contactos-cola { display: grid; grid-template-columns: minmax(150px, .8fr) minmax(0, 2fr); gap: 22px; }
+.contactos-cola nav { border-right: 1px solid var(--line); padding-right: 18px; min-width: 0; }
+.contactos-cola .campo { margin-top: 0; }
+.contactos-lista { display: grid; gap: 5px; max-height: 340px; overflow-y: auto; }
+.contactos-lista button { text-align: left; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--ink); padding: 12px; cursor: pointer; }
+.contactos-lista button:hover { background: var(--subtle); }
+.contactos-lista button[aria-current] { background: var(--orange-light); border-color: var(--orange); }
+.contactos-lista small, .contactos-conocidos small { display: block; color: var(--muted); margin-top: 4px; }
+.contactos-detalle { min-width: 0; }
+.contactos-detalle p, .contactos-detalle .mono { overflow-wrap: anywhere; }
+.contactos-pasos { display: flex; align-items: center; gap: 14px; }
+.contactos-empresa button { min-height: 40px; }
+.contactos-empresa button:focus-visible, .contactos-empresa input:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.contactos-empresa .btn-primario { background: var(--accent); }
+.contactos-empresa .btn-primario:disabled { background: var(--muted2); }
+.contacto-guardado { border-left: 3px solid var(--green); padding: 12px 16px; margin: 18px 0; background: var(--green-light); border-radius: 0 8px 8px 0; }
+.contacto-guardado p { margin: 10px 0; }
+.contactos-gratis { display: inline-block; margin: 8px; }
+.contactos-candidatos article { border-top: 1px solid var(--line); padding: 16px 0; display: flex; gap: 14px; align-items: center; justify-content: space-between; }
+.contactos-candidatos article p { margin: 4px 0; }
+.contactos-candidatos article small { color: var(--muted); }
+.contactos-candidatos article button { flex-shrink: 0; }
+.contactos-operacion { display: block; font-size: 11px; overflow-wrap: anywhere; margin-top: 6px; }
+.contactos-conocidos { padding-left: 20px; }
+@media (max-width: 1100px) {
+  .contactos-cola { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .contactos-cola nav { border-right: 0; padding-right: 0; border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+  .contactos-lista { grid-auto-flow: column; grid-auto-columns: minmax(160px, 1fr); overflow-x: auto; max-height: none; }
+}
+@media (max-width: 500px) {
+  .contactos-candidatos article { align-items: stretch; flex-direction: column; }
+  .contactos-empresa .confirmar .fila-botones { align-items: stretch; flex-direction: column; }
+}
 .campo input, .campo select, .campo textarea, textarea { border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; background: var(--panel); color: var(--ink); width: 100%; }
 .check { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0; font-size: 13px; }
 
@@ -125,14 +162,14 @@ button, input, select, textarea { font: inherit; }
 .fila-liga:hover td { background: var(--subtle); }
 
 @media (max-width: 860px) {
-  .marco { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .marco { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
   .lateral { flex-direction: row; align-items: center; padding: 10px 16px; gap: 12px; flex-wrap: wrap; }
   /* El menú completo se abre desde un botón para no llenar la barra. */
   .menu { position: relative; }
   .menu-boton { display: inline-flex; gap: 6px; background: #ffffff14; color: #fff; border: 0; border-radius: 8px; padding: 6px 10px; font-weight: 600; cursor: pointer; }
   .menu-grupos { display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; background: var(--ink); border-radius: 10px; padding: 10px 6px; min-width: 230px; box-shadow: 0 10px 30px #0006; }
   .menu.abierto .menu-grupos { display: block; }
-  .cuenta { margin: 0 0 0 auto; flex-direction: row; align-items: center; }
+  .cuenta { margin: 0 0 0 auto; flex-direction: row; align-items: center; flex-wrap: wrap; min-width: 0; max-width: 100%; }
   .cuenta .campo { margin: 0; flex-direction: row; align-items: center; }
   .cuenta .ver-como > span, .cuenta .aviso-pill { display: none; }
   .cuenta select { width: auto; }
@@ -332,10 +369,10 @@ a.btn-secundario, a.btn-primario, a.btn-secundario:hover, a.btn-primario:hover {
   .tabla-compacta th:nth-child(2), .tabla-compacta td:nth-child(2) { display: none; }
 }
 
-/* Contador de pendientes en el menú, barra móvil de una línea, filtros del CRM. */
+/* Contador de pendientes, barra móvil adaptable y filtros del CRM. */
 .lateral nav a .contador { margin-left: auto; font-family: var(--mono); font-size: 11px; background: var(--orange); color: #fff; border-radius: 999px; padding: 0 7px; min-width: 20px; text-align: center; line-height: 18px; }
 @media (max-width: 860px) {
-  .lateral { flex-wrap: nowrap; gap: 8px; }
+  .lateral { flex-wrap: wrap; gap: 8px; }
   .menu-boton { max-width: 44vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cuenta select { font-size: 12px; padding: 4px 6px; max-width: 118px; }
   .cuenta .inicial { width: 26px; height: 26px; flex-basis: 26px; font-size: 12px; }

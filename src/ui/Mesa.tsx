@@ -1,4 +1,5 @@
-import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { ErrorApi, type AvanceEnvio } from "../cliente/api";
 import { proyeccionLoads } from "../dominio/loads";
 import { operacionAdjudicacion } from "../dominio/operacion";
@@ -26,8 +27,7 @@ import { candidatosRecordatorio, claveIntento, esperaRespuesta, etiquetaSeguimie
 import { crearXlsx } from "../dominio/xlsx";
 import type { CarrierFit } from "../dominio/carrierFit";
 import type { Telefono } from "../dominio/telefonos";
-import type { ContactosCarrier } from "../dominio/contactos";
-import type { CorreoRevelado, PersonaApollo } from "../dominio/apollo";
+import { ContactosDeMesa, contextoDeContactos } from "./ContactosDeMesa";
 import * as I from "./Iconos";
 import { NOMBRE_FAMILIA, type HistorialSegmento } from "../dominio/segmento";
 import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
@@ -55,8 +55,12 @@ const ETAPAS: { clave: ClaveEtapa; titulo: string; pasos: ClavePaso[] }[] = [
 ];
 const etapaDe = (clave: ClavePaso): ClaveEtapa => ETAPAS.find((e) => e.pasos.includes(clave))!.clave;
 
+const FocoContactos = createContext<(id: string) => void>(() => {});
+
 export function Mesa({ id }: { id: string }) {
   const s = useSesion();
+  const location = useLocation();
+  const [, setParametros] = useSearchParams();
   const [carga, setCarga] = useState<Carga<Detalle>>({ tipo: "cargando" });
   const [entrega, setEntrega] = useState<EntregaLocal>(SIN_ENTREGA);
   const [recibo, setRecibo] = useState<Recibo | null>(null);
@@ -64,7 +68,7 @@ export function Mesa({ id }: { id: string }) {
   const [aviso, setAvisoMsg] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
   const actualPrevio = useRef<string | null>(null);
   const secuencia = useRef(0);
-  const contexto = JSON.stringify([s.modo, s.rol, s.correo, s.usuarioSimulado]);
+  const contexto = JSON.stringify([s.identidad, s.modo, s.rol, s.correo, s.usuarioSimulado]);
   const origen = useMemo(() => ({ api: s.api, id, recibo, listo: s.listo, contexto }), [s.api, id, recibo, s.listo, contexto]);
   const dueno = useRef<typeof origen | null>(null);
 
@@ -147,6 +151,12 @@ export function Mesa({ id }: { id: string }) {
 
   const p = { d, ctx, accion, entrega, setEntrega, recibo, setRecibo };
   return (
+    <FocoContactos.Provider value={empresa => {
+      const contactosContexto = contextoDeContactos(id, s);
+      setParametros(p => { const next = new URLSearchParams(p); if (location.state?.contactosContexto !== contactosContexto) next.delete("contactoFiltro"); next.set("contacto", empresa); return next; },
+        { replace: true, state: { ...(typeof location.state === "object" && location.state ? location.state : {}), contactosContexto } });
+      setVista("carriers"); requestAnimationFrame(() => document.getElementById("contactos-empresas")?.scrollIntoView({ block: "start" }));
+    }}>
     <section>
       <header className="cabecera">
         <div>
@@ -204,6 +214,7 @@ export function Mesa({ id }: { id: string }) {
             )}
             {actual !== etapaActual && r.actual && <button className="btn-texto con-icono" onClick={() => setVista(null)}>Ir al paso actual<I.Flecha size={14} /></button>}
           </div>
+          {verInvitacion && <ContactosDeMesa detalle={d} actualizar={() => { void leer(); }} />}
           {verInvitacion && <PanelInvitacion {...p} />}
           {verInvitacion && <MasCarriers {...p} />}
           {actual === "evento" && <PanelEvento {...p} />}
@@ -215,6 +226,7 @@ export function Mesa({ id }: { id: string }) {
         </div>
       </div>
     </section>
+    </FocoContactos.Provider>
   );
 }
 
@@ -747,133 +759,13 @@ function PanelCarrierFit({ d, ctx, accion, incrustado }: Props & { incrustado?: 
   );
 }
 
-// Contactos que Rateware ya conoce cuando el carrier no tiene uno útil: los del
-// registro y los de otros registros con su mismo dominio, sin rebotes recientes
-// en Gmail ni «no contactar». Solo los muestra: no cambia el contacto del
-// carrier en Rateware ni invita a nadie.
-function ContactosSugeridos({ vendorId, abrir = false }: { vendorId: string; abrir?: boolean }) {
-  const s = useSesion();
-  type Estado = { tipo: "cargando" } | { tipo: "ok"; datos: ContactosCarrier } | { tipo: "error"; mensaje: string };
-  const [c, setC] = useState<Estado | null>(null);
-  const consultar = () => {
-    setC({ tipo: "cargando" });
-    s.api.contactosConocidos(vendorId).then(
-      (datos) => setC({ tipo: "ok", datos }),
-      (e) => setC({ tipo: "error", mensaje: e instanceof Error ? e.message : "Error desconocido" })
-    );
-  };
-  useEffect(() => {
-    if (abrir) consultar();
-  }, [abrir, vendorId]);
-  if (!c || c.tipo === "error")
-    return (
-      <>
-        {c?.tipo === "error" && <span className="error-texto"> No se pudieron consultar los contactos: {c.mensaje}</span>}
-        <button className="btn-texto" onClick={consultar}>{c ? "Reintentar" : "Buscar contactos conocidos"}</button>
-      </>
-    );
-  if (c.tipo === "cargando") return <span className="tenue"> Buscando contactos en Rateware…</span>;
-  const x = c.datos;
-  return (
-    <div className="aviso-caja">
-      <p>
-        <b>Contactos conocidos de {x.nombre}</b>
-        {x.dominio ? ` (dominio ${x.dominio})` : ""}. Fr8Bid solo los sugiere: para usar uno, ponlo como contacto del carrier en Rateware y márcalo «Revisado».
-      </p>
-      {x.avisos.map((a) => <p key={a} className="alerta">{a}</p>)}
-      {!x.sugeridos.length ? (
-        <p className="tenue">Rateware no tiene otro contacto limpio de este carrier.</p>
-      ) : (
-        <ul>
-          {x.sugeridos.map((k) => (
-            <li key={`${k.tipo}:${k.valor}`}>
-              <span className="mono">{k.tipo === "whatsapp" ? `WhatsApp ${k.valor}` : k.valor}</span>
-              {k.nombre ? ` · ${k.nombre}` : ""} · <span className="tenue">{k.origen}{k.ultimoUso ? `; último uso ${k.ultimoUso}` : ""}</span>
-              {k.nota && <span className="tenue"> · {k.nota}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-      {x.descartados.length > 0 && (
-        <p className="tenue">No se sugieren: {x.descartados.map((k) => `${k.valor} (${k.motivo})`).join(", ")}.</p>
-      )}
-      {x.dominio && <BuscarEnApollo dominio={x.dominio} />}
-    </div>
-  );
+// All contact recovery opens the same company queue in this Mesa.
+function ContactosSugeridos({ vendorId }: { vendorId: string }) {
+  const abrir = useContext(FocoContactos);
+  return <button className="btn-texto" onClick={() => abrir(vendorId)}>Resolver contacto en esta Mesa</button>;
 }
 
-// Contactos nuevos en Apollo por el dominio del carrier: buscar es gratis;
-// revelar un correo cuesta 1 crédito y lo confirma el Administrador. Fr8Bid no
-// guarda el correo: se pone a mano en Rateware.
-function BuscarEnApollo({ dominio }: { dominio: string }) {
-  const s = useSesion();
-  type Estado = { tipo: "cargando" } | { tipo: "ok"; total: number; personas: PersonaApollo[] } | { tipo: "error"; mensaje: string };
-  const [b, setB] = useState<Estado | null>(null);
-  const [revelados, setRevelados] = useState<Record<string, CorreoRevelado | string>>({});
-  const buscar = () => {
-    setB({ tipo: "cargando" });
-    s.api.buscarEnApollo(dominio).then(
-      (r) => setB({ tipo: "ok", ...r }),
-      (e) => setB({ tipo: "error", mensaje: e instanceof Error ? e.message : "Error desconocido" })
-    );
-  };
-  const revelar = async (p: PersonaApollo) => {
-    try {
-      const r = await s.api.revelarCorreoApollo(p.id);
-      setRevelados((v) => ({ ...v, [p.id]: r }));
-    } catch (e) {
-      setRevelados((v) => ({ ...v, [p.id]: e instanceof Error ? e.message : "Error desconocido" }));
-    }
-  };
-  if (!b || b.tipo === "error")
-    return (
-      <p>
-        {b?.tipo === "error" && <span className="error-texto">Apollo: {b.mensaje} </span>}
-        <button className="btn-texto" onClick={buscar}>{b ? "Reintentar en Apollo" : `Buscar personas de ${dominio} en Apollo (gratis)`}</button>
-      </p>
-    );
-  if (b.tipo === "cargando") return <p className="tenue">Buscando en Apollo…</p>;
-  const utiles = b.personas.filter((p) => p.prioridad < 3);
-  const lista = utiles.length ? utiles : b.personas;
-  return (
-    <div>
-      <p>
-        <b>Apollo:</b> {plural(b.total, "persona")} con {dominio}
-        {utiles.length ? `; ${utiles.length} deciden o cotizan` : ""}. Revelar un correo cuesta 1 crédito de Apollo.
-      </p>
-      {!lista.length ? (
-        <p className="tenue">Apollo no tiene personas con este dominio.</p>
-      ) : (
-        <ul>
-          {lista.slice(0, 12).map((p) => {
-            const r = revelados[p.id];
-            return (
-              <li key={p.id}>
-                {p.nombre} · {p.puesto} <span className="tenue">({p.rol})</span>{" "}
-                {typeof r === "object" ? (
-                  r.correo ? <span className="mono">{r.correo}{r.estado ? ` · ${r.estado}` : ""}</span> : <span className="tenue">Apollo no dio correo (no se cobró).</span>
-                ) : !p.tieneCorreo ? (
-                  <span className="tenue">sin correo en Apollo</span>
-                ) : s.rol === "admin" ? (
-                  <>
-                    {typeof r === "string" && <span className="error-texto">{r} </span>}
-                    <Confirmar etiqueta="Revelar correo (1 crédito)" clase="btn-texto" advertencia={`Se gasta 1 crédito de Apollo para ver el correo de ${p.nombre}. Fr8Bid no lo guarda ni le escribe.`} onConfirmar={() => revelar(p)} />
-                  </>
-                ) : (
-                  <span className="tenue">correo disponible (lo revela el Administrador)</span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-// Historial del segmento: carriers con tarifas aprobadas en Rateware de la
-// misma caja, operación D2D y cruce que la ruta. Es evidencia «solo tarifa»:
-// no confirma el equipo y no reemplaza la revisión en Bidware.
+// Historial del segmento: evidencia de tarifa, sin reemplazar la revisión.
 const enEvento = (d: Detalle, vendorId: string) => d.rutas.some((r) => r.participaciones.some((p) => p.carrierId === vendorId));
 
 function PanelHistorialSegmento({ d, ctx, accion, incrustado }: Props & { incrustado?: boolean }) {
@@ -1153,7 +1045,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                 {abierto === `c:${x.carrierId}` && (
                   <tr>
                     <td colSpan={conSiguiente ? 6 : 5}>
-                      <ContactosSugeridos vendorId={x.carrierId} abrir />
+                      <ContactosSugeridos vendorId={x.carrierId} />
                     </td>
                   </tr>
                 )}
