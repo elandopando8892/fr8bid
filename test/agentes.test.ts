@@ -11,6 +11,7 @@ import {
   motivosParaNoIntegrar,
   ramaDeTrabajo,
   ramaPermitidaParaIntegrar,
+  rutasSecretos,
   rutasSensibles,
   validarNombre
 } from "../scripts/agentes/nucleo.mjs";
@@ -59,6 +60,20 @@ describe("arnés Claude + Codex", () => {
     expect(ramaPermitidaParaIntegrar("")).toBe(false);
     expect(ramaPermitidaParaIntegrar("claude/x")).toBe(true);
   });
+
+  it.each([".env", ".env.local", ".ENV", "config/.env.production", "config\\.env.production"])(
+    "detecta la ruta de secretos %s",
+    (ruta) => {
+      expect(rutasSecretos([ruta])).toEqual([ruta]);
+    }
+  );
+
+  it.each([".env.example", "config/.env.example", "src/environment.ts", "docs/env.md"])(
+    "no considera secreto %s",
+    (ruta) => {
+      expect(rutasSecretos([ruta])).toEqual([]);
+    }
+  );
 
   it("detecta rutas sensibles y deja pasar .env.example", () => {
     expect(rutasSensibles([".env", ".env.example", "api\\bid.ts", "src/ui/App.tsx", ".codex/config.toml"])).toEqual([
