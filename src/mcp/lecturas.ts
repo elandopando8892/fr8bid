@@ -48,9 +48,19 @@ export function crearLecturas(t: Transporte, ahora: () => Date = () => new Date(
       if (body.action === "list_rfx_detail") {
         if (!objeto(b.event) || typeof b.event.id !== "string" || b.event.id.toLowerCase() !== String(body.event_id).toLowerCase() ||
             !filas(b.lanes) || b.lanes.some((l: any) => !filas(l.invitations))) throw new Error("Detalle inválido");
+        // El mapper compartido usa Number(): un vacío no debe convertirse en cero.
+        // NaN es una marca interna; ofertas la convierte en sin_tarifa, sin versión vigente.
+        const importe = (x: unknown) => (typeof x === "number" || typeof x === "string" && x.trim() !== "") && Number.isFinite(Number(x)) ? Number(x) : Number.NaN;
+        const oferta = (p: Record<string, any>) => ({ ...p, bid_rate: importe(p.bid_rate) });
+        return { ...r, body: sinProtegidos(sinSecretos({ ...b, lanes: b.lanes.map((l: any) => ({ ...l,
+          invitations: l.invitations.map((p: any) => ({ ...oferta(p),
+            ...(Array.isArray(p.bid_revisions) ? { bid_revisions: p.bid_revisions.map(oferta) } : {}) }))
+        })) })) };
       } else if (body.action === "list_rfx_events") {
         if (!filas(b.rows ?? b.events)) throw new Error("Listado inválido");
-      } else if (body.action !== "carrier_recommendations") {
+      } else if (body.action === "carrier_recommendations") {
+        if (!filas(b.recommendations)) throw new ErrorApi(502, "RESPUESTA_INVALIDA", "Respuesta de sugerencias inválida");
+      } else {
         if (!filas(b.rows ?? (body.action === "list_outreach_messages" ? b.messages : undefined))) throw new Error("Listado inválido");
       }
     }
@@ -66,10 +76,13 @@ export function crearLecturas(t: Transporte, ahora: () => Date = () => new Date(
     const ctx = { rol, hoy: hoyMexico(ahora()), entrega };
     return { ruta_id: r.id, numero: r.numero, origen: r.origen, destino: r.destino, equipo: r.equipo, objetivo: r.objetivo, moneda: r.moneda, condiciones: r.condiciones,
       ofertas: r.participaciones.map(p => {
-        const v = versionVigente(p);
+        const candidata = versionVigente(p);
+        const v = candidata && Number.isFinite(candidata.tarifaAllIn) ? candidata : null;
+        const participacion = v ? p : { ...p, versiones: [] };
         return { participacion_id: p.id, carrier_id: p.carrierId, carrier: p.carrier, estado: p.estado, vigente: v, modelo: v ? describirModelo(v) : null,
+          tarifa: v?.tarifaAllIn ?? null, estado_tarifa: v ? "con_tarifa" : "sin_tarifa",
           diferencia_objetivo: v && r.objetivo !== null && v.moneda === r.moneda ? v.tarifaAllIn - r.objetivo : null,
-          condiciones: p.condiciones, rubros: p.rubros, candados: candadosAdjudicacion(d, r, p, ctx), candados_respaldo: candadosAdjudicacion(d, r, p, ctx, "respaldo") };
+          condiciones: p.condiciones, rubros: p.rubros, candados: candadosAdjudicacion(d, r, participacion, ctx), candados_respaldo: candadosAdjudicacion(d, r, participacion, ctx, "respaldo") };
       }) };
   }
   return async (nombre: string, args: Record<string, unknown>): Promise<Record<string, any>> => {
@@ -122,7 +135,13 @@ export function crearLecturas(t: Transporte, ahora: () => Date = () => new Date(
       }
     }
     const limpio = sinSecretos({ ...result, consultado_en: fecha, solo_lectura: true });
-    if (JSON.stringify(limpio).length > 200000) throw new Error("Resultado demasiado grande. Consulta una ruta o reduce limit; revisa el detalle en la Mesa.");
+    if (JSON.stringify(limpio).length > 200000) {
+      const rutas: any[] = Array.isArray(limpio.rutas) ? limpio.rutas : [];
+      const grande = rutas.find(r => JSON.stringify(r).length > 200000);
+      return { error: { codigo: "RESPUESTA_DEMASIADO_GRANDE", ruta_id: grande?.ruta_id ?? grande?.id ?? a.ruta_id ?? null,
+        sugerencia: grande ? "Filtra la consulta; esta ruta supera el límite por sí sola. Revisa sus ofertas en la Mesa." : "Filtra por ruta o reduce limit; revisa el detalle en la Mesa." },
+        consultado_en: fecha, solo_lectura: true };
+    }
     return limpio;
   };
 }
