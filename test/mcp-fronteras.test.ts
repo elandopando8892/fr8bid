@@ -21,6 +21,15 @@ describe("fronteras adicionales del MCP de lectura", () => {
     expect(r.rutas[0].ofertas[1]).toMatchObject({ tarifa: 150, estado_tarifa: "con_tarifa", diferencia_objetivo: 50 });
     expect(r.rutas[0].ofertas[2]).toMatchObject({ tarifa: 0, estado_tarifa: "con_tarifa", diferencia_objetivo: -100 });
   });
+  it.each(["", null, "no numerico", "   "])("bid_rate %j no cuenta como oferta en seguimiento ni en el recorrido", async bid_rate => {
+    const leer = lecturaDetalle([{ id: "sin-tarifa", vendor_id: "c1", vendors: { vendor_name: "Carrier" }, bid_rate }]);
+    const s = await leer("seguimiento_evento", { event_id: evento });
+    expect(s.filas.every((f: { ofertadas: number; estado: string }) => f.ofertadas === 0 && f.estado !== "oferto")).toBe(true);
+    const e = await leer("evento", { event_id: evento });
+    expect(JSON.stringify(e.recorrido)).not.toMatch(/NaN/);
+    const con = await lecturaDetalle([{ id: "valida", vendor_id: "c1", vendors: { vendor_name: "Carrier" }, bid_rate: "150" }])("seguimiento_evento", { event_id: evento });
+    expect(s.filas.length).toBe(con.filas.length);
+  });
   it.each([{}, { recommendations: {} }, { recommendations: [null] }, { recommendations: ["carrier"] }])("rechaza recomendaciones malformadas en vez de informar cero sugerencias: %j", async body => {
     await expect(lecturaDetalle([], body)("carriers_sugeridos", { event_id: evento })).rejects.toMatchObject({ code: "RESPUESTA_INVALIDA" });
   });

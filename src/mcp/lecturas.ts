@@ -49,8 +49,8 @@ export function crearLecturas(t: Transporte, ahora: () => Date = () => new Date(
         if (!objeto(b.event) || typeof b.event.id !== "string" || b.event.id.toLowerCase() !== String(body.event_id).toLowerCase() ||
             !filas(b.lanes) || b.lanes.some((l: any) => !filas(l.invitations))) throw new Error("Detalle inválido");
         // El mapper compartido usa Number(): un vacío no debe convertirse en cero.
-        // NaN es una marca interna; ofertas la convierte en sin_tarifa, sin versión vigente.
-        const importe = (x: unknown) => (typeof x === "number" || typeof x === "string" && x.trim() !== "") && Number.isFinite(Number(x)) ? Number(x) : Number.NaN;
+        // Importe ausente o inválido = null: el mapper no crea versión y ningún estado (seguimiento, recorrido, ofertas) lo cuenta como oferta.
+        const importe = (x: unknown) => (typeof x === "number" || typeof x === "string" && x.trim() !== "") && Number.isFinite(Number(x)) ? Number(x) : null;
         const oferta = (p: Record<string, any>) => ({ ...p, bid_rate: importe(p.bid_rate) });
         return { ...r, body: sinProtegidos(sinSecretos({ ...b, lanes: b.lanes.map((l: any) => ({ ...l,
           invitations: l.invitations.map((p: any) => ({ ...oferta(p),
