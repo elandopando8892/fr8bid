@@ -8,6 +8,9 @@ import { env } from "@/config/env";
 import { getAccessToken } from "@/lib/auth";
 import { decidir, idValido, leerAutorizacion, nombreCliente, RETORNO, type DetalleAutorizacion } from "../cliente/consentimiento";
 
+/** auth.<dominio>: el dominio neutro que aloja solo el consentimiento (Site URL de Auth). */
+export const esDominioDeAcceso = (host: string) => /^auth\.[a-z0-9.-]+$/i.test(host) && !host.endsWith(".vercel.app");
+
 type Estado =
   | { tipo: "cargando" }
   | { tipo: "error"; mensaje: string }

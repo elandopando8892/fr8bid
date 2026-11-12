@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decidir, idValido, leerAutorizacion, nombreCliente, retornoSeguro } from "../src/cliente/consentimiento";
+import { esDominioDeAcceso } from "../src/ui/ConsentimientoOAuth";
 
 const ID = "3f6b2c1a-9d4e-4f8a-b1c2-0e9d8c7b6a51";
 function op(status: number, body: unknown, vistos: { url: string; init: RequestInit }[] = []) {
@@ -49,5 +50,9 @@ describe("consentimiento OAuth del MCP", () => {
     expect(retornoSeguro(`/oauth/consent?authorization_id=${ID}`)).toBe(`/oauth/consent?authorization_id=${ID}`);
     for (const v of [null, "https://evil.example/oauth/consent?authorization_id=" + ID, "//evil.example", "/eventos", "/oauth/consent?authorization_id=../x"])
       expect(retornoSeguro(v)).toBeNull();
+  });
+  it("solo el dominio auth.* queda limitado al consentimiento", () => {
+    expect(esDominioDeAcceso("auth.heymarksman.com")).toBe(true);
+    for (const h of ["fr8bid.heymarksman.com", "rates.heymarksman.com", "localhost", "auth-fr8bid.vercel.app", "fr8bid.vercel.app"]) expect(esDominioDeAcceso(h)).toBe(false);
   });
 });
