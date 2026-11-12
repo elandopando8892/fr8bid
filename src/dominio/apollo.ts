@@ -1,8 +1,6 @@
-// Contactos nuevos en Apollo.io cuando Rateware no conoce a nadie útil del
-// carrier (pedido de Jose del 24-oct-2026, «Ambas»). Buscar personas por el
-// dominio del carrier es gratis; revelar un correo cuesta 1 crédito de Apollo y
-// se confirma uno por uno en la Mesa. Fr8Bid no guarda ni envía nada: el correo
-// se pone a mano en Rateware y el carrier se marca «Revisado» en Bidware.
+// Shared title ranking and legacy Apollo DTOs. The company queue reuses the
+// ranking; paid enrichment now belongs to contactosEmpresa and its durable
+// Rateware operation, with a verified credit policy and automatic persistence.
 
 export interface PersonaApollo {
   id: string;

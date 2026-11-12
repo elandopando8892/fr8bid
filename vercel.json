@@ -1,5 +1,5 @@
 {
   "framework": "vite",
-  "git": { "deploymentEnabled": { "codex/receipt-reader": false } },
+  "git": { "deploymentEnabled": { "codex/receipt-reader": false, "codex/fr8bid-contactos-apollo": false } },
   "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
 }

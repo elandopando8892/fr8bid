@@ -15,6 +15,7 @@ import type { RatewareSimulado } from "../simulado/rateware";
 export const MODO: "simulado" | "rateware" = import.meta.env.VITE_FR8BID_MODO === "rateware" ? "rateware" : "simulado";
 
 export interface Sesion {
+  identidad?: string;
   modo: typeof MODO;
   api: MesaApi;
   rol: Rol;
@@ -67,6 +68,7 @@ export function ProveedorSesion({ children }: { children: ReactNode }) {
 
   const u = USUARIOS_SIMULADOS.find((x) => x.clave === usuarioSimulado)!;
   const valor: Sesion = {
+    identidad: MODO === "simulado" ? usuarioSimulado : JSON.stringify([auth.user?.id, auth.user?.app_metadata?.organization_id]),
     modo: MODO,
     api,
     rol: MODO === "simulado" ? u.rol : auth.role,
