@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes, useParams } from "react
 import { AuthProvider } from "@/auth/AuthContext";
 import { ConfirmHost } from "@/components/confirm";
 import { AIntegraciones, AMesa, Bw, P } from "./bidware";
+import { ConsentimientoOAuth } from "./ConsentimientoOAuth";
 import { Eventos } from "./Eventos";
 import { Hoy } from "./Hoy";
 import { LigaCarrier } from "./LigaCarrier";
@@ -35,6 +36,7 @@ function Rutas() {
       <Route path="/bid/:token" element={<LigaDelCarrier />} />
       <Route path="/rfx-bid.html" element={publica(<P.BidRoom />)} />
       <Route path="/callback" element={publica(<P.Callback />)} />
+      <Route path="/oauth/consent" element={publica(<ConsentimientoOAuth />)} />
       <Route path="/board" element={publica(<P.Tablero />)} />
       <Route path="/bid-room-board.html" element={publica(<P.Tablero />)} />
       <Route path="/carrier-profile.html" element={publica(<P.PerfilCarrier />)} />

@@ -21,8 +21,10 @@ export function metadata(c: ConfigAuth) {
 export async function autenticar(authorization: string | undefined, c: ConfigAuth, jwks: JWTVerifyGetKey = createRemoteJWKSet(new URL(`${c.issuer}/.well-known/jwks.json`), { timeoutDuration: 5000 }), request: typeof fetch = fetch) {
   const token = /^Bearer ([A-Za-z0-9._~-]+)$/.exec(authorization || "")?.[1];
   if (!token) throw new Error("Inicia sesión con OAuth");
-  // No acepta el JWT genérico del navegador ni credenciales de servicio.
-  const { payload } = await jwtVerify(token, jwks, { issuer: c.issuer, audience: c.resource, algorithms: ["ES256", "RS256"], requiredClaims: ["exp", "sub", "client_id", "role"] });
+  // Supabase OAuth emite aud «authenticated»; se acepta también la URL del recurso por si un
+  // Custom Access Token Hook la fija después. El JWT genérico del navegador no trae client_id y
+  // se rechaza abajo; service_role también (role ≠ authenticated).
+  const { payload } = await jwtVerify(token, jwks, { issuer: c.issuer, audience: [c.resource, "authenticated"], algorithms: ["ES256", "RS256"], requiredClaims: ["exp", "sub", "client_id", "role"] });
   if (payload.role !== "authenticated" || typeof payload.client_id !== "string" || !c.clientIds.includes(payload.client_id)) throw new Error("Cliente no autorizado");
   const r = await request(`${c.issuer}/user`, { headers: { authorization: `Bearer ${token}`, apikey: c.anonKey }, redirect: "error", signal: AbortSignal.timeout(5000), cache: "no-store" });
   if (!r.ok) throw new Error("Sesión no válida");
