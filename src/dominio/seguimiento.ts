@@ -272,7 +272,10 @@ export function intentosWhatsapp(d: Detalle, ahora: Date, hoy: string, revisados
 
 // Misma clave en cada clic: Rateware devuelve el borrador existente en vez de
 // crear otro.
-export const claveIntento = (eventoId: string, participacionId: string, intento: number) => `fr8bid-intento-${intento}-${eventoId}-${participacionId}`;
+// Clave de idempotencia del intento. «-bid»: el seguimiento del bid completo es otro
+// correo que el de una ruta (claves sin sufijo, hasta el 12-nov); con la misma clave
+// Rateware devolvería el borrador viejo aunque esté archivado.
+export const claveIntento = (eventoId: string, participacionId: string, intento: number) => `fr8bid-intento-${intento}-${eventoId}-${participacionId}-bid`;
 
 export interface Recordatorio {
   para: string;
