@@ -150,3 +150,41 @@ export function aceptarLectura(original: string, rutas: RutaLectura[], cruda: an
   }
   return { tipo, resumen: texto(cruda?.resumen, 400), ofertas, dudas };
 }
+
+// Correo del carrier que Rateware trae de Gmail (get_rfx_carrier_reply,
+// 13-nov-2026): llena el texto y los archivos sin pegar ni descargar nada.
+// Solo pasan PDF e imágenes dentro de los límites de la lectura; lo demás se
+// nombra para que el equipo sepa qué no leyó la IA (por ejemplo, un Excel).
+export interface CorreoTraido {
+  texto: string;
+  adjuntos: AdjuntoLectura[];
+  omitidos: string[];
+  de: string | null;
+  asunto: string | null;
+  en: string | null;
+}
+
+export function correoParaLectura(crudo: any): CorreoTraido {
+  const omitidos: string[] = (Array.isArray(crudo?.skipped_attachments) ? crudo.skipped_attachments : []).map((a: any) => texto(a?.filename, 120) || "archivo");
+  const adjuntos: AdjuntoLectura[] = [];
+  let bytes = 0;
+  for (const a of Array.isArray(crudo?.attachments) ? crudo.attachments : []) {
+    const nombre = texto(a?.filename, 120) || "archivo";
+    const b64 = typeof a?.base64 === "string" ? a.base64 : "";
+    const tamano = bytesBase64(b64);
+    if (!TIPOS_ADJUNTO.includes(a?.mime_type) || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64) || adjuntos.length >= MAX_ADJUNTOS_LECTURA || bytes + tamano > MAX_BYTES_ADJUNTOS) {
+      omitidos.push(nombre);
+      continue;
+    }
+    bytes += tamano;
+    adjuntos.push({ nombre, tipo: a.mime_type, base64: b64 });
+  }
+  return {
+    texto: typeof crudo?.text === "string" ? crudo.text.slice(0, MAX_TEXTO_LECTURA) : "",
+    adjuntos,
+    omitidos,
+    de: texto(crudo?.from, 200) || null,
+    asunto: texto(crudo?.subject, 300) || null,
+    en: texto(crudo?.at, 40) || null
+  };
+}

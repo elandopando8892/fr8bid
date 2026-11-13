@@ -103,6 +103,8 @@ export class RatewareSimulado {
   ];
   // Lo que list_rfx_carrier_replies (R2) encontraría en Gmail y en el chat.
   respuestasCarrier: Fila[] = [];
+  // Contenido de cada correo de respuesta (get_rfx_carrier_reply) por gmail_message_id.
+  correosCarrier = new Map<string, Fila>();
   // outreach_email_opens: aperturas del píxel por mensaje (7-nov-2026).
   aperturasCorreo: Fila[] = [];
   // Resultado de send_outreach_messages por operation_id (repetirlo no reenvía).
@@ -310,6 +312,12 @@ export class RatewareSimulado {
           opens_status: "checked",
           opens: this.aperturasCorreo.filter((a) => mensajes.has(a.outreach_message_id)).map((a) => ({ ...a }))
         });
+      }
+      case "get_rfx_carrier_reply": {
+        const event = this.evento(u, body.event_id);
+        const correo = this.correosCarrier.get(String(body.gmail_message_id || ""));
+        if (!correo || correo.event_id !== event.id) throw new Falla(404, "This email is not a carrier reply to this RFx.", "404");
+        return ok({ ...correo });
       }
       case "list_vendors": {
         // Como list_vendors con lightweight: por ids o búsqueda (nombre o dominio).

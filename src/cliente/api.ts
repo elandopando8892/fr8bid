@@ -5,7 +5,7 @@
 import type { ConsultaTelefono, Telefono } from "../dominio/telefonos.js";
 import { MAX_TELEFONOS, revisarTelefonos } from "../servidor/telefonos.js";
 import { leerRespuesta } from "../servidor/lectura.js";
-import type { AdjuntoLectura, CanalLectura, Lectura, RutaLectura } from "../dominio/lectura.js";
+import { correoParaLectura, type AdjuntoLectura, type CanalLectura, type CorreoTraido, type Lectura, type RutaLectura } from "../dominio/lectura.js";
 import type { CorreoRevelado, PersonaApollo } from "../dominio/apollo.js";
 import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier } from "../dominio/contactos.js";
 import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit.js";
@@ -168,6 +168,18 @@ export class MesaApi {
     const r = await this.lector({ ...c, hoy: this.hoy() });
     if (r.status < 200 || r.status >= 300) throw new ErrorApi(r.status, String(r.body?.code || r.status), String(r.body?.error || "La IA no respondió"));
     return { ...r.body.lectura, recortado: Boolean(r.body.recortado) };
+  }
+
+  // Texto y PDF/imágenes de un correo del carrier, desde Gmail vía Rateware
+  // (solo lectura). Si Rateware aún no tiene la acción, el equipo pega el texto.
+  async traerCorreo(eventId: string, gmailMessageId: string): Promise<CorreoTraido> {
+    try {
+      return correoParaLectura(await this.rw({ action: "get_rfx_carrier_reply", event_id: eventId, gmail_message_id: gmailMessageId }));
+    } catch (e) {
+      if (e instanceof ErrorApi && e.status === 404) throw new ErrorApi(404, "CORREO_NO_ENCONTRADO", "Ese correo ya no está en Gmail o no es una respuesta a este evento. Pega el texto.");
+      if (e instanceof ErrorApi && e.status >= 500) throw new ErrorApi(e.status, "GMAIL_NO_RESPONDIO", "Gmail no respondió. Intenta de nuevo o pega el texto.");
+      throw new ErrorApi(e instanceof ErrorApi ? e.status : 400, "CORREO_NO_DISPONIBLE", "Rateware todavía no entrega el correo. Pega el texto o sube el archivo.");
+    }
   }
 
   private async pedirApollo(body: Record<string, unknown>) {

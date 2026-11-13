@@ -610,6 +610,23 @@ describe("ya respondió por otro canal", () => {
     s.fallas.fallarRespuestas = true;
     expect((await adm.detalle(id)).respuestas).toBeNull();
 
+    // Correos de la respuesta (13-nov-2026): Fr8Bid trae su texto y su PDF para leerlos con IA.
+    s.fallas.fallarRespuestas = false;
+    s.respuestasCarrier[0].messages = [{ gmail_message_id: "msg-a-2", at: "2026-10-23T12:00:00.000Z", from: "ops@a.mx" }];
+    s.correosCarrier.set("msg-a-2", { event_id: id, gmail_message_id: "msg-a-2", from: "ops@a.mx", at: "2026-10-23T12:00:00.000Z", subject: "RE: cotización", text: "Va nuestra tarifa en el PDF.", attachments: [{ filename: "tarifa.pdf", mime_type: "application/pdf", base64: "JVBERi0x" }, { filename: "tarifas.xlsx", mime_type: "application/vnd.ms-excel", base64: "AAAA" }], skipped_attachments: [{ filename: "otro.docx" }] });
+    expect((await adm.detalle(id)).respuestas?.[pa.id]?.correos).toEqual([{ id: "msg-a-2", en: "2026-10-23T12:00:00.000Z", de: "ops@a.mx" }]);
+    const traido = await adm.traerCorreo(id, "msg-a-2");
+    expect(traido).toMatchObject({ texto: "Va nuestra tarifa en el PDF.", de: "ops@a.mx", omitidos: ["otro.docx", "tarifas.xlsx"] });
+    expect(traido.adjuntos).toEqual([{ nombre: "tarifa.pdf", tipo: "application/pdf", base64: "JVBERi0x" }]);
+    await expect(adm.traerCorreo(id, "msg-de-otro")).rejects.toMatchObject({ code: "CORREO_NO_ENCONTRADO" });
+    // Leer un correo es solo lectura: también pasa contra Rateware real.
+    const correoReal = await manejar("rateware-api", { action: "get_rfx_carrier_reply", event_id: "e1", gmail_message_id: "m1" }, "Bearer x", { enviar: async () => ({ status: 200, body: { text: "x" }, headers: {} }), permitirEscrituras: false, real: true });
+    expect(correoReal.status).toBe(200);
+    // Si Rateware todavía no tiene la acción, se pide pegar el texto.
+    const sinAccion = new MesaApi(async () => ({ status: 400, body: { error: "Unsupported action" }, headers: {} }));
+    await expect(sinAccion.traerCorreo(id, "msg-a-2")).rejects.toMatchObject({ code: "CORREO_NO_DISPONIBLE" });
+    s.fallas.fallarRespuestas = true;
+
     // R2 está en rateware-prod (v716): la lectura pasa también contra Rateware real.
     const real = await manejar("rateware-api", { action: "list_rfx_carrier_replies", event_id: "e1" }, "Bearer x", { enviar: async () => ({ status: 200, body: { email_status: "checked", rows: [] }, headers: {} }), permitirEscrituras: false, real: true });
     expect(real.status).toBe(200);
