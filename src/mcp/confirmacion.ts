@@ -9,7 +9,7 @@ import { SignJWT, jwtVerify } from "jose";
 // Riesgo residual documentado (docs/mcp-escrituras.md): dos confirmar
 // simultáneos de la misma vista previa pueden pasar ambos la relectura; las
 // claves idempotentes de Rateware cubren intentos, campaña y tandas, pero no
-// una captura de oferta. Mejora posterior: tabla de nonces en Rateware.
+// una marca de respuesta. Mejora posterior: tabla de nonces en Rateware.
 
 export const EMISOR = "fr8bid-mcp";
 export const AUDIENCIA = "fr8bid-mcp-confirmar";

@@ -5,13 +5,12 @@ Estado: desarrollado y probado en local contra el simulado (evento `RFx-FR8BID-P
 
 ## Qué agrega
 
-El endpoint `/api/mcp` sigue con las 11 lecturas para todos los roles y, para Operador y Administrador, suma siete herramientas. `preparar_*` solo lee y devuelve una vista previa con `confirmacion_id` (anotación `readOnlyHint`); `confirmar` es la única que escribe (`destructiveHint`).
+El endpoint `/api/mcp` sigue con las 11 lecturas para todos los roles y, para Operador y Administrador, suma seis herramientas. `preparar_*` solo lee y devuelve una vista previa con `confirmacion_id` (anotación `readOnlyHint`); `confirmar` es la única que escribe (`destructiveHint`).
 
 | Herramienta | Rol | Acción del proxy al confirmar |
 | --- | --- | --- |
 | `preparar_intentos` | Operador | `draft_bid_room_carrier_message` por carrier (clave `claveIntento`). Queda **borrador en la Cola**; no se envía. Usa `intentosPorPreparar`/`textoIntento`: cadencia y exclusión de quien ya respondió. |
-| `preparar_ya_respondio` | Operador | `update_rfx_bid` sin tarifa (`marcarRespondio`): respondió o rechazó, canal y nota. Nunca sobre una participación con oferta. |
-| `preparar_captura` | Operador | `update_rfx_bid` con tarifa (`capturarOferta`). Rechaza si ya hay oferta (`bid_rate` no nulo o versión vigente): el MCP no modifica ofertas. Vista con all-in vs target (misma moneda). |
+| `preparar_ya_respondio` | Operador | `update_rfx_bid` sin tarifa (`marcarRespondio`): respondió o rechazó, canal y nota. Con `carrier_id` solo sus rutas pendientes, como la Mesa; las demás se muestran como excluidas. Nunca sobre una participación con oferta (el proxy también lo bloquea con `YA_OFERTO`). |
 | `preparar_revision` | Administrador | `record_rfx_invitation_wave_review` (`marcarRevisado`). |
 | `preparar_invitacion` fase `borradores` | Operador | `create_outreach_campaign` (si falta; `claveCampana`) + `generate_outreach_drafts`, solo carriers con «Revisado» vigente. |
 | `preparar_invitacion` fase `envio` | Administrador | `send_outreach_messages` de una tanda de hasta `MAXIMO_POR_LLAMADA` (100) con `expected_versions` y `operation_id` (`operacionTanda`). Evento abierto; el MCP no publica. |
@@ -21,6 +20,10 @@ El endpoint `/api/mcp` sigue con las 11 lecturas para todos los roles y, para Op
 Las vistas previas llevan destinatarios, canal (si queda en la Cola o se envía) y texto exacto, y quiénes quedan fuera y por qué. Los cuerpos se arman con los mismos métodos de `MesaApi` que usa la Mesa (sin ejecutarlos), salvo `app_origin`, fijo en `https://fr8bid.heymarksman.com`.
 
 Fuera del MCP (se hacen en la Mesa; las respuestas dan `mesa_url` = `https://fr8bid.heymarksman.com/eventos/<id>`): `award_rfx_lane_vendor`, `clear_rfx_award`, `closeout_awarded_rfx_to_rateware`, `generate_rfx_award_notices` y cualquier aviso de adjudicación. También quedan fuera crear eventos, importar rutas, preseleccionar, condiciones, marcar invitadas por otro canal, publicar y enviar intentos de seguimiento (se aprueban en la Mesa o la Cola). HDships (`EVENTOS_PROTEGIDOS`) no se lee ni se escribe. PRIMA (`RFx-1021-PRIMAPro`) nunca se cierra ni se rechaza: el plazo solo avanza y `preparar_ya_respondio` con `rechazo` se niega en PRIMA (supuesto conservador; se marca en la Mesa).
+
+## Captura de ofertas (pendiente)
+
+`preparar_captura` salió de esta entrega. La regla del propietario «nunca modificar ofertas» no se puede garantizar desde Fr8Bid: una oferta del carrier puede entrar entre la relectura y `update_rfx_bid`. Requiere una escritura condicional y atómica en Rateware («actualiza solo si `bid_rate` sigue en null») y se retoma en el hilo de captura con IA. Mientras tanto, el MCP no envía `update_rfx_bid` con tarifa (lo bloquean el transporte y `confirmar`) y las ofertas recibidas por otro canal se capturan en la página del evento.
 
 ## Camino de cada escritura
 
@@ -36,14 +39,14 @@ Fuera del MCP (se hacen en la Mesa; las respuestas dan `mesa_url` = `https://fr8
 - Los intentos fijan en `pre` el carrier y el correo de cada destinatario; si cambian, `confirmar` se niega. Si no se pudo saber quién respondió (falla o `PASO_EN_RATEWARE`), no se prepara ningún intento.
 - Reglas de cada acción: las mismas que la Mesa, en `src/dominio/acciones-mesa.ts` (usado por `Mesa.tsx` y por el MCP): estado del evento, estado de la participación, «Revisado», protegidos. Se aplican al preparar y otra vez al confirmar.
 - Tamaño: ningún `confirmacion_id` pasa de 60 000 caracteres. Si una selección de intentos o de «ya respondió» no cabe, `preparar_*` la parte en varias confirmaciones (`partes`, cada una con su vista previa y su «sí»), siempre por carrier completo (nunca separa las rutas de un carrier); si un solo carrier no cabe, o en las demás acciones, se pide acotar la selección.
-- Resultado: `aplicada` solo si Rateware reflejó todo lo aprobado (borradores generados por carrier, enviados = tanda, estado/plazo reflejados; en una captura, tarifa, moneda, vigencia, capacidad, tránsito y notas, releyendo el detalle si la respuesta no los trae). Si no hizo nada, `sin_efecto`; si hizo una parte, `parcial`; ambos con `omisiones` (id y motivo).
+- Resultado: `aplicada` solo si Rateware reflejó todo lo aprobado (borradores generados por carrier, enviados = tanda, estado/plazo reflejados; en «ya respondió», estado y nota, releyendo el detalle si la respuesta no los trae). Si no hizo nada, `sin_efecto`; si hizo una parte, `parcial`; ambos con `omisiones` (id y motivo).
 - Idempotencia que se conserva: `claveIntento` en intentos, `claveCampana` en la campaña, `operation_id` y `expected_versions` en tandas.
 - Sin `FR8BID_MCP_CONFIRM_SECRET` (o con menos de 32 caracteres): `preparar_*` y `confirmar` responden `CONFIRMACIONES_PENDIENTES` («confirmaciones pendientes de configurar», equivalente 503). Las 11 lecturas siguen.
 - Registro: cada `confirmar` escribe un `console.info` JSON (`tipo: fr8bid_mcp_confirmar`) con usuario, cliente, rol, acción, evento, `h`, `jti`, `frase_ok` (100 caracteres) y resultado (`aplicada`, `parcial`, `incierta`, `rechazada:<código>`). Sin tokens ni secretos.
 
 ### Riesgo residual (aceptado por el propietario)
 
-Dos `confirmar` simultáneos de la misma vista previa pueden pasar ambos la relectura antes de que el primero escriba. Intentos, campaña y tandas quedan cubiertos por sus claves idempotentes en Rateware; una **captura de oferta** o una marca de respuesta podrían registrarse dos veces (la captura agrega una versión más; no modifica ofertas). Mejora posterior: tabla de nonces (`jti`) en Rateware con inserción única antes de escribir. No se toca ahora.
+Dos `confirmar` simultáneos de la misma vista previa pueden pasar ambos la relectura antes de que el primero escriba. Intentos, campaña y tandas quedan cubiertos por sus claves idempotentes en Rateware; una marca de respuesta podría registrarse dos veces (mismo estado y nota). Mejora posterior: tabla de nonces (`jti`) en Rateware con inserción única antes de escribir. No se toca ahora.
 
 ## Lo que debe hacer Jose para activarlo
 
@@ -59,4 +62,4 @@ Nota: una tanda de 100 envíos depende del tiempo máximo de la función `/api/m
 
 ## Verificación
 
-`test/mcp-escrituras.test.ts` (simulado, `RFx-FR8BID-PRUEBA-01`): token (firma, vencimiento, otro usuario o cliente, `h` alterado, otro secreto), replay rechazado por la foto, roles (viewer y Operador donde toca, revalidado al confirmar), adjudicar/entregar inaccesibles, HDships y PRIMA, captura rechazada con oferta existente, plazo solo hacia adelante, cadencia que excluye a quien respondió, sin secreto con lecturas funcionando, `frase_ok` vacía o negativa, invitación en dos fases y anotaciones MCP.
+`test/mcp-escrituras.test.ts` (simulado, `RFx-FR8BID-PRUEBA-01`): token (firma, vencimiento, otro usuario o cliente, `h` alterado, otro secreto), replay rechazado por la foto, roles (viewer y Operador donde toca, revalidado al confirmar), adjudicar/entregar inaccesibles, HDships y PRIMA, plazo solo hacia adelante, cadencia que excluye a quien respondió, sin secreto con lecturas funcionando, `frase_ok` vacía o negativa, invitación en dos fases y anotaciones MCP.

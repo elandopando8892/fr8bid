@@ -6,7 +6,7 @@ import { esProtegido } from "../dominio/protegidos.js";
 import { hoyMexico, versionVigente } from "../dominio/recorrido.js";
 import { claveIntento, intentosPorPreparar, textoIntento } from "../dominio/seguimiento.js";
 import { audienciaInvitacion, estadoRevision, resumenOmisiones } from "../dominio/revision.js";
-import { bloqueoBorradoresInvitacion, bloqueoCaptura, bloqueoEnvioInvitacion, bloqueoIntentos, bloqueoPlazo, bloqueoRespondio, bloqueoRevision } from "../dominio/acciones-mesa.js";
+import { bloqueoBorradoresInvitacion, bloqueoEnvioInvitacion, bloqueoIntentos, bloqueoPlazo, bloqueoRespondio, bloqueoRevision } from "../dominio/acciones-mesa.js";
 import { seguimiento } from "../dominio/seguimiento.js";
 import { REMITENTE, campanaDelEvento, campanaFr8bid, elegirPlantilla } from "../dominio/invitacion.js";
 import { MAXIMO_POR_LLAMADA, leerResultado, requiereAtencion } from "../dominio/tandas.js";
@@ -43,8 +43,6 @@ export const herramientasEscritura = {
     schema: z.object({ event_id: id, participacion_ids: ids.optional() }).strict() },
   preparar_ya_respondio: { rol: "operator" as Rol, descripcion: `Marca que un carrier respondió o rechazó sin tarifa (lo saca de los intentos). Indica carrier_id o participacion_ids. Nunca sobre una participación con oferta. ${vista}`,
     schema: z.object({ event_id: id, carrier_id: id.optional(), participacion_ids: ids.optional(), respuesta: z.enum(["respondio", "rechazo"]), canal: z.enum(["email", "whatsapp", "phone"]), nota: z.string().trim().max(300).default("") }).strict() },
-  preparar_captura: { rol: "operator" as Rol, descripcion: `Captura una oferta all-in que llegó por otro canal en una participación SIN oferta (nunca modifica una existente). Muestra all-in vs target. ${vista}`,
-    schema: z.object({ event_id: id, participacion_id: id, tarifa: z.number().positive().max(1_000_000), moneda: z.enum(["USD", "MXN"]), vigencia: fecha.nullable().default(null), capacidad_semanal: z.number().int().min(0).max(10_000).nullable().default(null), dias_transito: z.number().int().min(0).max(90).nullable().default(null), canal: z.enum(["email", "phone", "whatsapp", "other"]), nota: z.string().trim().max(500).default("") }).strict() },
   preparar_revision: { rol: "admin" as Rol, descripcion: `Administrador: marca «Revisado» a un carrier preseleccionado para que pueda recibir invitación. No envía nada. ${vista}`,
     schema: z.object({ event_id: id, carrier_id: id }).strict() },
   preparar_invitacion: { rol: "operator" as Rol, descripcion: `Invitación por tandas. fase «borradores» (Operador): genera borradores solo para carriers con «Revisado» vigente, no envía. fase «envio» (Administrador): envía por Gmail una tanda de hasta ${MAXIMO_POR_LLAMADA} borradores con su versión exacta. ${vista}`,
@@ -58,7 +56,7 @@ export type NombreEscritura = keyof typeof herramientasEscritura;
 
 // Rol mínimo por acción firmada (se comprueba al preparar Y al confirmar).
 const ROL_ACCION: Record<string, Rol> = {
-  intentos: "operator", ya_respondio: "operator", captura: "operator", revision: "admin",
+  intentos: "operator", ya_respondio: "operator", revision: "admin",
   invitacion_borradores: "operator", invitacion_envio: "admin", cambio_evento: "admin"
 };
 const RANGO: Record<Rol, number> = { viewer: 0, operator: 1, admin: 2 };
@@ -80,15 +78,6 @@ export function esAfirmacion(frase: string): boolean {
   return n.split(" ").every(p => AFIRMATIVAS.has(p));
 }
 
-// Campos de una captura que se comparan con lo que Rateware guardó.
-export const CAMPOS_CAPTURA = ["currency", "valid_through", "weekly_capacity", "transit_days", "commercial_model", "notes"];
-function igualCampo(k: string, aprobado: unknown, guardado: unknown): boolean {
-  if (aprobado == null || guardado == null) return aprobado == null && guardado == null;
-  if (k === "valid_through") return String(aprobado).slice(0, 10) === String(guardado).slice(0, 10);
-  if (k === "weekly_capacity" || k === "transit_days") return Number(aprobado) === Number(guardado);
-  return String(aprobado).trim() === String(guardado).trim();
-}
-
 export interface Efecto { efecto: "completo" | "parcial" | "nulo"; omisiones: { id: string | null; motivo: string }[] }
 /** Compara la respuesta (ya válida) con lo aprobado: solo «completo» cuenta como hecho. */
 export function evaluarEfecto(body: Record<string, any>, b: any): Efecto {
@@ -100,19 +89,13 @@ export function evaluarEfecto(body: Record<string, any>, b: any): Efecto {
     case "draft_bid_room_carrier_message":
       return b.reused === true ? nulo(body.rfx_lane_vendor_id, "ya había un borrador con esa clave; no se creó otro") : completo;
     case "update_rfx_bid": {
+      // Desde el MCP solo «ya respondió»: sin tarifa. Se confirman estado Y nota.
       const p = body.patch || {};
-      if (p.bid_rate == null) return !("invitation_status" in row) ? sinVerificar(body.id) : row.invitation_status === p.invitation_status ? completo : nulo(body.id, "Rateware no reflejó el cambio de estado");
-      if (!("bid_rate" in row)) return sinVerificar(body.id);
-      if (Number(row.bid_rate) !== Number(p.bid_rate)) return nulo(body.id, "Rateware no reflejó la tarifa");
-      // Cada campo aprobado debe volver igual; uno ausente no se da por bueno.
-      const distintos: string[] = [], ausentes: string[] = [];
-      for (const k of CAMPOS_CAPTURA) {
-        if (!(k in p)) continue;
-        if (!(k in row)) { if (k !== "notes") ausentes.push(k); continue; }
-        if (!igualCampo(k, p[k], row[k])) distintos.push(k);
-      }
-      if (distintos.length) return { efecto: "parcial", omisiones: [{ id: String(body.id), motivo: `Rateware guardó distinto: ${distintos.join(", ")}. Verifica en la página del evento.` }] };
+      if (p.bid_rate != null) return nulo(body.id, "Capturar tarifas no está en el MCP");
+      const ausentes = ["invitation_status", "notes"].filter(k => k in p && !(k in row));
       if (ausentes.length) return { efecto: "parcial", omisiones: [{ id: String(body.id), motivo: `No confirmado (${ausentes.join(", ")}); verifica en la página del evento.` }] };
+      if (row.invitation_status !== p.invitation_status) return nulo(body.id, "Rateware no reflejó el cambio de estado");
+      if ("notes" in p && String(row.notes ?? "").trim() !== String(p.notes ?? "").trim()) return { efecto: "parcial", omisiones: [{ id: String(body.id), motivo: "Rateware guardó otra nota; verifica en la página del evento." }] };
       return completo;
     }
     case "record_rfx_invitation_wave_review":
@@ -188,6 +171,11 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
     const action = String(body.action);
     if (s !== "rateware-api" || !(LECTURAS[s].has(action) || ESCRITURAS_MCP.has(action))) throw new Rechazo("FUERA_DEL_MCP", "Acción fuera del MCP.", 403);
     for (const k of ["event_id", "rfx_event_id", "id"]) if (esProtegido(body[k])) throw new Rechazo("EVENTO_PROTEGIDO", "Evento protegido.", 404);
+    if (action === "update_rfx_bid") {
+      const patch = body.patch as Record<string, unknown> | undefined;
+      // El MCP no captura ni modifica ofertas: update_rfx_bid solo sin tarifa (respondió/rechazó).
+      if (!patch || patch.bid_rate != null || !["responded", "declined"].includes(String(patch.invitation_status))) throw new Rechazo("SIN_CAPTURA", "El MCP no captura ni modifica ofertas.", 403);
+    }
     if (action === "update_rfx_event") {
       const patch = body.patch as Record<string, unknown> | undefined;
       if (!patch || Object.keys(patch).join(",") !== "due_date") throw new Rechazo("SOLO_PLAZO", "Desde el chat solo se extiende el plazo.", 403);
@@ -254,12 +242,26 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       const d = await leer(a.event_id);
       const rechazo = a.respuesta === "rechazo";
       if (rechazo && esPrima(d.evento.folio)) throw new Rechazo("PRIMA_PROTEGIDO", "En PRIMA no se marca rechazo desde el chat; hazlo en la Mesa.", 403);
+      const segs = seguimiento(d, hoy());
       let elegidas = todas(d).filter(x => a.participacion_ids ? a.participacion_ids.includes(x.p.id) : x.p.carrierId === a.carrier_id);
       if (a.participacion_ids && elegidas.length !== new Set(a.participacion_ids).size) throw new Rechazo("AJENA", "Alguna participación no pertenece al evento.", 404);
       if (!elegidas.length) throw new Rechazo("AJENA", "Ese carrier no está en este evento.", 404);
+      // Con carrier_id, como la Mesa: solo sus rutas pendientes (sin oferta ni declinadas);
+      // las demás se muestran como excluidas con su motivo.
+      const excluidas: { carrier: string; ruta: string; estado: string; motivo: string }[] = [];
+      if (a.carrier_id) {
+        const sc = segs.find(x => x.carrierId === a.carrier_id);
+        if (!sc) throw new Rechazo("NO_INVITADA", "Ese carrier no está invitado en este evento.");
+        const bloqueo = bloqueoRespondio(d, sc);
+        if (bloqueo) throw new Rechazo("NO_PERMITIDO", bloqueo);
+        const pendientes = new Set(sc.pendientes.map(f => f.participacion.id));
+        for (const { p, r } of elegidas) if (!pendientes.has(p.id))
+          excluidas.push({ carrier: p.carrier, ruta: rutaTxt(r), estado: p.estado, motivo: conOferta(p) ? "ya ofertó" : p.estado === "declino" ? "declinó" : p.estado === "preseleccionada" ? "no invitado" : p.estado === "excluida" ? "excluida" : "no pendiente" });
+        elegidas = elegidas.filter(x => pendientes.has(x.p.id));
+        if (!elegidas.length) throw new Rechazo("NADA_POR_MARCAR", `${sc.carrier} no tiene rutas pendientes en este evento.`);
+      }
       // Mismas reglas que la Mesa («Ya respondió»): evento abierto, carrier esperando
       // respuesta y solo sus rutas pendientes (sin oferta, sin declinar).
-      const segs = seguimiento(d, hoy());
       for (const { p, r } of elegidas) {
         if (conOferta(p)) throw new Rechazo("YA_OFERTO", `${p.carrier} ya tiene oferta en ${rutaTxt(r)}; no se marca respuesta sin tarifa.`);
         if (p.estado === (rechazo ? "declino" : "respondio")) throw new Rechazo("YA_MARCADA", `${p.carrier} ya está marcado así en ${rutaTxt(r)}.`);
@@ -279,32 +281,8 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
         foto: elegidas.map(x => ({ p: x.p.id, estado: x.p.estado, versiones: x.p.versiones.length })),
         vista: { cambio: rechazo ? "Marcar que RECHAZÓ (declinó) sin tarifa" : "Marcar que RESPONDIÓ sin tarifa", canal_de_la_respuesta: a.canal,
           participaciones: elegidas.map(({ p, r }, i) => ({ carrier: p.carrier, ruta: rutaTxt(r), estado_actual: p.estado, nota_que_se_guarda: (cuerpos[i].patch as any).notes })),
+          ...(excluidas.length ? { excluidas } : {}),
           efecto: "Sale de los intentos de seguimiento. No envía nada ni toca ofertas." } };
-    },
-
-    async captura(a: { event_id: string; participacion_id: string; tarifa: number; moneda: string; vigencia: string | null; capacidad_semanal: number | null; dias_transito: number | null; canal: "email" | "phone" | "whatsapp" | "other"; nota: string }) {
-      const d = await leer(a.event_id);
-      const x = todas(d).find(x => x.p.id === a.participacion_id);
-      if (!x) throw new Rechazo("AJENA", "La participación no pertenece al evento.", 404);
-      const crudoDetalle = await crudo({ action: "list_rfx_detail", event_id: d.evento.id });
-      const fila = (crudoDetalle.lanes || []).flatMap((l: any) => l.invitations || []).find((v: any) => v.id === a.participacion_id);
-      const bidRate = fila?.bid_rate ?? null;
-      if (conOferta(x.p) || bidRate !== null) throw new Rechazo("YA_HAY_OFERTA", "Esta participación ya tiene oferta; el MCP no modifica ofertas. Revísala en la Mesa.");
-      // Mismas reglas que la Mesa (Captura del equipo) más «nunca sobre una participación excluida».
-      const bloqueo = bloqueoCaptura(d, x.p) ?? (x.p.estado === "excluida" ? "La participación está excluida." : null);
-      if (bloqueo) throw new Rechazo("NO_PERMITIDO", bloqueo);
-      const cuerpo = await cuerpoDe(m => m.capturarOferta({ eventId: d.evento.id, participacionId: x.p.id, tarifa: a.tarifa, moneda: a.moneda, vigencia: a.vigencia, capacidadSemanal: a.capacidad_semanal, diasTransito: a.dias_transito, canal: a.canal, notas: a.nota }));
-      const misma = x.r.objetivo !== null && x.r.moneda === a.moneda;
-      return { act: "captura", ev: d.evento.id, evento: resumenEvento(d),
-        arg: { ...a, event_id: d.evento.id },
-        cuerpos: [cuerpo],
-        foto: { p: x.p.id, estado: x.p.estado, versiones: x.p.versiones.length, bid_rate: bidRate },
-        vista: { ruta: rutaTxt(x.r), carrier: x.p.carrier, tarifa_all_in: a.tarifa, moneda: a.moneda, vigencia: a.vigencia, capacidad_semanal: a.capacidad_semanal, dias_transito: a.dias_transito,
-          canal: a.canal, nota_de_origen: (cuerpo.patch as any).source_note,
-          target: x.r.objetivo, moneda_target: x.r.moneda,
-          all_in_vs_target: misma ? a.tarifa - (x.r.objetivo as number) : null,
-          comparacion: misma ? (a.tarifa <= (x.r.objetivo as number) ? "en o bajo target" : "arriba del target") : "sin comparar: falta target o la moneda es distinta (no se convierten monedas)",
-          efecto: "Registra la oferta como capturada por el Operador. No adjudica ni avisa al carrier." } };
     },
 
     async revision(a: { event_id: string; carrier_id: string }) {
@@ -498,7 +476,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
         // Resultado contra lo aprobado: generados/omitidos, enviados/fallidos, estado reflejado.
         let respuesta = r.body;
         const patch = body.patch as Record<string, unknown> | undefined;
-        if (body.action === "update_rfx_bid" && patch?.bid_rate != null && ["bid_rate", ...CAMPOS_CAPTURA].some(k => k in patch && !(k in (respuesta.row ?? {})))) {
+        if (body.action === "update_rfx_bid" && ["invitation_status", "notes"].some(k => k in (patch ?? {}) && !(k in (respuesta.row ?? {})))) {
           try {
             const det = await crudo({ action: "list_rfx_detail", event_id: c.ev });
             const fila = (det.lanes || []).flatMap((l: any) => l.invitations || []).find((v: any) => v.id === body.id);
