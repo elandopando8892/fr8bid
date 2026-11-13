@@ -16,7 +16,7 @@ export function configuracion(env: NodeJS.ProcessEnv): ConfigAuth | null {
   } catch { return null; }
 }
 export function metadata(c: ConfigAuth) {
-  return { resource: c.resource, authorization_servers: [c.issuer], bearer_methods_supported: ["header"], resource_name: "Fr8Bid — consultas de solo lectura" };
+  return { resource: c.resource, authorization_servers: [c.issuer], bearer_methods_supported: ["header"], resource_name: "Fr8Bid — consultas y cambios con confirmación" };
 }
 export async function autenticar(authorization: string | undefined, c: ConfigAuth, jwks: JWTVerifyGetKey = createRemoteJWKSet(new URL(`${c.issuer}/.well-known/jwks.json`), { timeoutDuration: 5000 }), request: typeof fetch = fetch) {
   const token = /^Bearer ([A-Za-z0-9._~-]+)$/.exec(authorization || "")?.[1];
@@ -32,5 +32,5 @@ export async function autenticar(authorization: string | undefined, c: ConfigAut
   if (user.id !== payload.sub || !isTeamEmail(user.email)) throw new Error("Cuenta fuera del equipo");
   const roles: unknown[] = Array.isArray(user.app_metadata?.roles) ? user.app_metadata.roles : [];
   const rol: Rol = roles.includes("admin") ? "admin" : roles.includes("operator") ? "operator" : "viewer";
-  return { token, rol, userId: user.id as string };
+  return { token, rol, userId: user.id as string, clientId: payload.client_id };
 }
