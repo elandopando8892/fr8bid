@@ -7,7 +7,7 @@ description: Prepara el 2º/3º intento por correo a carriers que no han contest
 
 1. Usa el MCP **Fr8Bid** (OAuth), no el de Supabase. Ubica el evento con `eventos(buscar=...)`; si hay más de uno, pide elegir por folio o shipper.
 2. Llama `seguimiento_evento` para explicar quién no ha respondido y cuándo toca su siguiente intento. Si `respuestas_consultadas=false`, avisa que no se puede saber quién ya respondió y no prepares nada.
-3. Si alguien ya respondió por fuera (WhatsApp, llamada), primero usa **fr8bid-marcar-respondio** para sacarlo de la cadencia.
+3. Si alguien ya respondió por fuera (WhatsApp, llamada), márcalo primero en la página del evento («Ya respondió»): el MCP no lo hace. Da la liga y vuelve a preparar después.
 4. Llama `preparar_intentos(event_id)` (o con `participacion_ids` si el usuario acota). Fr8Bid ya excluye a quien respondió, ofertó, declinó o ya tiene borrador; no reconstruyas la cadencia.
 5. Muestra la vista previa: por carrier, correo, ruta, número de intento y el texto exacto; aclara que al confirmar **queda como borrador en la Cola** y que el envío lo aprueba el Administrador en la Mesa (Seguimiento) o en la Cola.
 6. Con el «sí» del usuario llama `confirmar(confirmacion_id, frase_ok)` y reporta `estado` y `pasos`.

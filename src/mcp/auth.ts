@@ -32,5 +32,5 @@ export async function autenticar(authorization: string | undefined, c: ConfigAut
   if (user.id !== payload.sub || !isTeamEmail(user.email)) throw new Error("Cuenta fuera del equipo");
   const roles: unknown[] = Array.isArray(user.app_metadata?.roles) ? user.app_metadata.roles : [];
   const rol: Rol = roles.includes("admin") ? "admin" : roles.includes("operator") ? "operator" : "viewer";
-  return { token, rol, userId: user.id as string, clientId: payload.client_id };
+  return { token, rol, userId: user.id as string, clientId: payload.client_id, email: String(user.email).toLowerCase() };
 }

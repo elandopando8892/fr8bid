@@ -6,7 +6,7 @@ import { transporteSimulado } from "../src/cliente/api";
 import { EVENTOS_PROTEGIDOS } from "../src/dominio/protegidos";
 import { hoyMexico } from "../src/dominio/recorrido";
 import { ESCRITURAS } from "../src/servidor/proxy";
-import { crearEscrituras, esAfirmacion, evaluarEfecto, FUERA_DEL_MCP, LIMITE_TOKEN, respuestaValida, type ContextoEscrituras } from "../src/mcp/escrituras";
+import { aprobadoresDe, crearEscrituras, esAfirmacion, evaluarEfecto, FUERA_DEL_MCP, LIMITE_TOKEN, respuestaValida, type ContextoEscrituras } from "../src/mcp/escrituras";
 import { ORG } from "../src/simulado/semilla";
 import { AUDIENCIA, EMISOR, secretoConfirmacion } from "../src/mcp/confirmacion";
 import { ESCRITURAS_MCP, transporteEscritura } from "../src/mcp/transporte";
@@ -51,7 +51,7 @@ function mcp(x: Escenario, usuario = "operador", rol: Rol = "operator", extra: P
   const logs: Record<string, unknown>[] = [];
   const t = transporteSimulado(x.sim, () => usuario);
   const ej = crearEscrituras(async (s, b) => { llamadas.push(b); return alterar(b, await t(s, b)); },
-    { userId: usuario, clientId: "cliente-1", rol, secreto: SECRETO, ahora: () => new Date(x.ahora()), registrar: e => logs.push(e), ...extra });
+    { userId: usuario, clientId: "cliente-1", email: `${usuario === "admin" ? "sales" : usuario}@heymarksman.com`, rol, secreto: SECRETO, ahora: () => new Date(x.ahora()), registrar: e => logs.push(e), ...extra });
   return { ej, llamadas, logs, escritas: () => llamadas.filter(b => ESCRITURAS_MCP.has(String(b.action))) };
 }
 const codigo = async (p: Promise<unknown>) => { try { await p; return "OK"; } catch (e: any) { return e.codigo ?? e.name ?? "ERROR"; } };
@@ -79,16 +79,16 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     expect(m.logs[0]).toMatchObject({ usuario: "operador", accion: "intentos", event_id: x.eventId, frase_ok: "sí, hazlo" });
   });
 
-  it("la cadencia excluye a quien ya respondió y no marca respuesta sobre una oferta", async () => {
+  it("la cadencia excluye a quien ya respondió; «ya respondió» no está en el MCP", async () => {
     const x = await escenario();
     const m = mcp(x);
-    const v = await m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.B.id, respuesta: "respondio", canal: "whatsapp", nota: "Pide más volumen" });
-    expect(v.vista_previa.participaciones[0].nota_que_se_guarda).toBe("WhatsApp: Pide más volumen");
-    expect((await m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
+    // B respondió (marcado en la página del evento): la cadencia ya no lo incluye.
+    await x.sim.llamar("rateware-api", { action: "update_rfx_bid", id: x.p.B, patch: { invitation_status: "responded", notes: "WhatsApp: Pide más volumen" } }, "Bearer sim:operador");
     const i = await m.ej("preparar_intentos", { event_id: x.eventId });
     expect(i.vista_previa.destinatarios.map((d: any) => d.participacion_id)).toEqual([x.p.C]);
-    expect(await codigo(m.ej("preparar_ya_respondio", { event_id: x.eventId, participacion_ids: [x.p.A], respuesta: "respondio", canal: "email" }))).toBe("YA_OFERTO");
-    expect(await codigo(m.ej("preparar_ya_respondio", { event_id: x.eventId, participacion_ids: [x.p.B], respuesta: "respondio", canal: "email" }))).toBe("YA_MARCADA");
+    // «Ya respondió» quedó fuera del MCP (update_rfx_bid sin tarifa pone bid_rate en null).
+    expect(await codigo(m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.C.id, respuesta: "respondio", canal: "email" }))).toBe("FUERA_DEL_MCP");
+    expect(m.escritas()).toEqual([]);
   });
 
   it("token: firma, vencimiento, otro usuario o cliente y h alterado se rechazan sin escribir", async () => {
@@ -193,13 +193,13 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     expect([...sinPaso.escritas(), ...falla.escritas()]).toEqual([]);
   });
 
-  it("«ya respondió» y «Revisado» con las reglas de la Mesa, revalidadas al confirmar", async () => {
+  it("intentos y «Revisado» con las reglas de la Mesa, revalidadas al confirmar", async () => {
     const x = await escenario();
     const m = mcp(x);
-    const v = await m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.C.id, respuesta: "respondio", canal: "email" });
+    const v = await m.ej("preparar_intentos", { event_id: x.eventId });
     x.sim.events.find(e => e.id === x.eventId)!.due_date = "2026-10-01"; // cerrado a ofertas
     expect(await codigo(m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" }))).toBe("YA_APLICADO_O_CAMBIO");
-    expect(await codigo(m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.C.id, respuesta: "respondio", canal: "email" }))).toBe("NO_PERMITIDO");
+    expect(await codigo(m.ej("preparar_intentos", { event_id: x.eventId }))).toBe("NO_PERMITIDO");
     const y = await escenario({ invitar: false, revisados: ["A"] });
     const admin = mcp(y, "admin", "admin");
     expect(await codigo(admin.ej("preparar_revision", { event_id: y.eventId, carrier_id: y.carriers.A.id }))).toBe("YA_REVISADO");
@@ -238,14 +238,25 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     expect(await codigo(mm.ej("confirmar", { confirmacion_id: "x".repeat(LIMITE_TOKEN + 1), frase_ok: "sí" }))).toBe("ZodError");
   }, 60000);
 
-  it("solo es «aplicada» si Rateware hizo todo lo aprobado: vacío = sin_efecto, incompleto = parcial con omisiones", async () => {
+  it("solo es «aplicada» si Rateware hizo todo lo aprobado; la campaña creada cuenta aunque falten borradores", async () => {
     const y = await escenario({ invitar: false });
     const vacio = mcp(y, "operador", "operator", {}, (b, r) => b.action === "generate_outreach_drafts" ? { ...r, body: { generated: 0, rows: [], skipped_rows: b.reviewed_vendor_ids.map((v: string) => ({ vendor_id: v, reason: "not_reviewed" })) } } : r);
     const b = await vacio.ej("preparar_invitacion", { event_id: y.eventId, fase: "borradores" });
     const rb = await vacio.ej("confirmar", { confirmacion_id: b.confirmacion_id, frase_ok: "sí" });
-    expect(rb.estado).toBe("sin_efecto");
-    expect(rb.omisiones).toHaveLength(3);
-    expect(rb.omisiones[0].motivo).toBe("not_reviewed");
+    expect(rb.estado).toBe("parcial");
+    expect(rb.omisiones[0].motivo).toMatch(/^Campaña creada \(.+\), borradores no generados\.$/);
+    expect(rb.omisiones.slice(1).map((o: any) => o.motivo)).toEqual(["not_reviewed", "not_reviewed", "not_reviewed"]);
+    // Falla al generar después de crear la campaña: parcial, no «rechazada».
+    const z = await escenario({ invitar: false });
+    const falla = mcp(z, "operador", "operator", {}, (b, r) => b.action === "generate_outreach_drafts" ? { status: 409, body: { code: "CONFLICTO", error: "x" }, headers: {} } : r);
+    const fb = await falla.ej("confirmar", { confirmacion_id: (await falla.ej("preparar_invitacion", { event_id: z.eventId, fase: "borradores" })).confirmacion_id, frase_ok: "sí" });
+    expect(fb).toMatchObject({ estado: "parcial", omisiones: [{ motivo: expect.stringMatching(/Campaña creada/) }] });
+    // Tanda que no envía ninguno: sin_efecto.
+    const w = await escenario({ invitar: false });
+    await mcp(w).ej("confirmar", { confirmacion_id: (await mcp(w).ej("preparar_invitacion", { event_id: w.eventId, fase: "borradores" })).confirmacion_id, frase_ok: "sí" });
+    const nada = mcp(w, "admin", "admin", {}, (b, r) => b.action === "send_outreach_messages" ? { ...r, body: { sent: 0, failed: 2, skipped: 0, delivery_unknown: 0, failures: b.ids.map((id: string) => ({ id, reason: "gmail_error" })), skipped_rows: [] } } : r);
+    const sn = await nada.ej("confirmar", { confirmacion_id: (await nada.ej("preparar_invitacion", { event_id: w.eventId, fase: "envio" })).confirmacion_id, frase_ok: "sí" });
+    expect(sn.estado).toBe("sin_efecto");
     // El simulado sí generó los borradores (solo se alteró la respuesta): se usan para la tanda.
     const parcial = mcp(y, "admin", "admin", {}, (b, r) => b.action === "send_outreach_messages" ? { ...r, body: { sent: 1, failed: 0, skipped: 1, delivery_unknown: 0, failures: [], skipped_rows: [{ id: b.ids[1], reason: "daily_cap" }] } } : r);
     const e = await parcial.ej("preparar_invitacion", { event_id: y.eventId, fase: "envio" });
@@ -257,54 +268,26 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     expect(evaluarEfecto({ action: "draft_bid_room_carrier_message", rfx_lane_vendor_id: "p" }, { reused: true, outreach_message: { id: "m" } }).efecto).toBe("nulo");
   });
 
-  it("la partición nunca separa las rutas de un mismo carrier y todas las partes se aplican", async () => {
-    const base = crearSimulado();
-    let ahora = ENVIO;
-    base.sim.hoy = () => hoyMexico(new Date(ahora));
-    base.sim.ahora = () => ahora;
-    const { sim, carriers } = base;
-    const op = (body: Record<string, unknown>) => sim.llamar("rateware-api", body, "Bearer sim:operador").then(r => r.body);
-    const { row: event } = await op({ action: "create_rfx_event", name: "PRUEBA CONTROLADA · varias rutas", customer: "Shipper de Prueba", due_date: "2026-11-20", rfx_id: "RFx-FR8BID-PRUEBA-01" });
-    const destinos = Array.from({ length: 8 }, (_, i) => `Destino ${i}`);
-    const { rows: lanes } = await op({ action: "import_rfx_lanes", event_id: event.id, rows: destinos.map(d => ({ origin_city: "Monterrey", origin_state: "NL", origin_country: "MX", destination_city: d, destination_state: "TX", destination_country: "US", equipment: "Dry Van", weekly_volume: 1, target_rate: 1700, currency: "USD" })) });
-    const ids = Object.values(carriers).map(c => c.id);
-    for (const l of lanes) await op({ action: "shortlist_rfx_lane_vendors", lane_id: l.id, vendor_ids: ids });
-    await op({ action: "update_rfx_event", event_id: event.id, patch: { status: "open" } });
-    for (const v of ids) sim.revisar(event.id, v);
-    const { rows: m } = await op({ action: "generate_outreach_drafts", event_id: event.id, reviewed_vendor_ids: ids });
-    await sim.llamar("rateware-api", { action: "send_outreach_messages", ids: m.map((x: any) => x.id), expected_versions: m.map((x: any) => ({ id: x.id, updated_at: x.updated_at })), confirmed: true, confirmation_action: "send_outreach_messages" }, "Bearer sim:admin");
-    ahora = DESPUES;
-    const participaciones = sim.laneVendors.filter(lv => lv.rfx_event_id === event.id);
-    expect(participaciones).toHaveLength(24);
-    // El simulado marca invitada solo la ruta del mensaje; las demás, como «invitadas por otro canal».
-    const pendientesDeInvitar = participaciones.filter(lv => lv.invitation_status === "drafted").map(lv => lv.id);
-    if (pendientesDeInvitar.length) await op({ action: "invite_rfx_lane_vendors", event_id: event.id, ids: pendientesDeInvitar, confirmed: true, confirmation_action: "invite_rfx_lane_vendors" });
-    const x = { sim, carriers, eventId: event.id, p: {}, reloj: (iso: string) => { ahora = iso; }, ahora: () => ahora } as unknown as Escenario;
-    const mm = mcp(x, "operador", "operator", { limiteToken: 12000 });
-    const v = await mm.ej("preparar_ya_respondio", { event_id: event.id, participacion_ids: participaciones.map(p => p.id), respuesta: "respondio", canal: "whatsapp", nota: "x".repeat(300) });
-    expect(v.partes.length).toBeGreaterThanOrEqual(2);
-    const carrierDe = new Map(participaciones.map(p => [p.id, p.vendor_id]));
-    const vistos = new Map<string, number>();
-    v.partes.forEach((p: any, i: number) => {
-      expect(p.confirmacion_id.length).toBeLessThanOrEqual(12000);
-      for (const pid of (decodeJwt(p.confirmacion_id) as any).arg.participacion_ids) {
-        const c = carrierDe.get(pid)!;
-        expect(vistos.get(c) ?? i).toBe(i); // un carrier nunca aparece en dos partes
-        vistos.set(c, i);
-      }
-    });
+  it("la partición con un límite menor: partes por carrier completo, todas se aplican; un carrier que no cabe solo da error", async () => {
+    const x = await escenario();
+    const completo = await mcp(x).ej("preparar_intentos", { event_id: x.eventId });
+    const limite = completo.confirmacion_id.length - 200;
+    const mm = mcp(x, "operador", "operator", { limiteToken: limite });
+    const v = await mm.ej("preparar_intentos", { event_id: x.eventId });
+    expect(v.partes).toHaveLength(2);
+    const vistos = v.partes.map((p: any) => (decodeJwt(p.confirmacion_id) as any).arg.participacion_ids);
+    expect(vistos.flat().sort()).toEqual([x.p.B, x.p.C].sort());
+    expect(v.partes.every((p: any) => p.confirmacion_id.length <= limite)).toBe(true);
     for (const p of v.partes) expect((await mm.ej("confirmar", { confirmacion_id: p.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
-    expect(mm.escritas()).toHaveLength(24);
-    // Un solo carrier que por sí solo no cabe: error claro, nada escrito.
+    expect(mm.escritas()).toHaveLength(2);
     const y = await escenario();
-    const chico = mcp(y, "operador", "operator", { limiteToken: 1500 });
+    const chico = mcp(y, "operador", "operator", { limiteToken: 1000 });
     let error: any;
-    try { await chico.ej("preparar_ya_respondio", { event_id: y.eventId, carrier_id: y.carriers.C.id, respuesta: "respondio", canal: "email", nota: "x".repeat(300) }); } catch (e) { error = e; }
+    try { await chico.ej("preparar_intentos", { event_id: y.eventId, participacion_ids: [y.p.C] }); } catch (e) { error = e; }
     expect(error).toMatchObject({ codigo: "DEMASIADO_GRANDE" });
     expect(error.message).toContain("Carrier Prueba C");
     expect(chico.escritas()).toEqual([]);
   });
-
   it("captura de ofertas fuera de esta entrega: ni herramienta ni update_rfx_bid con tarifa", async () => {
     const x = await escenario();
     const m = mcp(x);
@@ -318,43 +301,28 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     expect(m.escritas()).toEqual([]);
   });
 
-  it("«ya respondió» por carrier toma solo sus rutas pendientes y muestra las excluidas", async () => {
+  it("envíos reales y plazo: otro Administrador prepara pero solo el propietario confirma", async () => {
+    expect(aprobadoresDe({})).toEqual(["sales@heymarksman.com"]);
+    expect(aprobadoresDe({ FR8BID_MCP_APROBADORES: " Jose@HeyMarksman.com, sales@heymarksman.com " })).toEqual(["jose@heymarksman.com", "sales@heymarksman.com"]);
     const x = await escenario();
-    const sim = x.sim;
-    const op = (body: Record<string, unknown>) => sim.llamar("rateware-api", body, "Bearer sim:operador").then(r => r.body);
-    const ev = sim.events.find(e => e.id === x.eventId)!;
-    // Dos rutas más para B: una sin invitar, en otra declina; la original queda pendiente.
-    // (Con una oferta en cualquier ruta el carrier ya no espera respuesta: la Mesa tampoco lo deja marcar.)
-    const { rows: lanes } = await op({ action: "import_rfx_lanes", event_id: x.eventId, rows: ["Austin", "Houston"].map(c => ({ origin_city: "Monterrey", origin_state: "NL", origin_country: "MX", destination_city: c, destination_state: "TX", destination_country: "US", equipment: "Dry Van", weekly_volume: 1, target_rate: 1700, currency: "USD" })) });
-    const nuevas: string[] = [];
-    for (const l of lanes) nuevas.push(...(await op({ action: "shortlist_rfx_lane_vendors", lane_id: l.id, vendor_ids: [x.carriers.B.id] })).rows.map((r: any) => r.id));
-    await op({ action: "invite_rfx_lane_vendors", event_id: x.eventId, ids: [nuevas[1]], confirmed: true, confirmation_action: "invite_rfx_lane_vendors" });
-    sim.laneVendors.find(lv => lv.id === nuevas[1])!.invitation_status = "declined";
-    expect(ev.id).toBe(x.eventId);
-    const m = mcp(x);
-    const v = await m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.B.id, respuesta: "respondio", canal: "phone", nota: "Sin unidades esta semana" });
-    expect(v.vista_previa.participaciones).toHaveLength(1);
-    expect(v.vista_previa.excluidas.map((e: any) => e.motivo).sort()).toEqual(["declinó", "no invitado"]);
-    expect((decodeJwt(v.confirmacion_id) as any).arg.participacion_ids).toEqual([x.p.B]);
-    expect((await m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
-    expect(m.escritas().map(b => b.id)).toEqual([x.p.B]);
-  });
-
-  it("«ya respondió» confirma estado Y nota; sin evidencia o con otra nota queda parcial", async () => {
-    const preparar = async (alterar: Alterar) => {
-      const x = await escenario();
-      const m = mcp(x, "operador", "operator", {}, alterar);
-      const v = await m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.C.id, respuesta: "respondio", canal: "email", nota: "Pregunta por volumen" });
-      return { x, m, r: await m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" }) };
-    };
-    const sinNotaNiRelectura = await preparar((b, r) => b.action === "update_rfx_bid" && r.status === 200 ? { ...r, body: { row: { id: b.id, invitation_status: "responded" } } }
-      : b.action === "list_rfx_detail" && r.status === 200 && r.body?.lanes ? { ...r, body: { ...r.body, lanes: r.body.lanes.map((l: any) => ({ ...l, invitations: l.invitations.map(({ notes: _n, ...i }: any) => i) })) } } : r);
-    expect(sinNotaNiRelectura.r).toMatchObject({ estado: "parcial", omisiones: [{ motivo: expect.stringMatching(/No confirmado \(notes\)/) }] });
-    const otraNota = await preparar((b, r) => b.action === "update_rfx_bid" && r.status === 200 ? { ...r, body: { row: { ...r.body.row, notes: "Otra cosa" } } } : r);
-    expect(otraNota.r).toMatchObject({ estado: "parcial", omisiones: [{ motivo: expect.stringMatching(/otra nota/) }] });
-    const releida = await preparar((b, r) => b.action === "update_rfx_bid" && r.status === 200 ? { ...r, body: { row: { id: b.id } } } : r);
-    expect(releida.r.estado).toBe("aplicada"); // estado y nota confirmados releyendo list_rfx_detail
-    expect(evaluarEfecto({ action: "update_rfx_bid", id: "p", patch: { invitation_status: "responded", notes: "Correo: x" } }, { row: { invitation_status: "declined", notes: "Correo: x" } }).efecto).toBe("nulo");
+    const otro = mcp(x, "admin", "admin", { email: "otro-admin@heymarksman.com" });
+    const v = await otro.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-11-27" });
+    let error: any;
+    try { await otro.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" }); } catch (e) { error = e; }
+    expect(error).toMatchObject({ codigo: "SOLO_PROPIETARIO" });
+    expect(error.message).toMatch(/solo el propietario puede confirmar esto/i);
+    expect(otro.escritas()).toEqual([]);
+    // Con la lista explícita, ese mismo correo sí confirma; sin variable, el propietario por omisión.
+    const permitido = mcp(x, "admin", "admin", { email: "otro-admin@heymarksman.com", aprobadores: ["otro-admin@heymarksman.com"] });
+    expect((await permitido.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
+    const y = await escenario({ invitar: false });
+    await mcp(y).ej("confirmar", { confirmacion_id: (await mcp(y).ej("preparar_invitacion", { event_id: y.eventId, fase: "borradores" })).confirmacion_id, frase_ok: "sí" });
+    const e = await mcp(y, "admin", "admin", { email: "otro-admin@heymarksman.com" }).ej("preparar_invitacion", { event_id: y.eventId, fase: "envio" });
+    expect(await codigo(mcp(y, "admin", "admin", { email: "otro-admin@heymarksman.com" }).ej("confirmar", { confirmacion_id: e.confirmacion_id, frase_ok: "sí" }))).toBe("SOLO_PROPIETARIO");
+    expect((await mcp(y, "admin", "admin").ej("confirmar", { confirmacion_id: e.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
+    // Borradores y «Revisado» siguen con la regla de rol: un Operador confirma borradores.
+    const z = await escenario({ invitar: false });
+    expect((await mcp(z).ej("confirmar", { confirmacion_id: (await mcp(z).ej("preparar_invitacion", { event_id: z.eventId, fase: "borradores" })).confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
   });
 
   it("si la plantilla cambia entre preparar y confirmar, no se generan borradores", async () => {
@@ -415,7 +383,6 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     x.sim.events.find(e => e.id === x.eventId)!.rfx_id = "RFx-1021-PRIMAPro";
     expect(await codigo(m.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-10-28" }))).toBe("FECHA_PASADA");
     expect(await codigo(m.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-12-01", status: "closed" }))).toBe("ZodError");
-    expect(await codigo(m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.C.id, respuesta: "rechazo", canal: "email" }))).toBe("PRIMA_PROTEGIDO");
     expect(m.escritas()).toEqual([]);
   });
 
@@ -488,7 +455,7 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     const lista = async (rol: Rol) => ({ tools: (await rpc(rol, "tools/list")).result.tools as any[], call: (method: string, params?: object) => rpc(rol, method, params) });
     expect((await lista("viewer")).tools).toHaveLength(11);
     const { tools, call } = await lista("operator");
-    expect(tools).toHaveLength(17);
+    expect(tools).toHaveLength(16);
     expect(tools.find(t => t.name === "confirmar").annotations).toMatchObject({ destructiveHint: true, readOnlyHint: false });
     expect(tools.filter(t => t.name.startsWith("preparar_")).every(t => t.annotations.readOnlyHint && !t.annotations.destructiveHint)).toBe(true);
     const r = await call("tools/call", { name: "preparar_intentos", arguments: { event_id: "11111111-1111-4111-8111-111111111111" } });

@@ -14,10 +14,11 @@ export function transporteApi(resource: string, token: string, request: typeof f
 // Lista cerrada de escrituras del MCP (Entrega 2): subconjunto de ESCRITURAS del
 // proxy. Fuera a propósito: adjudicar, limpiar adjudicación, entregar a Rateware y
 // avisos de adjudicación (se hacen en la Mesa), además de crear eventos, importar
-// rutas, preseleccionar, condiciones y marcar invitadas por otro canal.
+// rutas, preseleccionar, condiciones y marcar invitadas por otro canal. update_rfx_bid
+// (capturar oferta o «ya respondió») también queda fuera: necesita una escritura
+// condicional atómica en Rateware (bid_rate IS NULL).
 export const ESCRITURAS_MCP = new Set([
   "draft_bid_room_carrier_message",
-  "update_rfx_bid", // solo sin tarifa («ya respondió»); capturar ofertas queda pendiente
   "record_rfx_invitation_wave_review",
   "create_outreach_campaign",
   "generate_outreach_drafts",
@@ -35,9 +36,6 @@ export function transporteEscritura(resource: string, token: string, request: ty
   return async (servicio, body) => {
     const action = String(body.action);
     if (servicio !== "rateware-api" || !(LECTURAS[servicio].has(action) || ESCRITURAS_MCP.has(action))) throw new Error("Acción fuera del MCP");
-    // update_rfx_bid solo para «ya respondió» (sin tarifa): el MCP no captura ni modifica ofertas.
-    const patch = body.patch as Record<string, unknown> | undefined;
-    if (action === "update_rfx_bid" && (!patch || patch.bid_rate != null)) throw new Error("El MCP no captura ofertas");
     let response: Response;
     try {
       response = await request(endpoint, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify(body), redirect: "error", cache: "no-store", signal: AbortSignal.timeout(28000) });
