@@ -394,11 +394,22 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     // Ninguno con cuerpo: no se prepara nada que confirmar.
     const ninguno = await preparar(m => ({ ...m, text_body: "  ", html_body: "<style>x{}</style>" }));
     expect(ninguno.v).toMatchObject({ codigo: "NADA_POR_ENVIAR" });
-    expect(ninguno.v.message).toMatch(/sin asunto o sin cuerpo visible/);
-    // HTML largo: truncado con el largo total.
+    expect(ninguno.v.message).toMatch(/sin asunto, sin cuerpo visible/);
+    // HTML largo: truncado con el largo total, y no enviable (no se mostró completo).
     const largo = contenidoCorreo({ subject: "S", html_body: `<p>${"x".repeat(LIMITE_VISTA + 500)}</p>` });
     expect(largo.html).toMatchObject({ truncado: true, largo_total: LIMITE_VISTA + 500 });
+    expect(largo.visible).toBe(false);
+    expect(contenidoCorreo({ subject: "S", text_body: "x".repeat(LIMITE_VISTA + 1) }).visible).toBe(false);
+    expect(contenidoCorreo({ subject: "S", text_body: "x".repeat(LIMITE_VISTA) }).visible).toBe(true);
+    // Un largo en la tanda queda fuera y no impide preparar a los demás.
+    const conLargo = await preparar((m, i) => i === 0 ? { ...m, text_body: "x".repeat(LIMITE_VISTA + 1) } : m);
+    expect(JSON.stringify(conLargo.v)).toMatch(/demasiado largo/);
     expect(textoDeHtml("<p>a</p><p>b</p>")).toBe("a\nb");
+    // Entidades inválidas no lanzan: se sustituyen y no bloquean la preparación.
+    expect(() => textoDeHtml("<p>a &#1114112; b &#xD800; c</p>")).not.toThrow();
+    expect(textoDeHtml("<p>a &#1114112; &#65; &#x42;</p>")).toBe("a � A B");
+    const conEntidad = await preparar((m, i) => i === 0 ? { ...m, html_body: "<p>&#1114112;</p>" } : m);
+    expect(conEntidad.v.codigo).not.toBe("ERROR");
   });
 
   it("vista previa de borradores: la plantilla real muestra asunto y html_body", async () => {

@@ -81,6 +81,8 @@ export function esAfirmacion(frase: string): boolean {
 // con su largo total. Si texto y HTML dicen cosas distintas se muestran ambas variantes.
 export const LIMITE_VISTA = 4000;
 const ENTIDADES: Record<string, string> = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'", "#39": "'" };
+// Entidad numérica fuera de Unicode o sustituto: carácter de reemplazo, nunca una excepción.
+const caracter = (n: number) => Number.isInteger(n) && n >= 0 && n <= 0x10ffff && !(n >= 0xd800 && n <= 0xdfff) ? String.fromCodePoint(n) : "�";
 export function textoDeHtml(html: string): string {
   return html
     .replace(/<!--[\s\S]*?-->/g, " ")
@@ -89,7 +91,7 @@ export function textoDeHtml(html: string): string {
     .replace(/<\/(p|div|li|tr|h[1-6]|table|section)\s*>/gi, "\n")
     .replace(/<a\b[^>]*href\s*=\s*["']([^"']*)["'][^>]*>([\s\S]*?)<\/a\s*>/gi, (_m, href, t) => `${t} (${href})`)
     .replace(/<[^>]*>/g, " ")
-    .replace(/&(#\d+|#x[0-9a-f]+|[a-z]+|#39);/gi, (m, e: string) => ENTIDADES[e.toLowerCase()] ?? (e[0] === "#" ? String.fromCodePoint(e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : m))
+    .replace(/&(#\d+|#x[0-9a-f]+|[a-z]+|#39);/gi, (m, e: string) => ENTIDADES[e.toLowerCase()] ?? (e[0] === "#" ? caracter(e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : m))
     .replace(/[ \t\f\v\u00a0]+/g, " ")
     .replace(/ *\n[ \n]*/g, "\n")
     .trim();
@@ -102,7 +104,9 @@ export function contenidoCorreo(m: { subject?: unknown; text_body?: unknown; htm
   const texto = String(m.text_body ?? "").trim();
   const html = typeof m.html_body === "string" && m.html_body.trim() ? textoDeHtml(m.html_body) : "";
   return { asunto, texto: texto ? recortar(texto) : null, html: html ? recortar(html) : null,
-    distintas: Boolean(texto && html && plano(texto) !== plano(html)), visible: Boolean(asunto && (texto || html)) };
+    distintas: Boolean(texto && html && plano(texto) !== plano(html)),
+    // Solo se puede aprobar lo que se mostró completo: un cuerpo truncado no es enviable desde el chat.
+    visible: Boolean(asunto && (texto || html)) && texto.length <= LIMITE_VISTA && html.length <= LIMITE_VISTA };
 }
 function vistaPlantilla(t: Record<string, any>) {
   const c = contenidoCorreo({ subject: t.subject, text_body: t.body ?? t.text_body, html_body: t.html_body });
@@ -331,7 +335,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       const porEnviar = enviables.filter(x => revisada(x) && visible(x)).sort((x, y) => x.id.localeCompare(y.id));
       const tanda = porEnviar.slice(0, MAXIMO_POR_LLAMADA);
       if (!tanda.length) throw new Rechazo("NADA_POR_ENVIAR", sinCuerpo.length
-        ? `${sinCuerpo.length} borrador(es) sin asunto o sin cuerpo visible: no se puede mostrar el texto exacto. Revísalos en la Cola de Rateware.`
+        ? `${sinCuerpo.length} borrador(es) sin asunto, sin cuerpo visible o demasiado largos para mostrarse completos: no se puede mostrar el texto exacto. Revísalos en la Cola de Rateware.`
         : "No hay borradores de invitación listos de carriers revisados.");
       const cuerpo = await cuerpoDe(m => m.enviarAvisos(d.evento.id, tanda));
       return { act: "invitacion_envio", ev: d.evento.id, evento: resumenEvento(d), arg: { event_id: d.evento.id, fase: "envio" }, cuerpos: [cuerpo],
@@ -342,7 +346,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
           quedan_fuera: [
             ...enviables.filter(x => !revisada(x)).map(x => ({ carrier: carrierDe(x)?.carrier ?? null, motivo: carrierDe(x) ? `sin «Revisado» vigente (${estadoRevision(d, carrierDe(x)!.carrierId)})` : "participación no encontrada" })),
             ...porEnviar.slice(MAXIMO_POR_LLAMADA).map(x => ({ carrier: carrierDe(x)?.carrier ?? null, motivo: "siguiente tanda" })),
-            ...sinCuerpo.map(x => ({ carrier: carrierDe(x)?.carrier ?? null, motivo: "sin asunto o sin cuerpo visible: no se puede mostrar el texto exacto" })),
+            ...sinCuerpo.map(x => ({ carrier: carrierDe(x)?.carrier ?? null, motivo: "sin asunto, sin cuerpo visible o demasiado largo para mostrarse completo: no se puede mostrar el texto exacto" })),
             ...enProceso.map(x => ({ carrier: carrierDe(x)?.carrier ?? null, motivo: estadoCrudo.get(x.id) === "sending" ? "en proceso (Rateware lo está enviando)" : "en proceso o estado no confirmado" }))
           ],
           ya_enviadas_u_otras: invitaciones.length - enviables.length } };
