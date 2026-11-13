@@ -28,10 +28,10 @@ const CAMPANA_NUEVA = "$campana_creada";
 // confirmar acepta hasta este largo de confirmacion_id; preparar_* nunca firma uno mayor.
 export const LIMITE_TOKEN = 60000;
 const PARTIBLES = new Set(["intentos"]);
-// AGENTS.md regla 6: aprobación del PROPIETARIO por acción. Enviar una tanda solo lo confirma un
-// correo de FR8BID_MCP_APROBADORES, sobre una vista previa que él mismo preparó (el token es de su sesión).
+// AGENTS.md regla 6: aprobación del PROPIETARIO por acción. Toda escritura real (intentos,
+// «Revisado», campaña y borradores, tanda) solo la confirma un correo de FR8BID_MCP_APROBADORES,
+// sobre una vista previa que él mismo preparó (el token es de su sesión). Los demás solo preparan.
 export const APROBADORES_POR_OMISION = ["sales@heymarksman.com"];
-const SOLO_PROPIETARIO = new Set(["invitacion_envio"]);
 export function aprobadoresDe(env: NodeJS.ProcessEnv): string[] {
   const lista = String(env.FR8BID_MCP_APROBADORES || "").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
   return lista.length ? lista : APROBADORES_POR_OMISION;
@@ -202,7 +202,15 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       const bloqueo = bloqueoIntentos(d);
       if (bloqueo) throw new Rechazo(d.respuestas == null ? "SIN_RESPUESTAS" : "NO_PERMITIDO", `${bloqueo} No se preparó nada.`);
       let lista = intentosPorPreparar(d, ahora(), hoy());
-      if (a.participacion_ids) lista = lista.filter(x => a.participacion_ids!.includes(x.participacion.id));
+      // Con participacion_ids: primero el carrier de cada ID y luego su intento con la
+      // participación elegida (no la primera pendiente).
+      if (a.participacion_ids) {
+        const sel = new Set(a.participacion_ids);
+        lista = lista.flatMap(x => {
+          const elegida = x.s.pendientes.find(f => sel.has(f.participacion.id));
+          return elegida ? [{ ...x, participacion: elegida.participacion, ruta: elegida.ruta }] : [];
+        });
+      }
       if (!lista.length) throw new Rechazo("NADA_POR_PREPARAR", "Nadie tiene un intento pendiente por la cadencia (ya respondió, ya ofertó, ya está en la Cola o aún no toca).");
       lista.sort((x, y) => x.participacion.id.localeCompare(y.participacion.id));
       const cuerpos: Record<string, unknown>[] = [];
@@ -368,7 +376,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       const minimo = ROL_ACCION[c.act];
       if (!minimo || !planes[c.act]) throw new Rechazo("ACCION", "Acción no disponible en el MCP.", 400);
       if (!permite(ctx.rol, minimo)) throw new Rechazo("SIN_PERMISO", "Tu rol ya no permite esta acción.", 403);
-      if (SOLO_PROPIETARIO.has(c.act) && !(ctx.aprobadores ?? APROBADORES_POR_OMISION).includes(String(ctx.email ?? "").trim().toLowerCase()))
+      if (!(ctx.aprobadores ?? APROBADORES_POR_OMISION).includes(String(ctx.email ?? "").trim().toLowerCase()))
         throw new Rechazo("SOLO_PROPIETARIO", "Solo el propietario puede confirmar esto. El propietario debe preparar y confirmar su propia vista previa.", 403);
       if (huellaCuerpos(c.cuerpos, c.fijo) !== c.h) throw new Rechazo("ALTERADA", "La confirmación no coincide con su vista previa.", 400);
       if (esProtegido(c.ev) || c.cuerpos.some(b => !ESCRITURAS_MCP.has(String(b.action)) || ![b.event_id, b.rfx_event_id].includes(c.ev))) throw new Rechazo("ALTERADA", "La confirmación no coincide con su vista previa.", 400);

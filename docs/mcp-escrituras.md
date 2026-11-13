@@ -5,7 +5,7 @@ Estado: desarrollado y probado en local contra el simulado (evento `RFx-FR8BID-P
 
 ## Qué agrega
 
-El endpoint `/api/mcp` sigue con las 11 lecturas para todos los roles y, para Operador y Administrador, suma cuatro herramientas (`preparar_intentos`, `preparar_revision`, `preparar_invitacion` y `confirmar`). `preparar_*` solo lee y devuelve una vista previa con `confirmacion_id` (anotación `readOnlyHint`); `confirmar` es la única que escribe (`destructiveHint`).
+El endpoint `/api/mcp` sigue con las 11 lecturas para todos los roles y, para Operador y Administrador, suma cuatro herramientas (`preparar_intentos`, `preparar_revision`, `preparar_invitacion` y `confirmar`). Cualquiera con el rol de la acción prepara; solo el propietario confirma. `preparar_*` solo lee y devuelve una vista previa con `confirmacion_id` (anotación `readOnlyHint`); `confirmar` es la única que escribe (`destructiveHint`).
 
 | Herramienta | Rol | Acción del proxy al confirmar |
 | --- | --- | --- |
@@ -53,7 +53,7 @@ Dos `confirmar` simultáneos de la misma vista previa pueden pasar ambos la rele
 ## Lo que debe hacer Jose para activarlo
 
 1. En Vercel (proyecto `fr8bid`, Production), crear `FR8BID_MCP_CONFIRM_SECRET` con un valor aleatorio de al menos 32 caracteres (por ejemplo `openssl rand -base64 48`). No se comparte con nadie ni se pone en el repo. Cambiarlo invalida las vistas previas pendientes (vencen igual a los 15 min).
-2. Opcional: `FR8BID_MCP_APROBADORES` con los correos (separados por coma) que pueden **confirmar** envíos reales de tandas (`send_outreach_messages`). Sin la variable, solo `sales@heymarksman.com`. La vista previa está ligada a la sesión que la preparó (`sub` y `client_id`): el propietario debe **preparar y confirmar su propia** vista previa. Si otro Administrador prepara, su `confirmar` responde «solo el propietario puede confirmar esto» (`SOLO_PROPIETARIO`) y el propietario tampoco puede confirmar esa vista ajena (`OTRA_SESION`). Borradores (intentos, campaña, generar) y «Revisado» siguen con la regla de rol.
+2. Opcional: `FR8BID_MCP_APROBADORES` con los correos (separados por coma) que pueden **confirmar** cualquier escritura real del MCP: intentos, «Revisado», campaña y borradores de invitación, y tandas (AGENTS.md regla 6: aprobación del propietario por acción). Sin la variable, solo `sales@heymarksman.com`. **El Operador y los agentes preparan; solo el propietario confirma.** La vista previa está ligada a la sesión que la preparó (`sub` y `client_id`), así que el propietario prepara y confirma desde su propia sesión. Si otro usuario prepara, su `confirmar` responde «solo el propietario puede confirmar esto» (`SOLO_PROPIETARIO`) y el propietario tampoco puede confirmar esa vista ajena (`OTRA_SESION`). El rol mínimo de cada acción sigue aplicando al preparar.
 3. Las escrituras reales siguen gobernadas por `FR8BID_ESCRITURAS_REALES` del proxy: con `no` todo `confirmar` devuelve 423; con `borradores` solo pasan los intentos (borradores en la Cola).
 4. Fusionar el PR a `main` (Vercel despliega `main`).
 

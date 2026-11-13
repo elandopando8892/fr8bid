@@ -51,7 +51,9 @@ function mcp(x: Escenario, usuario = "operador", rol: Rol = "operator", extra: P
   const logs: Record<string, unknown>[] = [];
   const t = transporteSimulado(x.sim, () => usuario);
   const ej = crearEscrituras(async (s, b) => { llamadas.push(b); return alterar(b, await t(s, b)); },
-    { userId: usuario, clientId: "cliente-1", email: `${usuario === "admin" ? "sales" : usuario}@heymarksman.com`, rol, secreto: SECRETO, ahora: () => new Date(x.ahora()), registrar: e => logs.push(e), ...extra });
+    // Pruebas que no tratan de aprobaciones: el operador simulado figura como aprobador. Las de
+    // aprobación pasan { aprobadores: undefined } para usar la lista por omisión del código.
+    { userId: usuario, clientId: "cliente-1", email: `${usuario === "admin" ? "sales" : usuario}@heymarksman.com`, aprobadores: ["sales@heymarksman.com", "operador@heymarksman.com"], rol, secreto: SECRETO, ahora: () => new Date(x.ahora()), registrar: e => logs.push(e), ...extra });
   return { ej, llamadas, logs, escritas: () => llamadas.filter(b => ESCRITURAS_MCP.has(String(b.action))) };
 }
 const codigo = async (p: Promise<unknown>) => { try { await p; return "OK"; } catch (e: any) { return e.codigo ?? e.name ?? "ERROR"; } };
@@ -328,6 +330,41 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     // Borradores siguen con la regla de rol: un Operador los confirma.
     const z = await escenario({ invitar: false });
     expect((await mcp(z).ej("confirmar", { confirmacion_id: (await mcp(z).ej("preparar_invitacion", { event_id: z.eventId, fase: "borradores" })).confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
+  });
+
+  it("toda escritura real: el Operador prepara pero solo el propietario confirma, cada uno desde su sesión", async () => {
+    const estricto = { aprobadores: undefined }; // lista por omisión: solo sales@heymarksman.com
+    const x = await escenario();
+    const op = mcp(x, "operador", "operator", estricto);
+    const dueno = mcp(x, "admin", "admin", estricto);
+    const vi = await op.ej("preparar_intentos", { event_id: x.eventId });
+    expect(vi.vista_previa.destinatarios).toHaveLength(2); // el Operador ve la vista previa
+    expect(await codigo(op.ej("confirmar", { confirmacion_id: vi.confirmacion_id, frase_ok: "sí" }))).toBe("SOLO_PROPIETARIO");
+    expect(op.escritas()).toEqual([]);
+    expect((await dueno.ej("confirmar", { confirmacion_id: (await dueno.ej("preparar_intentos", { event_id: x.eventId })).confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
+    const y = await escenario({ invitar: false, revisados: ["A", "B"] });
+    const opY = mcp(y, "operador", "operator", estricto);
+    const duenoY = mcp(y, "admin", "admin", estricto);
+    const vb = await opY.ej("preparar_invitacion", { event_id: y.eventId, fase: "borradores" });
+    expect(await codigo(opY.ej("confirmar", { confirmacion_id: vb.confirmacion_id, frase_ok: "sí" }))).toBe("SOLO_PROPIETARIO");
+    expect(opY.escritas()).toEqual([]);
+    for (const [n, a] of [["preparar_revision", { carrier_id: y.carriers.C.id }], ["preparar_invitacion", { fase: "borradores" }], ["preparar_invitacion", { fase: "envio" }]] as const) {
+      const v = await duenoY.ej(n, { event_id: y.eventId, ...a });
+      expect((await duenoY.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" })).estado, `${n} ${JSON.stringify(a)}`).toBe("aplicada");
+    }
+  });
+
+  it("intentos con participacion_ids usan la participación elegida, no la primera pendiente", async () => {
+    const x = await escenario();
+    const op = (body: Record<string, unknown>) => x.sim.llamar("rateware-api", body, "Bearer sim:operador").then(r => r.body);
+    const { rows: [lane] } = await op({ action: "import_rfx_lanes", event_id: x.eventId, rows: [{ origin_city: "Monterrey", origin_state: "NL", origin_country: "MX", destination_city: "Austin", destination_state: "TX", destination_country: "US", equipment: "Dry Van", weekly_volume: 1, target_rate: 1700, currency: "USD" }] });
+    const { rows: [segunda] } = await op({ action: "shortlist_rfx_lane_vendors", lane_id: lane.id, vendor_ids: [x.carriers.C.id] });
+    await op({ action: "invite_rfx_lane_vendors", event_id: x.eventId, ids: [segunda.id], confirmed: true, confirmation_action: "invite_rfx_lane_vendors" });
+    const m = mcp(x);
+    const v = await m.ej("preparar_intentos", { event_id: x.eventId, participacion_ids: [segunda.id] });
+    expect(v.vista_previa.destinatarios.map((d: any) => d.participacion_id)).toEqual([segunda.id]);
+    expect((await m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
+    expect(m.escritas()).toEqual([expect.objectContaining({ action: "draft_bid_room_carrier_message", rfx_lane_vendor_id: segunda.id })]);
   });
 
   it("una tanda con entrega desconocida queda incierta, nunca aplicada ni sin efecto", async () => {
