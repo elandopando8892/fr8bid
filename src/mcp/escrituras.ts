@@ -80,6 +80,15 @@ export function esAfirmacion(frase: string): boolean {
   return n.split(" ").every(p => AFIRMATIVAS.has(p));
 }
 
+// Campos de una captura que se comparan con lo que Rateware guardó.
+export const CAMPOS_CAPTURA = ["currency", "valid_through", "weekly_capacity", "transit_days", "commercial_model", "notes"];
+function igualCampo(k: string, aprobado: unknown, guardado: unknown): boolean {
+  if (aprobado == null || guardado == null) return aprobado == null && guardado == null;
+  if (k === "valid_through") return String(aprobado).slice(0, 10) === String(guardado).slice(0, 10);
+  if (k === "weekly_capacity" || k === "transit_days") return Number(aprobado) === Number(guardado);
+  return String(aprobado).trim() === String(guardado).trim();
+}
+
 export interface Efecto { efecto: "completo" | "parcial" | "nulo"; omisiones: { id: string | null; motivo: string }[] }
 /** Compara la respuesta (ya válida) con lo aprobado: solo «completo» cuenta como hecho. */
 export function evaluarEfecto(body: Record<string, any>, b: any): Efecto {
@@ -93,7 +102,18 @@ export function evaluarEfecto(body: Record<string, any>, b: any): Efecto {
     case "update_rfx_bid": {
       const p = body.patch || {};
       if (p.bid_rate == null) return !("invitation_status" in row) ? sinVerificar(body.id) : row.invitation_status === p.invitation_status ? completo : nulo(body.id, "Rateware no reflejó el cambio de estado");
-      return !("bid_rate" in row) ? sinVerificar(body.id) : Number(row.bid_rate) === Number(p.bid_rate) ? completo : nulo(body.id, "Rateware no reflejó la tarifa");
+      if (!("bid_rate" in row)) return sinVerificar(body.id);
+      if (Number(row.bid_rate) !== Number(p.bid_rate)) return nulo(body.id, "Rateware no reflejó la tarifa");
+      // Cada campo aprobado debe volver igual; uno ausente no se da por bueno.
+      const distintos: string[] = [], ausentes: string[] = [];
+      for (const k of CAMPOS_CAPTURA) {
+        if (!(k in p)) continue;
+        if (!(k in row)) { if (k !== "notes") ausentes.push(k); continue; }
+        if (!igualCampo(k, p[k], row[k])) distintos.push(k);
+      }
+      if (distintos.length) return { efecto: "parcial", omisiones: [{ id: String(body.id), motivo: `Rateware guardó distinto: ${distintos.join(", ")}. Verifica en la página del evento.` }] };
+      if (ausentes.length) return { efecto: "parcial", omisiones: [{ id: String(body.id), motivo: `No confirmado (${ausentes.join(", ")}); verifica en la página del evento.` }] };
+      return completo;
     }
     case "record_rfx_invitation_wave_review":
       return !("reviewed" in row) ? sinVerificar(body.vendor_id) : row.reviewed === true ? completo : nulo(body.vendor_id, "Rateware no registró «Revisado»");
@@ -141,6 +161,8 @@ export interface ContextoEscrituras {
   secreto: Uint8Array | null;
   ahora?: () => Date;
   registrar?: (entrada: Record<string, unknown>) => void;
+  /** Solo pruebas: límite menor que LIMITE_TOKEN para ejercitar la partición. */
+  limiteToken?: number;
 }
 
 interface Plan {
@@ -153,6 +175,8 @@ interface Plan {
   foto: unknown;
   vista: Record<string, unknown>;
   evento: Record<string, unknown>;
+  // Acciones partibles: participaciones agrupadas por carrier; una parte nunca separa a un carrier.
+  grupos?: { carrier: string; ids: string[] }[];
 }
 
 export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
@@ -193,6 +217,11 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
   const todas = (d: Detalle) => d.rutas.flatMap(r => r.participaciones.map(p => ({ r, p })));
   const rutaTxt = (r: Ruta) => `#${r.numero} ${r.origen} → ${r.destino} (${r.equipo})`;
   const conOferta = (p: Participacion) => p.versiones.length > 0 || versionVigente(p) !== null;
+  const porCarrier = (xs: { id: string; carrierId: string; carrier: string }[]) => {
+    const m = new Map<string, { carrier: string; ids: string[] }>();
+    for (const x of xs) { const g = m.get(x.carrierId) ?? { carrier: x.carrier, ids: [] }; g.ids.push(x.id); m.set(x.carrierId, g); }
+    return [...m.values()];
+  };
 
   const planes: Record<string, (a: any) => Promise<Plan>> = {
     async intentos(a: { event_id: string; participacion_ids?: string[] }) {
@@ -209,6 +238,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       for (const x of lista) cuerpos.push({ ...(await cuerpoDe(m => m.prepararIntento(d.evento.id, x.participacion.id, textoIntento(d, x.paso), claveIntento(d.evento.id, x.participacion.id, x.paso.intento)))), app_origin: APP });
       return { act: "intentos", ev: d.evento.id, evento: resumenEvento(d),
         arg: { event_id: d.evento.id, participacion_ids: lista.map(x => x.participacion.id) },
+        grupos: porCarrier(lista.map(x => ({ id: x.participacion.id, carrierId: x.s.carrierId, carrier: x.s.carrier }))),
         cuerpos,
         // Destinatario fijado: si cambia el carrier o su correo, confirmar se niega.
         foto: lista.map(x => ({ p: x.participacion.id, carrier_id: x.s.carrierId, correo: x.s.correo, intento: x.paso.intento, estado: x.s.estado, en_cola: x.paso.enCola })),
@@ -244,6 +274,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       for (const { p } of elegidas) cuerpos.push(await cuerpoDe(m => m.marcarRespondio({ eventId: d.evento.id, participacionId: p.id, rechazo, canal: a.canal, nota: a.nota })));
       return { act: "ya_respondio", ev: d.evento.id, evento: resumenEvento(d),
         arg: { event_id: d.evento.id, participacion_ids: elegidas.map(x => x.p.id), respuesta: a.respuesta, canal: a.canal, nota: a.nota },
+        grupos: porCarrier(elegidas.map(x => ({ id: x.p.id, carrierId: x.p.carrierId, carrier: x.p.carrier }))),
         cuerpos,
         foto: elegidas.map(x => ({ p: x.p.id, estado: x.p.estado, versiones: x.p.versiones.length })),
         vista: { cambio: rechazo ? "Marcar que RECHAZÓ (declinó) sin tarifa" : "Marcar que RESPONDIÓ sin tarifa", canal_de_la_respuesta: a.canal,
@@ -375,30 +406,45 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
     if (!ctx.secreto) throw PENDIENTE();
     if (esProtegido(a.event_id)) throw new Rechazo("EVENTO_PROTEGIDO", "Evento protegido.", 404);
     const secreto = ctx.secreto;
+    const limite = Math.min(ctx.limiteToken ?? LIMITE_TOKEN, LIMITE_TOKEN);
     const firmarPlan = (p: Plan) => firmar({ sub: ctx.userId, client_id: ctx.clientId, act, ev: p.ev, arg: p.arg, cuerpos: p.cuerpos, fijo: p.fijo, pre: huella(p.foto) }, secreto, ahora());
     const plan = await planes[act](a);
     const firma = await firmarPlan(plan);
-    if (firma.token.length <= LIMITE_TOKEN)
+    if (firma.token.length <= limite)
       return { estado: "vista_previa", escrito: false, accion: act, evento: plan.evento, vista_previa: plan.vista, confirmacion_id: firma.token, vence_en: firma.vence, mesa_url: ligaMesa(plan.ev),
         instruccion: "Nada se escribió. Muestra esta vista previa completa (destinatarios, canal y texto) y pide un «sí» explícito. Solo después llama a confirmar con este confirmacion_id y frase_ok = el texto literal de esa respuesta." };
-    // No cabe en un confirmacion_id: se parte por participaciones, cada parte con su vista previa.
+    // No cabe en un confirmacion_id: se parte por carrier (nunca dentro de un carrier, para que
+    // confirmar una parte no deje a las demás bloqueadas), cada parte con su vista previa.
     const ids = plan.arg.participacion_ids as string[] | undefined;
-    if (!PARTIBLES.has(act) || !ids || ids.length < 2) throw new Rechazo("DEMASIADO_GRANDE", "La vista previa no cabe en una sola confirmación; acota la selección (menos carriers o rutas).", 413);
-    let tam = Math.max(1, Math.floor(ids.length * (LIMITE_TOKEN / firma.token.length) * 0.9));
+    const grupos = plan.grupos;
+    if (!PARTIBLES.has(act) || !ids || !grupos || grupos.length < 2) {
+      const solo = grupos?.length === 1 ? ` ${grupos[0].carrier} por sí solo excede el límite (${grupos[0].ids.length} participaciones): márcalo por rutas en partes o hazlo en la página del evento.` : "";
+      throw new Rechazo("DEMASIADO_GRANDE", `La vista previa no cabe en una sola confirmación; acota la selección.${solo}`, 413);
+    }
+    const porId = firma.token.length / ids.length;
+    let objetivo = limite * 0.9;
     for (;;) {
+      const bloques: { carrier: string; ids: string[]; n: number }[] = [];
+      let actual: { carrier: string; ids: string[]; n: number } | null = null;
+      for (const g of grupos) {
+        if (actual && (actual.ids.length + g.ids.length) * porId > objetivo) { bloques.push(actual); actual = null; }
+        actual = actual ? { carrier: actual.carrier, ids: [...actual.ids, ...g.ids], n: actual.n + 1 } : { carrier: g.carrier, ids: [...g.ids], n: 1 };
+      }
+      if (actual) bloques.push(actual);
       const partes: Record<string, unknown>[] = [];
       let cabe = true;
-      for (let i = 0; i < ids.length && cabe; i += tam) {
-        const p = await planes[act]({ ...plan.arg, participacion_ids: ids.slice(i, i + tam) });
+      for (const b of bloques) {
+        const p = await planes[act]({ ...plan.arg, participacion_ids: b.ids });
         const f = await firmarPlan(p);
-        if (f.token.length > LIMITE_TOKEN) cabe = false;
-        else partes.push({ vista_previa: p.vista, confirmacion_id: f.token, vence_en: f.vence });
+        if (f.token.length <= limite) { partes.push({ vista_previa: p.vista, confirmacion_id: f.token, vence_en: f.vence }); continue; }
+        if (b.n === 1) throw new Rechazo("DEMASIADO_GRANDE", `${b.carrier} por sí solo excede el límite de una confirmación (${b.ids.length} participaciones). Acota sus rutas o hazlo en la página del evento.`, 413);
+        cabe = false;
+        break;
       }
       if (cabe) return { estado: "vista_previa", escrito: false, accion: act, evento: plan.evento, mesa_url: ligaMesa(plan.ev),
         partes: partes.map((x, i) => ({ parte: i + 1, de: partes.length, ...x })),
-        instruccion: `Nada se escribió. La selección no cabe en una sola confirmación: son ${partes.length} partes. Muestra cada parte completa y pide un «sí» explícito para cada una; confirma cada confirmacion_id por separado.` };
-      if (tam === 1) throw new Rechazo("DEMASIADO_GRANDE", "La vista previa no cabe en una sola confirmación; acota la selección.", 413);
-      tam = Math.max(1, Math.floor(tam / 2));
+        instruccion: `Nada se escribió. La selección no cabe en una sola confirmación: son ${partes.length} partes (cada carrier completo en una sola). Muestra cada parte completa y pide un «sí» explícito para cada una; confirma cada confirmacion_id por separado.` };
+      objetivo = objetivo / 2;
     }
   }
 
@@ -450,7 +496,16 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
         if (!ok) { corte = invalida || r.status === 504 || r.body?.incierta ? "incierta" : "rechazada"; break; }
         if (body.action === "create_outreach_campaign") { campana = String(r.body.row.id); continue; }
         // Resultado contra lo aprobado: generados/omitidos, enviados/fallidos, estado reflejado.
-        const ef = evaluarEfecto(body, r.body);
+        let respuesta = r.body;
+        const patch = body.patch as Record<string, unknown> | undefined;
+        if (body.action === "update_rfx_bid" && patch?.bid_rate != null && ["bid_rate", ...CAMPOS_CAPTURA].some(k => k in patch && !(k in (respuesta.row ?? {})))) {
+          try {
+            const det = await crudo({ action: "list_rfx_detail", event_id: c.ev });
+            const fila = (det.lanes || []).flatMap((l: any) => l.invitations || []).find((v: any) => v.id === body.id);
+            if (fila) respuesta = { ...respuesta, row: { ...fila, ...respuesta.row } };
+          } catch { /* sin relectura: los campos ausentes quedan «no confirmado» */ }
+        }
+        const ef = evaluarEfecto(body, respuesta);
         paso.efecto = ef.efecto;
         efectos.push(ef.efecto);
         omisiones.push(...ef.omisiones);

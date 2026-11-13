@@ -277,6 +277,74 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     expect(evaluarEfecto({ action: "draft_bid_room_carrier_message", rfx_lane_vendor_id: "p" }, { reused: true, outreach_message: { id: "m" } }).efecto).toBe("nulo");
   });
 
+  it("captura: cada campo aprobado debe volver igual; si falta, se relee el detalle", async () => {
+    const cap = { tarifa: 1650, moneda: "USD" as const, canal: "phone" as const, vigencia: "2026-12-31", capacidad_semanal: 4, dias_transito: 2, nota: "Llamada" };
+    for (const [campo, valor] of [["currency", "MXN"], ["valid_through", "2026-12-01"], ["weekly_capacity", 9], ["transit_days", 5]] as const) {
+      const x = await escenario();
+      const m = mcp(x, "operador", "operator", {}, (b, r) => b.action === "update_rfx_bid" && r.status === 200 ? { ...r, body: { ...r.body, row: { ...r.body.row, [campo]: valor } } } : r);
+      const v = await m.ej("preparar_captura", { event_id: x.eventId, participacion_id: x.p.C, ...cap });
+      const res = await m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" });
+      expect(res.estado, campo).toBe("parcial");
+      expect(res.omisiones[0].motivo).toContain(campo);
+    }
+    // La respuesta solo trae la tarifa: se completa releyendo list_rfx_detail.
+    const y = await escenario();
+    const solo = mcp(y, "operador", "operator", {}, (b, r) => b.action === "update_rfx_bid" && r.status === 200 ? { ...r, body: { row: { id: b.id, bid_rate: r.body.row.bid_rate } } } : r);
+    const v = await solo.ej("preparar_captura", { event_id: y.eventId, participacion_id: y.p.C, ...cap });
+    expect((await solo.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
+    expect(solo.llamadas.filter(b => b.action === "list_rfx_detail").length).toBeGreaterThan(0);
+    expect(evaluarEfecto({ action: "update_rfx_bid", id: "p", patch: { bid_rate: 1650, currency: "USD", valid_through: null } }, { row: { bid_rate: 1650 } }))
+      .toMatchObject({ efecto: "parcial", omisiones: [{ motivo: expect.stringMatching(/No confirmado/) }] });
+  });
+
+  it("la partición nunca separa las rutas de un mismo carrier y todas las partes se aplican", async () => {
+    const base = crearSimulado();
+    let ahora = ENVIO;
+    base.sim.hoy = () => hoyMexico(new Date(ahora));
+    base.sim.ahora = () => ahora;
+    const { sim, carriers } = base;
+    const op = (body: Record<string, unknown>) => sim.llamar("rateware-api", body, "Bearer sim:operador").then(r => r.body);
+    const { row: event } = await op({ action: "create_rfx_event", name: "PRUEBA CONTROLADA · varias rutas", customer: "Shipper de Prueba", due_date: "2026-11-20", rfx_id: "RFx-FR8BID-PRUEBA-01" });
+    const destinos = Array.from({ length: 8 }, (_, i) => `Destino ${i}`);
+    const { rows: lanes } = await op({ action: "import_rfx_lanes", event_id: event.id, rows: destinos.map(d => ({ origin_city: "Monterrey", origin_state: "NL", origin_country: "MX", destination_city: d, destination_state: "TX", destination_country: "US", equipment: "Dry Van", weekly_volume: 1, target_rate: 1700, currency: "USD" })) });
+    const ids = Object.values(carriers).map(c => c.id);
+    for (const l of lanes) await op({ action: "shortlist_rfx_lane_vendors", lane_id: l.id, vendor_ids: ids });
+    await op({ action: "update_rfx_event", event_id: event.id, patch: { status: "open" } });
+    for (const v of ids) sim.revisar(event.id, v);
+    const { rows: m } = await op({ action: "generate_outreach_drafts", event_id: event.id, reviewed_vendor_ids: ids });
+    await sim.llamar("rateware-api", { action: "send_outreach_messages", ids: m.map((x: any) => x.id), expected_versions: m.map((x: any) => ({ id: x.id, updated_at: x.updated_at })), confirmed: true, confirmation_action: "send_outreach_messages" }, "Bearer sim:admin");
+    ahora = DESPUES;
+    const participaciones = sim.laneVendors.filter(lv => lv.rfx_event_id === event.id);
+    expect(participaciones).toHaveLength(24);
+    // El simulado marca invitada solo la ruta del mensaje; las demás, como «invitadas por otro canal».
+    const pendientesDeInvitar = participaciones.filter(lv => lv.invitation_status === "drafted").map(lv => lv.id);
+    if (pendientesDeInvitar.length) await op({ action: "invite_rfx_lane_vendors", event_id: event.id, ids: pendientesDeInvitar, confirmed: true, confirmation_action: "invite_rfx_lane_vendors" });
+    const x = { sim, carriers, eventId: event.id, p: {}, reloj: (iso: string) => { ahora = iso; }, ahora: () => ahora } as unknown as Escenario;
+    const mm = mcp(x, "operador", "operator", { limiteToken: 12000 });
+    const v = await mm.ej("preparar_ya_respondio", { event_id: event.id, participacion_ids: participaciones.map(p => p.id), respuesta: "respondio", canal: "whatsapp", nota: "x".repeat(300) });
+    expect(v.partes.length).toBeGreaterThanOrEqual(2);
+    const carrierDe = new Map(participaciones.map(p => [p.id, p.vendor_id]));
+    const vistos = new Map<string, number>();
+    v.partes.forEach((p: any, i: number) => {
+      expect(p.confirmacion_id.length).toBeLessThanOrEqual(12000);
+      for (const pid of (decodeJwt(p.confirmacion_id) as any).arg.participacion_ids) {
+        const c = carrierDe.get(pid)!;
+        expect(vistos.get(c) ?? i).toBe(i); // un carrier nunca aparece en dos partes
+        vistos.set(c, i);
+      }
+    });
+    for (const p of v.partes) expect((await mm.ej("confirmar", { confirmacion_id: p.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
+    expect(mm.escritas()).toHaveLength(24);
+    // Un solo carrier que por sí solo no cabe: error claro, nada escrito.
+    const y = await escenario();
+    const chico = mcp(y, "operador", "operator", { limiteToken: 1500 });
+    let error: any;
+    try { await chico.ej("preparar_ya_respondio", { event_id: y.eventId, carrier_id: y.carriers.C.id, respuesta: "respondio", canal: "email", nota: "x".repeat(300) }); } catch (e) { error = e; }
+    expect(error).toMatchObject({ codigo: "DEMASIADO_GRANDE" });
+    expect(error.message).toContain("Carrier Prueba C");
+    expect(chico.escritas()).toEqual([]);
+  });
+
   it("si la plantilla cambia entre preparar y confirmar, no se generan borradores", async () => {
     const x = await escenario({ invitar: false });
     const m = mcp(x);
