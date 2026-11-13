@@ -13,6 +13,8 @@ export interface RutaLectura {
   origen: string;
   destino: string;
   equipo: string;
+  // Solo para comparar en el servidor con la tabla citada del correo; nunca llega a la IA.
+  objetivo?: number | null;
 }
 
 export interface OfertaLeida {
@@ -63,7 +65,7 @@ const INICIO_CITA = [
 const ENCABEZADO_CITA = /^\s*(el|on)\s.+/i;
 const FIN_ENCABEZADO_CITA = /(escribi[oó]|wrote):?\s*$/i;
 
-export function quitarCitado(original: string): { texto: string; recortado: boolean } {
+export function quitarCitado(original: string): { texto: string; recortado: boolean; citado: string } {
   const lineas = original.split(/\r?\n/);
   let corte = -1;
   for (let i = 0; i < lineas.length && corte < 0; i++) {
@@ -71,8 +73,48 @@ export function quitarCitado(original: string): { texto: string; recortado: bool
     // Gmail parte «El lun, 9 nov… escribió:» en dos o tres renglones.
     else if (ENCABEZADO_CITA.test(lineas[i]) && [0, 1, 2].some((k) => FIN_ENCABEZADO_CITA.test(lineas[i + k] ?? ""))) corte = i;
   }
-  if (corte < 0) return { texto: original.trim(), recortado: false };
-  return { texto: lineas.slice(0, corte).join("\n").trim(), recortado: true };
+  if (corte < 0) return { texto: original.trim(), recortado: false, citado: "" };
+  return { texto: lineas.slice(0, corte).join("\n").trim(), recortado: true, citado: lineas.slice(corte).join("\n") };
+}
+
+const AVISA_OFERTA = /propuesta|cotizaci|tarifa|rate|quote|oferta|precio|adjunt/i;
+
+// Algunos carriers contestan editando la tabla citada: cambian la columna donde
+// iba nuestro objetivo por su tarifa (JPI en O-I). Se rescatan solo las cifras
+// que NO coinciden con el objetivo de esa ruta, y solo si el carrier avisa que
+// manda una propuesta; el objetivo mismo nunca sale de aquí. Sin objetivo
+// conocido no se puede distinguir y no se rescata nada.
+export function tarifasEnCitado(citado: string, rutas: RutaLectura[], propio: string): string[] {
+  if (!citado || !AVISA_OFERTA.test(propio)) return [];
+  const bloques: { n: number; texto: string }[] = [];
+  let actual: { n: number; texto: string } | null = null;
+  for (const cruda of citado.split(/\r?\n/)) {
+    const linea = cruda.replace(/^\s*(>\s*)+/, "");
+    const fila = linea.match(/^(\d{1,2})\t/);
+    if (fila) {
+      if (actual) bloques.push(actual);
+      actual = { n: Number(fila[1]), texto: linea };
+    } else if (actual) {
+      if (linea.trim() === "") {
+        bloques.push(actual);
+        actual = null;
+      } else actual.texto += ` ${linea}`;
+    }
+  }
+  if (actual) bloques.push(actual);
+  const vistas = new Set<number>();
+  const salida: string[] = [];
+  for (const b of bloques) {
+    const ruta = rutas.find((r) => r.numero === b.n);
+    if (!ruta || vistas.has(b.n) || typeof ruta.objetivo !== "number") continue;
+    const monto = b.texto.match(/(\d[\d.,]*)\s*(USD|MXN)\s*$/i);
+    if (!monto) continue;
+    const valor = Number(monto[1].replace(/,(?=\d{3}(\D|$))/g, ""));
+    if (!Number.isFinite(valor) || valor <= 0 || valor === ruta.objetivo) continue;
+    vistas.add(b.n);
+    salida.push(`Ruta ${b.n}: ${monto[1]} ${monto[2].toUpperCase()}`);
+  }
+  return salida;
 }
 
 const TIPOS: TipoLectura[] = ["oferta", "rechazo", "pregunta", "otro"];
@@ -155,8 +197,16 @@ export function aceptarLectura(original: string, rutas: RutaLectura[], cruda: an
 // 13-nov-2026): llena el texto y los archivos sin pegar ni descargar nada.
 // Solo pasan PDF e imágenes dentro de los límites de la lectura; lo demás se
 // nombra para que el equipo sepa qué no leyó la IA (por ejemplo, un Excel).
+export interface AnexoTexto {
+  nombre: string;
+  texto: string;
+}
+export const MAX_ANEXOS_TEXTO = 3;
+
 export interface CorreoTraido {
   texto: string;
+  // Correos adjuntos (.eml) que Rateware ya convirtió a texto.
+  anexos: AnexoTexto[];
   adjuntos: AdjuntoLectura[];
   omitidos: string[];
   de: string | null;
@@ -179,8 +229,13 @@ export function correoParaLectura(crudo: any): CorreoTraido {
     bytes += tamano;
     adjuntos.push({ nombre, tipo: a.mime_type, base64: b64 });
   }
+  const anexos: AnexoTexto[] = (Array.isArray(crudo?.attached_emails) ? crudo.attached_emails : [])
+    .map((a: any) => ({ nombre: texto(a?.filename, 120) || "correo adjunto", texto: typeof a?.text === "string" ? a.text.trim().slice(0, MAX_TEXTO_LECTURA) : "" }))
+    .filter((a: AnexoTexto) => a.texto)
+    .slice(0, MAX_ANEXOS_TEXTO);
   return {
     texto: typeof crudo?.text === "string" ? crudo.text.slice(0, MAX_TEXTO_LECTURA) : "",
+    anexos,
     adjuntos,
     omitidos,
     de: texto(crudo?.from, 200) || null,

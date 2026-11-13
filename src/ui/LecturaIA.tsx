@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 import { ErrorApi } from "../cliente/api";
-import type { AdjuntoLectura, CanalLectura, CorreoTraido, Lectura, TipoAdjunto } from "../dominio/lectura";
+import type { AdjuntoLectura, AnexoTexto, CanalLectura, CorreoTraido, Lectura, TipoAdjunto } from "../dominio/lectura";
 import { bytesBase64, MAX_ADJUNTOS_LECTURA, MAX_BYTES_ADJUNTOS, MAX_TEXTO_LECTURA, TIPOS_ADJUNTO } from "../dominio/lectura";
 import type { CorreoRespuesta, Detalle, Participacion, Ruta } from "../dominio/tipos";
 import { Confirmar, dinero, plural } from "./comun";
@@ -55,6 +55,7 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
   const [filas, setFilas] = useState<Fila[]>([]);
   const [trayendo, setTrayendo] = useState<string | null>(null);
   const [traido, setTraido] = useState<(CorreoTraido & { id: string }) | null>(null);
+  const [anexos, setAnexos] = useState<AnexoTexto[]>([]);
 
   const carriers = new Map<string, string>();
   for (const r of d.rutas) for (const p of r.participaciones) if (capturable(r, p)) carriers.set(p.carrierId, p.carrier);
@@ -78,6 +79,7 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
     setTexto("");
     setAdjuntos([]);
     setTraido(null);
+    setAnexos([]);
     setCarrierId("");
     setAbierto(false);
   };
@@ -99,6 +101,7 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
       setCanal("email");
       setTexto(t.texto);
       setAdjuntos(t.adjuntos);
+      setAnexos(t.anexos);
     } catch (e) {
       setError(e instanceof ErrorApi ? e.message : "No se pudo traer el correo. Pega el texto.");
     } finally {
@@ -123,7 +126,7 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
     limpiar();
     setLeyendo(true);
     try {
-      const l = await s.api.leerRespuesta({ texto, canal, carrier, adjuntos, rutas: d.rutas.map((r) => ({ id: r.id, numero: r.numero, origen: r.origen, destino: r.destino, equipo: r.equipo })) });
+      const l = await s.api.leerRespuesta({ texto, canal, carrier, adjuntos, anexos, rutas: d.rutas.map((r) => ({ id: r.id, numero: r.numero, origen: r.origen, destino: r.destino, equipo: r.equipo, objetivo: r.objetivo })) });
       setLectura(l);
       setFilas(
         l.ofertas.flatMap((o) => {
@@ -165,7 +168,7 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
       <h2>Leer respuesta con IA</h2>
       <div className="rejilla">
         <label className="campo"><span>Carrier</span>
-          <select value={carrierId} onChange={(e) => { setCarrierId(e.target.value); setTraido(null); limpiar(); }}>
+          <select value={carrierId} onChange={(e) => { setCarrierId(e.target.value); setTraido(null); setAnexos([]); limpiar(); }}>
             <option value="">Elige…</option>
             {[...carriers].sort((a, b) => a[1].localeCompare(b[1])).map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
           </select>
@@ -190,6 +193,9 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
               </li>
             ))}
           </ul>
+          {traido && traido.anexos.length > 0 && (
+            <p className="tenue">Se trajo también el correo adjunto: {traido.anexos.map((a) => a.nombre).join(", ")}.</p>
+          )}
           {traido && traido.omitidos.length > 0 && (
             <p className="tenue">No se trajo: {traido.omitidos.join(", ")}. Si ahí viene la tarifa (por ejemplo, un Excel), captúrala a mano.</p>
           )}
@@ -210,7 +216,7 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
       )}
       {!lectura && (
         <div className="fila-botones">
-          <button className="btn-primario" disabled={!carrierId || (texto.trim().length < 3 && !adjuntos.length) || leyendo} onClick={leer}>{leyendo ? "Leyendo…" : "Leer con IA"}</button>
+          <button className="btn-primario" disabled={!carrierId || (texto.trim().length < 3 && !adjuntos.length && !anexos.length) || leyendo} onClick={leer}>{leyendo ? "Leyendo…" : "Leer con IA"}</button>
           <button className="btn-texto" onClick={cerrar}>Cancelar</button>
         </div>
       )}

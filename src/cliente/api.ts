@@ -5,7 +5,7 @@
 import type { ConsultaTelefono, Telefono } from "../dominio/telefonos.js";
 import { MAX_TELEFONOS, revisarTelefonos } from "../servidor/telefonos.js";
 import { leerRespuesta } from "../servidor/lectura.js";
-import { correoParaLectura, type AdjuntoLectura, type CanalLectura, type CorreoTraido, type Lectura, type RutaLectura } from "../dominio/lectura.js";
+import { correoParaLectura, type AdjuntoLectura, type AnexoTexto, type CanalLectura, type CorreoTraido, type Lectura, type RutaLectura } from "../dominio/lectura.js";
 import type { CorreoRevelado, PersonaApollo } from "../dominio/apollo.js";
 import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier } from "../dominio/contactos.js";
 import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit.js";
@@ -164,7 +164,7 @@ export class MesaApi {
   // La IA lee lo que contestó el carrier y propone la oferta por ruta. Solo
   // viajan el texto (sin el correo citado), los archivos subidos, el nombre
   // del carrier y origen, destino y equipo de cada ruta. No guarda nada: el resultado es un borrador para confirmar.
-  async leerRespuesta(c: { texto: string; canal: CanalLectura; carrier: string; rutas: RutaLectura[]; adjuntos?: AdjuntoLectura[] }): Promise<Lectura & { recortado: boolean }> {
+  async leerRespuesta(c: { texto: string; canal: CanalLectura; carrier: string; rutas: RutaLectura[]; adjuntos?: AdjuntoLectura[]; anexos?: AnexoTexto[] }): Promise<Lectura & { recortado: boolean }> {
     const r = await this.lector({ ...c, hoy: this.hoy() });
     if (r.status < 200 || r.status >= 300) throw new ErrorApi(r.status, String(r.body?.code || r.status), String(r.body?.error || "La IA no respondió"));
     return { ...r.body.lectura, recortado: Boolean(r.body.recortado) };

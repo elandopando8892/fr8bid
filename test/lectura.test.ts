@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { MesaApi, type LectorRespuestas } from "../src/cliente/api";
-import { aceptarLectura, MAX_BYTES_ADJUNTOS, MAX_TEXTO_LECTURA, quitarCitado, tarifaEnTexto, type RutaLectura } from "../src/dominio/lectura";
+import { aceptarLectura, MAX_BYTES_ADJUNTOS, MAX_TEXTO_LECTURA, quitarCitado, tarifaEnTexto, tarifasEnCitado, type RutaLectura } from "../src/dominio/lectura";
 import { leerRespuesta, type ConsultaLectura, type Leer } from "../src/servidor/lectura";
 
 const rutas: RutaLectura[] = [
@@ -97,7 +97,7 @@ describe("el correo citado no llega a la IA", () => {
 
   it("corta en la cita de Gmail aunque venga partida en dos renglones", () => {
     const r = quitarCitado(`Te cotizo Albany en 4,350 USD.\n\nSaludos\n\nEl lun, 9 nov 2026 a la(s) 11:57 a.m., sales via PRICING (\nPRICING@carrier.net) escribió:\n\n> ${invitacion}`);
-    expect(r).toEqual({ texto: "Te cotizo Albany en 4,350 USD.\n\nSaludos", recortado: true });
+    expect(r).toMatchObject({ texto: "Te cotizo Albany en 4,350 USD.\n\nSaludos", recortado: true });
   });
 
   it("corta en la cita de Outlook y en «On … wrote:»", () => {
@@ -107,7 +107,7 @@ describe("el correo citado no llega a la IA", () => {
   });
 
   it("no toca un mensaje sin cita", () => {
-    expect(quitarCitado("El flete sale en 1,250 USD, cruce incluido.")).toEqual({ texto: "El flete sale en 1,250 USD, cruce incluido.", recortado: false });
+    expect(quitarCitado("El flete sale en 1,250 USD, cruce incluido.")).toEqual({ texto: "El flete sale en 1,250 USD, cruce incluido.", recortado: false, citado: "" });
   });
 
   it("el objetivo citado no se puede proponer como oferta", async () => {
@@ -205,5 +205,72 @@ describe("correo traído de Rateware", () => {
     expect(t.adjuntos.map((a) => a.nombre)).toEqual(["cotizacion.pdf"]);
     expect(t.omitidos).toEqual(["contrato.docx", "foto.png", "enorme.pdf", "hoja.xlsx"]);
     expect(t).toMatchObject({ de: "ops@carrier.mx", asunto: null, en: null });
+  });
+});
+
+// JPI (O-I, 12-nov): contestó editando la tabla citada, con su tarifa donde iba el objetivo.
+describe("tabla citada que el carrier modificó", () => {
+  const rutasObj: RutaLectura[] = [
+    { ...rutas[0], objetivo: 4000 },
+    { ...rutas[1], objetivo: 2100 }
+  ];
+  const original = (a: string, b: string) => `> Ruta\tOrigen\tDestino\tEquipo / Remolque / Config\tOperacion\tServicio\tVolumen\n> semanal\tObjetivo\n> 1\tMonterrey, NL 64570\n> Albany, GA 31705\n> Truck Trailer / Dry Van\tD2D Export\tOne Way\t-\t${a} USD\n> 2\tMonterrey, NL 64570\n> Fort Worth, TX 76134\n> Truck Trailer / Dry Van\tD2D Export\tOne Way\t-\t${b} USD\n`;
+  const propio = "Buenos dias, no tenemos manera de cotizar Tultitlan,\n\nPero te hago llegar nuestra propuesta para las de origen monterrey";
+
+  it("rescata solo las cifras distintas del objetivo", () => {
+    const { texto, citado } = quitarCitado(`${propio}\n\n${original("4,558", "2,370")}\nQuedo atento\n> El 11 nov 2026 sales@heymarksman.com escribió:\n${original("4,000", "2,100")}`);
+    expect(texto).toBe(propio);
+    expect(tarifasEnCitado(citado, rutasObj, texto)).toEqual(["Ruta 1: 4,558 USD", "Ruta 2: 2,370 USD"]);
+  });
+
+  it("no rescata nada si la tabla citada está intacta, si no hay objetivo o si el carrier no avisa de una oferta", () => {
+    expect(tarifasEnCitado(original("4,000", "2,100"), rutasObj, propio)).toEqual([]);
+    expect(tarifasEnCitado(original("4,558", "2,370"), rutas, propio)).toEqual([]);
+    expect(tarifasEnCitado(original("4,558", "2,370"), rutasObj, "Gracias, lo revisamos")).toEqual([]);
+  });
+
+  it("de una tabla con una sola cifra cambiada rescata solo esa", () => {
+    expect(tarifasEnCitado(original("4,000", "2,370"), rutasObj, propio)).toEqual(["Ruta 2: 2,370 USD"]);
+  });
+
+  it("llega a la IA sin el objetivo, propone la tarifa y avisa que sale del correo citado", async () => {
+    let visto: any = null;
+    const r = await leerRespuesta({ texto: `${propio}\n\n${original("4,558", "2,370")}\n> El 11 nov 2026 sales@heymarksman.com escribió:\n${original("4,000", "2,100")}`, canal: "email", carrier: "JPI", rutas: rutasObj }, true, async (c) => {
+      visto = c;
+      return { tipo: "oferta", resumen: "", ofertas: [oferta({ tarifa: 4558, cita: "Ruta 1: 4,558 USD" }), oferta({ ruta_id: "r2", tarifa: 2370, cita: "Ruta 2: 2,370 USD" })], dudas: [] };
+    });
+    expect(visto.texto).toContain("Ruta 1: 4,558 USD");
+    expect(visto.texto).not.toMatch(/4,000|2,100/);
+    expect(JSON.stringify(visto.rutas)).not.toContain("objetivo");
+    expect(r.body).toMatchObject({ lectura: { ofertas: [{ tarifa: 4558 }, { tarifa: 2370 }] } });
+    expect((r.body as any).lectura.dudas).toContain("Algunas tarifas salen de la tabla citada del correo: compáralas con el correo antes de guardar.");
+  });
+});
+
+describe("correo adjunto (.eml) ya convertido a texto", () => {
+  const anexo = { nombre: "M&J Carriers Rate Quote MJQ-20261111-0002 | 8 lanes.eml", texto: "Monterrey, NL → Albany, GA\n$4,365.36\nMonterrey, NL → Fort Worth, TX\n$3,353.60\nValid Through 2026-12-11" };
+
+  it("se lee como parte del texto y la tarifa se comprueba contra él", async () => {
+    let visto = "";
+    const r = await leerRespuesta({ texto: "Attached are our rates", canal: "email", carrier: "M&J", rutas, anexos: [anexo] }, true, async (c) => {
+      visto = c.texto;
+      return { tipo: "oferta", resumen: "", ofertas: [oferta({ tarifa: 4365.36, cita: "$4,365.36" })], dudas: [] };
+    });
+    expect(visto).toContain("[Correo adjunto «M&J Carriers Rate Quote MJQ-20261111-0002 | 8 lanes.eml»]");
+    expect(visto).toContain("$4,365.36");
+    expect(r.body).toMatchObject({ lectura: { ofertas: [{ tarifa: 4365.36 }] } });
+  });
+
+  it("sin texto propio basta con el correo adjunto, y rechaza demasiados o muy largos", async () => {
+    const leer: Leer = async () => ({ tipo: "otro", resumen: "", ofertas: [], dudas: [] });
+    expect((await leerRespuesta({ texto: "", canal: "email", carrier: "M&J", rutas, anexos: [anexo] }, true, leer)).status).toBe(200);
+    expect(await leerRespuesta({ texto: "x", canal: "email", carrier: "M&J", rutas, anexos: [anexo, anexo, anexo, anexo] }, true, leer)).toMatchObject({ status: 400, body: { code: "ANEXOS_INVALIDOS" } });
+    expect(await leerRespuesta({ texto: "x", canal: "email", carrier: "M&J", rutas, anexos: [{ nombre: "a.eml", texto: "z".repeat(MAX_TEXTO_LECTURA + 1) }] }, true, leer)).toMatchObject({ status: 400, body: { code: "ANEXOS_INVALIDOS" } });
+  });
+
+  it("correoParaLectura conserva los correos adjuntos y descarta los vacíos", async () => {
+    const { correoParaLectura } = await import("../src/dominio/lectura");
+    const t = correoParaLectura({ text: "Attached", attached_emails: [{ filename: "q.eml", subject: "S", text: "  $5,915.36  " }, { filename: "vacio.eml", text: "   " }] });
+    expect(t.anexos).toEqual([{ nombre: "q.eml", texto: "$5,915.36" }]);
   });
 });
