@@ -6,6 +6,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAsync } from "@/components/useAsync";
 import { Empty, ErrorBanner, InfoBanner, Pill, Spinner, TopBar } from "@/components/ui";
 import { ShipperPicker } from "@/components/ShipperPicker";
+import { WebIntakeTray } from "@/features/web-intake/WebIntakeTray";
 import type { ShipperOption } from "@/features/quotedesk/quotedesk.service";
 import {
   awaitsTeam,
@@ -457,6 +458,7 @@ function ShipperIntakeContent() {
           </section>
           )}
         </div>
+        <WebIntakeTray onPromoted={projects.reload} />
       </main>
     </>
   );
