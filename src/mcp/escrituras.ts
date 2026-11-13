@@ -153,7 +153,8 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
   const planes: Record<string, (a: any) => Promise<Plan>> = {
     async intentos(a: { event_id: string; participacion_ids?: string[] }) {
       const d = await leer(a.event_id);
-      if (d.respuestas === null) throw new Rechazo("SIN_RESPUESTAS", "No se pudo revisar quién ya respondió; no se prepara ningún intento.");
+      // null (falló) o undefined (no disponible, PASO_EN_RATEWARE): sin saber quién respondió no se insiste.
+      if (d.respuestas == null) throw new Rechazo("SIN_RESPUESTAS", "No se pudo saber quién ya respondió; intenta más tarde. No se preparó nada.");
       let lista = intentosPorPreparar(d, ahora(), hoy());
       if (a.participacion_ids) lista = lista.filter(x => a.participacion_ids!.includes(x.participacion.id));
       if (!lista.length) throw new Rechazo("NADA_POR_PREPARAR", "Nadie tiene un intento pendiente por la cadencia (ya respondió, ya ofertó, ya está en la Cola o aún no toca).");
@@ -163,7 +164,8 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       return { act: "intentos", ev: d.evento.id, evento: resumenEvento(d),
         arg: { event_id: d.evento.id, participacion_ids: lista.map(x => x.participacion.id) },
         cuerpos,
-        foto: lista.map(x => ({ p: x.participacion.id, intento: x.paso.intento, estado: x.s.estado, en_cola: x.paso.enCola })),
+        // Destinatario fijado: si cambia el carrier o su correo, confirmar se niega.
+        foto: lista.map(x => ({ p: x.participacion.id, carrier_id: x.s.carrierId, correo: x.s.correo, intento: x.paso.intento, estado: x.s.estado, en_cola: x.paso.enCola })),
         vista: {
           canal: "Correo. Al confirmar queda como BORRADOR en la Cola de Rateware; NO se envía hasta que el Administrador lo apruebe en la Mesa (Seguimiento) o en la Cola.",
           destinatarios: lista.map(x => ({ carrier: x.s.carrier, correo: x.s.correo, participacion_id: x.participacion.id, ruta: rutaTxt(x.ruta), intento: x.paso.intento, toco_en: x.paso.tocaEn, texto: textoIntento(d, x.paso) })),
@@ -273,19 +275,26 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       const carrierDe = (x: Aviso) => participaciones.find(p => p.id === x.participacionId);
       const revisada = (x: Aviso) => { const p = carrierDe(x); return Boolean(p && estadoRevision(d, p.carrierId) === "revisado"); };
       const invitaciones = d.avisos.filter(x => x.tipo === "invitacion" && !x.intento);
-      const enviables = invitaciones.filter(x => x.estado === "borrador" || x.estado === "fallido" || x.estado === "en_cola");
+      // «en_cola» mezcla queued y sending: con el estado crudo solo se ofrecen los pendientes
+      // de verdad (drafted, queued, failed). Uno en proceso (sending) no entra y no altera la tanda.
+      const crudos = await crudo({ action: "list_outreach_messages", rfx_event_id: d.evento.id, channel: "email" });
+      const estadoCrudo = new Map<string, string>(((crudos.rows ?? crudos.messages ?? []) as any[]).map(m => [String(m.id), String(m.status ?? "")]));
+      const PENDIENTES = new Set(["drafted", "queued", "failed"]);
+      const enProceso = invitaciones.filter(x => (x.estado === "borrador" || x.estado === "fallido" || x.estado === "en_cola") && !PENDIENTES.has(estadoCrudo.get(x.id) ?? ""));
+      const enviables = invitaciones.filter(x => (x.estado === "borrador" || x.estado === "fallido" || x.estado === "en_cola") && PENDIENTES.has(estadoCrudo.get(x.id) ?? ""));
       const porEnviar = enviables.filter(revisada).sort((x, y) => x.id.localeCompare(y.id));
       const tanda = porEnviar.slice(0, MAXIMO_POR_LLAMADA);
       if (!tanda.length) throw new Rechazo("NADA_POR_ENVIAR", "No hay borradores de invitación listos de carriers revisados.");
       const cuerpo = await cuerpoDe(m => m.enviarAvisos(d.evento.id, tanda));
       return { act: "invitacion_envio", ev: d.evento.id, evento: resumenEvento(d), arg: { event_id: d.evento.id, fase: "envio" }, cuerpos: [cuerpo],
-        foto: tanda.map(x => ({ id: x.id, version: x.version, estado: x.estado, revisado: revisada(x) })),
+        foto: tanda.map(x => ({ id: x.id, version: x.version, estado: x.estado, crudo: estadoCrudo.get(x.id), revisado: revisada(x) })),
         vista: { canal: `Gmail desde ${REMITENTE}. Al confirmar SE ENVÍAN ${tanda.length} invitaciones con este texto exacto (versión aprobada).`,
           operation_id: cuerpo.operation_id,
           destinatarios: tanda.map(x => ({ carrier: carrierDe(x)?.carrier ?? null, para: x.destinatario, asunto: x.asunto, texto: x.cuerpo, estado: x.estado })),
           quedan_fuera: [
             ...enviables.filter(x => !revisada(x)).map(x => ({ carrier: carrierDe(x)?.carrier ?? null, motivo: carrierDe(x) ? `sin «Revisado» vigente (${estadoRevision(d, carrierDe(x)!.carrierId)})` : "participación no encontrada" })),
-            ...porEnviar.slice(MAXIMO_POR_LLAMADA).map(x => ({ carrier: carrierDe(x)?.carrier ?? null, motivo: "siguiente tanda" }))
+            ...porEnviar.slice(MAXIMO_POR_LLAMADA).map(x => ({ carrier: carrierDe(x)?.carrier ?? null, motivo: "siguiente tanda" })),
+            ...enProceso.map(x => ({ carrier: carrierDe(x)?.carrier ?? null, motivo: estadoCrudo.get(x.id) === "sending" ? "en proceso (Rateware lo está enviando)" : "en proceso o estado no confirmado" }))
           ],
           ya_enviadas_u_otras: invitaciones.length - enviables.length } };
     },

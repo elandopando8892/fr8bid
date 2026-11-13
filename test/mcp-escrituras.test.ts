@@ -151,6 +151,47 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     expect(respuestaValida("update_rfx_event", invalido.body, 0)).toBe(false);
   });
 
+  it("la tanda excluye mensajes en proceso (sending) y no cambia su composición", async () => {
+    const x = await escenario({ invitar: false });
+    await mcp(x).ej("confirmar", { confirmacion_id: (await mcp(x).ej("preparar_invitacion", { event_id: x.eventId, fase: "borradores" })).confirmacion_id, frase_ok: "sí" });
+    const borradores = x.sim.mensajes.filter(m => m.rfx_event_id === x.eventId);
+    expect(borradores.length).toBeGreaterThanOrEqual(2);
+    const ocupado = borradores[0];
+    ocupado.status = "sending";
+    const admin = mcp(x, "admin", "admin");
+    const e1 = await admin.ej("preparar_invitacion", { event_id: x.eventId, fase: "envio" });
+    const e2 = await admin.ej("preparar_invitacion", { event_id: x.eventId, fase: "envio" });
+    const ids: string[] = (decodeJwt(e1.confirmacion_id) as any).cuerpos[0].ids;
+    expect(ids).not.toContain(ocupado.id);
+    expect(ids).toHaveLength(borradores.length - 1);
+    expect(e1.vista_previa.operation_id).toBe(e2.vista_previa.operation_id);
+    expect(e1.vista_previa.quedan_fuera).toEqual(expect.arrayContaining([expect.objectContaining({ motivo: expect.stringMatching(/en proceso/) })]));
+    expect(admin.escritas()).toEqual([]);
+  });
+
+  it("intentos: si cambia el correo del destinatario entre preparar y confirmar, no se escribe", async () => {
+    const x = await escenario();
+    const m = mcp(x);
+    const v = await m.ej("preparar_intentos", { event_id: x.eventId, participacion_ids: [x.p.C] });
+    expect(v.vista_previa.destinatarios[0].correo).toBe("sales@heymarksman.com");
+    x.sim.vendors.find(c => c.id === x.carriers.C.id)!.primary_email = "otro@ejemplo.test";
+    expect(await codigo(m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" }))).toBe("YA_APLICADO_O_CAMBIO");
+    expect(m.escritas()).toEqual([]);
+  });
+
+  it("intentos: sin saber quién respondió (falla o PASO_EN_RATEWARE) no se prepara nada", async () => {
+    const x = await escenario();
+    const sinPaso = mcp(x, "operador", "operator", {}, (b, r) => b.action === "list_rfx_carrier_replies" ? { status: 501, body: { code: "PASO_EN_RATEWARE", error: "x" }, headers: {} } : r);
+    let error: any;
+    try { await sinPaso.ej("preparar_intentos", { event_id: x.eventId }); } catch (e) { error = e; }
+    expect(error).toMatchObject({ codigo: "SIN_RESPUESTAS" });
+    expect(error.message).toMatch(/intenta más tarde/);
+    x.sim.fallas.fallarRespuestas = true;
+    const falla = mcp(x);
+    expect(await codigo(falla.ej("preparar_intentos", { event_id: x.eventId }))).toBe("SIN_RESPUESTAS");
+    expect([...sinPaso.escritas(), ...falla.escritas()]).toEqual([]);
+  });
+
   it("si la plantilla cambia entre preparar y confirmar, no se generan borradores", async () => {
     const x = await escenario({ invitar: false });
     const m = mcp(x);
