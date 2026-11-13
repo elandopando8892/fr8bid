@@ -35,6 +35,7 @@ import type { Aviso, Detalle, EntregaLocal, Participacion, Recibo, Ruta } from "
 import { EditorCondiciones, ListaCondiciones, MatrizCondiciones } from "./condiciones";
 import { aCarga, Confirmar, Desactualizado, dinero, EstadoVista, fecha, Liga, plural, Prueba, type Carga } from "./comun";
 import { useSesion } from "./sesion";
+import { LecturaIA } from "./LecturaIA";
 
 // Fecha corta sin hora, para columnas angostas.
 const dia = (iso: string | null | undefined) =>
@@ -1405,6 +1406,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
         </div>
       )}
       {d.evento.estado === "cerrado" && ctx.rol === "admin" && <AdjudicarEnLote d={d} ctx={ctx} accion={accion} />}
+      <LecturaIA d={d} accion={accion} advertenciaReal={ADVERTENCIA_REAL(s, d)} />
       {d.rutas.map((ruta, i) => {
         const filas = [...conOferta(ruta)].sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
         const sel = ruta.participaciones.find((x) => x.id === elegido) ?? null;

@@ -4,6 +4,8 @@
 
 import type { ConsultaTelefono, Telefono } from "../dominio/telefonos.js";
 import { MAX_TELEFONOS, revisarTelefonos } from "../servidor/telefonos.js";
+import { leerRespuesta } from "../servidor/lectura.js";
+import type { CanalLectura, Lectura, RutaLectura } from "../dominio/lectura.js";
 import type { CorreoRevelado, PersonaApollo } from "../dominio/apollo.js";
 import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier } from "../dominio/contactos.js";
 import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit.js";
@@ -99,6 +101,29 @@ export function revisorHttp(token: () => Promise<string | null>): RevisorTelefon
   };
 }
 
+// Lectura con IA de la respuesta de un carrier (POST /api/lectura). Solo
+// propone: nada se guarda hasta que el equipo confirma.
+export type LectorRespuestas = (body: Record<string, unknown>) => Promise<{ status: number; body: any }>;
+
+export function lectorHttp(token: () => Promise<string | null>): LectorRespuestas {
+  return async (body) => {
+    const t = await token();
+    try {
+      const r = await fetch("/api/lectura", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(t ? { authorization: `Bearer ${t}` } : {}) },
+        body: JSON.stringify(body)
+      });
+      return { status: r.status, body: await r.json().catch(() => ({ error: "Respuesta no válida", code: "RESPUESTA_INVALIDA" })) };
+    } catch {
+      return { status: 504, body: { error: "Sin conexión con Fr8Bid.", code: "SIN_RESPUESTA" } };
+    }
+  };
+}
+
+// En el simulado no hay IA: responde «no configurada» y la captura sigue a mano.
+export const lectorSimulado: LectorRespuestas = async (body) => leerRespuesta(body, true, null);
+
 // En el simulado no hay IA: solo reglas (los dudosos siguen dudosos).
 export const revisorSimulado: RevisorTelefonos = async (telefonos) => revisarTelefonos({ telefonos }, true, null);
 
@@ -134,7 +159,16 @@ export interface RevisionTelefonos {
 }
 
 export class MesaApi {
-  constructor(private t: Transporte, private hoy: () => string = () => hoyMexico(), private revisor: RevisorTelefonos = revisorSimulado, private apollo: ConsultaApollo = apolloSimulado) {}
+  constructor(private t: Transporte, private hoy: () => string = () => hoyMexico(), private revisor: RevisorTelefonos = revisorSimulado, private apollo: ConsultaApollo = apolloSimulado, private lector: LectorRespuestas = lectorSimulado) {}
+
+  // La IA lee lo que contestó el carrier y propone la oferta por ruta. Solo
+  // viajan el texto, el nombre del carrier y origen, destino y equipo de cada
+  // ruta. No guarda nada: el resultado es un borrador para confirmar.
+  async leerRespuesta(c: { texto: string; canal: CanalLectura; carrier: string; rutas: RutaLectura[] }): Promise<Lectura> {
+    const r = await this.lector({ ...c, hoy: this.hoy() });
+    if (r.status < 200 || r.status >= 300) throw new ErrorApi(r.status, String(r.body?.code || r.status), String(r.body?.error || "La IA no respondió"));
+    return r.body.lectura;
+  }
 
   private async pedirApollo(body: Record<string, unknown>) {
     const r = await this.apollo(body);
@@ -357,6 +391,8 @@ export class MesaApi {
     diasTransito: number | null;
     canal: "email" | "phone" | "whatsapp" | "other";
     notas: string;
+    // La propuso la IA a partir del texto del carrier y el equipo la confirmó.
+    leidaConIA?: boolean;
   }) {
     const etiqueta = { email: "Email", phone: "Phone", whatsapp: "WhatsApp", other: "Other" }[c.canal];
     const notas = c.notas.trim();
@@ -373,7 +409,7 @@ export class MesaApi {
         notes: notas || null,
         capture_source: "manual_operator",
         manual_source_channel: c.canal,
-        source_note: `Captured from ${etiqueta}${notas ? `: ${notas}` : ""}`
+        source_note: `Captured from ${etiqueta}${c.leidaConIA ? " (read by AI, confirmed by operator)" : ""}${notas ? `: ${notas}` : ""}`
       }
     });
   }

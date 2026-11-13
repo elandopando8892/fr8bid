@@ -8,7 +8,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { useAuth } from "@/auth/AuthContext";
 import { isConfigured } from "@/config/env";
 import { getAccessToken } from "@/lib/auth";
-import { MesaApi, apolloHttp, revisorHttp, transporteHttp, transporteSimulado } from "../cliente/api";
+import { MesaApi, apolloHttp, lectorHttp, revisorHttp, transporteHttp, transporteSimulado } from "../cliente/api";
 import type { Rol } from "../dominio/tipos";
 import type { RatewareSimulado } from "../simulado/rateware";
 
@@ -62,7 +62,7 @@ export function ProveedorSesion({ children }: { children: ReactNode }) {
 
   const api = useMemo(() => {
     if (MODO === "simulado") return new MesaApi(sim ? transporteSimulado(sim, () => usuarioSimulado) : async () => ({ status: 503, body: { error: "Cargando", code: "CARGANDO" }, headers: {} }));
-    return new MesaApi(transporteHttp(getAccessToken), undefined, revisorHttp(getAccessToken), apolloHttp(getAccessToken));
+    return new MesaApi(transporteHttp(getAccessToken), undefined, revisorHttp(getAccessToken), apolloHttp(getAccessToken), lectorHttp(getAccessToken));
   }, [sim, usuarioSimulado]);
 
   const u = USUARIOS_SIMULADOS.find((x) => x.clave === usuarioSimulado)!;
