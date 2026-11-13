@@ -630,7 +630,8 @@ export class RatewareSimulado {
         if (!body.id) throw new Falla(400, "RFx invitation id is required.", "BAD_REQUEST");
         const lv = this.laneVendor(u, body.id);
         const e = this.events.find((x) => x.id === lv.rfx_event_id)!;
-        if (e.status === "awarded") throw new Falla(409, "El evento ya se entregó.", "RFX_CLOSED");
+        // Como la Mesa: nada se captura en un evento entregado o archivado.
+        if (e.status === "awarded" || e.status === "archived") throw new Falla(409, "El evento ya se entregó o se archivó.", "RFX_CLOSED");
         if (!body.patch) return ok({ row: this.invitacionCruda(lv) });
         if (body.patch.bid_rate === null || body.patch.bid_rate === undefined) {
           // Igual que rateware-api: sin tarifa queda el estado que se mande.

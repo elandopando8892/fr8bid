@@ -22,7 +22,7 @@ describe("endpoint Vercel con frontera de identidad simulada", () => {
     vi.stubEnv("FR8BID_MCP_RESOURCE", "https://fr8bid.example.test/api/mcp");
     vi.spyOn(auth, "autenticar").mockImplementation(async authorization => {
       if (!authorization || !["Bearer operador", "Bearer ajeno"].includes(authorization)) throw new Error("401");
-      return { token: `sim:${authorization.slice(7)}`, userId: authorization.slice(7), rol: "operator" };
+      return { token: `sim:${authorization.slice(7)}`, userId: authorization.slice(7), clientId: "synthetic-client", email: `${authorization.slice(7)}@heymarksman.com`, rol: "operator" };
     });
     const realFetch = globalThis.fetch;
     const llamadas: string[] = [];

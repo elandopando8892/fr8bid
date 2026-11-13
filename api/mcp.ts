@@ -2,7 +2,9 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { NodeStreamableHTTPServerTransport } from "@modelcontextprotocol/node";
 import { autenticar, configuracion } from "../src/mcp/auth.js";
 import { crearServidor } from "../src/mcp/servidor.js";
-import { transporteApi } from "../src/mcp/transporte.js";
+import { transporteApi, transporteEscritura } from "../src/mcp/transporte.js";
+import { secretoConfirmacion } from "../src/mcp/confirmacion.js";
+import { aprobadoresDe } from "../src/mcp/escrituras.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Cache-Control", "no-store");
@@ -28,7 +30,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: "Inicia sesión con OAuth de Fr8Bid" });
   }
   if (req.method !== "POST") { res.setHeader("Allow", "POST, OPTIONS"); return res.status(405).end(); }
-  const servidor = crearServidor(transporteApi(c.resource, sesion.token), sesion.rol);
+  // Escrituras (Entrega 2) solo para Operador/Administrador; sin FR8BID_MCP_CONFIRM_SECRET
+  // preparar_*/confirmar responden «confirmaciones pendientes de configurar» y las lecturas siguen.
+  const escrituras = sesion.rol === "viewer" ? undefined
+    : { t: transporteEscritura(c.resource, sesion.token), userId: sesion.userId, clientId: sesion.clientId, email: sesion.email, aprobadores: aprobadoresDe(process.env), secreto: secretoConfirmacion(process.env) };
+  const servidor = crearServidor(transporteApi(c.resource, sesion.token), sesion.rol, undefined, escrituras);
   const transporte = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   try {
     await servidor.connect(transporte);

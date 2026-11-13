@@ -22,6 +22,7 @@ import {
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
 import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
 import { cambiosComerciales, describirModelo, modeloCorto, tarifaVenta } from "../dominio/modelo";
+import { bloqueoRespondio, bloqueoRevision, candidatasCaptura } from "../dominio/acciones-mesa";
 import { candidatosRecordatorio, claveIntento, esperaRespuesta, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
 import type { CarrierFit } from "../dominio/carrierFit";
@@ -447,7 +448,7 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
   const accionOmitida = (o: (typeof omitidas)[number]) => (
     <>
       {!o.p.correo && ctx.rol !== "viewer" && <ContactosSugeridos vendorId={o.p.carrierId} />}
-      {ctx.rol === "admin" && o.estado === "sin_revision" && o.p.correo && (
+      {ctx.rol === "admin" && !bloqueoRevision(d, o.p) && (
         <Confirmar
           etiqueta="Revisado"
           clase="btn-chico"
@@ -1144,7 +1145,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                         <I.Sobre size={14} />{abierto === x.carrierId ? "Ocultar" : "Recordatorio"}
                       </button>
                     )}
-                    {esperaRespuesta(x.estado) && ctx.rol !== "viewer" && d.evento.estado === "abierto" && (
+                    {!bloqueoRespondio(d, x) && ctx.rol !== "viewer" && (
                       <button className="btn-chico" onClick={() => setAbierto(abierto === `r:${x.carrierId}` ? null : `r:${x.carrierId}`)}>
                         <I.Check size={14} />{abierto === `r:${x.carrierId}` ? "Ocultar" : "Ya respondió"}
                       </button>
@@ -1307,11 +1308,11 @@ function YaRespondio({ d, s: x, accion }: { d: Detalle; s: ReturnType<typeof seg
 // versión nueva; las anteriores no se tocan.
 function CapturaEquipo({ d, ruta, accion }: { d: Detalle; ruta: Ruta; accion: Props["accion"] }) {
   const s = useSesion();
-  const candidatas = ruta.participaciones.filter((x) => !["preseleccionada", "declino"].includes(x.estado) && !x.rol);
+  const candidatas = candidatasCaptura(d, ruta);
   const vacio = { id: "", tarifa: "", moneda: "USD", vigencia: "", capacidad: "", transito: "", canal: "email" as const, notas: "" };
   const [f, setF] = useState<{ id: string; tarifa: string; moneda: string; vigencia: string; capacidad: string; transito: string; canal: "email" | "phone" | "whatsapp" | "other"; notas: string }>(vacio);
   const [abierto, setAbierto] = useState(false);
-  if (s.rol === "viewer" || !candidatas.length || d.evento.estado === "adjudicado" || d.evento.estado === "archivado") return null;
+  if (s.rol === "viewer" || !candidatas.length) return null;
   if (!abierto) return <button className="btn-texto con-icono" onClick={() => setAbierto(true)}><I.Mas size={14} />Capturar oferta recibida por otro canal</button>;
   const tarifa = Number(f.tarifa.replace(/,/g, ""));
   const num = (x: string) => (x.trim() === "" ? null : Number(x));
