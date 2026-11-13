@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -41,18 +42,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // The server's copy of the account: app_metadata in the session is as old as its token.
   const [fresh, setFresh] = useState<User | null>(null);
   const [sessionRevision, setSessionRevision] = useState(0);
+  const currentUserId = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
     // An account outside the team's domains is signed straight back out, so no
     // screen ever calls the backend with it.
     const accept = (session: Session | null) => {
-      // Every session notification invalidates the last verification, even
-      // when Supabase reuses the same User object during token refresh.
-      setFresh(null);
-      setCurrentTeamRole("viewer");
-      setSessionRevision((revision) => revision + 1);
       const next = session?.user ?? null;
+      // Supabase re-announces the same account when the tab comes back into
+      // view (SIGNED_IN) and on every token refresh. Dropping the verified role
+      // there made every page reload from scratch on each tab switch, so for
+      // the same account the last verification stays until the server answers
+      // again (the effect below asks on every notification).
+      const sameAccount = Boolean(next && currentUserId.current === next.id && isTeamEmail(next.email));
+      if (!sameAccount) {
+        setFresh(null);
+        setCurrentTeamRole("viewer");
+      }
+      currentUserId.current = next && isTeamEmail(next.email) ? next.id : null;
+      setSessionRevision((revision) => revision + 1);
       if (next && !isTeamEmail(next.email)) {
         setDeniedEmail(next.email ?? "");
         setUser(null);
