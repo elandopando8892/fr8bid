@@ -3,6 +3,8 @@
 2026-11-12. Base de esta tarea: `77408197`, rama `codex/mcp-lectura-2`.
 Estado: código y pruebas preparados; no ejecutados en esta sesión, no desplegados ni utilizados con datos reales.
 
+La entrega 2 (cambios con vista previa y «sí»: `preparar_*` y `confirmar`) está en [mcp-escrituras.md](mcp-escrituras.md).
+
 ## Alcance y comparación reutilizada
 
 La primera ronda (`31919ab`, rama local `codex/mcp-lectura`) preparó dos herramientas y un subconjunto manual de MCP, sin OAuth. El alcance documental de entrega 1 pide once lecturas y cuatro skills. Existe una implementación local de ese alcance en `8404dbb`, consultada mediante Git sin modificar su checkout. Se reutilizan sus módulos, pruebas, skills y dependencias fijadas; esta sesión no acredita sus resultados históricos como pruebas de este cambio.
