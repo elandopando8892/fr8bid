@@ -149,6 +149,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       if (!!a.carrier_id === !!a.participacion_ids) throw new Rechazo("ARGUMENTOS", "Indica carrier_id o participacion_ids (solo uno).", 400);
       const d = await leer(a.event_id);
       const rechazo = a.respuesta === "rechazo";
+      if (rechazo && esPrima(d.evento.folio)) throw new Rechazo("PRIMA_PROTEGIDO", "En PRIMA no se marca rechazo desde el chat; hazlo en la Mesa.", 403);
       let elegidas = todas(d).filter(x => a.participacion_ids ? a.participacion_ids.includes(x.p.id) : x.p.carrierId === a.carrier_id && !conOferta(x.p) && (x.p.estado === "invitada" || x.p.estado === "vista"));
       if (a.participacion_ids && elegidas.length !== new Set(a.participacion_ids).size) throw new Rechazo("AJENA", "Alguna participación no pertenece al evento.", 404);
       if (!elegidas.length) throw new Rechazo("NADA_POR_MARCAR", "Ese carrier no tiene participaciones invitadas sin oferta en este evento.");
@@ -264,6 +265,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
     async cambio_evento(a: { event_id: string; nueva_fecha: string }) {
       const d = await leer(a.event_id);
       if (d.evento.estado !== "abierto" && d.evento.estado !== "borrador") throw new Rechazo("EVENTO_NO_EDITABLE", "Solo se extiende el plazo de eventos abiertos o en borrador.");
+      // Solo hacia adelante: nunca cierra (tampoco PRIMA, que jamás se cierra ni se rechaza).
       const actual = d.evento.plazo ? d.evento.plazo.slice(0, 10) : null;
       if (a.nueva_fecha <= hoy()) throw new Rechazo("FECHA_PASADA", "La fecha nueva debe ser posterior a hoy; desde el chat no se cierra ni se adelanta el plazo.", 400);
       if (actual && a.nueva_fecha <= actual) throw new Rechazo("SOLO_EXTENDER", `Solo hacia adelante: la fecha nueva debe ser posterior al plazo actual (${actual}).`, 400);
