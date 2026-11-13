@@ -6,6 +6,8 @@ import { esProtegido } from "../dominio/protegidos.js";
 import { hoyMexico, versionVigente } from "../dominio/recorrido.js";
 import { claveIntento, intentosPorPreparar, textoIntento } from "../dominio/seguimiento.js";
 import { audienciaInvitacion, estadoRevision, resumenOmisiones } from "../dominio/revision.js";
+import { bloqueoBorradoresInvitacion, bloqueoCaptura, bloqueoEnvioInvitacion, bloqueoIntentos, bloqueoPlazo, bloqueoRespondio, bloqueoRevision } from "../dominio/acciones-mesa.js";
+import { seguimiento } from "../dominio/seguimiento.js";
 import { REMITENTE, campanaDelEvento, campanaFr8bid, elegirPlantilla } from "../dominio/invitacion.js";
 import { MAXIMO_POR_LLAMADA, leerResultado, requiereAtencion } from "../dominio/tandas.js";
 import type { Aviso, Detalle, Participacion, Rol, Ruta } from "../dominio/tipos.js";
@@ -24,6 +26,9 @@ export const FUERA_DEL_MCP = ["award_rfx_lane_vendor", "clear_rfx_award", "close
 const FOLIOS_SIN_CIERRE = new Set(["rfx-1021-primapro"]);
 export const esPrima = (folio: unknown) => FOLIOS_SIN_CIERRE.has(String(folio ?? "").trim().toLowerCase());
 const CAMPANA_NUEVA = "$campana_creada";
+// confirmar acepta hasta este largo de confirmacion_id; preparar_* nunca firma uno mayor.
+export const LIMITE_TOKEN = 60000;
+const PARTIBLES = new Set(["intentos", "ya_respondio"]);
 
 const id = z.string().regex(/^[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}$/i);
 const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(s => {
@@ -39,7 +44,7 @@ export const herramientasEscritura = {
   preparar_ya_respondio: { rol: "operator" as Rol, descripcion: `Marca que un carrier respondió o rechazó sin tarifa (lo saca de los intentos). Indica carrier_id o participacion_ids. Nunca sobre una participación con oferta. ${vista}`,
     schema: z.object({ event_id: id, carrier_id: id.optional(), participacion_ids: ids.optional(), respuesta: z.enum(["respondio", "rechazo"]), canal: z.enum(["email", "whatsapp", "phone"]), nota: z.string().trim().max(300).default("") }).strict() },
   preparar_captura: { rol: "operator" as Rol, descripcion: `Captura una oferta all-in que llegó por otro canal en una participación SIN oferta (nunca modifica una existente). Muestra all-in vs target. ${vista}`,
-    schema: z.object({ event_id: id, participacion_id: id, tarifa: z.number().positive().max(1_000_000), moneda: z.string().regex(/^[A-Z]{3}$/), vigencia: fecha.nullable().default(null), capacidad_semanal: z.number().int().min(0).max(10_000).nullable().default(null), dias_transito: z.number().int().min(0).max(90).nullable().default(null), canal: z.enum(["email", "phone", "whatsapp", "other"]), nota: z.string().trim().max(500).default("") }).strict() },
+    schema: z.object({ event_id: id, participacion_id: id, tarifa: z.number().positive().max(1_000_000), moneda: z.enum(["USD", "MXN"]), vigencia: fecha.nullable().default(null), capacidad_semanal: z.number().int().min(0).max(10_000).nullable().default(null), dias_transito: z.number().int().min(0).max(90).nullable().default(null), canal: z.enum(["email", "phone", "whatsapp", "other"]), nota: z.string().trim().max(500).default("") }).strict() },
   preparar_revision: { rol: "admin" as Rol, descripcion: `Administrador: marca «Revisado» a un carrier preseleccionado para que pueda recibir invitación. No envía nada. ${vista}`,
     schema: z.object({ event_id: id, carrier_id: id }).strict() },
   preparar_invitacion: { rol: "operator" as Rol, descripcion: `Invitación por tandas. fase «borradores» (Operador): genera borradores solo para carriers con «Revisado» vigente, no envía. fase «envio» (Administrador): envía por Gmail una tanda de hasta ${MAXIMO_POR_LLAMADA} borradores con su versión exacta. ${vista}`,
@@ -47,7 +52,7 @@ export const herramientasEscritura = {
   preparar_cambio_evento: { rol: "admin" as Rol, descripcion: `Administrador: SOLO extiende el plazo (fecha nueva posterior a la actual y a hoy) de un evento abierto o en borrador. No cierra, no publica, no cambia estado. ${vista}`,
     schema: z.object({ event_id: id, nueva_fecha: fecha }).strict() },
   confirmar: { rol: "operator" as Rol, descripcion: "Ejecuta una vista previa ya mostrada. confirmacion_id = el de preparar_*; frase_ok = el texto literal con el que el usuario dijo «sí» (vacío = rechazo). Vence a los 15 min, vuelve a comprobar el evento y no reintenta. Adjudicar, entregar a Rateware y avisos de adjudicación no están aquí: se hacen en la Mesa.",
-    schema: z.object({ confirmacion_id: z.string().min(20).max(60000), frase_ok: z.string().max(300).optional() }).strict() }
+    schema: z.object({ confirmacion_id: z.string().min(20).max(LIMITE_TOKEN), frase_ok: z.string().max(300).optional() }).strict() }
 };
 export type NombreEscritura = keyof typeof herramientasEscritura;
 
@@ -73,6 +78,45 @@ export function esAfirmacion(frase: string): boolean {
   const n = normalizar(frase);
   if (!n || DUDAS.test(n)) return false;
   return n.split(" ").every(p => AFIRMATIVAS.has(p));
+}
+
+export interface Efecto { efecto: "completo" | "parcial" | "nulo"; omisiones: { id: string | null; motivo: string }[] }
+/** Compara la respuesta (ya válida) con lo aprobado: solo «completo» cuenta como hecho. */
+export function evaluarEfecto(body: Record<string, any>, b: any): Efecto {
+  const completo: Efecto = { efecto: "completo", omisiones: [] };
+  const nulo = (id: unknown, motivo: string): Efecto => ({ efecto: "nulo", omisiones: [{ id: id == null ? null : String(id), motivo }] });
+  const sinVerificar = (id: unknown): Efecto => ({ efecto: "parcial", omisiones: [{ id: id == null ? null : String(id), motivo: "Rateware no devolvió el estado; verifica en la página del evento." }] });
+  const row = b?.row ?? {};
+  switch (body.action) {
+    case "draft_bid_room_carrier_message":
+      return b.reused === true ? nulo(body.rfx_lane_vendor_id, "ya había un borrador con esa clave; no se creó otro") : completo;
+    case "update_rfx_bid": {
+      const p = body.patch || {};
+      if (p.bid_rate == null) return !("invitation_status" in row) ? sinVerificar(body.id) : row.invitation_status === p.invitation_status ? completo : nulo(body.id, "Rateware no reflejó el cambio de estado");
+      return !("bid_rate" in row) ? sinVerificar(body.id) : Number(row.bid_rate) === Number(p.bid_rate) ? completo : nulo(body.id, "Rateware no reflejó la tarifa");
+    }
+    case "record_rfx_invitation_wave_review":
+      return !("reviewed" in row) ? sinVerificar(body.vendor_id) : row.reviewed === true ? completo : nulo(body.vendor_id, "Rateware no registró «Revisado»");
+    case "update_rfx_event":
+      return !("due_date" in row) ? sinVerificar(body.event_id) : String(row.due_date ?? "").slice(0, 10) === body.patch?.due_date ? completo : nulo(body.event_id, "Rateware no reflejó el plazo nuevo");
+    case "generate_outreach_drafts": {
+      const esperados: string[] = (body.reviewed_vendor_ids || []).map(String);
+      const generados = new Set((Array.isArray(b.rows) ? b.rows : []).map((x: any) => String(x?.vendor_id ?? "")));
+      const motivos = new Map<string, string>((Array.isArray(b.skipped_rows) ? b.skipped_rows : []).map((x: any) => [String(x?.vendor_id ?? ""), String(x?.reason || "omitido")]));
+      const faltan = esperados.filter(v => !generados.has(v));
+      if (!faltan.length) return completo;
+      return { efecto: faltan.length === esperados.length ? "nulo" : "parcial", omisiones: faltan.map(v => ({ id: v, motivo: motivos.get(v) || "Rateware no generó borrador" })) };
+    }
+    case "send_outreach_messages": {
+      const ids: string[] = body.ids || [];
+      const res = leerResultado(b, ids);
+      const lista = [...res.failures, ...res.skipped_rows].map(f => ({ id: f.id, motivo: f.reason || "no enviado" }));
+      if (res.sent === ids.length && !requiereAtencion(res, ids)) return completo;
+      if (res.sent === 0) return { efecto: "nulo", omisiones: lista.length ? lista : [{ id: null, motivo: "Rateware no envió ninguno" }] };
+      return { efecto: "parcial", omisiones: lista.length ? lista : [{ id: null, motivo: `${ids.length - res.sent} sin confirmar como enviados` }] };
+    }
+  }
+  return nulo(null, "acción sin verificación");
 }
 
 /** 2xx con la forma que esa acción devuelve; si no, el resultado no está confirmado. */
@@ -153,8 +197,10 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
   const planes: Record<string, (a: any) => Promise<Plan>> = {
     async intentos(a: { event_id: string; participacion_ids?: string[] }) {
       const d = await leer(a.event_id);
-      // null (falló) o undefined (no disponible, PASO_EN_RATEWARE): sin saber quién respondió no se insiste.
-      if (d.respuestas == null) throw new Rechazo("SIN_RESPUESTAS", "No se pudo saber quién ya respondió; intenta más tarde. No se preparó nada.");
+      // Mismas reglas que la Mesa: evento abierto y respuestas consultadas (null o
+      // undefined por PASO_EN_RATEWARE: sin saber quién respondió no se insiste).
+      const bloqueo = bloqueoIntentos(d);
+      if (bloqueo) throw new Rechazo(d.respuestas == null ? "SIN_RESPUESTAS" : "NO_PERMITIDO", `${bloqueo} No se preparó nada.`);
       let lista = intentosPorPreparar(d, ahora(), hoy());
       if (a.participacion_ids) lista = lista.filter(x => a.participacion_ids!.includes(x.participacion.id));
       if (!lista.length) throw new Rechazo("NADA_POR_PREPARAR", "Nadie tiene un intento pendiente por la cadencia (ya respondió, ya ofertó, ya está en la Cola o aún no toca).");
@@ -178,13 +224,20 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       const d = await leer(a.event_id);
       const rechazo = a.respuesta === "rechazo";
       if (rechazo && esPrima(d.evento.folio)) throw new Rechazo("PRIMA_PROTEGIDO", "En PRIMA no se marca rechazo desde el chat; hazlo en la Mesa.", 403);
-      let elegidas = todas(d).filter(x => a.participacion_ids ? a.participacion_ids.includes(x.p.id) : x.p.carrierId === a.carrier_id && !conOferta(x.p) && (x.p.estado === "invitada" || x.p.estado === "vista"));
+      let elegidas = todas(d).filter(x => a.participacion_ids ? a.participacion_ids.includes(x.p.id) : x.p.carrierId === a.carrier_id);
       if (a.participacion_ids && elegidas.length !== new Set(a.participacion_ids).size) throw new Rechazo("AJENA", "Alguna participación no pertenece al evento.", 404);
-      if (!elegidas.length) throw new Rechazo("NADA_POR_MARCAR", "Ese carrier no tiene participaciones invitadas sin oferta en este evento.");
+      if (!elegidas.length) throw new Rechazo("AJENA", "Ese carrier no está en este evento.", 404);
+      // Mismas reglas que la Mesa («Ya respondió»): evento abierto, carrier esperando
+      // respuesta y solo sus rutas pendientes (sin oferta, sin declinar).
+      const segs = seguimiento(d, hoy());
       for (const { p, r } of elegidas) {
         if (conOferta(p)) throw new Rechazo("YA_OFERTO", `${p.carrier} ya tiene oferta en ${rutaTxt(r)}; no se marca respuesta sin tarifa.`);
         if (p.estado === (rechazo ? "declino" : "respondio")) throw new Rechazo("YA_MARCADA", `${p.carrier} ya está marcado así en ${rutaTxt(r)}.`);
-        if (p.estado === "preseleccionada" || p.estado === "excluida") throw new Rechazo("NO_INVITADA", `${p.carrier} no está invitado en ${rutaTxt(r)}.`);
+        const sc = segs.find(x => x.carrierId === p.carrierId);
+        if (!sc) throw new Rechazo("NO_INVITADA", `${p.carrier} no está invitado en ${rutaTxt(r)}.`);
+        const bloqueo = bloqueoRespondio(d, sc);
+        if (bloqueo) throw new Rechazo("NO_PERMITIDO", bloqueo);
+        if (!sc.pendientes.some(f => f.participacion.id === p.id)) throw new Rechazo("NO_PENDIENTE", `${p.carrier} no tiene pendiente ${rutaTxt(r)}.`);
       }
       elegidas = [...elegidas].sort((x, y) => x.p.id.localeCompare(y.p.id));
       const cuerpos: Record<string, unknown>[] = [];
@@ -206,7 +259,9 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       const fila = (crudoDetalle.lanes || []).flatMap((l: any) => l.invitations || []).find((v: any) => v.id === a.participacion_id);
       const bidRate = fila?.bid_rate ?? null;
       if (conOferta(x.p) || bidRate !== null) throw new Rechazo("YA_HAY_OFERTA", "Esta participación ya tiene oferta; el MCP no modifica ofertas. Revísala en la Mesa.");
-      if (x.p.estado === "excluida") throw new Rechazo("EXCLUIDA", "La participación está excluida.");
+      // Mismas reglas que la Mesa (Captura del equipo) más «nunca sobre una participación excluida».
+      const bloqueo = bloqueoCaptura(d, x.p) ?? (x.p.estado === "excluida" ? "La participación está excluida." : null);
+      if (bloqueo) throw new Rechazo("NO_PERMITIDO", bloqueo);
       const cuerpo = await cuerpoDe(m => m.capturarOferta({ eventId: d.evento.id, participacionId: x.p.id, tarifa: a.tarifa, moneda: a.moneda, vigencia: a.vigencia, capacidadSemanal: a.capacidad_semanal, diasTransito: a.dias_transito, canal: a.canal, notas: a.nota }));
       const misma = x.r.objetivo !== null && x.r.moneda === a.moneda;
       return { act: "captura", ev: d.evento.id, evento: resumenEvento(d),
@@ -223,12 +278,12 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
 
     async revision(a: { event_id: string; carrier_id: string }) {
       const d = await leer(a.event_id);
-      if (d.evento.estado !== "abierto" && d.evento.estado !== "borrador") throw new Rechazo("EVENTO_NO_EDITABLE", "Solo en eventos abiertos o en borrador.");
       const x = todas(d).find(x => x.p.carrierId === a.carrier_id);
       if (!x) throw new Rechazo("AJENA", "El carrier no está en este evento.", 404);
+      // Mismas reglas que la Mesa: preseleccionado, sin revisión, con correo, evento abierto o borrador.
       const e = estadoRevision(d, a.carrier_id);
-      if (e === "sin_consulta") throw new Rechazo("SIN_CONSULTA", "No se pudo consultar la revisión; no se marca nada.");
-      if (e === "revisado") throw new Rechazo("YA_REVISADO", `${x.p.carrier} ya tiene «Revisado» vigente.`);
+      const bloqueo = bloqueoRevision(d, x.p) ?? (todas(d).some(y => y.p.carrierId === a.carrier_id && y.p.estado === "preseleccionada") ? null : `${x.p.carrier} ya no está preseleccionado (ya se invitó o se excluyó).`);
+      if (bloqueo) throw new Rechazo(e === "revisado" ? "YA_REVISADO" : "NO_PERMITIDO", bloqueo);
       const cuerpo = await cuerpoDe(m => m.marcarRevisado(d.evento.id, { carrierId: x.p.carrierId, carrier: x.p.carrier, correo: x.p.correo }));
       return { act: "revision", ev: d.evento.id, evento: resumenEvento(d), arg: { event_id: d.evento.id, carrier_id: a.carrier_id }, cuerpos: [cuerpo],
         foto: { carrier: a.carrier_id, estado: e, en: d.revisiones?.[a.carrier_id]?.en ?? null },
@@ -238,8 +293,8 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
 
     async invitacion_borradores(a: { event_id: string }) {
       const d = await leer(a.event_id);
-      if (d.evento.estado !== "abierto" && d.evento.estado !== "borrador") throw new Rechazo("EVENTO_NO_EDITABLE", "Solo en eventos abiertos o en borrador.");
-      if (!d.revisiones) throw new Rechazo("SIN_CONSULTA", "No se pudo consultar la revisión; no se invita a nadie.");
+      const bloqueoB = bloqueoBorradoresInvitacion(d);
+      if (bloqueoB) throw new Rechazo("NO_PERMITIDO", bloqueoB);
       const invitaciones = d.avisos.filter(x => x.tipo === "invitacion" && !x.intento);
       const audiencia = audienciaInvitacion(d);
       const sinBorrador = audiencia.aptas.filter(p => !invitaciones.some(x => x.participaciones.includes(p.id)));
@@ -270,7 +325,8 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
 
     async invitacion_envio(a: { event_id: string }) {
       const d = await leer(a.event_id);
-      if (d.evento.estado !== "abierto") throw new Rechazo("EVENTO_NO_ABIERTO", "El evento no está abierto a ofertas. Publícalo en la Mesa; el MCP no publica.");
+      const bloqueoE = bloqueoEnvioInvitacion(d);
+      if (bloqueoE) throw new Rechazo(d.evento.estado !== "abierto" ? "EVENTO_NO_ABIERTO" : "NO_PERMITIDO", `${bloqueoE} El MCP no publica.`);
       const participaciones = todas(d).map(x => x.p);
       const carrierDe = (x: Aviso) => participaciones.find(p => p.id === x.participacionId);
       const revisada = (x: Aviso) => { const p = carrierDe(x); return Boolean(p && estadoRevision(d, p.carrierId) === "revisado"); };
@@ -301,11 +357,10 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
 
     async cambio_evento(a: { event_id: string; nueva_fecha: string }) {
       const d = await leer(a.event_id);
-      if (d.evento.estado !== "abierto" && d.evento.estado !== "borrador") throw new Rechazo("EVENTO_NO_EDITABLE", "Solo se extiende el plazo de eventos abiertos o en borrador.");
+      const bloqueoP = bloqueoPlazo(d, a.nueva_fecha, hoy());
+      if (bloqueoP) throw new Rechazo(d.evento.estado !== "abierto" && d.evento.estado !== "borrador" ? "EVENTO_NO_EDITABLE" : a.nueva_fecha <= hoy() ? "FECHA_PASADA" : "SOLO_EXTENDER", bloqueoP, 400);
       // Solo hacia adelante: nunca cierra (tampoco PRIMA, que jamás se cierra ni se rechaza).
       const actual = d.evento.plazo ? d.evento.plazo.slice(0, 10) : null;
-      if (a.nueva_fecha <= hoy()) throw new Rechazo("FECHA_PASADA", "La fecha nueva debe ser posterior a hoy; desde el chat no se cierra ni se adelanta el plazo.", 400);
-      if (actual && a.nueva_fecha <= actual) throw new Rechazo("SOLO_EXTENDER", `Solo hacia adelante: la fecha nueva debe ser posterior al plazo actual (${actual}).`, 400);
       return { act: "cambio_evento", ev: d.evento.id, evento: resumenEvento(d), arg: { event_id: d.evento.id, nueva_fecha: a.nueva_fecha },
         cuerpos: [{ action: "update_rfx_event", event_id: d.evento.id, patch: { due_date: a.nueva_fecha } }],
         foto: { estado: d.evento.estado, plazo: actual },
@@ -319,10 +374,32 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
     if (!permite(ctx.rol, ROL_ACCION[act])) throw new Rechazo("SIN_PERMISO", `Esta acción es del ${ROL_ACCION[act] === "admin" ? "Administrador" : "Operador"}.`, 403);
     if (!ctx.secreto) throw PENDIENTE();
     if (esProtegido(a.event_id)) throw new Rechazo("EVENTO_PROTEGIDO", "Evento protegido.", 404);
+    const secreto = ctx.secreto;
+    const firmarPlan = (p: Plan) => firmar({ sub: ctx.userId, client_id: ctx.clientId, act, ev: p.ev, arg: p.arg, cuerpos: p.cuerpos, fijo: p.fijo, pre: huella(p.foto) }, secreto, ahora());
     const plan = await planes[act](a);
-    const firma = await firmar({ sub: ctx.userId, client_id: ctx.clientId, act, ev: plan.ev, arg: plan.arg, cuerpos: plan.cuerpos, fijo: plan.fijo, pre: huella(plan.foto) }, ctx.secreto, ahora());
-    return { estado: "vista_previa", escrito: false, accion: act, evento: plan.evento, vista_previa: plan.vista, confirmacion_id: firma.token, vence_en: firma.vence, mesa_url: ligaMesa(plan.ev),
-      instruccion: "Nada se escribió. Muestra esta vista previa completa (destinatarios, canal y texto) y pide un «sí» explícito. Solo después llama a confirmar con este confirmacion_id y frase_ok = el texto literal de esa respuesta." };
+    const firma = await firmarPlan(plan);
+    if (firma.token.length <= LIMITE_TOKEN)
+      return { estado: "vista_previa", escrito: false, accion: act, evento: plan.evento, vista_previa: plan.vista, confirmacion_id: firma.token, vence_en: firma.vence, mesa_url: ligaMesa(plan.ev),
+        instruccion: "Nada se escribió. Muestra esta vista previa completa (destinatarios, canal y texto) y pide un «sí» explícito. Solo después llama a confirmar con este confirmacion_id y frase_ok = el texto literal de esa respuesta." };
+    // No cabe en un confirmacion_id: se parte por participaciones, cada parte con su vista previa.
+    const ids = plan.arg.participacion_ids as string[] | undefined;
+    if (!PARTIBLES.has(act) || !ids || ids.length < 2) throw new Rechazo("DEMASIADO_GRANDE", "La vista previa no cabe en una sola confirmación; acota la selección (menos carriers o rutas).", 413);
+    let tam = Math.max(1, Math.floor(ids.length * (LIMITE_TOKEN / firma.token.length) * 0.9));
+    for (;;) {
+      const partes: Record<string, unknown>[] = [];
+      let cabe = true;
+      for (let i = 0; i < ids.length && cabe; i += tam) {
+        const p = await planes[act]({ ...plan.arg, participacion_ids: ids.slice(i, i + tam) });
+        const f = await firmarPlan(p);
+        if (f.token.length > LIMITE_TOKEN) cabe = false;
+        else partes.push({ vista_previa: p.vista, confirmacion_id: f.token, vence_en: f.vence });
+      }
+      if (cabe) return { estado: "vista_previa", escrito: false, accion: act, evento: plan.evento, mesa_url: ligaMesa(plan.ev),
+        partes: partes.map((x, i) => ({ parte: i + 1, de: partes.length, ...x })),
+        instruccion: `Nada se escribió. La selección no cabe en una sola confirmación: son ${partes.length} partes. Muestra cada parte completa y pide un «sí» explícito para cada una; confirma cada confirmacion_id por separado.` };
+      if (tam === 1) throw new Rechazo("DEMASIADO_GRANDE", "La vista previa no cabe en una sola confirmación; acota la selección.", 413);
+      tam = Math.max(1, Math.floor(tam / 2));
+    }
   }
 
   async function confirmar(args: Record<string, unknown>) {
@@ -352,7 +429,9 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       if (plan.ev !== c.ev || huella(plan.foto) !== c.pre || huellaCuerpos(plan.cuerpos, plan.fijo) !== c.h)
         throw new Rechazo("YA_APLICADO_O_CAMBIO", "Ya aplicado o el evento cambió desde la vista previa. Vuelve a preparar; no se escribió nada.");
       const pasos: Record<string, unknown>[] = [];
-      let estado = "aplicada";
+      const efectos: Efecto["efecto"][] = [];
+      const omisiones: Efecto["omisiones"] = [];
+      let corte: "incierta" | "rechazada" | null = null;
       let campana: string | null = null;
       let envio: Record<string, unknown> | null = null;
       for (const original of c.cuerpos) {
@@ -364,23 +443,33 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
         // Un 2xx sin la forma esperada (JSON inválido, «incierta», sin contadores) NO es éxito.
         const invalida = exito && !respuestaValida(String(body.action), r.body, (body.ids as string[] | undefined)?.length ?? 0);
         const ok = exito && !invalida;
-        pasos.push({ accion: body.action, status: r.status, ok, codigo: ok ? null : invalida ? "RESPUESTA_INVALIDA" : String(r.body?.code || r.status),
+        const paso: Record<string, unknown> = { accion: body.action, status: r.status, ok, codigo: ok ? null : invalida ? "RESPUESTA_INVALIDA" : String(r.body?.code || r.status),
           ...(r.status === 423 ? { mensaje: "Rateware real tiene las escrituras de Fr8Bid cerradas (FR8BID_ESCRITURAS_REALES). Hazlo en la Mesa o pide la aprobación del propietario." } : {}),
-          ...(invalida ? { mensaje: "Respuesta no confirmada: revisa en la página del evento antes de repetir." } : {}) });
-        if (!ok) { estado = invalida || r.status === 504 || r.body?.incierta ? "incierta" : pasos.length > 1 ? "parcial" : "rechazada"; break; }
-        if (body.action === "create_outreach_campaign") campana = String(r.body.row.id);
+          ...(invalida ? { mensaje: "Respuesta no confirmada: revisa en la página del evento antes de repetir." } : {}) };
+        pasos.push(paso);
+        if (!ok) { corte = invalida || r.status === 504 || r.body?.incierta ? "incierta" : "rechazada"; break; }
+        if (body.action === "create_outreach_campaign") { campana = String(r.body.row.id); continue; }
+        // Resultado contra lo aprobado: generados/omitidos, enviados/fallidos, estado reflejado.
+        const ef = evaluarEfecto(body, r.body);
+        paso.efecto = ef.efecto;
+        efectos.push(ef.efecto);
+        omisiones.push(...ef.omisiones);
         if (body.action === "send_outreach_messages") {
-          const idsTanda = (body.ids as string[]) || [];
-          const res = leerResultado(r.body, idsTanda);
+          const res = leerResultado(r.body, (body.ids as string[]) || []);
           envio = { enviados: res.sent, fallidos: res.failed, omitidos: res.skipped, inciertos: res.delivery_unknown };
-          if (requiereAtencion(res, idsTanda)) estado = "parcial";
         }
       }
-      if (estado === "aplicada" && pasos.length < c.cuerpos.length) estado = "parcial";
+      const algo = efectos.some(e => e !== "nulo");
+      const estado = corte === "incierta" ? "incierta"
+        : corte === "rechazada" ? (algo ? "parcial" : "rechazada")
+        : efectos.length && efectos.every(e => e === "completo") ? "aplicada"
+        : !algo ? "sin_efecto" : "parcial";
       log.resultado = estado;
-      return { estado, accion: c.act, event_id: c.ev, pasos, ...(envio ? { envio } : {}), mesa_url: ligaMesa(c.ev),
-        instruccion: estado === "aplicada" ? "Hecho. Verifica en la Mesa si hace falta." : estado === "incierta"
+      return { estado, accion: c.act, event_id: c.ev, pasos, ...(omisiones.length ? { omisiones } : {}), ...(envio ? { envio } : {}), mesa_url: ligaMesa(c.ev),
+        instruccion: estado === "aplicada" ? "Hecho: Rateware reflejó todo lo aprobado." : estado === "incierta"
           ? "Resultado incierto: Rateware no confirmó. No reintentes; revisa en la página del evento antes de repetir."
+          : estado === "sin_efecto" ? "Rateware no aplicó nada de lo aprobado (ver omisiones). No reintentes; revisa en la página del evento."
+          : estado === "parcial" ? "Se aplicó solo una parte (ver omisiones). No reintentes automáticamente; revisa en la página del evento."
           : "No se completó. No reintentes automáticamente; revisa la Mesa." };
     } catch (e) {
       log.resultado = e instanceof Rechazo ? `rechazada:${e.codigo}` : "error";

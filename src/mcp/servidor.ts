@@ -42,7 +42,7 @@ export function crearServidor(t: Transporte, rol: Rol, ahora?: () => Date, escri
       }, async (args: Record<string, unknown>) => {
         try {
           const result = await ejecutar(nombre, args);
-          const fallo = ["rechazada", "incierta", "parcial"].includes(result.estado);
+          const fallo = ["rechazada", "incierta", "parcial", "sin_efecto"].includes(result.estado);
           return { ...(fallo ? { isError: true } : {}), content: [{ type: "text" as const, text: JSON.stringify(result) }], structuredContent: result };
         } catch (e) {
           if (e instanceof Rechazo) {

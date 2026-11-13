@@ -6,7 +6,8 @@ import { transporteSimulado } from "../src/cliente/api";
 import { EVENTOS_PROTEGIDOS } from "../src/dominio/protegidos";
 import { hoyMexico } from "../src/dominio/recorrido";
 import { ESCRITURAS } from "../src/servidor/proxy";
-import { crearEscrituras, esAfirmacion, FUERA_DEL_MCP, respuestaValida, type ContextoEscrituras } from "../src/mcp/escrituras";
+import { crearEscrituras, esAfirmacion, evaluarEfecto, FUERA_DEL_MCP, LIMITE_TOKEN, respuestaValida, type ContextoEscrituras } from "../src/mcp/escrituras";
+import { ORG } from "../src/simulado/semilla";
 import { AUDIENCIA, EMISOR, secretoConfirmacion } from "../src/mcp/confirmacion";
 import { ESCRITURAS_MCP, transporteEscritura } from "../src/mcp/transporte";
 import { crearLecturas } from "../src/mcp/lecturas";
@@ -190,6 +191,90 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     const falla = mcp(x);
     expect(await codigo(falla.ej("preparar_intentos", { event_id: x.eventId }))).toBe("SIN_RESPUESTAS");
     expect([...sinPaso.escritas(), ...falla.escritas()]).toEqual([]);
+  });
+
+  it("captura con las reglas de la Mesa: ni preseleccionados, ni declinados, ni eventos archivados; se revalida al confirmar", async () => {
+    const sinInvitar = await escenario({ invitar: false });
+    expect(await codigo(mcp(sinInvitar).ej("preparar_captura", { event_id: sinInvitar.eventId, participacion_id: sinInvitar.p.B, tarifa: 1600, moneda: "USD", canal: "email" }))).toBe("NO_PERMITIDO");
+    const x = await escenario();
+    const m = mcp(x);
+    const v = await m.ej("preparar_captura", { event_id: x.eventId, participacion_id: x.p.C, tarifa: 1650, moneda: "USD", canal: "phone" });
+    await x.sim.llamar("rfx-bid-api", { action: "decline_invitation", token: x.sim.tokenDe(x.p.C) }, null);
+    expect(await codigo(m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" }))).toBe("YA_APLICADO_O_CAMBIO");
+    expect(await codigo(m.ej("preparar_captura", { event_id: x.eventId, participacion_id: x.p.C, tarifa: 1650, moneda: "USD", canal: "phone" }))).toBe("NO_PERMITIDO");
+    const v2 = await m.ej("preparar_captura", { event_id: x.eventId, participacion_id: x.p.B, tarifa: 1650, moneda: "USD", canal: "phone" });
+    x.sim.events.find(e => e.id === x.eventId)!.status = "archived";
+    expect(await codigo(m.ej("confirmar", { confirmacion_id: v2.confirmacion_id, frase_ok: "sí" }))).toBe("YA_APLICADO_O_CAMBIO");
+    expect(await codigo(m.ej("preparar_captura", { event_id: x.eventId, participacion_id: x.p.B, tarifa: 1650, moneda: "USD", canal: "phone" }))).toBe("NO_PERMITIDO");
+    expect(m.escritas()).toEqual([]);
+    // El simulado también se niega a capturar en un evento archivado, como Rateware.
+    const directa = await x.sim.llamar("rateware-api", { action: "update_rfx_bid", id: x.p.B, patch: { bid_rate: 1650, currency: "USD" } }, "Bearer sim:operador");
+    expect(directa.status).toBe(409);
+  });
+
+  it("«ya respondió» y «Revisado» con las reglas de la Mesa, revalidadas al confirmar", async () => {
+    const x = await escenario();
+    const m = mcp(x);
+    const v = await m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.C.id, respuesta: "respondio", canal: "email" });
+    x.sim.events.find(e => e.id === x.eventId)!.due_date = "2026-10-01"; // cerrado a ofertas
+    expect(await codigo(m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" }))).toBe("YA_APLICADO_O_CAMBIO");
+    expect(await codigo(m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.C.id, respuesta: "respondio", canal: "email" }))).toBe("NO_PERMITIDO");
+    const y = await escenario({ invitar: false, revisados: ["A"] });
+    const admin = mcp(y, "admin", "admin");
+    expect(await codigo(admin.ej("preparar_revision", { event_id: y.eventId, carrier_id: y.carriers.A.id }))).toBe("YA_REVISADO");
+    y.sim.revisar(y.eventId, y.carriers.B.id, false);
+    expect(await codigo(admin.ej("preparar_revision", { event_id: y.eventId, carrier_id: y.carriers.B.id }))).toBe("NO_PERMITIDO"); // revocada
+    const r = await admin.ej("preparar_revision", { event_id: y.eventId, carrier_id: y.carriers.C.id });
+    y.sim.revisar(y.eventId, y.carriers.C.id);
+    expect(await codigo(admin.ej("confirmar", { confirmacion_id: r.confirmacion_id, frase_ok: "sí" }))).toBe("YA_APLICADO_O_CAMBIO");
+    expect([...m.escritas(), ...admin.escritas()]).toEqual([]);
+  });
+
+  it("ningún confirmacion_id pasa del límite: una selección grande se parte en varias confirmaciones", async () => {
+    const base = crearSimulado();
+    let ahora = ENVIO;
+    base.sim.hoy = () => hoyMexico(new Date(ahora));
+    base.sim.ahora = () => ahora;
+    const sim = base.sim;
+    const op = (body: Record<string, unknown>) => sim.llamar("rateware-api", body, "Bearer sim:operador").then(r => r.body);
+    const vendors = Array.from({ length: 90 }, (_, i) => sim.agregarVendor(ORG, `Carrier Masivo ${String(i).padStart(2, "0")}`));
+    const { row: event } = await op({ action: "create_rfx_event", name: "PRUEBA CONTROLADA · masiva", customer: "Shipper de Prueba", due_date: "2026-11-20", rfx_id: "RFx-FR8BID-PRUEBA-01" });
+    const { rows: lanes } = await op({ action: "import_rfx_lanes", event_id: event.id, rows: [{ origin_city: "Monterrey", origin_state: "NL", origin_country: "MX", destination_city: "Dallas", destination_state: "TX", destination_country: "US", equipment: "Dry Van", weekly_volume: 4, target_rate: 1700, currency: "USD" }] });
+    await op({ action: "shortlist_rfx_lane_vendors", lane_id: lanes[0].id, vendor_ids: vendors.map(v => v.id) });
+    await op({ action: "update_rfx_event", event_id: event.id, patch: { status: "open" } });
+    for (const v of vendors) sim.revisar(event.id, v.id);
+    const { rows: m } = await op({ action: "generate_outreach_drafts", event_id: event.id, reviewed_vendor_ids: vendors.map(v => v.id) });
+    await sim.llamar("rateware-api", { action: "send_outreach_messages", ids: m.map((x: any) => x.id), expected_versions: m.map((x: any) => ({ id: x.id, updated_at: x.updated_at })), confirmed: true, confirmation_action: "send_outreach_messages" }, "Bearer sim:admin");
+    ahora = DESPUES;
+    const x = { sim, carriers: {}, eventId: event.id, p: {}, reloj: (iso: string) => { ahora = iso; }, ahora: () => ahora } as unknown as Escenario;
+    const mm = mcp(x);
+    const v = await mm.ej("preparar_intentos", { event_id: event.id });
+    expect(v.partes.length).toBeGreaterThanOrEqual(2);
+    expect(v.partes.every((p: any) => p.confirmacion_id.length <= LIMITE_TOKEN)).toBe(true);
+    expect(v.partes.flatMap((p: any) => p.vista_previa.destinatarios.map((d: any) => d.participacion_id))).toHaveLength(90);
+    for (const p of v.partes) expect((await mm.ej("confirmar", { confirmacion_id: p.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
+    expect(mm.escritas()).toHaveLength(90);
+    expect(await codigo(mm.ej("confirmar", { confirmacion_id: "x".repeat(LIMITE_TOKEN + 1), frase_ok: "sí" }))).toBe("ZodError");
+  }, 60000);
+
+  it("solo es «aplicada» si Rateware hizo todo lo aprobado: vacío = sin_efecto, incompleto = parcial con omisiones", async () => {
+    const y = await escenario({ invitar: false });
+    const vacio = mcp(y, "operador", "operator", {}, (b, r) => b.action === "generate_outreach_drafts" ? { ...r, body: { generated: 0, rows: [], skipped_rows: b.reviewed_vendor_ids.map((v: string) => ({ vendor_id: v, reason: "not_reviewed" })) } } : r);
+    const b = await vacio.ej("preparar_invitacion", { event_id: y.eventId, fase: "borradores" });
+    const rb = await vacio.ej("confirmar", { confirmacion_id: b.confirmacion_id, frase_ok: "sí" });
+    expect(rb.estado).toBe("sin_efecto");
+    expect(rb.omisiones).toHaveLength(3);
+    expect(rb.omisiones[0].motivo).toBe("not_reviewed");
+    // El simulado sí generó los borradores (solo se alteró la respuesta): se usan para la tanda.
+    const parcial = mcp(y, "admin", "admin", {}, (b, r) => b.action === "send_outreach_messages" ? { ...r, body: { sent: 1, failed: 0, skipped: 1, delivery_unknown: 0, failures: [], skipped_rows: [{ id: b.ids[1], reason: "daily_cap" }] } } : r);
+    const e = await parcial.ej("preparar_invitacion", { event_id: y.eventId, fase: "envio" });
+    const re = await parcial.ej("confirmar", { confirmacion_id: e.confirmacion_id, frase_ok: "sí" });
+    expect(re).toMatchObject({ estado: "parcial", envio: { enviados: 1, omitidos: 1 }, omisiones: [{ motivo: "daily_cap" }] });
+    expect(evaluarEfecto({ action: "send_outreach_messages", ids: ["a", "b"] }, { sent: 0, failed: 2, failures: [{ id: "a", reason: "x" }, { id: "b", reason: "y" }] }).efecto).toBe("nulo");
+    expect(evaluarEfecto({ action: "update_rfx_event", event_id: "e", patch: { due_date: "2026-12-01" } }, { row: { due_date: "2026-11-20" } }).efecto).toBe("nulo");
+    expect(evaluarEfecto({ action: "update_rfx_event", event_id: "e", patch: { due_date: "2026-12-01" } }, { row: {} }).efecto).toBe("parcial");
+    expect(evaluarEfecto({ action: "update_rfx_bid", id: "p", patch: { bid_rate: 1650 } }, { row: { bid_rate: 1650 } }).efecto).toBe("completo");
+    expect(evaluarEfecto({ action: "draft_bid_room_carrier_message", rfx_lane_vendor_id: "p" }, { reused: true, outreach_message: { id: "m" } }).efecto).toBe("nulo");
   });
 
   it("si la plantilla cambia entre preparar y confirmar, no se generan borradores", async () => {
