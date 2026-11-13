@@ -9,7 +9,7 @@ import { audienciaInvitacion, estadoRevision, resumenOmisiones } from "../domini
 import { REMITENTE, campanaDelEvento, campanaFr8bid, elegirPlantilla } from "../dominio/invitacion.js";
 import { MAXIMO_POR_LLAMADA, leerResultado, requiereAtencion } from "../dominio/tandas.js";
 import type { Aviso, Detalle, Participacion, Rol, Ruta } from "../dominio/tipos.js";
-import { firmar, huella, verificar } from "./confirmacion.js";
+import { firmar, huella, huellaCuerpos, verificar } from "./confirmacion.js";
 import { ESCRITURAS_MCP } from "./transporte.js";
 
 // Entrega 2 del MCP: cambios con vista previa y «sí» explícito. preparar_* solo
@@ -64,7 +64,31 @@ export class Rechazo extends Error {
   constructor(public codigo: string, mensaje: string, public status = 409) { super(mensaje); }
 }
 const PENDIENTE = () => new Rechazo("CONFIRMACIONES_PENDIENTES", "Confirmaciones pendientes de configurar (falta FR8BID_MCP_CONFIRM_SECRET). Las consultas siguen disponibles; este cambio hazlo en la Mesa.", 503);
-const NEGATIVA = /^\s*(no\b|nel\b|cancel|espera|todav[ií]a no|mejor no|alto\b|detente)/i;
+// frase_ok: lista blanca de afirmaciones explícitas. Cualquier negación o duda
+// la invalida aunque también diga «sí».
+const normalizar = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9ñ]+/g, " ").trim().replace(/\s+/g, " ");
+const AFIRMATIVAS = new Set(["si", "confirmo", "ok", "okay", "adelante", "dale", "hazlo", "envialo", "enviala", "envialos", "envialas", "autorizo", "yes", "confirm", "procede"]);
+const DUDAS = /\b(no|nel|espera|esperar|esperemos|quiza|quizas|tal vez|duda|dudas|dudo|luego|despues|por ahora|todavia|aun|cancela|cancelar|alto|detente|pero)\b/;
+export function esAfirmacion(frase: string): boolean {
+  const n = normalizar(frase);
+  if (!n || DUDAS.test(n)) return false;
+  return n.split(" ").every(p => AFIRMATIVAS.has(p));
+}
+
+/** 2xx con la forma que esa acción devuelve; si no, el resultado no está confirmado. */
+export function respuestaValida(action: string, b: any, enviados: number): boolean {
+  if (!b || typeof b !== "object" || Array.isArray(b) || b.incierta || b.error) return false;
+  const fila = (x: any) => !!x && typeof x === "object" && !Array.isArray(x);
+  const num = (x: unknown) => typeof x === "number" && Number.isFinite(x) && x >= 0;
+  switch (action) {
+    case "draft_bid_room_carrier_message": return fila(b.outreach_message) && !!b.outreach_message.id;
+    case "create_outreach_campaign": return fila(b.row) && !!b.row.id;
+    case "update_rfx_bid": case "record_rfx_invitation_wave_review": case "update_rfx_event": return fila(b.row);
+    case "generate_outreach_drafts": return Array.isArray(b.rows);
+    case "send_outreach_messages": return num(b.sent) && num(b.failed) && b.sent <= enviados;
+    default: return false;
+  }
+}
 
 export interface ContextoEscrituras {
   userId: string;
@@ -80,6 +104,8 @@ interface Plan {
   ev: string;
   arg: Record<string, unknown>;
   cuerpos: Record<string, unknown>[];
+  // Contenido que no viaja en los cuerpos pero se aprobó (plantilla, destinatarios): entra en h y en pre.
+  fijo?: unknown;
   foto: unknown;
   vista: Record<string, unknown>;
   evento: Record<string, unknown>;
@@ -229,8 +255,10 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       }
       cuerpos.push({ action: "generate_outreach_drafts", event_id: d.evento.id, campaign_id: campana ? campana.id : CAMPANA_NUEVA, template_id: plantilla.id, channel: "email", reviewed_vendor_ids: revisados });
       const porCarrier = new Map(sinBorrador.map(p => [p.carrierId, p]));
-      return { act: "invitacion_borradores", ev: d.evento.id, evento: resumenEvento(d), arg: { event_id: d.evento.id, fase: "borradores" }, cuerpos,
-        foto: { revisados, campana: campana?.id ?? null, plantilla: String(plantilla.id), borradores: invitaciones.map(x => x.id).sort() },
+      const destinatarios = [...porCarrier.values()].map(p => ({ carrier_id: p.carrierId, carrier: p.carrier, correo: p.correo })).sort((x, y) => x.carrier_id.localeCompare(y.carrier_id));
+      const fijo = { plantilla: huella({ id: plantilla.id, asunto: plantilla.subject ?? null, cuerpo: plantilla.body ?? plantilla.text_body ?? plantilla.html_body ?? null, version: plantilla.updated_at ?? plantilla.version ?? null }), destinatarios };
+      return { act: "invitacion_borradores", ev: d.evento.id, evento: resumenEvento(d), arg: { event_id: d.evento.id, fase: "borradores" }, cuerpos, fijo,
+        foto: { revisados, campana: campana?.id ?? null, plantilla_id: String(plantilla.id), borradores: invitaciones.map(x => x.id).sort(), ...fijo },
         vista: { canal: `Correo (Gmail, ${REMITENTE}). Al confirmar se generan BORRADORES en la Cola; no se envía nada. El envío es la fase «envio» (Administrador).`,
           destinatarios: [...porCarrier.values()].map(p => ({ carrier: p.carrier, correo: p.correo })),
           texto: { plantilla: plantilla.name ?? null, asunto: plantilla.subject ?? null, cuerpo: plantilla.body ?? plantilla.text_body ?? null, nota: "Rateware llena la plantilla por carrier; el texto final exacto se muestra en la fase «envio»." },
@@ -283,7 +311,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
     if (!ctx.secreto) throw PENDIENTE();
     if (esProtegido(a.event_id)) throw new Rechazo("EVENTO_PROTEGIDO", "Evento protegido.", 404);
     const plan = await planes[act](a);
-    const firma = await firmar({ sub: ctx.userId, client_id: ctx.clientId, act, ev: plan.ev, arg: plan.arg, cuerpos: plan.cuerpos, pre: huella(plan.foto) }, ctx.secreto, ahora());
+    const firma = await firmar({ sub: ctx.userId, client_id: ctx.clientId, act, ev: plan.ev, arg: plan.arg, cuerpos: plan.cuerpos, fijo: plan.fijo, pre: huella(plan.foto) }, ctx.secreto, ahora());
     return { estado: "vista_previa", escrito: false, accion: act, evento: plan.evento, vista_previa: plan.vista, confirmacion_id: firma.token, vence_en: firma.vence, mesa_url: ligaMesa(plan.ev),
       instruccion: "Nada se escribió. Muestra esta vista previa completa (destinatarios, canal y texto) y pide un «sí» explícito. Solo después llama a confirmar con este confirmacion_id y frase_ok = el texto literal de esa respuesta." };
   }
@@ -296,7 +324,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       if (!ctx.secreto) throw PENDIENTE();
       const frase = (a.frase_ok ?? "").trim();
       if (!frase) throw new Rechazo("SIN_SI", "Falta la confirmación explícita del usuario (frase_ok). Muestra la vista previa y espera su «sí».", 400);
-      if (NEGATIVA.test(frase)) throw new Rechazo("NO_CONFIRMADO", "La respuesta del usuario no es un «sí». No se escribió nada.", 400);
+      if (!esAfirmacion(frase)) throw new Rechazo("NO_CONFIRMADO", "La respuesta del usuario no es un «sí» explícito (sí, confirmo, adelante, hazlo…). No se escribió nada.", 400);
       log.frase_ok = frase.slice(0, 100);
       let c;
       try { c = await verificar(a.confirmacion_id, ctx.secreto, ahora()); }
@@ -306,13 +334,13 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       const minimo = ROL_ACCION[c.act];
       if (!minimo || !planes[c.act]) throw new Rechazo("ACCION", "Acción no disponible en el MCP.", 400);
       if (!permite(ctx.rol, minimo)) throw new Rechazo("SIN_PERMISO", "Tu rol ya no permite esta acción.", 403);
-      if (huella(c.cuerpos) !== c.h) throw new Rechazo("ALTERADA", "La confirmación no coincide con su vista previa.", 400);
+      if (huellaCuerpos(c.cuerpos, c.fijo) !== c.h) throw new Rechazo("ALTERADA", "La confirmación no coincide con su vista previa.", 400);
       if (esProtegido(c.ev) || c.cuerpos.some(b => !ESCRITURAS_MCP.has(String(b.action)) || ![b.event_id, b.rfx_event_id].includes(c.ev))) throw new Rechazo("ALTERADA", "La confirmación no coincide con su vista previa.", 400);
       // Relectura: si el evento ya no está como en la vista previa (o ya se aplicó), no se escribe.
       let plan: Plan;
       try { plan = await planes[c.act](c.arg); }
       catch (e) { if (e instanceof Rechazo) throw new Rechazo("YA_APLICADO_O_CAMBIO", `Ya aplicado o el evento cambió: ${e.message} No se escribió nada.`); throw e; }
-      if (plan.ev !== c.ev || huella(plan.foto) !== c.pre || huella(plan.cuerpos) !== c.h)
+      if (plan.ev !== c.ev || huella(plan.foto) !== c.pre || huellaCuerpos(plan.cuerpos, plan.fijo) !== c.h)
         throw new Rechazo("YA_APLICADO_O_CAMBIO", "Ya aplicado o el evento cambió desde la vista previa. Vuelve a preparar; no se escribió nada.");
       const pasos: Record<string, unknown>[] = [];
       let estado = "aplicada";
@@ -323,13 +351,15 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
         let r;
         try { r = await seguro("rateware-api", body); }
         catch { r = { status: 504, body: { code: "SIN_RESPUESTA", incierta: true }, headers: {} }; }
-        const ok = r.status >= 200 && r.status < 300 && !r.body?.error;
-        pasos.push({ accion: body.action, status: r.status, ok, codigo: ok ? null : String(r.body?.code || r.status), ...(r.status === 423 ? { mensaje: "Rateware real tiene las escrituras de Fr8Bid cerradas (FR8BID_ESCRITURAS_REALES). Hazlo en la Mesa o pide la aprobación del propietario." } : {}) });
-        if (!ok) { estado = r.status === 504 || r.body?.incierta ? "incierta" : pasos.length > 1 ? "parcial" : "rechazada"; break; }
-        if (body.action === "create_outreach_campaign") {
-          campana = r.body?.row?.id ? String(r.body.row.id) : null;
-          if (!campana) { estado = "incierta"; break; }
-        }
+        const exito = r.status >= 200 && r.status < 300;
+        // Un 2xx sin la forma esperada (JSON inválido, «incierta», sin contadores) NO es éxito.
+        const invalida = exito && !respuestaValida(String(body.action), r.body, (body.ids as string[] | undefined)?.length ?? 0);
+        const ok = exito && !invalida;
+        pasos.push({ accion: body.action, status: r.status, ok, codigo: ok ? null : invalida ? "RESPUESTA_INVALIDA" : String(r.body?.code || r.status),
+          ...(r.status === 423 ? { mensaje: "Rateware real tiene las escrituras de Fr8Bid cerradas (FR8BID_ESCRITURAS_REALES). Hazlo en la Mesa o pide la aprobación del propietario." } : {}),
+          ...(invalida ? { mensaje: "Respuesta no confirmada: revisa en la página del evento antes de repetir." } : {}) });
+        if (!ok) { estado = invalida || r.status === 504 || r.body?.incierta ? "incierta" : pasos.length > 1 ? "parcial" : "rechazada"; break; }
+        if (body.action === "create_outreach_campaign") campana = String(r.body.row.id);
         if (body.action === "send_outreach_messages") {
           const idsTanda = (body.ids as string[]) || [];
           const res = leerResultado(r.body, idsTanda);
@@ -341,7 +371,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       log.resultado = estado;
       return { estado, accion: c.act, event_id: c.ev, pasos, ...(envio ? { envio } : {}), mesa_url: ligaMesa(c.ev),
         instruccion: estado === "aplicada" ? "Hecho. Verifica en la Mesa si hace falta." : estado === "incierta"
-          ? "Resultado incierto: Rateware no confirmó. No reintentes; revisa la Mesa o la Cola antes de preparar otra vez."
+          ? "Resultado incierto: Rateware no confirmó. No reintentes; revisa en la página del evento antes de repetir."
           : "No se completó. No reintentes automáticamente; revisa la Mesa." };
     } catch (e) {
       log.resultado = e instanceof Rechazo ? `rechazada:${e.codigo}` : "error";

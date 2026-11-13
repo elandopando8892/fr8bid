@@ -32,6 +32,8 @@ export function canonico(x: unknown): string {
 }
 
 export const huella = (x: unknown) => createHash("sha256").update(canonico(x)).digest("hex");
+/** h: cuerpos exactos y, si existe, el contenido fijado que no viaja en ellos (p. ej. la plantilla). */
+export const huellaCuerpos = (cuerpos: unknown, fijo?: unknown) => huella(fijo === undefined ? cuerpos : { cuerpos, fijo });
 
 export interface Captura {
   sub: string;
@@ -40,6 +42,7 @@ export interface Captura {
   ev: string;
   arg: Record<string, unknown>;
   cuerpos: Record<string, unknown>[];
+  fijo?: unknown;
   h: string;
   pre: string;
   jti: string;
@@ -48,8 +51,8 @@ export interface Captura {
 
 export async function firmar(c: Omit<Captura, "h" | "jti" | "exp">, secreto: Uint8Array, ahora: Date): Promise<{ token: string; vence: string; h: string }> {
   const iat = Math.floor(ahora.getTime() / 1000);
-  const h = huella(c.cuerpos);
-  const token = await new SignJWT({ client_id: c.client_id, act: c.act, ev: c.ev, arg: c.arg, cuerpos: c.cuerpos, h, pre: c.pre })
+  const h = huellaCuerpos(c.cuerpos, c.fijo);
+  const token = await new SignJWT({ client_id: c.client_id, act: c.act, ev: c.ev, arg: c.arg, cuerpos: c.cuerpos, ...(c.fijo === undefined ? {} : { fijo: c.fijo }), h, pre: c.pre })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setSubject(c.sub)
     .setIssuer(EMISOR)
