@@ -8907,3 +8907,21 @@ table.data.uploads-table {
     display: none;
   }
 }
+
+/* Website tray on Shipper intake (rateware#210). */
+.web-intake { margin-top: 28px; }
+.web-intake > header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between; }
+.web-intake > header h2 { margin: 0; }
+.web-intake-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.web-intake-filter { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.web-intake-hint { color: var(--muted, #5b6270); font-size: 13px; margin: 8px 0 12px; }
+.web-intake-act { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+.web-intake-msg { margin-top: 6px; font-size: 13px; }
+.web-intake-msg.error { color: var(--danger, #b42318); }
+.web-intake-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 14px; margin-top: 12px; }
+.web-intake-raw dl { display: grid; gap: 4px; font-size: 12px; margin: 8px 0 12px; }
+.web-intake-raw dl > div { display: flex; gap: 8px; }
+.web-intake-raw dt { min-width: 140px; color: var(--muted, #5b6270); }
+.web-intake-raw dd { margin: 0; overflow-wrap: anywhere; }
+.web-intake-options { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; max-height: 260px; overflow: auto; }
+.web-intake-options button { width: 100%; text-align: left; }
