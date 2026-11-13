@@ -5,9 +5,9 @@
 
 import { useState } from "react";
 import { ErrorApi } from "../cliente/api";
-import type { AdjuntoLectura, CanalLectura, Lectura, TipoAdjunto } from "../dominio/lectura";
+import type { AdjuntoLectura, CanalLectura, CorreoTraido, Lectura, TipoAdjunto } from "../dominio/lectura";
 import { bytesBase64, MAX_ADJUNTOS_LECTURA, MAX_BYTES_ADJUNTOS, MAX_TEXTO_LECTURA, TIPOS_ADJUNTO } from "../dominio/lectura";
-import type { Detalle, Participacion, Ruta } from "../dominio/tipos";
+import type { CorreoRespuesta, Detalle, Participacion, Ruta } from "../dominio/tipos";
 import { Confirmar, dinero, plural } from "./comun";
 import * as I from "./Iconos";
 import { useSesion } from "./sesion";
@@ -53,6 +53,8 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
   const [lectura, setLectura] = useState<(Lectura & { recortado: boolean }) | null>(null);
   const [adjuntos, setAdjuntos] = useState<AdjuntoLectura[]>([]);
   const [filas, setFilas] = useState<Fila[]>([]);
+  const [trayendo, setTrayendo] = useState<string | null>(null);
+  const [traido, setTraido] = useState<(CorreoTraido & { id: string }) | null>(null);
 
   const carriers = new Map<string, string>();
   for (const r of d.rutas) for (const p of r.participaciones) if (capturable(r, p)) carriers.set(p.carrierId, p.carrier);
@@ -75,8 +77,33 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
     limpiar();
     setTexto("");
     setAdjuntos([]);
+    setTraido(null);
     setCarrierId("");
     setAbierto(false);
+  };
+
+  // Correos con que respondió este carrier (de cualquiera de sus rutas), sin repetir.
+  const correos: CorreoRespuesta[] = [];
+  for (const r of d.rutas)
+    for (const p of r.participaciones)
+      if (p.carrierId === carrierId)
+        for (const c of d.respuestas?.[p.id]?.correos ?? []) if (!correos.some((x) => x.id === c.id)) correos.push(c);
+  correos.sort((a, b) => b.en.localeCompare(a.en));
+
+  const traer = async (c: CorreoRespuesta) => {
+    limpiar();
+    setTrayendo(c.id);
+    try {
+      const t = await s.api.traerCorreo(d.evento.id, c.id);
+      setTraido({ ...t, id: c.id });
+      setCanal("email");
+      setTexto(t.texto);
+      setAdjuntos(t.adjuntos);
+    } catch (e) {
+      setError(e instanceof ErrorApi ? e.message : "No se pudo traer el correo. Pega el texto.");
+    } finally {
+      setTrayendo(null);
+    }
   };
 
   const subir = async (archivos: FileList | null) => {
@@ -138,7 +165,7 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
       <h2>Leer respuesta con IA</h2>
       <div className="rejilla">
         <label className="campo"><span>Carrier</span>
-          <select value={carrierId} onChange={(e) => { setCarrierId(e.target.value); limpiar(); }}>
+          <select value={carrierId} onChange={(e) => { setCarrierId(e.target.value); setTraido(null); limpiar(); }}>
             <option value="">Elige…</option>
             {[...carriers].sort((a, b) => a[1].localeCompare(b[1])).map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
           </select>
@@ -149,6 +176,25 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
           </select>
         </label>
       </div>
+      {correos.length > 0 && (
+        <div className="campo">
+          <span>Sus correos de respuesta</span>
+          <ul className="sin-margen">
+            {correos.slice(0, 5).map((c) => (
+              <li key={c.id}>
+                {new Date(c.en).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Monterrey" })}
+                {c.de ? ` · ${c.de}` : ""}{" "}
+                <button className="btn-texto" disabled={Boolean(trayendo) || leyendo} onClick={() => void traer(c)}>
+                  {trayendo === c.id ? "Trayendo…" : traido?.id === c.id ? "Traído" : "Traer este correo"}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {traido && traido.omitidos.length > 0 && (
+            <p className="tenue">No se trajo: {traido.omitidos.join(", ")}. Si ahí viene la tarifa (por ejemplo, un Excel), captúrala a mano.</p>
+          )}
+        </div>
+      )}
       <label className="campo"><span>Lo que contestó el carrier</span>
         <textarea rows={6} value={texto} maxLength={MAX_TEXTO_LECTURA} placeholder="Pega aquí el correo o el mensaje de WhatsApp" onChange={(e) => { setTexto(e.target.value); limpiar(); }} />
       </label>

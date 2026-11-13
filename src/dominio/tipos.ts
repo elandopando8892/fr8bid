@@ -199,6 +199,15 @@ export interface RespuestaCarrier {
   canales: ("correo" | "chat" | "whatsapp")[];
   primeraEn: string;
   ultimaEn: string;
+  // Correos de esa respuesta (más recientes primero), para traer su contenido
+  // y leerlo con IA. Vacío si Rateware todavía no los entrega.
+  correos?: CorreoRespuesta[];
+}
+
+export interface CorreoRespuesta {
+  id: string; // gmail_message_id
+  en: string;
+  de: string | null;
 }
 
 export type EstadoEntrega = "sin_preparar" | "preparada" | "enviada" | "confirmada" | "rechazada" | "incierta";

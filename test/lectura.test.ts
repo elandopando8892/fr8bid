@@ -185,3 +185,25 @@ describe("cliente", () => {
     expect(llamadas[0].patch).toMatchObject({ bid_rate: 1250, capture_source: "manual_operator", manual_source_channel: "email", source_note: "Captured from Email (read by AI, confirmed by operator): Cruce incluido" });
   });
 });
+
+describe("correo traído de Rateware", () => {
+  it("pasa PDF e imágenes dentro de los límites y nombra lo demás", async () => {
+    const { correoParaLectura } = await import("../src/dominio/lectura");
+    const grande = "A".repeat(Math.ceil((MAX_BYTES_ADJUNTOS * 4) / 3) + 8);
+    const t = correoParaLectura({
+      text: "x".repeat(MAX_TEXTO_LECTURA + 50),
+      from: "ops@carrier.mx",
+      attachments: [
+        { filename: "cotizacion.pdf", mime_type: "application/pdf", base64: "JVBERi0x" },
+        { filename: "foto.png", mime_type: "image/png", base64: "no es base64!" },
+        { filename: "enorme.pdf", mime_type: "application/pdf", base64: grande },
+        { filename: "hoja.xlsx", mime_type: "application/vnd.ms-excel", base64: "AAAA" }
+      ],
+      skipped_attachments: [{ filename: "contrato.docx" }]
+    });
+    expect(t.texto).toHaveLength(MAX_TEXTO_LECTURA);
+    expect(t.adjuntos.map((a) => a.nombre)).toEqual(["cotizacion.pdf"]);
+    expect(t.omitidos).toEqual(["contrato.docx", "foto.png", "enorme.pdf", "hoja.xlsx"]);
+    expect(t).toMatchObject({ de: "ops@carrier.mx", asunto: null, en: null });
+  });
+});
