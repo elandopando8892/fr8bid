@@ -37,6 +37,44 @@ export interface Lectura {
 export const MAX_TEXTO_LECTURA = 12000;
 export const MAX_RUTAS_LECTURA = 60;
 
+// Lo que el carrier adjuntó (su cotización en PDF o una captura de pantalla).
+export const TIPOS_ADJUNTO = ["application/pdf", "image/png", "image/jpeg", "image/webp"] as const;
+export type TipoAdjunto = (typeof TIPOS_ADJUNTO)[number];
+export interface AdjuntoLectura {
+  nombre: string;
+  tipo: TipoAdjunto;
+  base64: string;
+}
+export const MAX_ADJUNTOS_LECTURA = 4;
+// Entre todos. Vercel corta el cuerpo en 4.5 MB y base64 crece un tercio.
+export const MAX_BYTES_ADJUNTOS = 3_000_000;
+
+export const bytesBase64 = (b64: string) => Math.floor((b64.length * 3) / 4) - (b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0);
+
+// Una respuesta de correo trae citada nuestra invitación, con la columna
+// «Objetivo»: esos importes son de Marksman, no del carrier, y no deben llegar
+// a la IA. Se corta en la primera marca de cita.
+const INICIO_CITA = [
+  /^\s*>/,
+  /^\s*_{8,}\s*$/,
+  /^\s*-{2,}\s*(original message|mensaje original|forwarded message|mensaje reenviado)/i,
+  /^\s*(from|de):\s.*\S+@\S+/i
+];
+const ENCABEZADO_CITA = /^\s*(el|on)\s.+/i;
+const FIN_ENCABEZADO_CITA = /(escribi[oó]|wrote):?\s*$/i;
+
+export function quitarCitado(original: string): { texto: string; recortado: boolean } {
+  const lineas = original.split(/\r?\n/);
+  let corte = -1;
+  for (let i = 0; i < lineas.length && corte < 0; i++) {
+    if (INICIO_CITA.some((r) => r.test(lineas[i]))) corte = i;
+    // Gmail parte «El lun, 9 nov… escribió:» en dos o tres renglones.
+    else if (ENCABEZADO_CITA.test(lineas[i]) && [0, 1, 2].some((k) => FIN_ENCABEZADO_CITA.test(lineas[i + k] ?? ""))) corte = i;
+  }
+  if (corte < 0) return { texto: original.trim(), recortado: false };
+  return { texto: lineas.slice(0, corte).join("\n").trim(), recortado: true };
+}
+
 const TIPOS: TipoLectura[] = ["oferta", "rechazo", "pregunta", "otro"];
 
 const texto = (x: unknown, max: number) => (typeof x === "string" ? x.trim().slice(0, max) : "");
@@ -62,7 +100,9 @@ export function tarifaEnTexto(tarifa: number, original: string): boolean {
 
 // Limpia lo que devolvió la IA. Todo lo que no se puede sostener con el texto o
 // con las rutas del evento se quita y se avisa en `dudas`.
-export function aceptarLectura(original: string, rutas: RutaLectura[], cruda: any): Lectura {
+// Con adjuntos la tarifa puede venir del archivo: no se puede comprobar contra
+// el texto, así que se propone y se pide compararla con el archivo.
+export function aceptarLectura(original: string, rutas: RutaLectura[], cruda: any, conAdjuntos = false): Lectura {
   const dudas: string[] = (Array.isArray(cruda?.dudas) ? cruda.dudas : []).map((x: unknown) => texto(x, 200)).filter(Boolean).slice(0, 8);
   const porId = new Map(rutas.map((r) => [r.id, r]));
   const vistas = new Set<string>();
@@ -81,8 +121,11 @@ export function aceptarLectura(original: string, rutas: RutaLectura[], cruda: an
     const propias: string[] = (Array.isArray(o?.dudas) ? o.dudas : []).map((x: unknown) => texto(x, 200)).filter(Boolean).slice(0, 5);
     let tarifa = positivo(o?.tarifa);
     if (tarifa !== null && !tarifaEnTexto(tarifa, original)) {
-      propias.push(`La IA propuso ${tarifa}, pero ese número no aparece en el texto: captúralo a mano.`);
-      tarifa = null;
+      if (conAdjuntos) propias.push("La tarifa sale del archivo adjunto: compárala con el archivo antes de guardar.");
+      else {
+        propias.push(`La IA propuso ${tarifa}, pero ese número no aparece en el texto: captúralo a mano.`);
+        tarifa = null;
+      }
     }
     const moneda = o?.moneda === "USD" || o?.moneda === "MXN" ? o.moneda : null;
     if (tarifa !== null && !moneda) propias.push("El texto no dice la moneda.");
@@ -102,7 +145,7 @@ export function aceptarLectura(original: string, rutas: RutaLectura[], cruda: an
   let tipo: TipoLectura = TIPOS.includes(cruda?.tipo) ? cruda.tipo : "otro";
   // Sin una sola tarifa sostenida por el texto no es una oferta capturable.
   if (tipo === "oferta" && !ofertas.some((o) => o.tarifa !== null)) {
-    dudas.push("No se encontró una tarifa clara en el texto.");
+    dudas.push(conAdjuntos ? "No se encontró una tarifa clara en el texto ni en los archivos." : "No se encontró una tarifa clara en el texto.");
     if (!ofertas.length) tipo = "otro";
   }
   return { tipo, resumen: texto(cruda?.resumen, 400), ofertas, dudas };

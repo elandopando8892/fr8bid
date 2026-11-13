@@ -1,11 +1,12 @@
 // «Leer respuesta con IA»: el carrier contestó por correo o WhatsApp. Se pega
-// su texto, la IA propone la oferta por ruta y el equipo la revisa. Nada se
+// su texto o se sube su cotización (PDF o imagen), la IA propone la oferta por
+// ruta y el equipo la revisa. Nada se
 // guarda hasta confirmar; cada oferta entra como una versión más.
 
 import { useState } from "react";
 import { ErrorApi } from "../cliente/api";
-import type { CanalLectura, Lectura } from "../dominio/lectura";
-import { MAX_TEXTO_LECTURA } from "../dominio/lectura";
+import type { AdjuntoLectura, CanalLectura, Lectura, TipoAdjunto } from "../dominio/lectura";
+import { bytesBase64, MAX_ADJUNTOS_LECTURA, MAX_BYTES_ADJUNTOS, MAX_TEXTO_LECTURA, TIPOS_ADJUNTO } from "../dominio/lectura";
 import type { Detalle, Participacion, Ruta } from "../dominio/tipos";
 import { Confirmar, dinero, plural } from "./comun";
 import * as I from "./Iconos";
@@ -30,6 +31,15 @@ interface Fila {
 const TIPO: Record<Lectura["tipo"], string> = { oferta: "Mandó oferta", rechazo: "Rechazó", pregunta: "Hizo una pregunta", otro: "Sin oferta" };
 
 // Mismas reglas que la captura a mano: sin primario en la ruta y sin rol.
+function aBase64(f: File): Promise<string> {
+  return new Promise((ok, mal) => {
+    const lector = new FileReader();
+    lector.onload = () => ok(String(lector.result).split(",")[1] || "");
+    lector.onerror = () => mal(lector.error);
+    lector.readAsDataURL(f);
+  });
+}
+
 const capturable = (ruta: Ruta, p: Participacion) => !["preseleccionada", "declino"].includes(p.estado) && !p.rol && !ruta.participaciones.some((x) => x.rol === "primario");
 
 export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: Accion; advertenciaReal: string }) {
@@ -40,7 +50,8 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
   const [texto, setTexto] = useState("");
   const [leyendo, setLeyendo] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lectura, setLectura] = useState<Lectura | null>(null);
+  const [lectura, setLectura] = useState<(Lectura & { recortado: boolean }) | null>(null);
+  const [adjuntos, setAdjuntos] = useState<AdjuntoLectura[]>([]);
   const [filas, setFilas] = useState<Fila[]>([]);
 
   const carriers = new Map<string, string>();
@@ -63,15 +74,29 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
   const cerrar = () => {
     limpiar();
     setTexto("");
+    setAdjuntos([]);
     setCarrierId("");
     setAbierto(false);
+  };
+
+  const subir = async (archivos: FileList | null) => {
+    limpiar();
+    const nuevos: AdjuntoLectura[] = [];
+    for (const f of Array.from(archivos || [])) {
+      if (!TIPOS_ADJUNTO.includes(f.type as TipoAdjunto)) return setError(`«${f.name}» no es PDF, PNG, JPG ni WebP. Si es Excel, captura la oferta a mano.`);
+      nuevos.push({ nombre: f.name, tipo: f.type as TipoAdjunto, base64: await aBase64(f) });
+    }
+    const todos = [...adjuntos, ...nuevos];
+    if (todos.length > MAX_ADJUNTOS_LECTURA) return setError(`Sube hasta ${MAX_ADJUNTOS_LECTURA} archivos.`);
+    if (todos.reduce((n, a) => n + bytesBase64(a.base64), 0) > MAX_BYTES_ADJUNTOS) return setError("Los archivos pasan de 3 MB entre todos. Sube solo la cotización.");
+    setAdjuntos(todos);
   };
 
   const leer = async () => {
     limpiar();
     setLeyendo(true);
     try {
-      const l = await s.api.leerRespuesta({ texto, canal, carrier, rutas: d.rutas.map((r) => ({ id: r.id, numero: r.numero, origen: r.origen, destino: r.destino, equipo: r.equipo })) });
+      const l = await s.api.leerRespuesta({ texto, canal, carrier, adjuntos, rutas: d.rutas.map((r) => ({ id: r.id, numero: r.numero, origen: r.origen, destino: r.destino, equipo: r.equipo })) });
       setLectura(l);
       setFilas(
         l.ofertas.flatMap((o) => {
@@ -127,9 +152,19 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
       <label className="campo"><span>Lo que contestó el carrier</span>
         <textarea rows={6} value={texto} maxLength={MAX_TEXTO_LECTURA} placeholder="Pega aquí el correo o el mensaje de WhatsApp" onChange={(e) => { setTexto(e.target.value); limpiar(); }} />
       </label>
+      <label className="campo"><span>Su cotización en PDF o imagen (opcional)</span>
+        <input type="file" multiple accept={TIPOS_ADJUNTO.join(",")} onChange={(e) => { void subir(e.target.files); e.target.value = ""; }} />
+      </label>
+      {adjuntos.length > 0 && (
+        <ul className="tenue">
+          {adjuntos.map((a, i) => (
+            <li key={i}>{a.nombre} <button className="btn-texto" onClick={() => { limpiar(); setAdjuntos(adjuntos.filter((_, j) => j !== i)); }}>Quitar</button></li>
+          ))}
+        </ul>
+      )}
       {!lectura && (
         <div className="fila-botones">
-          <button className="btn-primario" disabled={!carrierId || texto.trim().length < 3 || leyendo} onClick={leer}>{leyendo ? "Leyendo…" : "Leer con IA"}</button>
+          <button className="btn-primario" disabled={!carrierId || (texto.trim().length < 3 && !adjuntos.length) || leyendo} onClick={leer}>{leyendo ? "Leyendo…" : "Leer con IA"}</button>
           <button className="btn-texto" onClick={cerrar}>Cancelar</button>
         </div>
       )}
@@ -139,6 +174,7 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
         <div className="aviso-caja">
           <h3>Borrador de la IA · {TIPO[lectura.tipo]}</h3>
           {lectura.resumen && <p>{lectura.resumen}</p>}
+          {lectura.recortado && <p className="tenue">No se leyó el correo citado (nuestra invitación con el objetivo).</p>}
           {lectura.dudas.length > 0 && <ul className="tenue">{lectura.dudas.map((x, i) => <li key={i}>{x}</li>)}</ul>}
 
           {filas.map((f, i) => (
