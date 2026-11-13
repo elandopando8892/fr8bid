@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { MesaApi, type LectorRespuestas } from "../src/cliente/api";
-import { aceptarLectura, MAX_TEXTO_LECTURA, tarifaEnTexto, type RutaLectura } from "../src/dominio/lectura";
+import { aceptarLectura, MAX_BYTES_ADJUNTOS, MAX_TEXTO_LECTURA, quitarCitado, tarifaEnTexto, type RutaLectura } from "../src/dominio/lectura";
 import { leerRespuesta, type ConsultaLectura, type Leer } from "../src/servidor/lectura";
 
 const rutas: RutaLectura[] = [
@@ -86,9 +86,73 @@ describe("POST /api/lectura", () => {
       visto = c;
       return { tipo: "oferta", resumen: "Cotizó", ofertas: [oferta({})], dudas: [] };
     });
-    expect(visto).toEqual({ texto: correo, canal: "email", carrier: "ACME", hoy: "2026-11-13", rutas });
+    expect(visto).toEqual({ texto: correo, canal: "email", carrier: "ACME", hoy: "2026-11-13", rutas, adjuntos: [] });
     expect(JSON.stringify(visto)).not.toContain("999");
     expect(r).toMatchObject({ status: 200, body: { lectura: { tipo: "oferta", ofertas: [{ rutaId: "r1", tarifa: 1250 }] } } });
+  });
+});
+
+describe("el correo citado no llega a la IA", () => {
+  const invitacion = "1 Monterrey, NL 64570\nAlbany, GA 31705\nTruck Trailer / Dry Van D2D Export One Way - 4,000 USD";
+
+  it("corta en la cita de Gmail aunque venga partida en dos renglones", () => {
+    const r = quitarCitado(`Te cotizo Albany en 4,350 USD.\n\nSaludos\n\nEl lun, 9 nov 2026 a la(s) 11:57 a.m., sales via PRICING (\nPRICING@carrier.net) escribió:\n\n> ${invitacion}`);
+    expect(r).toEqual({ texto: "Te cotizo Albany en 4,350 USD.\n\nSaludos", recortado: true });
+  });
+
+  it("corta en la cita de Outlook y en «On … wrote:»", () => {
+    expect(quitarCitado(`Comparto cotizacion.\n\n________________________________\nFrom: sales@heymarksman.com <sales@heymarksman.com>\n${invitacion}`).texto).toBe("Comparto cotizacion.");
+    expect(quitarCitado(`Attached are our rates\n\nOn Mon, Nov 9, 2026 at 11:57 AM sales@heymarksman.com wrote:\n${invitacion}`).texto).toBe("Attached are our rates");
+    expect(quitarCitado(`Sin unidades\nDe: sales@heymarksman.com\nEnviado: lunes\n${invitacion}`).texto).toBe("Sin unidades");
+  });
+
+  it("no toca un mensaje sin cita", () => {
+    expect(quitarCitado("El flete sale en 1,250 USD, cruce incluido.")).toEqual({ texto: "El flete sale en 1,250 USD, cruce incluido.", recortado: false });
+  });
+
+  it("el objetivo citado no se puede proponer como oferta", async () => {
+    const texto = `Anexo cotización.\n\nEl lun, 9 nov 2026 sales@heymarksman.com escribió:\n> ${invitacion}`;
+    let visto = "";
+    const r = await leerRespuesta({ texto, canal: "email", carrier: "ACME", rutas }, true, async (c) => {
+      visto = c.texto;
+      return { tipo: "oferta", resumen: "", ofertas: [oferta({ tarifa: 4000, cita: "4,000 USD" })], dudas: [] };
+    });
+    expect(visto).toBe("Anexo cotización.");
+    expect(r.body).toMatchObject({ recortado: true, lectura: { ofertas: [{ tarifa: null }] } });
+  });
+
+  it("si solo quedó lo citado, lo dice", async () => {
+    const r = await leerRespuesta({ texto: `> ${invitacion}`, canal: "email", carrier: "ACME", rutas }, true, async () => ({}));
+    expect(r).toMatchObject({ status: 400, body: { code: "TEXTO_VACIO", error: expect.stringContaining("correo citado") } });
+  });
+});
+
+describe("archivos del carrier", () => {
+  const pdf = { nombre: "cotizacion.pdf", tipo: "application/pdf", base64: "JVBERi0xLjQ=" };
+  const base = { texto: "Anexo la cotización", canal: "email", carrier: "ACME", rutas };
+
+  it("los manda a la IA y propone la tarifa pidiendo compararla con el archivo", async () => {
+    let enviados: unknown[] = [];
+    const r = await leerRespuesta({ ...base, adjuntos: [pdf] }, true, async (c) => {
+      enviados = c.adjuntos;
+      return { tipo: "oferta", resumen: "Cotizó en el PDF", ofertas: [oferta({ tarifa: 4350, cita: "cotizacion.pdf: MTY-ALBANY 4,350" })], dudas: [] };
+    });
+    expect(enviados).toEqual([pdf]);
+    expect(r.body).toMatchObject({ lectura: { tipo: "oferta", ofertas: [{ tarifa: 4350, dudas: ["La tarifa sale del archivo adjunto: compárala con el archivo antes de guardar."] }] } });
+  });
+
+  it("basta el archivo, sin texto", async () => {
+    const r = await leerRespuesta({ ...base, texto: "", adjuntos: [pdf] }, true, async () => ({ tipo: "otro", resumen: "", ofertas: [], dudas: [] }));
+    expect(r.status).toBe(200);
+  });
+
+  it("rechaza otros formatos, base64 inválido, más de cuatro y más de 3 MB", async () => {
+    const leer: Leer = async () => ({});
+    const mal = async (adjuntos: unknown[]) => (await leerRespuesta({ ...base, adjuntos }, true, leer)).body;
+    expect(await mal([{ ...pdf, tipo: "application/vnd.ms-excel" }])).toMatchObject({ code: "ADJUNTOS_INVALIDOS" });
+    expect(await mal([{ ...pdf, base64: "no es base64!" }])).toMatchObject({ code: "ADJUNTOS_INVALIDOS" });
+    expect(await mal(Array(5).fill(pdf))).toMatchObject({ code: "ADJUNTOS_INVALIDOS" });
+    expect(await mal([{ ...pdf, base64: "A".repeat(Math.ceil((MAX_BYTES_ADJUNTOS * 4) / 3) + 8) }])).toMatchObject({ code: "ADJUNTOS_GRANDES" });
   });
 });
 

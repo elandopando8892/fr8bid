@@ -5,7 +5,7 @@
 import type { ConsultaTelefono, Telefono } from "../dominio/telefonos.js";
 import { MAX_TELEFONOS, revisarTelefonos } from "../servidor/telefonos.js";
 import { leerRespuesta } from "../servidor/lectura.js";
-import type { CanalLectura, Lectura, RutaLectura } from "../dominio/lectura.js";
+import type { AdjuntoLectura, CanalLectura, Lectura, RutaLectura } from "../dominio/lectura.js";
 import type { CorreoRevelado, PersonaApollo } from "../dominio/apollo.js";
 import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier } from "../dominio/contactos.js";
 import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit.js";
@@ -162,12 +162,12 @@ export class MesaApi {
   constructor(private t: Transporte, private hoy: () => string = () => hoyMexico(), private revisor: RevisorTelefonos = revisorSimulado, private apollo: ConsultaApollo = apolloSimulado, private lector: LectorRespuestas = lectorSimulado) {}
 
   // La IA lee lo que contestó el carrier y propone la oferta por ruta. Solo
-  // viajan el texto, el nombre del carrier y origen, destino y equipo de cada
-  // ruta. No guarda nada: el resultado es un borrador para confirmar.
-  async leerRespuesta(c: { texto: string; canal: CanalLectura; carrier: string; rutas: RutaLectura[] }): Promise<Lectura> {
+  // viajan el texto (sin el correo citado), los archivos subidos, el nombre
+  // del carrier y origen, destino y equipo de cada ruta. No guarda nada: el resultado es un borrador para confirmar.
+  async leerRespuesta(c: { texto: string; canal: CanalLectura; carrier: string; rutas: RutaLectura[]; adjuntos?: AdjuntoLectura[] }): Promise<Lectura & { recortado: boolean }> {
     const r = await this.lector({ ...c, hoy: this.hoy() });
     if (r.status < 200 || r.status >= 300) throw new ErrorApi(r.status, String(r.body?.code || r.status), String(r.body?.error || "La IA no respondió"));
-    return r.body.lectura;
+    return { ...r.body.lectura, recortado: Boolean(r.body.recortado) };
   }
 
   private async pedirApollo(body: Record<string, unknown>) {
