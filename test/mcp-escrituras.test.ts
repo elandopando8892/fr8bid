@@ -147,9 +147,9 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     expect(respuestaValida("send_outreach_messages", { sent: 3, failed: 0 }, 2)).toBe(false);
     expect(respuestaValida("send_outreach_messages", { sent: 2, failed: 0 }, 2)).toBe(true);
     const t = transporteEscritura("https://fr8bid.test/api/mcp", "synthetic", async () => new Response("<html>", { status: 200 }));
-    const invalido = await t("rateware-api", { action: "update_rfx_event", event_id: "synthetic", patch: { due_date: "2026-12-01" } });
+    const invalido = await t("rateware-api", { action: "record_rfx_invitation_wave_review", event_id: "synthetic", vendor_id: "v" });
     expect(invalido).toMatchObject({ status: 200, body: { code: "RESPUESTA_INVALIDA", incierta: true } });
-    expect(respuestaValida("update_rfx_event", invalido.body, 0)).toBe(false);
+    expect(respuestaValida("record_rfx_invitation_wave_review", invalido.body, 0)).toBe(false);
   });
 
   it("la tanda excluye mensajes en proceso (sending) y no cambia su composición", async () => {
@@ -263,8 +263,11 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     const re = await parcial.ej("confirmar", { confirmacion_id: e.confirmacion_id, frase_ok: "sí" });
     expect(re).toMatchObject({ estado: "parcial", envio: { enviados: 1, omitidos: 1 }, omisiones: [{ motivo: "daily_cap" }] });
     expect(evaluarEfecto({ action: "send_outreach_messages", ids: ["a", "b"] }, { sent: 0, failed: 2, failures: [{ id: "a", reason: "x" }, { id: "b", reason: "y" }] }).efecto).toBe("nulo");
-    expect(evaluarEfecto({ action: "update_rfx_event", event_id: "e", patch: { due_date: "2026-12-01" } }, { row: { due_date: "2026-11-20" } }).efecto).toBe("nulo");
-    expect(evaluarEfecto({ action: "update_rfx_event", event_id: "e", patch: { due_date: "2026-12-01" } }, { row: {} }).efecto).toBe("parcial");
+    expect(evaluarEfecto({ action: "record_rfx_invitation_wave_review", vendor_id: "v" }, { row: { reviewed: false } }).efecto).toBe("nulo");
+    expect(evaluarEfecto({ action: "record_rfx_invitation_wave_review", vendor_id: "v" }, { row: {} }).efecto).toBe("parcial");
+    // Entrega desconocida: siempre incierta, sola o mezclada.
+    expect(evaluarEfecto({ action: "send_outreach_messages", ids: ["a", "b"] }, { sent: 0, failed: 0, delivery_unknown: 2 }).efecto).toBe("incierto");
+    expect(evaluarEfecto({ action: "send_outreach_messages", ids: ["a", "b"] }, { sent: 1, failed: 0, delivery_unknown: 1 }).efecto).toBe("incierto");
     expect(evaluarEfecto({ action: "draft_bid_room_carrier_message", rfx_lane_vendor_id: "p" }, { reused: true, outreach_message: { id: "m" } }).efecto).toBe("nulo");
   });
 
@@ -301,30 +304,44 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     expect(m.escritas()).toEqual([]);
   });
 
-  it("envíos reales y plazo: otro Administrador prepara pero solo el propietario confirma", async () => {
+  it("tandas: el propietario prepara y confirma su propia vista previa; otro Administrador no puede confirmar", async () => {
     expect(aprobadoresDe({})).toEqual(["sales@heymarksman.com"]);
     expect(aprobadoresDe({ FR8BID_MCP_APROBADORES: " Jose@HeyMarksman.com, sales@heymarksman.com " })).toEqual(["jose@heymarksman.com", "sales@heymarksman.com"]);
-    const x = await escenario();
-    const otro = mcp(x, "admin", "admin", { email: "otro-admin@heymarksman.com" });
-    const v = await otro.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-11-27" });
-    let error: any;
-    try { await otro.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" }); } catch (e) { error = e; }
-    expect(error).toMatchObject({ codigo: "SOLO_PROPIETARIO" });
-    expect(error.message).toMatch(/solo el propietario puede confirmar esto/i);
-    expect(otro.escritas()).toEqual([]);
-    // Con la lista explícita, ese mismo correo sí confirma; sin variable, el propietario por omisión.
-    const permitido = mcp(x, "admin", "admin", { email: "otro-admin@heymarksman.com", aprobadores: ["otro-admin@heymarksman.com"] });
-    expect((await permitido.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
     const y = await escenario({ invitar: false });
     await mcp(y).ej("confirmar", { confirmacion_id: (await mcp(y).ej("preparar_invitacion", { event_id: y.eventId, fase: "borradores" })).confirmacion_id, frase_ok: "sí" });
-    const e = await mcp(y, "admin", "admin", { email: "otro-admin@heymarksman.com" }).ej("preparar_invitacion", { event_id: y.eventId, fase: "envio" });
-    expect(await codigo(mcp(y, "admin", "admin", { email: "otro-admin@heymarksman.com" }).ej("confirmar", { confirmacion_id: e.confirmacion_id, frase_ok: "sí" }))).toBe("SOLO_PROPIETARIO");
-    expect((await mcp(y, "admin", "admin").ej("confirmar", { confirmacion_id: e.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
-    // Borradores y «Revisado» siguen con la regla de rol: un Operador confirma borradores.
+    y.sim.agregarUsuario({ clave: "admin2", email: "otro-admin@heymarksman.com", ownerEmail: ORG, roles: ["admin"] });
+    const otro = mcp(y, "admin2", "admin", { email: "otro-admin@heymarksman.com" });
+    const propietario = mcp(y, "admin", "admin", { email: "sales@heymarksman.com" });
+    // Otro Administrador prepara: no confirma (no es propietario) y el propietario tampoco confirma la vista ajena.
+    const ajena = await otro.ej("preparar_invitacion", { event_id: y.eventId, fase: "envio" });
+    let error: any;
+    try { await otro.ej("confirmar", { confirmacion_id: ajena.confirmacion_id, frase_ok: "sí" }); } catch (e) { error = e; }
+    expect(error).toMatchObject({ codigo: "SOLO_PROPIETARIO" });
+    expect(error.message).toMatch(/solo el propietario puede confirmar esto/i);
+    expect(await codigo(propietario.ej("confirmar", { confirmacion_id: ajena.confirmacion_id, frase_ok: "sí" }))).toBe("OTRA_SESION");
+    expect([...otro.escritas(), ...propietario.escritas()]).toEqual([]);
+    // Con una lista de aprobadores que no lo incluye, sigue sin poder confirmar.
+    expect(await codigo(mcp(y, "admin2", "admin", { email: "otro-admin@heymarksman.com", aprobadores: ["jose@heymarksman.com"] }).ej("confirmar", { confirmacion_id: ajena.confirmacion_id, frase_ok: "sí" }))).toBe("SOLO_PROPIETARIO");
+    // El propietario prepara y confirma su propia vista previa.
+    const propia = await propietario.ej("preparar_invitacion", { event_id: y.eventId, fase: "envio" });
+    expect((await propietario.ej("confirmar", { confirmacion_id: propia.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
+    // Borradores siguen con la regla de rol: un Operador los confirma.
     const z = await escenario({ invitar: false });
     expect((await mcp(z).ej("confirmar", { confirmacion_id: (await mcp(z).ej("preparar_invitacion", { event_id: z.eventId, fase: "borradores" })).confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
   });
 
+  it("una tanda con entrega desconocida queda incierta, nunca aplicada ni sin efecto", async () => {
+    for (const cuerpo of [(ids: string[]) => ({ sent: 0, failed: 0, skipped: 0, delivery_unknown: ids.length, failures: [], skipped_rows: [] }),
+                          (ids: string[]) => ({ sent: ids.length - 1, failed: 0, skipped: 0, delivery_unknown: 1, failures: [], skipped_rows: [] })]) {
+      const y = await escenario({ invitar: false });
+      await mcp(y).ej("confirmar", { confirmacion_id: (await mcp(y).ej("preparar_invitacion", { event_id: y.eventId, fase: "borradores" })).confirmacion_id, frase_ok: "sí" });
+      const admin = mcp(y, "admin", "admin", {}, (b, r) => b.action === "send_outreach_messages" ? { ...r, body: cuerpo(b.ids) } : r);
+      const e = await admin.ej("preparar_invitacion", { event_id: y.eventId, fase: "envio" });
+      const res = await admin.ej("confirmar", { confirmacion_id: e.confirmacion_id, frase_ok: "sí" });
+      expect(res.estado).toBe("incierta");
+      expect(res.omisiones[0].motivo).toMatch(/entrega desconocida/);
+    }
+  });
   it("si la plantilla cambia entre preparar y confirmar, no se generan borradores", async () => {
     const x = await escenario({ invitar: false });
     const m = mcp(x);
@@ -336,16 +353,17 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     expect(decodeJwt(v.confirmacion_id).fijo).toMatchObject({ destinatarios: expect.any(Array), plantilla: expect.any(String) });
   });
 
-  it("rol: viewer no prepara ni confirma; el Operador no revisa, no envía tandas ni cambia plazo; se revalida al confirmar", async () => {
+  it("rol: viewer no prepara ni confirma; el Operador no revisa ni envía tandas; se revalida al confirmar", async () => {
     const x = await escenario();
     expect(await codigo(mcp(x, "consulta", "viewer").ej("preparar_intentos", { event_id: x.eventId }))).toBe("SIN_PERMISO");
     expect(await codigo(mcp(x, "consulta", "viewer").ej("confirmar", { confirmacion_id: "x".repeat(30), frase_ok: "sí" }))).toBe("SIN_PERMISO");
     const op = mcp(x);
     expect(await codigo(op.ej("preparar_revision", { event_id: x.eventId, carrier_id: x.carriers.A.id }))).toBe("SIN_PERMISO");
     expect(await codigo(op.ej("preparar_invitacion", { event_id: x.eventId, fase: "envio" }))).toBe("SIN_PERMISO");
-    expect(await codigo(op.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-12-01" }))).toBe("SIN_PERMISO");
-    const v = await mcp(x, "admin", "admin").ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-12-01" });
-    const degradado = mcp(x, "admin", "operator");
+    expect(await codigo(op.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-12-01" }))).toBe("FUERA_DEL_MCP");
+    const y = await escenario({ invitar: false, revisados: ["A", "B"] });
+    const v = await mcp(y, "admin", "admin").ej("preparar_revision", { event_id: y.eventId, carrier_id: y.carriers.C.id });
+    const degradado = mcp(y, "admin", "operator");
     expect(await codigo(degradado.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" }))).toBe("SIN_PERMISO");
     expect([...op.escritas(), ...degradado.escritas()]).toEqual([]);
   });
@@ -368,8 +386,9 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     });
     for (const action of ["award_rfx_lane_vendor", "clear_rfx_award", "closeout_awarded_rfx_to_rateware", "generate_rfx_award_notices", "create_rfx_event", "invite_rfx_lane_vendors"])
       await expect(t("rateware-api", { action })).rejects.toThrow();
-    await t("rateware-api", { action: "update_rfx_event", event_id: "synthetic", patch: { due_date: "2026-12-01" } });
-    expect(acciones).toEqual(["update_rfx_event"]);
+    for (const action of ["update_rfx_event", "update_rfx_bid"]) await expect(t("rateware-api", { action, event_id: "synthetic" })).rejects.toThrow();
+    await t("rateware-api", { action: "record_rfx_invitation_wave_review", event_id: "synthetic", vendor_id: "v" });
+    expect(acciones).toEqual(["record_rfx_invitation_wave_review"]);
     expect(m.escritas()).toEqual([]);
   });
 
@@ -377,27 +396,14 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     const x = await escenario();
     const m = mcp(x, "admin", "admin");
     const [hd] = EVENTOS_PROTEGIDOS;
-    for (const [n, a] of [["preparar_intentos", {}], ["preparar_cambio_evento", { nueva_fecha: "2026-12-01" }], ["preparar_invitacion", { fase: "envio" }]] as const)
+    for (const [n, a] of [["preparar_intentos", {}], ["preparar_revision", { carrier_id: x.carriers.A.id }], ["preparar_invitacion", { fase: "envio" }]] as const)
       expect(await codigo(m.ej(n, { event_id: hd, ...a }))).toBe("EVENTO_PROTEGIDO");
     expect(m.llamadas).toEqual([]);
     x.sim.events.find(e => e.id === x.eventId)!.rfx_id = "RFx-1021-PRIMAPro";
-    expect(await codigo(m.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-10-28" }))).toBe("FECHA_PASADA");
-    expect(await codigo(m.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-12-01", status: "closed" }))).toBe("ZodError");
+    // Ninguna herramienta cambia estado ni plazo: el MCP no puede cerrar PRIMA.
+    expect(await codigo(m.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-12-01" }))).toBe("FUERA_DEL_MCP");
+    expect(ESCRITURAS_MCP.has("update_rfx_event")).toBe(false);
     expect(m.escritas()).toEqual([]);
-  });
-
-  it("plazo: solo Administrador, solo hacia adelante y una sola vez", async () => {
-    const x = await escenario();
-    const m = mcp(x, "admin", "admin");
-    expect(await codigo(m.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-11-20" }))).toBe("SOLO_EXTENDER");
-    expect(await codigo(m.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-11-10" }))).toBe("SOLO_EXTENDER");
-    expect(await codigo(m.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-10-29" }))).toBe("FECHA_PASADA");
-    const v = await m.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-11-27" });
-    expect(v.vista_previa).toMatchObject({ plazo_actual: "2026-11-20", plazo_nuevo: "2026-11-27" });
-    expect((await m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
-    expect(m.escritas()).toEqual([{ action: "update_rfx_event", event_id: x.eventId, patch: { due_date: "2026-11-27" } }]);
-    expect(x.sim.events.find(e => e.id === x.eventId)!.due_date).toBe("2026-11-27");
-    expect(await codigo(m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" }))).toBe("YA_APLICADO_O_CAMBIO");
   });
 
   it("invitación por tandas: borradores solo con «Revisado»; envío del Administrador con versión exacta", async () => {
@@ -455,7 +461,7 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     const lista = async (rol: Rol) => ({ tools: (await rpc(rol, "tools/list")).result.tools as any[], call: (method: string, params?: object) => rpc(rol, method, params) });
     expect((await lista("viewer")).tools).toHaveLength(11);
     const { tools, call } = await lista("operator");
-    expect(tools).toHaveLength(16);
+    expect(tools).toHaveLength(15);
     expect(tools.find(t => t.name === "confirmar").annotations).toMatchObject({ destructiveHint: true, readOnlyHint: false });
     expect(tools.filter(t => t.name.startsWith("preparar_")).every(t => t.annotations.readOnlyHint && !t.annotations.destructiveHint)).toBe(true);
     const r = await call("tools/call", { name: "preparar_intentos", arguments: { event_id: "11111111-1111-4111-8111-111111111111" } });

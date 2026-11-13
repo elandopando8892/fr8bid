@@ -16,14 +16,14 @@ export function transporteApi(resource: string, token: string, request: typeof f
 // avisos de adjudicación (se hacen en la Mesa), además de crear eventos, importar
 // rutas, preseleccionar, condiciones y marcar invitadas por otro canal. update_rfx_bid
 // (capturar oferta o «ya respondió») también queda fuera: necesita una escritura
-// condicional atómica en Rateware (bid_rate IS NULL).
+// condicional atómica en Rateware (bid_rate IS NULL). update_rfx_event (extender plazo)
+// también: dos confirmaciones concurrentes podrían acortarlo sin condición sobre el plazo previo.
 export const ESCRITURAS_MCP = new Set([
   "draft_bid_room_carrier_message",
   "record_rfx_invitation_wave_review",
   "create_outreach_campaign",
   "generate_outreach_drafts",
-  "send_outreach_messages",
-  "update_rfx_event"
+  "send_outreach_messages"
 ]);
 
 /**

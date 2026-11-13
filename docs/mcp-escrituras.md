@@ -5,7 +5,7 @@ Estado: desarrollado y probado en local contra el simulado (evento `RFx-FR8BID-P
 
 ## Qué agrega
 
-El endpoint `/api/mcp` sigue con las 11 lecturas para todos los roles y, para Operador y Administrador, suma cinco herramientas. `preparar_*` solo lee y devuelve una vista previa con `confirmacion_id` (anotación `readOnlyHint`); `confirmar` es la única que escribe (`destructiveHint`).
+El endpoint `/api/mcp` sigue con las 11 lecturas para todos los roles y, para Operador y Administrador, suma cuatro herramientas (`preparar_intentos`, `preparar_revision`, `preparar_invitacion` y `confirmar`). `preparar_*` solo lee y devuelve una vista previa con `confirmacion_id` (anotación `readOnlyHint`); `confirmar` es la única que escribe (`destructiveHint`).
 
 | Herramienta | Rol | Acción del proxy al confirmar |
 | --- | --- | --- |
@@ -13,16 +13,17 @@ El endpoint `/api/mcp` sigue con las 11 lecturas para todos los roles y, para Op
 | `preparar_revision` | Administrador | `record_rfx_invitation_wave_review` (`marcarRevisado`). |
 | `preparar_invitacion` fase `borradores` | Operador | `create_outreach_campaign` (si falta; `claveCampana`) + `generate_outreach_drafts`, solo carriers con «Revisado» vigente. |
 | `preparar_invitacion` fase `envio` | Administrador | `send_outreach_messages` de una tanda de hasta `MAXIMO_POR_LLAMADA` (100) con `expected_versions` y `operation_id` (`operacionTanda`). Evento abierto; el MCP no publica. |
-| `preparar_cambio_evento` | Administrador | `update_rfx_event {patch:{due_date}}`: solo extender, evento abierto o borrador, fecha nueva > plazo actual y > hoy (México). |
 | `confirmar` | según la acción | Ejecuta la vista previa firmada. |
 
 Las vistas previas llevan destinatarios, canal (si queda en la Cola o se envía) y texto exacto, y quiénes quedan fuera y por qué. Los cuerpos se arman con los mismos métodos de `MesaApi` que usa la Mesa (sin ejecutarlos), salvo `app_origin`, fijo en `https://fr8bid.heymarksman.com`.
 
-Fuera del MCP (se hacen en la Mesa; las respuestas dan `mesa_url` = `https://fr8bid.heymarksman.com/eventos/<id>`): `award_rfx_lane_vendor`, `clear_rfx_award`, `closeout_awarded_rfx_to_rateware`, `generate_rfx_award_notices` y cualquier aviso de adjudicación. También quedan fuera crear eventos, importar rutas, preseleccionar, condiciones, marcar invitadas por otro canal, publicar y enviar intentos de seguimiento (se aprueban en la Mesa o la Cola). HDships (`EVENTOS_PROTEGIDOS`) no se lee ni se escribe. PRIMA (`RFx-1021-PRIMAPro`) nunca se cierra ni se rechaza: el plazo solo avanza.
+Fuera del MCP (se hacen en la Mesa; las respuestas dan `mesa_url` = `https://fr8bid.heymarksman.com/eventos/<id>`): `award_rfx_lane_vendor`, `clear_rfx_award`, `closeout_awarded_rfx_to_rateware`, `generate_rfx_award_notices` y cualquier aviso de adjudicación. También quedan fuera crear eventos, importar rutas, preseleccionar, condiciones, marcar invitadas por otro canal, publicar y enviar intentos de seguimiento (se aprueban en la Mesa o la Cola). HDships (`EVENTOS_PROTEGIDOS`) no se lee ni se escribe. PRIMA (`RFx-1021-PRIMAPro`) nunca se cierra ni se rechaza: ninguna herramienta del MCP cambia estado ni plazo de un evento.
 
-## Captura de ofertas y «ya respondió» (pendiente)
+## Pendiente: escritura condicional atómica en Rateware
 
 `preparar_captura` salió de esta entrega. La regla del propietario «nunca modificar ofertas» no se puede garantizar desde Fr8Bid: una oferta del carrier puede entrar entre la relectura y `update_rfx_bid`. Requiere una escritura condicional y atómica en Rateware («actualiza solo si `bid_rate` sigue en null») y se retoma en el hilo de captura con IA. `preparar_ya_respondio` también salió: `update_rfx_bid` sin tarifa pone `bid_rate` en null en Rateware y podría borrar una oferta que entre entre la guarda del proxy y la escritura. Las dos acciones quedan pendientes de una **escritura condicional atómica en Rateware** (`… WHERE bid_rate IS NULL`). `update_rfx_bid` ya no está en `ESCRITURAS_MCP`: el MCP no lo envía en ningún caso. Mientras tanto, capturar ofertas y marcar «respondió/rechazó» se hacen en la página del evento.
+
+`preparar_cambio_evento` (extender plazo) también salió: `update_rfx_event` escribe `due_date` sin condición sobre el plazo anterior, así que dos confirmaciones concurrentes podrían terminar **acortándolo**. Requiere en Rateware «actualiza `due_date` solo si sigue siendo el plazo que se vio» (atómico). `update_rfx_event` ya no está en `ESCRITURAS_MCP`; el plazo se cambia en la página del evento.
 
 Nota: la página del evento tiene hoy la misma carrera (la guarda `YA_OFERTO` del proxy relee antes de escribir, pero no es atómica). Corregirla es una mejora de Rateware, no de esta entrega.
 
@@ -40,7 +41,7 @@ Nota: la página del evento tiene hoy la misma carrera (la guarda `YA_OFERTO` de
 - Los intentos fijan en `pre` el carrier y el correo de cada destinatario; si cambian, `confirmar` se niega. Si no se pudo saber quién respondió (falla o `PASO_EN_RATEWARE`), no se prepara ningún intento.
 - Reglas de cada acción: las mismas que la Mesa, en `src/dominio/acciones-mesa.ts` (usado por `Mesa.tsx` y por el MCP): estado del evento, estado de la participación, «Revisado», protegidos. Se aplican al preparar y otra vez al confirmar.
 - Tamaño: ningún `confirmacion_id` pasa de 60 000 caracteres. Si una selección de intentos no cabe, `preparar_*` la parte en varias confirmaciones (`partes`, cada una con su vista previa y su «sí»), siempre por carrier completo (nunca separa las rutas de un carrier); si un solo carrier no cabe, o en las demás acciones, se pide acotar la selección.
-- Resultado: `aplicada` solo si Rateware reflejó todo lo aprobado (borradores generados por carrier, enviados = tanda, estado/plazo reflejados). Crear la campaña de invitación persiste: si después los borradores fallan o salen en cero, el resultado es `parcial` con «Campaña creada (id), borradores no generados». Si no hizo nada, `sin_efecto`; si hizo una parte, `parcial`; ambos con `omisiones` (id y motivo).
+- Resultado: `aplicada` solo si Rateware reflejó todo lo aprobado (borradores generados por carrier, enviados = tanda sin fallos ni entregas desconocidas, «Revisado» reflejado). Una tanda con `delivery_unknown` > 0 es siempre `incierta`. Crear la campaña de invitación persiste: si después los borradores fallan o salen en cero, el resultado es `parcial` con «Campaña creada (id), borradores no generados». Si no hizo nada, `sin_efecto`; si hizo una parte, `parcial`; ambos con `omisiones` (id y motivo).
 - Idempotencia que se conserva: `claveIntento` en intentos, `claveCampana` en la campaña, `operation_id` y `expected_versions` en tandas.
 - Sin `FR8BID_MCP_CONFIRM_SECRET` (o con menos de 32 caracteres): `preparar_*` y `confirmar` responden `CONFIRMACIONES_PENDIENTES` («confirmaciones pendientes de configurar», equivalente 503). Las 11 lecturas siguen.
 - Registro: cada `confirmar` escribe un `console.info` JSON (`tipo: fr8bid_mcp_confirmar`) con usuario, cliente, rol, acción, evento, `h`, `jti`, `frase_ok` (100 caracteres) y resultado (`aplicada`, `parcial`, `incierta`, `rechazada:<código>`). Sin tokens ni secretos.
@@ -52,7 +53,7 @@ Dos `confirmar` simultáneos de la misma vista previa pueden pasar ambos la rele
 ## Lo que debe hacer Jose para activarlo
 
 1. En Vercel (proyecto `fr8bid`, Production), crear `FR8BID_MCP_CONFIRM_SECRET` con un valor aleatorio de al menos 32 caracteres (por ejemplo `openssl rand -base64 48`). No se comparte con nadie ni se pone en el repo. Cambiarlo invalida las vistas previas pendientes (vencen igual a los 15 min).
-2. Opcional: `FR8BID_MCP_APROBADORES` con los correos (separados por coma) que pueden **confirmar** envíos reales de tandas (`send_outreach_messages`) y cambios de plazo (`update_rfx_event`). Sin la variable, solo `sales@heymarksman.com`. Otro Administrador puede preparar la vista previa, pero `confirmar` responde «solo el propietario puede confirmar esto» (`SOLO_PROPIETARIO`). Borradores (intentos, campaña, generar) y «Revisado» siguen con la regla de rol.
+2. Opcional: `FR8BID_MCP_APROBADORES` con los correos (separados por coma) que pueden **confirmar** envíos reales de tandas (`send_outreach_messages`). Sin la variable, solo `sales@heymarksman.com`. La vista previa está ligada a la sesión que la preparó (`sub` y `client_id`): el propietario debe **preparar y confirmar su propia** vista previa. Si otro Administrador prepara, su `confirmar` responde «solo el propietario puede confirmar esto» (`SOLO_PROPIETARIO`) y el propietario tampoco puede confirmar esa vista ajena (`OTRA_SESION`). Borradores (intentos, campaña, generar) y «Revisado» siguen con la regla de rol.
 3. Las escrituras reales siguen gobernadas por `FR8BID_ESCRITURAS_REALES` del proxy: con `no` todo `confirmar` devuelve 423; con `borradores` solo pasan los intentos (borradores en la Cola).
 4. Fusionar el PR a `main` (Vercel despliega `main`).
 
@@ -60,8 +61,8 @@ Nota: una tanda de 100 envíos depende del tiempo máximo de la función `/api/m
 
 ## Skills
 
-`.claude/skills/fr8bid-insistir`, `fr8bid-invitar-tanda` y `fr8bid-extender-plazo`: paso a paso, siempre vista previa y «sí» en un mensaje nuevo antes de `confirmar`, sin reintentos.
+`.claude/skills/fr8bid-insistir` y `fr8bid-invitar-tanda`: paso a paso, siempre vista previa y «sí» en un mensaje nuevo antes de `confirmar`, sin reintentos.
 
 ## Verificación
 
-`test/mcp-escrituras.test.ts` (simulado, `RFx-FR8BID-PRUEBA-01`): token (firma, vencimiento, otro usuario o cliente, `h` alterado, otro secreto), replay rechazado por la foto, roles (viewer y Operador donde toca, revalidado al confirmar), adjudicar/entregar inaccesibles, HDships y PRIMA, plazo solo hacia adelante, cadencia que excluye a quien respondió, sin secreto con lecturas funcionando, `frase_ok` vacía o negativa, invitación en dos fases y anotaciones MCP.
+`test/mcp-escrituras.test.ts` (simulado, `RFx-FR8BID-PRUEBA-01`): token (firma, vencimiento, otro usuario o cliente, `h` alterado, otro secreto), replay rechazado por la foto, roles (viewer y Operador donde toca, revalidado al confirmar), adjudicar/entregar inaccesibles, HDships y PRIMA, cadencia que excluye a quien respondió, sin secreto con lecturas funcionando, `frase_ok` vacía o negativa, invitación en dos fases y anotaciones MCP.

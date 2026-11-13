@@ -6,7 +6,7 @@ import { esProtegido } from "../dominio/protegidos.js";
 import { hoyMexico } from "../dominio/recorrido.js";
 import { claveIntento, intentosPorPreparar, textoIntento } from "../dominio/seguimiento.js";
 import { audienciaInvitacion, estadoRevision, resumenOmisiones } from "../dominio/revision.js";
-import { bloqueoBorradoresInvitacion, bloqueoEnvioInvitacion, bloqueoIntentos, bloqueoPlazo, bloqueoRevision } from "../dominio/acciones-mesa.js";
+import { bloqueoBorradoresInvitacion, bloqueoEnvioInvitacion, bloqueoIntentos, bloqueoRevision } from "../dominio/acciones-mesa.js";
 import { REMITENTE, campanaDelEvento, campanaFr8bid, elegirPlantilla } from "../dominio/invitacion.js";
 import { MAXIMO_POR_LLAMADA, leerResultado, requiereAtencion } from "../dominio/tandas.js";
 import type { Aviso, Detalle, Rol, Ruta } from "../dominio/tipos.js";
@@ -28,20 +28,16 @@ const CAMPANA_NUEVA = "$campana_creada";
 // confirmar acepta hasta este largo de confirmacion_id; preparar_* nunca firma uno mayor.
 export const LIMITE_TOKEN = 60000;
 const PARTIBLES = new Set(["intentos"]);
-// AGENTS.md regla 6: aprobación del PROPIETARIO por acción. Enviar y mover el plazo solo los
-// confirma un correo de FR8BID_MCP_APROBADORES; otro Administrador puede preparar, no confirmar.
+// AGENTS.md regla 6: aprobación del PROPIETARIO por acción. Enviar una tanda solo lo confirma un
+// correo de FR8BID_MCP_APROBADORES, sobre una vista previa que él mismo preparó (el token es de su sesión).
 export const APROBADORES_POR_OMISION = ["sales@heymarksman.com"];
-const SOLO_PROPIETARIO = new Set(["invitacion_envio", "cambio_evento"]);
+const SOLO_PROPIETARIO = new Set(["invitacion_envio"]);
 export function aprobadoresDe(env: NodeJS.ProcessEnv): string[] {
   const lista = String(env.FR8BID_MCP_APROBADORES || "").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
   return lista.length ? lista : APROBADORES_POR_OMISION;
 }
 
 const id = z.string().regex(/^[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}$/i);
-const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(s => {
-  const d = new Date(`${s}T12:00:00Z`);
-  return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === s;
-}, "Fecha inválida");
 const ids = z.array(id).min(1).max(100);
 const vista = "Solo lee y devuelve una vista previa con confirmacion_id; no escribe nada. Muestra la vista previa completa y pide un «sí» explícito antes de llamar a confirmar.";
 
@@ -52,8 +48,6 @@ export const herramientasEscritura = {
     schema: z.object({ event_id: id, carrier_id: id }).strict() },
   preparar_invitacion: { rol: "operator" as Rol, descripcion: `Invitación por tandas. fase «borradores» (Operador): genera borradores solo para carriers con «Revisado» vigente, no envía. fase «envio» (Administrador): envía por Gmail una tanda de hasta ${MAXIMO_POR_LLAMADA} borradores con su versión exacta. ${vista}`,
     schema: z.object({ event_id: id, fase: z.enum(["borradores", "envio"]) }).strict() },
-  preparar_cambio_evento: { rol: "admin" as Rol, descripcion: `Administrador: SOLO extiende el plazo (fecha nueva posterior a la actual y a hoy) de un evento abierto o en borrador. No cierra, no publica, no cambia estado. ${vista}`,
-    schema: z.object({ event_id: id, nueva_fecha: fecha }).strict() },
   confirmar: { rol: "operator" as Rol, descripcion: "Ejecuta una vista previa ya mostrada. confirmacion_id = el de preparar_*; frase_ok = el texto literal con el que el usuario dijo «sí» (vacío = rechazo). Vence a los 15 min, vuelve a comprobar el evento y no reintenta. Adjudicar, entregar a Rateware y avisos de adjudicación no están aquí: se hacen en la Mesa.",
     schema: z.object({ confirmacion_id: z.string().min(20).max(LIMITE_TOKEN), frase_ok: z.string().max(300).optional() }).strict() }
 };
@@ -62,7 +56,7 @@ export type NombreEscritura = keyof typeof herramientasEscritura;
 // Rol mínimo por acción firmada (se comprueba al preparar Y al confirmar).
 const ROL_ACCION: Record<string, Rol> = {
   intentos: "operator", revision: "admin",
-  invitacion_borradores: "operator", invitacion_envio: "admin", cambio_evento: "admin"
+  invitacion_borradores: "operator", invitacion_envio: "admin"
 };
 const RANGO: Record<Rol, number> = { viewer: 0, operator: 1, admin: 2 };
 const permite = (rol: Rol, minimo: Rol) => RANGO[rol] >= RANGO[minimo];
@@ -83,7 +77,7 @@ export function esAfirmacion(frase: string): boolean {
   return n.split(" ").every(p => AFIRMATIVAS.has(p));
 }
 
-export interface Efecto { efecto: "completo" | "parcial" | "nulo"; omisiones: { id: string | null; motivo: string }[] }
+export interface Efecto { efecto: "completo" | "parcial" | "nulo" | "incierto"; omisiones: { id: string | null; motivo: string }[] }
 /** Compara la respuesta (ya válida) con lo aprobado: solo «completo» cuenta como hecho. */
 export function evaluarEfecto(body: Record<string, any>, b: any): Efecto {
   const completo: Efecto = { efecto: "completo", omisiones: [] };
@@ -95,8 +89,6 @@ export function evaluarEfecto(body: Record<string, any>, b: any): Efecto {
       return b.reused === true ? nulo(body.rfx_lane_vendor_id, "ya había un borrador con esa clave; no se creó otro") : completo;
     case "record_rfx_invitation_wave_review":
       return !("reviewed" in row) ? sinVerificar(body.vendor_id) : row.reviewed === true ? completo : nulo(body.vendor_id, "Rateware no registró «Revisado»");
-    case "update_rfx_event":
-      return !("due_date" in row) ? sinVerificar(body.event_id) : String(row.due_date ?? "").slice(0, 10) === body.patch?.due_date ? completo : nulo(body.event_id, "Rateware no reflejó el plazo nuevo");
     case "generate_outreach_drafts": {
       const esperados: string[] = (body.reviewed_vendor_ids || []).map(String);
       const generados = new Set((Array.isArray(b.rows) ? b.rows : []).map((x: any) => String(x?.vendor_id ?? "")));
@@ -109,6 +101,8 @@ export function evaluarEfecto(body: Record<string, any>, b: any): Efecto {
       const ids: string[] = body.ids || [];
       const res = leerResultado(b, ids);
       const lista = [...res.failures, ...res.skipped_rows].map(f => ({ id: f.id, motivo: f.reason || "no enviado" }));
+      // Entrega desconocida: nunca «aplicada» ni «sin_efecto»; el resultado es incierto.
+      if (res.delivery_unknown > 0) return { efecto: "incierto", omisiones: [{ id: null, motivo: `${res.delivery_unknown} con entrega desconocida; revisa en la página del evento antes de repetir.` }, ...lista] };
       if (res.sent === ids.length && !requiereAtencion(res, ids)) return completo;
       if (res.sent === 0) return { efecto: "nulo", omisiones: lista.length ? lista : [{ id: null, motivo: "Rateware no envió ninguno" }] };
       return { efecto: "parcial", omisiones: lista.length ? lista : [{ id: null, motivo: `${ids.length - res.sent} sin confirmar como enviados` }] };
@@ -125,7 +119,7 @@ export function respuestaValida(action: string, b: any, enviados: number): boole
   switch (action) {
     case "draft_bid_room_carrier_message": return fila(b.outreach_message) && !!b.outreach_message.id;
     case "create_outreach_campaign": return fila(b.row) && !!b.row.id;
-    case "record_rfx_invitation_wave_review": case "update_rfx_event": return fila(b.row);
+    case "record_rfx_invitation_wave_review": return fila(b.row);
     case "generate_outreach_drafts": return Array.isArray(b.rows);
     case "send_outreach_messages": return num(b.sent) && num(b.failed) && b.sent <= enviados;
     default: return false;
@@ -170,10 +164,6 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
     const action = String(body.action);
     if (s !== "rateware-api" || !(LECTURAS[s].has(action) || ESCRITURAS_MCP.has(action))) throw new Rechazo("FUERA_DEL_MCP", "Acción fuera del MCP.", 403);
     for (const k of ["event_id", "rfx_event_id", "id"]) if (esProtegido(body[k])) throw new Rechazo("EVENTO_PROTEGIDO", "Evento protegido.", 404);
-    if (action === "update_rfx_event") {
-      const patch = body.patch as Record<string, unknown> | undefined;
-      if (!patch || Object.keys(patch).join(",") !== "due_date") throw new Rechazo("SOLO_PLAZO", "Desde el chat solo se extiende el plazo.", 403);
-    }
     const r = await t(s, body);
     return { ...r, body: sinProtegidos(sinSecretos(r.body)) };
   };
@@ -309,17 +299,6 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
           ya_enviadas_u_otras: invitaciones.length - enviables.length } };
     },
 
-    async cambio_evento(a: { event_id: string; nueva_fecha: string }) {
-      const d = await leer(a.event_id);
-      const bloqueoP = bloqueoPlazo(d, a.nueva_fecha, hoy());
-      if (bloqueoP) throw new Rechazo(d.evento.estado !== "abierto" && d.evento.estado !== "borrador" ? "EVENTO_NO_EDITABLE" : a.nueva_fecha <= hoy() ? "FECHA_PASADA" : "SOLO_EXTENDER", bloqueoP, 400);
-      // Solo hacia adelante: nunca cierra (tampoco PRIMA, que jamás se cierra ni se rechaza).
-      const actual = d.evento.plazo ? d.evento.plazo.slice(0, 10) : null;
-      return { act: "cambio_evento", ev: d.evento.id, evento: resumenEvento(d), arg: { event_id: d.evento.id, nueva_fecha: a.nueva_fecha },
-        cuerpos: [{ action: "update_rfx_event", event_id: d.evento.id, patch: { due_date: a.nueva_fecha } }],
-        foto: { estado: d.evento.estado, plazo: actual },
-        vista: { plazo_actual: actual, plazo_nuevo: a.nueva_fecha, efecto: "Solo mueve el plazo hacia adelante. No cierra, no publica, no cambia estado ni avisa a carriers." } };
-    }
   };
 
   async function preparar(nombre: NombreEscritura, args: Record<string, unknown>) {
@@ -390,7 +369,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       if (!minimo || !planes[c.act]) throw new Rechazo("ACCION", "Acción no disponible en el MCP.", 400);
       if (!permite(ctx.rol, minimo)) throw new Rechazo("SIN_PERMISO", "Tu rol ya no permite esta acción.", 403);
       if (SOLO_PROPIETARIO.has(c.act) && !(ctx.aprobadores ?? APROBADORES_POR_OMISION).includes(String(ctx.email ?? "").trim().toLowerCase()))
-        throw new Rechazo("SOLO_PROPIETARIO", "Solo el propietario puede confirmar esto. Puedes preparar la vista previa; la confirma el propietario.", 403);
+        throw new Rechazo("SOLO_PROPIETARIO", "Solo el propietario puede confirmar esto. El propietario debe preparar y confirmar su propia vista previa.", 403);
       if (huellaCuerpos(c.cuerpos, c.fijo) !== c.h) throw new Rechazo("ALTERADA", "La confirmación no coincide con su vista previa.", 400);
       if (esProtegido(c.ev) || c.cuerpos.some(b => !ESCRITURAS_MCP.has(String(b.action)) || ![b.event_id, b.rfx_event_id].includes(c.ev))) throw new Rechazo("ALTERADA", "La confirmación no coincide con su vista previa.", 400);
       // Relectura: si el evento ya no está como en la vista previa (o ya se aplicó), no se escribe.
@@ -441,7 +420,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       const generado = pasos.some(x => x.accion === "generate_outreach_drafts" && x.efecto === "completo");
       if (campanaCreada && !generado) omisiones.unshift({ id: campanaCreada, motivo: `Campaña creada (${campanaCreada}), borradores no generados.` });
       const algo = efectos.some(e => e !== "nulo");
-      const estado = corte === "incierta" ? "incierta"
+      const estado = corte === "incierta" || efectos.includes("incierto") ? "incierta"
         : corte === "rechazada" ? (algo ? "parcial" : "rechazada")
         : efectos.length && efectos.every(e => e === "completo") ? "aplicada"
         : !algo ? "sin_efecto" : "parcial";
