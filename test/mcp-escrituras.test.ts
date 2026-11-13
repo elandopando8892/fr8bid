@@ -6,7 +6,7 @@ import { transporteSimulado } from "../src/cliente/api";
 import { EVENTOS_PROTEGIDOS } from "../src/dominio/protegidos";
 import { hoyMexico } from "../src/dominio/recorrido";
 import { ESCRITURAS } from "../src/servidor/proxy";
-import { aprobadoresDe, crearEscrituras, esAfirmacion, evaluarEfecto, FUERA_DEL_MCP, LIMITE_TOKEN, respuestaValida, type ContextoEscrituras } from "../src/mcp/escrituras";
+import { aprobadoresDe, contenidoCorreo, crearEscrituras, esAfirmacion, LIMITE_VISTA, textoDeHtml, evaluarEfecto, FUERA_DEL_MCP, LIMITE_TOKEN, respuestaValida, type ContextoEscrituras } from "../src/mcp/escrituras";
 import { ORG } from "../src/simulado/semilla";
 import { AUDIENCIA, EMISOR, secretoConfirmacion } from "../src/mcp/confirmacion";
 import { ESCRITURAS_MCP, transporteEscritura } from "../src/mcp/transporte";
@@ -367,6 +367,53 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     expect(m.escritas()).toEqual([expect.objectContaining({ action: "draft_bid_room_carrier_message", rfx_lane_vendor_id: segunda.id })]);
   });
 
+  it("vista previa de la tanda: asunto, texto y HTML seguro; variantes distintas; sin cuerpo no se envía", async () => {
+    const preparar = async (cambiar: (m: any, i: number) => any) => {
+      const y = await escenario({ invitar: false });
+      await mcp(y).ej("confirmar", { confirmacion_id: (await mcp(y).ej("preparar_invitacion", { event_id: y.eventId, fase: "borradores" })).confirmacion_id, frase_ok: "sí" });
+      const alterar: Alterar = (b, r) => b.action === "list_outreach_messages" && r.status === 200
+        ? { ...r, body: { ...r.body, rows: [...(r.body.rows ?? [])].sort((a: any, c: any) => String(a.id).localeCompare(String(c.id))).map(cambiar) } } : r;
+      const admin = mcp(y, "admin", "admin", {}, alterar);
+      return { y, admin, v: await admin.ej("preparar_invitacion", { event_id: y.eventId, fase: "envio" }).catch(e => e) };
+    };
+    // Solo HTML: se muestra como texto, sin scripts ni estilos.
+    const soloHtml = await preparar(m => ({ ...m, text_body: "", html_body: "<html><head><style>p{color:red}</style></head><body><script>alert('x')</script><p>Hola &amp; bienvenido</p><a href=\"https://fr8bid.heymarksman.com/bid\">Abrir</a></body></html>" }));
+    const d0 = soloHtml.v.vista_previa.destinatarios[0];
+    expect(d0.texto).toBeNull();
+    expect(d0.html.contenido).toContain("Hola & bienvenido");
+    expect(d0.html.contenido).toContain("Abrir (https://fr8bid.heymarksman.com/bid)");
+    expect(d0.html.contenido).not.toMatch(/alert|color:red|<[a-z]/i);
+    // Variantes distintas: se muestran las dos y se marca.
+    const distintas = await preparar(m => ({ ...m, text_body: "Versión de texto", html_body: "<p>Versión HTML diferente</p>" }));
+    expect(distintas.v.vista_previa.destinatarios[0]).toMatchObject({ texto: { contenido: "Versión de texto" }, html: { contenido: "Versión HTML diferente" }, variantes_distintas: true });
+    // Un mensaje sin cuerpo: queda fuera con motivo; el otro sí entra.
+    const uno = await preparar((m, i) => i === 0 ? { ...m, text_body: "", html_body: null } : m);
+    expect(uno.v.vista_previa.destinatarios).toHaveLength(2);
+    expect(uno.v.vista_previa.quedan_fuera).toEqual(expect.arrayContaining([expect.objectContaining({ motivo: expect.stringMatching(/sin cuerpo visible/) })]));
+    expect((decodeJwt(uno.v.confirmacion_id) as any).cuerpos[0].ids).toHaveLength(2);
+    // Ninguno con cuerpo: no se prepara nada que confirmar.
+    const ninguno = await preparar(m => ({ ...m, text_body: "  ", html_body: "<style>x{}</style>" }));
+    expect(ninguno.v).toMatchObject({ codigo: "NADA_POR_ENVIAR" });
+    expect(ninguno.v.message).toMatch(/sin asunto o sin cuerpo visible/);
+    // HTML largo: truncado con el largo total.
+    const largo = contenidoCorreo({ subject: "S", html_body: `<p>${"x".repeat(LIMITE_VISTA + 500)}</p>` });
+    expect(largo.html).toMatchObject({ truncado: true, largo_total: LIMITE_VISTA + 500 });
+    expect(textoDeHtml("<p>a</p><p>b</p>")).toBe("a\nb");
+  });
+
+  it("vista previa de borradores: la plantilla real muestra asunto y html_body", async () => {
+    const x = await escenario({ invitar: false });
+    const t = x.sim.plantillas.find(p => p.name === "RFx carrier invitation - Spanish")!;
+    Object.assign(t, { owner_email: null, channel: "email", subject: "Invitación RFx {{rfx_id}}", html_body: "<p>Hola {{vendor_name}},</p><p>Le invitamos a cotizar.</p><script>x()</script>", whatsapp_body: null, whatsapp_group_body: null, is_default: false, active: true });
+    const m = mcp(x);
+    const v = await m.ej("preparar_invitacion", { event_id: x.eventId, fase: "borradores" });
+    expect(v.vista_previa.texto).toMatchObject({ asunto: "Invitación RFx {{rfx_id}}", cuerpo: null, html: { contenido: "Hola {{vendor_name}},\nLe invitamos a cotizar.", truncado: false } });
+    // Cambiar el html_body entre preparar y confirmar invalida la confirmación.
+    t.html_body = "<p>Otro texto</p>";
+    expect(await codigo(m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" }))).toBe("YA_APLICADO_O_CAMBIO");
+    expect(m.escritas()).toEqual([]);
+  });
+
   it("una tanda con entrega desconocida queda incierta, nunca aplicada ni sin efecto", async () => {
     for (const cuerpo of [(ids: string[]) => ({ sent: 0, failed: 0, skipped: 0, delivery_unknown: ids.length, failures: [], skipped_rows: [] }),
                           (ids: string[]) => ({ sent: ids.length - 1, failed: 0, skipped: 0, delivery_unknown: 1, failures: [], skipped_rows: [] })]) {
@@ -457,7 +504,7 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     const admin = mcp(x, "admin", "admin");
     const e = await admin.ej("preparar_invitacion", { event_id: x.eventId, fase: "envio" });
     expect(e.vista_previa.destinatarios).toHaveLength(2);
-    expect(e.vista_previa.destinatarios[0]).toEqual(expect.objectContaining({ para: expect.any(String), asunto: expect.any(String), texto: expect.any(String) }));
+    expect(e.vista_previa.destinatarios[0]).toEqual(expect.objectContaining({ para: expect.any(String), asunto: expect.any(String), texto: expect.objectContaining({ contenido: expect.any(String) }), html: expect.objectContaining({ contenido: expect.any(String) }), variantes_distintas: false }));
     expect(e.vista_previa.canal).toMatch(/SE ENVÍAN 2/);
     const re = await admin.ej("confirmar", { confirmacion_id: e.confirmacion_id, frase_ok: "sí, envíalas" });
     expect(re).toMatchObject({ estado: "aplicada", envio: { enviados: 2 } });

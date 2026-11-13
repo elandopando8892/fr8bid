@@ -77,6 +77,38 @@ export function esAfirmacion(frase: string): boolean {
   return n.split(" ").every(p => AFIRMATIVAS.has(p));
 }
 
+// Vista segura de un correo: el HTML se muestra como texto (sin scripts ni estilos), truncado
+// con su largo total. Si texto y HTML dicen cosas distintas se muestran ambas variantes.
+export const LIMITE_VISTA = 4000;
+const ENTIDADES: Record<string, string> = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'", "#39": "'" };
+export function textoDeHtml(html: string): string {
+  return html
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<(script|style|head|noscript|template)\b[\s\S]*?<\/\1\s*>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|tr|h[1-6]|table|section)\s*>/gi, "\n")
+    .replace(/<a\b[^>]*href\s*=\s*["']([^"']*)["'][^>]*>([\s\S]*?)<\/a\s*>/gi, (_m, href, t) => `${t} (${href})`)
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&(#\d+|#x[0-9a-f]+|[a-z]+|#39);/gi, (m, e: string) => ENTIDADES[e.toLowerCase()] ?? (e[0] === "#" ? String.fromCodePoint(e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : m))
+    .replace(/[ \t\f\v\u00a0]+/g, " ")
+    .replace(/ *\n[ \n]*/g, "\n")
+    .trim();
+}
+const recortar = (t: string) => t.length > LIMITE_VISTA ? { contenido: `${t.slice(0, LIMITE_VISTA)}…`, largo_total: t.length, truncado: true } : { contenido: t, largo_total: t.length, truncado: false };
+const plano = (t: string) => t.replace(/\s+/g, " ").trim();
+export interface ContenidoCorreo { asunto: string; texto: ReturnType<typeof recortar> | null; html: ReturnType<typeof recortar> | null; distintas: boolean; visible: boolean }
+export function contenidoCorreo(m: { subject?: unknown; text_body?: unknown; html_body?: unknown }): ContenidoCorreo {
+  const asunto = String(m.subject ?? "").trim();
+  const texto = String(m.text_body ?? "").trim();
+  const html = typeof m.html_body === "string" && m.html_body.trim() ? textoDeHtml(m.html_body) : "";
+  return { asunto, texto: texto ? recortar(texto) : null, html: html ? recortar(html) : null,
+    distintas: Boolean(texto && html && plano(texto) !== plano(html)), visible: Boolean(asunto && (texto || html)) };
+}
+function vistaPlantilla(t: Record<string, any>) {
+  const c = contenidoCorreo({ subject: t.subject, text_body: t.body ?? t.text_body, html_body: t.html_body });
+  return { asunto: c.asunto || null, cuerpo: c.texto, html: c.html, variantes_distintas: c.distintas };
+}
+
 export interface Efecto { efecto: "completo" | "parcial" | "nulo" | "incierto"; omisiones: { id: string | null; motivo: string }[] }
 /** Compara la respuesta (ya válida) con lo aprobado: solo «completo» cuenta como hecho. */
 export function evaluarEfecto(body: Record<string, any>, b: any): Efecto {
@@ -265,12 +297,12 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       cuerpos.push({ action: "generate_outreach_drafts", event_id: d.evento.id, campaign_id: campana ? campana.id : CAMPANA_NUEVA, template_id: plantilla.id, channel: "email", reviewed_vendor_ids: revisados });
       const porCarrier = new Map(sinBorrador.map(p => [p.carrierId, p]));
       const destinatarios = [...porCarrier.values()].map(p => ({ carrier_id: p.carrierId, carrier: p.carrier, correo: p.correo })).sort((x, y) => x.carrier_id.localeCompare(y.carrier_id));
-      const fijo = { plantilla: huella({ id: plantilla.id, asunto: plantilla.subject ?? null, cuerpo: plantilla.body ?? plantilla.text_body ?? plantilla.html_body ?? null, version: plantilla.updated_at ?? plantilla.version ?? null }), destinatarios };
+      const fijo = { plantilla: huella({ id: plantilla.id, asunto: plantilla.subject ?? null, cuerpo: plantilla.body ?? plantilla.text_body ?? null, html: plantilla.html_body ?? null, version: plantilla.updated_at ?? plantilla.version ?? null }), destinatarios };
       return { act: "invitacion_borradores", ev: d.evento.id, evento: resumenEvento(d), arg: { event_id: d.evento.id, fase: "borradores" }, cuerpos, fijo,
         foto: { revisados, campana: campana?.id ?? null, plantilla_id: String(plantilla.id), borradores: invitaciones.map(x => x.id).sort(), ...fijo },
         vista: { canal: `Correo (Gmail, ${REMITENTE}). Al confirmar se generan BORRADORES en la Cola; no se envía nada. El envío es la fase «envio» (Administrador).`,
           destinatarios: [...porCarrier.values()].map(p => ({ carrier: p.carrier, correo: p.correo })),
-          texto: { plantilla: plantilla.name ?? null, asunto: plantilla.subject ?? null, cuerpo: plantilla.body ?? plantilla.text_body ?? null, nota: "Rateware llena la plantilla por carrier; el texto final exacto se muestra en la fase «envio»." },
+          texto: { plantilla: plantilla.name ?? null, ...vistaPlantilla(plantilla), nota: "Rateware llena la plantilla por carrier; el texto final exacto se muestra en la fase «envio»." },
           quedan_fuera: { resumen: resumenOmisiones(audiencia) || "Nadie.", carriers: [...new Map(audiencia.omitidas.map(o => [o.p.carrierId, { carrier: o.p.carrier, motivo: o.motivo }])).values()] },
           campana: campana ? "existente" : "se crea la campaña de Fr8Bid del evento (clave idempotente)" } };
     },
@@ -286,22 +318,31 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       // «en_cola» mezcla queued y sending: con el estado crudo solo se ofrecen los pendientes
       // de verdad (drafted, queued, failed). Uno en proceso (sending) no entra y no altera la tanda.
       const crudos = await crudo({ action: "list_outreach_messages", rfx_event_id: d.evento.id, channel: "email" });
-      const estadoCrudo = new Map<string, string>(((crudos.rows ?? crudos.messages ?? []) as any[]).map(m => [String(m.id), String(m.status ?? "")]));
+      const filasCrudas = (crudos.rows ?? crudos.messages ?? []) as any[];
+      const estadoCrudo = new Map<string, string>(filasCrudas.map(m => [String(m.id), String(m.status ?? "")]));
+      // Contenido exacto de cada mensaje: asunto, text_body y html_body (Aviso.cuerpo solo trae text_body).
+      const contenidoDe = new Map<string, ContenidoCorreo>(filasCrudas.map(m => [String(m.id), contenidoCorreo(m)]));
       const PENDIENTES = new Set(["drafted", "queued", "failed"]);
       const enProceso = invitaciones.filter(x => (x.estado === "borrador" || x.estado === "fallido" || x.estado === "en_cola") && !PENDIENTES.has(estadoCrudo.get(x.id) ?? ""));
       const enviables = invitaciones.filter(x => (x.estado === "borrador" || x.estado === "fallido" || x.estado === "en_cola") && PENDIENTES.has(estadoCrudo.get(x.id) ?? ""));
-      const porEnviar = enviables.filter(revisada).sort((x, y) => x.id.localeCompare(y.id));
+      // Sin cuerpo visible no se puede mostrar el texto exacto: ese mensaje no entra en la tanda.
+      const visible = (x: Aviso) => contenidoDe.get(x.id)?.visible === true;
+      const sinCuerpo = enviables.filter(x => revisada(x) && !visible(x));
+      const porEnviar = enviables.filter(x => revisada(x) && visible(x)).sort((x, y) => x.id.localeCompare(y.id));
       const tanda = porEnviar.slice(0, MAXIMO_POR_LLAMADA);
-      if (!tanda.length) throw new Rechazo("NADA_POR_ENVIAR", "No hay borradores de invitación listos de carriers revisados.");
+      if (!tanda.length) throw new Rechazo("NADA_POR_ENVIAR", sinCuerpo.length
+        ? `${sinCuerpo.length} borrador(es) sin asunto o sin cuerpo visible: no se puede mostrar el texto exacto. Revísalos en la Cola de Rateware.`
+        : "No hay borradores de invitación listos de carriers revisados.");
       const cuerpo = await cuerpoDe(m => m.enviarAvisos(d.evento.id, tanda));
       return { act: "invitacion_envio", ev: d.evento.id, evento: resumenEvento(d), arg: { event_id: d.evento.id, fase: "envio" }, cuerpos: [cuerpo],
-        foto: tanda.map(x => ({ id: x.id, version: x.version, estado: x.estado, crudo: estadoCrudo.get(x.id), revisado: revisada(x) })),
+        foto: tanda.map(x => ({ id: x.id, version: x.version, estado: x.estado, crudo: estadoCrudo.get(x.id), revisado: revisada(x), contenido: huella(contenidoDe.get(x.id)) })),
         vista: { canal: `Gmail desde ${REMITENTE}. Al confirmar SE ENVÍAN ${tanda.length} invitaciones con este texto exacto (versión aprobada).`,
           operation_id: cuerpo.operation_id,
-          destinatarios: tanda.map(x => ({ carrier: carrierDe(x)?.carrier ?? null, para: x.destinatario, asunto: x.asunto, texto: x.cuerpo, estado: x.estado })),
+          destinatarios: tanda.map(x => { const c = contenidoDe.get(x.id)!; return { carrier: carrierDe(x)?.carrier ?? null, para: x.destinatario, asunto: c.asunto, texto: c.texto, html: c.html, variantes_distintas: c.distintas, estado: x.estado }; }),
           quedan_fuera: [
             ...enviables.filter(x => !revisada(x)).map(x => ({ carrier: carrierDe(x)?.carrier ?? null, motivo: carrierDe(x) ? `sin «Revisado» vigente (${estadoRevision(d, carrierDe(x)!.carrierId)})` : "participación no encontrada" })),
             ...porEnviar.slice(MAXIMO_POR_LLAMADA).map(x => ({ carrier: carrierDe(x)?.carrier ?? null, motivo: "siguiente tanda" })),
+            ...sinCuerpo.map(x => ({ carrier: carrierDe(x)?.carrier ?? null, motivo: "sin asunto o sin cuerpo visible: no se puede mostrar el texto exacto" })),
             ...enProceso.map(x => ({ carrier: carrierDe(x)?.carrier ?? null, motivo: estadoCrudo.get(x.id) === "sending" ? "en proceso (Rateware lo está enviando)" : "en proceso o estado no confirmado" }))
           ],
           ya_enviadas_u_otras: invitaciones.length - enviables.length } };
