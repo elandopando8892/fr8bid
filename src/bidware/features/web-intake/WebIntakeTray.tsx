@@ -18,6 +18,7 @@ import {
   promoteWebLead,
   registerWebRateSheet,
   webRateSheetUrl,
+  leadSource,
   type WebIntake,
   type WebLane,
 } from "./webIntake.service";
@@ -123,7 +124,10 @@ export function WebIntakeTray({ onPromoted }: { onPromoted?: () => void }) {
             {rows.map((row) => (
               <tr key={row.id}>
                 <td className="mono">{stamp(row.created_at)}</td>
-                <td>{SITE[row.source_site] ?? row.source_site}</td>
+                <td>
+                  <div>{SITE[row.source_site] ?? row.source_site}</div>
+                  {leadSource(row) && <div className="cell-sub" title={tr("source")}>{leadSource(row)}</div>}
+                </td>
                 <td>
                   <div className="cell-title">{text(row.lead, "company")}</div>
                   <div className="cell-sub">{[text(row.lead, "name"), text(row.lead, "email")].filter(Boolean).join(" · ")}</div>
@@ -205,6 +209,7 @@ function PromoteDialog({ row, onClose, onDone }: { row: WebIntake; onClose: () =
     ["origin_text", tr("origin"), true], ["destination_text", tr("destination"), true], ["truck_type", tr("truckType"), true],
     ["weekly_volume", tr("loadsPerWeek"), true], ["trailer_requirements", tr("trailer"), false], ["average_weight", tr("weight"), false],
     ["border_crossing", tr("border"), false], ["product", tr("product"), false], ["target_rate", tr("targetRate"), false],
+    ["config", tr("config"), false], ["service", tr("service"), false], ["packaging", tr("packaging"), false], ["hazmat", tr("hazmat"), false],
   ];
 
   async function submit() {
@@ -246,6 +251,10 @@ function PromoteDialog({ row, onClose, onDone }: { row: WebIntake; onClose: () =
             <input value={lane[key]} onChange={set(key)} inputMode={key === "weekly_volume" || key === "average_weight" ? "decimal" : undefined} />
           </label>
         ))}
+        <label className="intake-field web-intake-wide">
+          <span>{tr("notes")}</span>
+          <textarea rows={3} value={lane.notes} onChange={set("notes")} />
+        </label>
         <label className="intake-field">
           <span>{tr("currency")}</span>
           <select value={currency} onChange={(e) => setCurrency(e.target.value as "USD" | "MXN")}>

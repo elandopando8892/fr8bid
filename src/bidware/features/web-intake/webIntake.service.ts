@@ -27,6 +27,8 @@ export interface WebIntake {
   source_site: "marksman" | "xbf" | "holding" | string;
   kind: WebIntakeKind;
   lead: Record<string, unknown>;
+  /** Campaign keys the site captured (utm_*, click ids, landing_path); empty when none. */
+  attribution?: Record<string, unknown> | null;
   review: WebIntakeReview | null;
 }
 
@@ -40,6 +42,11 @@ export interface WebLane {
   border_crossing: string;
   product: string;
   target_rate: string;
+  config: string;
+  service: string;
+  packaging: string;
+  hazmat: string;
+  notes: string;
 }
 
 const field = (lead: Record<string, unknown>, key: string) => {
@@ -50,9 +57,26 @@ const field = (lead: Record<string, unknown>, key: string) => {
 /** A whole positive number of loads, or empty for the operator to complete. */
 const loads = (value: string) => (/^\d+(\.\d+)?$/.test(value) && Number(value) > 0 ? value : "");
 
-/** The lane the operator starts from: what the visitor wrote, nothing invented. */
+/** Border answers that are not a crossing point (the group site's RFI offers them). */
+const NOT_A_CROSSING = new Set(["no crossing", "not sure"]);
+
+/**
+ * The lane the operator starts from: what the visitor wrote, nothing invented.
+ * The group site's detailed RFI sends the RFI template's values, so equipment,
+ * service and packaging arrive ready; what has no lane column goes to notes.
+ */
 export function laneFromLead(lead: Record<string, unknown>): WebLane {
   const weight = field(lead, "weight_lbs").replace(/[,\s]/g, "");
+  const border = field(lead, "border");
+  const notes = ([
+    ["noteNeed", field(lead, "operation")],
+    ["noteOriginFacility", field(lead, "origin_facility")],
+    ["noteDestinationFacility", field(lead, "destination_facility")],
+    ["noteBorder", border.toLowerCase() === "not sure" ? border : ""],
+    ["noteSchedule", field(lead, "schedule")],
+    ["noteSeasonality", field(lead, "seasonality")],
+    ["noteLeadTime", field(lead, "lead_time")],
+  ] as const).filter(([, value]) => value).map(([label, value]) => `${tr(label)}: ${value}`).join("\n");
   return {
     origin_text: [field(lead, "origin_city"), field(lead, "origin_postal_code")].filter(Boolean).join(" "),
     destination_text: [field(lead, "destination_city"), field(lead, "destination_postal_code")].filter(Boolean).join(" "),
@@ -60,10 +84,26 @@ export function laneFromLead(lead: Record<string, unknown>): WebLane {
     weekly_volume: loads(field(lead, "loads_per_week")),
     average_weight: /^\d+(\.\d+)?$/.test(weight) ? weight : "",
     trailer_requirements: field(lead, "trailer_type"),
-    border_crossing: field(lead, "border"),
+    border_crossing: NOT_A_CROSSING.has(border.toLowerCase()) ? "" : border,
     product: field(lead, "product"),
     target_rate: field(lead, "target_rate"),
+    config: field(lead, "configuration"),
+    service: field(lead, "service_type"),
+    packaging: field(lead, "packaging"),
+    hazmat: field(lead, "hazmat"),
+    notes,
   };
+}
+
+/** Where a lead came from, as the site captured it: campaign, else landing page. */
+export function leadSource(row: Pick<WebIntake, "attribution">): string {
+  const a = row.attribution && typeof row.attribution === "object" ? row.attribution : {};
+  const value = (key: string) => (typeof a[key] === "string" ? String(a[key]).trim() : "");
+  const campaign = [value("utm_source"), value("utm_medium"), value("utm_campaign")].filter(Boolean).join(" / ");
+  if (campaign) return campaign;
+  if (value("gclid") || value("gbraid") || value("wbraid")) return "Google Ads";
+  if (value("msclkid")) return "Microsoft Ads";
+  return value("landing_path");
 }
 
 /** What still blocks a promotion, in the order the form shows it. */

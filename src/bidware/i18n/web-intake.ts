@@ -242,6 +242,19 @@ export const copy = {
     "es": "La bandeja del sitio no está disponible por ahora. No se guardó nada; inténtalo más tarde.",
     "en": "The website tray isn't available right now. Nothing was saved; try again later."
   },
+  "config": { "es": "Configuración", "en": "Configuration" },
+  "service": { "es": "Tipo de servicio", "en": "Service type" },
+  "packaging": { "es": "Embalaje", "en": "Packaging" },
+  "hazmat": { "es": "Material peligroso", "en": "Hazardous material" },
+  "notes": { "es": "Notas de la ruta", "en": "Lane notes" },
+  "noteNeed": { "es": "Necesidad", "en": "Need" },
+  "noteOriginFacility": { "es": "Instalación en origen", "en": "Origin facility" },
+  "noteDestinationFacility": { "es": "Instalación en destino", "en": "Destination facility" },
+  "noteBorder": { "es": "Cruce", "en": "Crossing" },
+  "noteSchedule": { "es": "Días de operación", "en": "Operating days" },
+  "noteSeasonality": { "es": "Temporalidad", "en": "Seasonality" },
+  "noteLeadTime": { "es": "Anticipación", "en": "Lead time" },
+  "source": { "es": "Fuente", "en": "Source" },
   "readOnly": {
     "es": "Solo lectura: tu rol puede ver la bandeja pero no decidir.",
     "en": "Read only: your role can see the tray but not decide."

@@ -27,6 +27,30 @@ test('the lane starts from what the visitor wrote and invents nothing', () => {
   assert.deepEqual(m.missingForPromotion({ ...lane, weekly_volume: '0', truck_type: ' ' }, SHIPPER), ['Tipo de equipo', 'Cargas por semana']);
 });
 
+test('the detailed RFI arrives ready: template values to lane fields, the rest to notes', () => {
+  const lane = m.laneFromLead({ origin_city: 'Monterrey, NL', destination_city: 'Dallas, TX', truck_type: 'Truck Trailer', trailer_type: 'Dry Van',
+    configuration: 'Single', service_type: 'One Way', packaging: 'Pallets', hazmat: 'No', loads_per_week: '4', weight_lbs: '38000',
+    border: 'Nuevo Laredo / Laredo', operation: 'Autopartes a planta', origin_facility: 'Factory', schedule: 'Mon - Fri', lead_time: '48 h' });
+  assert.equal(lane.config, 'Single');
+  assert.equal(lane.service, 'One Way');
+  assert.equal(lane.packaging, 'Pallets');
+  assert.equal(lane.border_crossing, 'Nuevo Laredo / Laredo');
+  assert.equal(lane.notes, 'Necesidad: Autopartes a planta\nInstalación en origen: Factory\nDías de operación: Mon - Fri\nAnticipación: 48 h');
+  assert.deepEqual(m.missingForPromotion(lane, SHIPPER), []);
+  assert.equal(m.laneFromLead({ border: 'No crossing' }).border_crossing, '');
+  const unsure = m.laneFromLead({ border: 'Not sure' });
+  assert.equal(unsure.border_crossing, '');
+  assert.equal(unsure.notes, 'Cruce: Not sure');
+});
+
+test('the source reads the campaign first, then ad click ids, then the landing page', () => {
+  assert.equal(m.leadSource({ attribution: { utm_source: 'linkedin', utm_medium: 'social', utm_campaign: 'rfi', landing_path: '/contacto' } }), 'linkedin / social / rfi');
+  assert.equal(m.leadSource({ attribution: { gclid: 'x', landing_path: '/' } }), 'Google Ads');
+  assert.equal(m.leadSource({ attribution: { landing_path: '/contacto' } }), '/contacto');
+  assert.equal(m.leadSource({ attribution: null }), '');
+  assert.equal(m.leadSource({}), '');
+});
+
 test('promotion sends only filled, trimmed lane fields and the chosen shipper', async () => {
   const calls = api(() => ({ project_id: ID, replayed: false }));
   const lane = { ...m.laneFromLead({ origin_city: ' Monterrey ', destination_city: 'Dallas', truck_type: 'Tractor' }), weekly_volume: '2 ' };
