@@ -58,6 +58,7 @@ Dos `confirmar` simultáneos de la misma vista previa pueden pasar ambos la rele
 4. Fusionar el PR a `main` (Vercel despliega `main`).
 
 Estado: PR #59 fusionado el 13-nov-2026 y `FR8BID_MCP_CONFIRM_SECRET` creado por Jose en Vercel Production el 13-nov-2026. Las variables nuevas solo entran con un despliegue nuevo de `main`.
+El valor debe tener 32 caracteres o más; uno más corto se ignora y el MCP responde `CONFIRMACIONES_PENDIENTES` igual que si faltara (pasó el 13-nov con uno de 20; se reemplazó el 14-nov).
 
 Nota: una tanda de 100 envíos depende del tiempo máximo de la función `/api/mcp` en Vercel (el transporte corta a 28 s y lo deja `incierta`, sin reintentar; repetir la misma tanda no duplica por `operation_id`).
 
