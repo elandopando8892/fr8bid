@@ -89,7 +89,12 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
     // Invitar desde la Mesa: campaña propia de Fr8Bid por evento y la marca
     // «Revisado» que antes se ponía en Bidware.
     "create_outreach_campaign",
-    "record_rfx_invitation_wave_review"
+    "record_rfx_invitation_wave_review",
+    // MCP: escrituras condicionales atómicas (rateware PR #213). Solo escriben si la
+    // participación sigue sin tarifa o si el plazo sigue igual al leído; si no, 409.
+    "capture_rfx_bid_if_empty",
+    "mark_rfx_replied_if_empty",
+    "extend_rfx_due_date_if_unchanged"
   ]),
   "rfx-bid-api": new Set(["submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
@@ -231,6 +236,14 @@ export async function manejar(
     }
   }
 
+  if (action === "extend_rfx_due_date_if_unchanged") {
+    // Solo mover el plazo, con el plazo leído: nunca estado, notas ni otra cosa.
+    const patch = body?.patch && typeof body.patch === "object" ? (body.patch as Record<string, unknown>) : null;
+    if (!body?.event_id) return error(400, "FALTA_EVENTO", "Extender el plazo necesita event_id.");
+    if (!patch || Object.keys(patch).join(",") !== "due_date" || !("expected_due_date" in body!))
+      return error(400, "SOLO_PLAZO", "Solo se extiende el plazo y con el plazo leído (expected_due_date).");
+  }
+
   if (esEscritura && !op.permitirEscrituras && op.soloBorradores && !SOLO_BORRADORES[servicio].has(action)) {
     return error(423, "SOLO_BORRADORES", "Fr8Bid está en modo «solo borradores»: este paso se hace en Rateware o con la aprobación del propietario.", { action });
   }
@@ -259,7 +272,7 @@ export async function manejar(
     if (bloqueo) return bloqueo;
   }
 
-  if (action === "update_rfx_bid" || action === "invite_rfx_lane_vendors" || action === "draft_bid_room_carrier_message") {
+  if (action === "update_rfx_bid" || action === "invite_rfx_lane_vendors" || action === "draft_bid_room_carrier_message" || action === "capture_rfx_bid_if_empty" || action === "mark_rfx_replied_if_empty") {
     const bloqueo = await guardaParticipaciones(action, body!, autorizacion, op);
     if (bloqueo) return bloqueo;
   }
@@ -342,9 +355,15 @@ async function guardaAdjudicacion(body: Record<string, unknown>, autorizacion: s
 // es de ese evento (así un id ajeno, p. ej. de HDships, no pasa).
 async function guardaParticipaciones(action: string, body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
   if (!body.event_id) return error(400, "FALTA_EVENTO", "Esta acción necesita event_id.");
-  const ids = action === "update_rfx_bid" ? [body.id] : action === "draft_bid_room_carrier_message" ? [body.rfx_lane_vendor_id] : Array.isArray(body.ids) ? body.ids : [];
+  const porId = action === "update_rfx_bid" || action === "capture_rfx_bid_if_empty" || action === "mark_rfx_replied_if_empty";
+  const ids = porId ? [body.id] : action === "draft_bid_room_carrier_message" ? [body.rfx_lane_vendor_id] : Array.isArray(body.ids) ? body.ids : [];
   if (!ids.length || ids.some((x) => !x)) return error(400, "FALTA_PARTICIPACION", "Indica la participación.");
-  if (action === "update_rfx_bid" && (!body.patch || typeof body.patch !== "object")) return error(400, "FALTA_PATCH", "update_rfx_bid necesita patch.");
+  if (porId && (!body.patch || typeof body.patch !== "object")) return error(400, "FALTA_PATCH", `${action} necesita patch.`);
+  const patchCondicional = body.patch as Record<string, unknown> | undefined;
+  if (action === "capture_rfx_bid_if_empty" && !(typeof patchCondicional?.bid_rate === "number" && patchCondicional.bid_rate > 0))
+    return error(400, "SIN_TARIFA", "La captura necesita una tarifa mayor que cero.");
+  if (action === "mark_rfx_replied_if_empty" && ("bid_rate" in (patchCondicional ?? {}) || !["responded", "declined"].includes(String(patchCondicional?.invitation_status || ""))))
+    return error(400, "SIN_TARIFA", "«Ya respondió» solo marca respondió o rechazó, sin tarifa.");
   if (action === "invite_rfx_lane_vendors" && (body.confirmed !== true || body.confirmation_action !== "invite_rfx_lane_vendors"))
     return error(400, "SIN_CONFIRMAR", "Marcar como invitadas requiere confirmación explícita.");
   if (action === "draft_bid_room_carrier_message" && (body.confirmed !== true || body.confirmation_action !== "draft_bid_room_carrier_message"))

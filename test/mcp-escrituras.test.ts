@@ -46,11 +46,12 @@ async function escenario(o: { invitar?: boolean; revisados?: ("A" | "B" | "C")[]
 type Escenario = Awaited<ReturnType<typeof escenario>>;
 
 type Alterar = (b: Record<string, any>, r: { status: number; body: any; headers: Record<string, string> }) => { status: number; body: any; headers: Record<string, string> };
-function mcp(x: Escenario, usuario = "operador", rol: Rol = "operator", extra: Partial<ContextoEscrituras> = {}, alterar: Alterar = (_b, r) => r) {
+// antes: corre justo antes de que una escritura llegue a Rateware (para simular una carrera).
+function mcp(x: Escenario, usuario = "operador", rol: Rol = "operator", extra: Partial<ContextoEscrituras> = {}, alterar: Alterar = (_b, r) => r, antes: (b: Record<string, any>) => Promise<void> = async () => {}) {
   const llamadas: Record<string, any>[] = [];
   const logs: Record<string, unknown>[] = [];
   const t = transporteSimulado(x.sim, () => usuario);
-  const ej = crearEscrituras(async (s, b) => { llamadas.push(b); return alterar(b, await t(s, b)); },
+  const ej = crearEscrituras(async (s, b) => { llamadas.push(b); if (ESCRITURAS_MCP.has(String(b.action))) await antes(b); return alterar(b, await t(s, b)); },
     // Pruebas que no tratan de aprobaciones: el operador simulado figura como aprobador. Las de
     // aprobación pasan { aprobadores: undefined } para usar la lista por omisión del código.
     { userId: usuario, clientId: "cliente-1", email: `${usuario === "admin" ? "sales" : usuario}@heymarksman.com`, aprobadores: ["sales@heymarksman.com", "operador@heymarksman.com"], rol, secreto: SECRETO, ahora: () => new Date(x.ahora()), registrar: e => logs.push(e), ...extra });
@@ -81,16 +82,18 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     expect(m.logs[0]).toMatchObject({ usuario: "operador", accion: "intentos", event_id: x.eventId, frase_ok: "sí, hazlo" });
   });
 
-  it("la cadencia excluye a quien ya respondió; «ya respondió» no está en el MCP", async () => {
+  it("la cadencia excluye a quien ya respondió y no marca respuesta sobre una oferta", async () => {
     const x = await escenario();
     const m = mcp(x);
-    // B respondió (marcado en la página del evento): la cadencia ya no lo incluye.
-    await x.sim.llamar("rateware-api", { action: "update_rfx_bid", id: x.p.B, patch: { invitation_status: "responded", notes: "WhatsApp: Pide más volumen" } }, "Bearer sim:operador");
+    const v = await m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.B.id, respuesta: "respondio", canal: "whatsapp", nota: "Pide más volumen" });
+    expect(v.vista_previa.participaciones[0].nota_que_se_guarda).toBe("WhatsApp: Pide más volumen");
+    expect((await m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
+    // Por la escritura condicional: nunca update_rfx_bid y nunca bid_rate en el cuerpo.
+    expect(m.escritas()).toEqual([{ action: "mark_rfx_replied_if_empty", event_id: x.eventId, id: x.p.B, patch: { invitation_status: "responded", notes: "WhatsApp: Pide más volumen", channel: "whatsapp" } }]);
     const i = await m.ej("preparar_intentos", { event_id: x.eventId });
     expect(i.vista_previa.destinatarios.map((d: any) => d.participacion_id)).toEqual([x.p.C]);
-    // «Ya respondió» quedó fuera del MCP (update_rfx_bid sin tarifa pone bid_rate en null).
-    expect(await codigo(m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.C.id, respuesta: "respondio", canal: "email" }))).toBe("FUERA_DEL_MCP");
-    expect(m.escritas()).toEqual([]);
+    expect(await codigo(m.ej("preparar_ya_respondio", { event_id: x.eventId, participacion_ids: [x.p.A], respuesta: "respondio", canal: "email" }))).toBe("YA_OFERTO");
+    expect(await codigo(m.ej("preparar_ya_respondio", { event_id: x.eventId, participacion_ids: [x.p.B], respuesta: "respondio", canal: "email" }))).toBe("YA_MARCADA");
   });
 
   it("token: firma, vencimiento, otro usuario o cliente y h alterado se rechazan sin escribir", async () => {
@@ -293,10 +296,25 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     expect(error.message).toContain("Carrier Prueba C");
     expect(chico.escritas()).toEqual([]);
   });
-  it("captura de ofertas fuera de esta entrega: ni herramienta ni update_rfx_bid con tarifa", async () => {
+  it("captura: muestra all-in vs target, escribe una vez por la escritura condicional y nunca modifica una oferta existente", async () => {
     const x = await escenario();
     const m = mcp(x);
-    expect(await codigo(m.ej("preparar_captura", { event_id: x.eventId, participacion_id: x.p.C, tarifa: 1650, moneda: "USD", canal: "phone" }))).toBe("FUERA_DEL_MCP");
+    expect(await codigo(m.ej("preparar_captura", { event_id: x.eventId, participacion_id: x.p.A, tarifa: 1500, moneda: "USD", canal: "email" }))).toBe("YA_HAY_OFERTA");
+    const v = await m.ej("preparar_captura", { event_id: x.eventId, participacion_id: x.p.C, tarifa: 1650, moneda: "USD", canal: "phone", nota: "Llamada con Juan", vigencia: "2026-12-31", dias_transito: 2 });
+    expect(v.vista_previa).toMatchObject({ tarifa_all_in: 1650, target: 1700, all_in_vs_target: -50, comparacion: "en o bajo target", nota_de_origen: "Captured from Phone: Llamada con Juan" });
+    expect(m.escritas()).toEqual([]);
+    expect((await m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "Sí, confirmo" })).estado).toBe("aplicada");
+    expect(m.escritas()).toEqual([expect.objectContaining({ action: "capture_rfx_bid_if_empty", id: x.p.C, patch: expect.objectContaining({ bid_rate: 1650, currency: "USD", valid_through: "2026-12-31", transit_days: 2, capture_source: "manual_operator" }) })]);
+    expect(x.sim.laneVendors.find(lv => lv.id === x.p.C)!.bid_rate).toBe(1650);
+    expect(await codigo(m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" }))).toBe("YA_APLICADO_O_CAMBIO");
+    expect(m.escritas()).toHaveLength(1);
+  });
+
+  it("update_rfx_bid y update_rfx_event siguen fuera del MCP, aun firmados a mano", async () => {
+    const x = await escenario();
+    const m = mcp(x);
+    expect(ESCRITURAS_MCP.has("update_rfx_bid")).toBe(false);
+    expect(ESCRITURAS_MCP.has("update_rfx_event")).toBe(false);
     const t = transporteEscritura("https://fr8bid.test/api/mcp", "synthetic", async () => new Response("{}", { status: 200 }));
     await expect(t("rateware-api", { action: "update_rfx_bid", event_id: "synthetic", id: "p", patch: { bid_rate: 1650, currency: "USD" } })).rejects.toThrow();
     // Ni con una confirmación firmada a mano con el secreto.
@@ -455,7 +473,7 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     const op = mcp(x);
     expect(await codigo(op.ej("preparar_revision", { event_id: x.eventId, carrier_id: x.carriers.A.id }))).toBe("SIN_PERMISO");
     expect(await codigo(op.ej("preparar_invitacion", { event_id: x.eventId, fase: "envio" }))).toBe("SIN_PERMISO");
-    expect(await codigo(op.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-12-01" }))).toBe("FUERA_DEL_MCP");
+    expect(await codigo(op.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-12-01" }))).toBe("SIN_PERMISO");
     const y = await escenario({ invitar: false, revisados: ["A", "B"] });
     const v = await mcp(y, "admin", "admin").ej("preparar_revision", { event_id: y.eventId, carrier_id: y.carriers.C.id });
     const degradado = mcp(y, "admin", "operator");
@@ -491,12 +509,14 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     const x = await escenario();
     const m = mcp(x, "admin", "admin");
     const [hd] = EVENTOS_PROTEGIDOS;
-    for (const [n, a] of [["preparar_intentos", {}], ["preparar_revision", { carrier_id: x.carriers.A.id }], ["preparar_invitacion", { fase: "envio" }]] as const)
+    for (const [n, a] of [["preparar_intentos", {}], ["preparar_revision", { carrier_id: x.carriers.A.id }], ["preparar_invitacion", { fase: "envio" }], ["preparar_cambio_evento", { nueva_fecha: "2026-12-01" }], ["preparar_captura", { participacion_id: x.p.C, tarifa: 1, moneda: "USD", canal: "email" }], ["preparar_ya_respondio", { carrier_id: x.carriers.C.id, respuesta: "respondio", canal: "email" }]] as const)
       expect(await codigo(m.ej(n, { event_id: hd, ...a }))).toBe("EVENTO_PROTEGIDO");
     expect(m.llamadas).toEqual([]);
     x.sim.events.find(e => e.id === x.eventId)!.rfx_id = "RFx-1021-PRIMAPro";
-    // Ninguna herramienta cambia estado ni plazo: el MCP no puede cerrar PRIMA.
-    expect(await codigo(m.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-12-01" }))).toBe("FUERA_DEL_MCP");
+    // PRIMA: no se marca rechazo y el plazo solo se extiende (nunca hacia atrás, nunca estado).
+    expect(await codigo(m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.C.id, respuesta: "rechazo", canal: "email" }))).toBe("PRIMA_PROTEGIDO");
+    expect(await codigo(m.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-10-28" }))).toBe("FECHA_PASADA");
+    expect(await codigo(m.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-12-01", status: "closed" }))).toBe("ZodError");
     expect(ESCRITURAS_MCP.has("update_rfx_event")).toBe(false);
     expect(m.escritas()).toEqual([]);
   });
@@ -556,7 +576,7 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     const lista = async (rol: Rol) => ({ tools: (await rpc(rol, "tools/list")).result.tools as any[], call: (method: string, params?: object) => rpc(rol, method, params) });
     expect((await lista("viewer")).tools).toHaveLength(11);
     const { tools, call } = await lista("operator");
-    expect(tools).toHaveLength(15);
+    expect(tools).toHaveLength(18);
     expect(tools.find(t => t.name === "confirmar").annotations).toMatchObject({ destructiveHint: true, readOnlyHint: false });
     expect(tools.filter(t => t.name.startsWith("preparar_")).every(t => t.annotations.readOnlyHint && !t.annotations.destructiveHint)).toBe(true);
     const r = await call("tools/call", { name: "preparar_intentos", arguments: { event_id: "11111111-1111-4111-8111-111111111111" } });
@@ -564,5 +584,115 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     expect(r.result.content[0].text).toMatch(/CONFIRMACIONES_PENDIENTES/);
     const leer = await call("tools/call", { name: "eventos", arguments: {} });
     expect(leer.result.isError).toBeFalsy();
+  });
+});
+
+describe("MCP: captura, «ya respondió» y extender plazo con escrituras condicionales de Rateware", () => {
+  const ofertaDe = (x: Escenario, p: string, bid_rate: number) =>
+    x.sim.llamar("rfx-bid-api", { action: "submit_bid", token: x.sim.tokenDe(p), bid_rate, currency: "USD", commercial_model: "fee_plus", weekly_capacity: 1, transit_days: 3 }, null);
+
+  it("captura: si entra una oferta entre preparar y confirmar, Rateware da 409 y el resultado es «ya hay oferta», nunca «aplicada»", async () => {
+    const x = await escenario();
+    const m = mcp(x, "operador", "operator", {}, undefined, async b => { if (b.action === "capture_rfx_bid_if_empty") await ofertaDe(x, x.p.C, 1590); });
+    const v = await m.ej("preparar_captura", { event_id: x.eventId, participacion_id: x.p.C, tarifa: 1650, moneda: "USD", canal: "phone" });
+    const r = await m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" });
+    expect(r.estado).not.toBe("aplicada");
+    expect(r).toMatchObject({ estado: "sin_efecto", conflictos: ["YA_HAY_OFERTA"], pasos: [{ accion: "capture_rfx_bid_if_empty", status: 409, ok: false, codigo: "YA_HAY_OFERTA", efecto: "nulo" }] });
+    expect(r.instruccion).toMatch(/Ya hay oferta/);
+    // La oferta del carrier queda intacta.
+    expect(x.sim.laneVendors.find(lv => lv.id === x.p.C)!.bid_rate).toBe(1590);
+    expect(m.logs.at(-1)!.resultado).toBe("sin_efecto");
+  });
+
+  it("«ya respondió»: si entra una oferta antes de escribir, 409 sin tocar la oferta; con varias rutas, las demás sí se marcan", async () => {
+    const x = await escenario();
+    const m = mcp(x, "operador", "operator", {}, undefined, async b => { if (b.action === "mark_rfx_replied_if_empty" && b.id === x.p.C) await ofertaDe(x, x.p.C, 1600); });
+    const v = await m.ej("preparar_ya_respondio", { event_id: x.eventId, participacion_ids: [x.p.B, x.p.C], respuesta: "respondio", canal: "email", nota: "Lo revisa" });
+    const r = await m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" });
+    expect(r).toMatchObject({ estado: "parcial", conflictos: ["YA_HAY_OFERTA"] });
+    expect(r.omisiones).toEqual([{ id: x.p.C, motivo: expect.stringMatching(/Ya hay oferta/) }]);
+    expect(x.sim.laneVendors.find(lv => lv.id === x.p.C)!).toMatchObject({ bid_rate: 1600, invitation_status: "quoted" });
+    expect(x.sim.laneVendors.find(lv => lv.id === x.p.B)!.invitation_status).toBe("responded");
+    // Una sola participación en carrera: sin efecto, nunca «aplicada».
+    const y = await escenario();
+    const n = mcp(y, "operador", "operator", {}, undefined, async b => { if (b.action === "mark_rfx_replied_if_empty") await ofertaDe(y, y.p.C, 1610); });
+    const w = await n.ej("preparar_ya_respondio", { event_id: y.eventId, carrier_id: y.carriers.C.id, respuesta: "rechazo", canal: "phone" });
+    expect(await n.ej("confirmar", { confirmacion_id: w.confirmacion_id, frase_ok: "sí" })).toMatchObject({ estado: "sin_efecto", conflictos: ["YA_HAY_OFERTA"] });
+    expect(y.sim.laneVendors.find(lv => lv.id === y.p.C)!.invitation_status).toBe("quoted");
+  });
+
+  it("plazo: el propietario lo extiende con el plazo leído; si otro lo cambia antes, PLAZO_CAMBIO y no se escribe", async () => {
+    const x = await escenario();
+    const m = mcp(x, "admin", "admin");
+    expect(await codigo(m.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-11-20" }))).toBe("SOLO_EXTENDER");
+    expect(await codigo(m.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-10-29" }))).toBe("FECHA_PASADA");
+    const v = await m.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-11-27" });
+    expect(v.vista_previa).toMatchObject({ plazo_actual: "2026-11-20", plazo_nuevo: "2026-11-27" });
+    expect((await m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
+    expect(m.escritas()).toEqual([{ action: "extend_rfx_due_date_if_unchanged", event_id: x.eventId, patch: { due_date: "2026-11-27" }, expected_due_date: "2026-11-20" }]);
+    expect(x.sim.events.find(e => e.id === x.eventId)!.due_date).toBe("2026-11-27");
+    expect(await codigo(m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" }))).toBe("YA_APLICADO_O_CAMBIO");
+
+    const y = await escenario();
+    const otro = async (b: Record<string, any>) => {
+      if (b.action === "extend_rfx_due_date_if_unchanged") await y.sim.llamar("rateware-api", { action: "update_rfx_event", event_id: y.eventId, patch: { due_date: "2026-11-25" } }, "Bearer sim:operador");
+    };
+    const n = mcp(y, "admin", "admin", {}, undefined, otro);
+    const w = await n.ej("preparar_cambio_evento", { event_id: y.eventId, nueva_fecha: "2026-11-30" });
+    const r = await n.ej("confirmar", { confirmacion_id: w.confirmacion_id, frase_ok: "sí" });
+    expect(r).toMatchObject({ estado: "sin_efecto", conflictos: ["PLAZO_CAMBIO"], pasos: [{ codigo: "PLAZO_CAMBIO", status: 409 }] });
+    expect(r.instruccion).toMatch(/El plazo cambió/);
+    expect(y.sim.events.find(e => e.id === y.eventId)!.due_date).toBe("2026-11-25");
+  });
+
+  it("solo el propietario confirma: el Operador o un Administrador fuera de FR8BID_MCP_APROBADORES preparan pero no escriben", async () => {
+    const x = await escenario();
+    const op = mcp(x, "operador", "operator", { aprobadores: undefined });
+    const cap = await op.ej("preparar_captura", { event_id: x.eventId, participacion_id: x.p.C, tarifa: 1650, moneda: "USD", canal: "email" });
+    const resp = await op.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.B.id, respuesta: "respondio", canal: "email" });
+    for (const v of [cap, resp]) expect(await codigo(op.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" }))).toBe("SOLO_PROPIETARIO");
+    x.sim.agregarUsuario({ clave: "admin2", email: "otro-admin@heymarksman.com", ownerEmail: ORG, roles: ["admin"] });
+    const otroAdmin = mcp(x, "admin2", "admin", { email: "otro-admin@heymarksman.com", aprobadores: undefined });
+    const plazo = await otroAdmin.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-11-27" });
+    expect(await codigo(otroAdmin.ej("confirmar", { confirmacion_id: plazo.confirmacion_id, frase_ok: "sí" }))).toBe("SOLO_PROPIETARIO");
+    expect([...op.escritas(), ...otroAdmin.escritas()]).toEqual([]);
+    // El propietario (sales@) sí confirma su propia vista previa.
+    const dueno = mcp(x, "admin", "admin", { aprobadores: undefined });
+    const propia = await dueno.ej("preparar_captura", { event_id: x.eventId, participacion_id: x.p.C, tarifa: 1650, moneda: "USD", canal: "email" });
+    expect((await dueno.ej("confirmar", { confirmacion_id: propia.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
+  });
+
+  it("Rateware sin la acción desplegada: error claro, nada escrito y nunca «aplicada»", async () => {
+    const x = await escenario();
+    x.sim.sinDesplegar.add("capture_rfx_bid_if_empty");
+    const m = mcp(x);
+    const v = await m.ej("preparar_captura", { event_id: x.eventId, participacion_id: x.p.C, tarifa: 1650, moneda: "USD", canal: "email" });
+    const r = await m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" });
+    expect(r).toMatchObject({ estado: "rechazada", pasos: [{ status: 400, ok: false, codigo: "ACCION_NO_DESPLEGADA" }] });
+    expect(r.instruccion).toMatch(/Rateware todavía no tiene esta acción/);
+    expect(x.sim.laneVendors.find(lv => lv.id === x.p.C)!.bid_rate).toBeNull();
+    // La forma real de rateware-api: 400 {"error":"Unknown action."} sin código.
+    const y = await escenario();
+    const n = mcp(y, "admin", "admin", {}, (b, res) => b.action === "extend_rfx_due_date_if_unchanged" ? { status: 400, body: { error: "Unknown action." }, headers: {} } : res);
+    const w = await n.ej("preparar_cambio_evento", { event_id: y.eventId, nueva_fecha: "2026-11-27" });
+    const s = await n.ej("confirmar", { confirmacion_id: w.confirmacion_id, frase_ok: "sí" });
+    expect(s).toMatchObject({ estado: "rechazada", pasos: [{ codigo: "ACCION_NO_DESPLEGADA" }] });
+    expect(s.instruccion).toMatch(/PR #213/);
+  });
+
+  it("el proxy y la lista cerrada solo dejan pasar la forma condicional exacta", async () => {
+    for (const a of ["capture_rfx_bid_if_empty", "mark_rfx_replied_if_empty", "extend_rfx_due_date_if_unchanged"]) {
+      expect(ESCRITURAS_MCP.has(a)).toBe(true);
+      expect(ESCRITURAS["rateware-api"].has(a)).toBe(true);
+    }
+    const x = await escenario();
+    const llamar = (body: Record<string, unknown>) => transporteSimulado(x.sim, () => "operador")("rateware-api", body);
+    expect((await llamar({ action: "capture_rfx_bid_if_empty", event_id: x.eventId, id: x.p.C, patch: { currency: "USD" } })).body.code).toBe("SIN_TARIFA");
+    expect((await llamar({ action: "mark_rfx_replied_if_empty", event_id: x.eventId, id: x.p.C, patch: { invitation_status: "responded", bid_rate: null } })).body.code).toBe("SIN_TARIFA");
+    expect((await llamar({ action: "extend_rfx_due_date_if_unchanged", event_id: x.eventId, patch: { due_date: "2026-11-30", status: "closed" }, expected_due_date: "2026-11-20" })).body.code).toBe("SOLO_PLAZO");
+    expect((await llamar({ action: "extend_rfx_due_date_if_unchanged", event_id: x.eventId, patch: { due_date: "2026-11-30" } })).body.code).toBe("SOLO_PLAZO");
+    expect((await llamar({ action: "capture_rfx_bid_if_empty", event_id: x.eventId, id: "00000000-0000-4000-8000-000000000000", patch: { bid_rate: 1 } })).status).toBe(404);
+    expect(x.sim.laneVendors.find(lv => lv.id === x.p.C)!.bid_rate).toBeNull();
+    expect(x.sim.events.find(e => e.id === x.eventId)!.due_date).toBe("2026-11-20");
   });
 });
