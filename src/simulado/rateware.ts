@@ -55,7 +55,10 @@ const WRITE_ACTIONS = new Set([
   "save_rfx_lane_conditions",
   "draft_bid_room_carrier_message",
   "create_outreach_campaign",
-  "record_rfx_invitation_wave_review"
+  "record_rfx_invitation_wave_review",
+  "capture_rfx_bid_if_empty",
+  "mark_rfx_replied_if_empty",
+  "extend_rfx_due_date_if_unchanged"
 ]);
 
 export class ErrorRed extends Error {
@@ -111,6 +114,8 @@ export class RatewareSimulado {
   operacionesEnvio = new Map<string, Fila>();
   // cuotaGmail: cuántos mensajes más acepta Gmail hoy (null = sin límite).
   fallas = { perderRespuestaDe: new Set<string>(), sinResponder: new Set<string>(), cuotaGmail: null as number | null, fallarRevisiones: false, fallarRespuestas: false };
+  // Acciones que este Rateware «todavía no tiene» (p. ej. sin desplegar): responden 400 «Unknown action.».
+  sinDesplegar = new Set<string>();
   hoy: () => string = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(new Date());
   ahora: () => string = () => new Date().toISOString();
 
@@ -187,6 +192,7 @@ export class RatewareSimulado {
     if (WRITE_ACTIONS.has(action) && roles.includes("viewer") && !roles.includes("admin") && !roles.includes("operator"))
       throw new Falla(403, "Tu rol es de consulta.", "TEAM_ROLE_REQUIRED");
     const ok = (b: unknown, headers: Record<string, string> = {}) => ({ status: 200, body: b, headers });
+    if (this.sinDesplegar.has(action)) throw new Falla(400, "Unknown action.", "UNKNOWN_ACTION");
 
     switch (action) {
       case "list_rfx_events": {
@@ -642,6 +648,44 @@ export class RatewareSimulado {
         }
         this.registrarOferta(lv, body.patch, "team_capture", u.email);
         return ok({ row: this.invitacionCruda(lv) });
+      }
+      // Escrituras condicionales atómicas de rateware-api (PR #213): la condición se evalúa
+      // en el mismo paso que la escritura; si no se cumple, 409 y nada cambia.
+      case "capture_rfx_bid_if_empty":
+      case "mark_rfx_replied_if_empty": {
+        if (!body.id) throw new Falla(400, "RFx invitation id is required.", "BAD_REQUEST");
+        const lv = this.laneVendor(u, body.id);
+        const e = this.events.find((x) => x.id === lv.rfx_event_id)!;
+        const patch: Fila = body.patch && typeof body.patch === "object" ? body.patch : {};
+        if (action === "capture_rfx_bid_if_empty" && !(Number(patch.bid_rate) > 0)) throw new Falla(400, "Bid rate is required.", "OFERTA_INVALIDA");
+        if (action === "mark_rfx_replied_if_empty" && !["responded", "declined"].includes(String(patch.invitation_status))) throw new Falla(400, "invitation_status must be responded or declined.", "ESTADO_INVALIDO");
+        if (["awarded", "archived", "closed"].includes(e.status)) throw new Falla(409, `The event is ${e.status}; nothing was written.`, "CONDICION_NO_CUMPLIDA");
+        if (lv.bid_rate !== null && lv.bid_rate !== undefined) throw new Falla(409, "This participation already has a bid; nothing was written.", "YA_HAY_OFERTA");
+        if (lv.award_role || ["archived", "awarded"].includes(lv.invitation_status)) throw new Falla(409, "The participation is awarded or archived; nothing was written.", "CONDICION_NO_CUMPLIDA");
+        if (action === "capture_rfx_bid_if_empty") {
+          this.registrarOferta(lv, patch, "team_capture", u.email);
+          return ok({ row: this.invitacionCruda(lv) });
+        }
+        // Nunca escribe bid_rate (tampoco a null).
+        const antes = lv.invitation_status;
+        Object.assign(lv, { invitation_status: patch.invitation_status, notes: patch.notes ?? lv.notes ?? null, responded_at: this.ahora(), response_source: "manual_operator" });
+        this.bitacorar(u.email, "rfx.vendor.status", "rfx_lane_vendors", lv.id, antes, lv.invitation_status, { canal: patch.channel ?? null, condicional: true });
+        return ok({ row: this.invitacionCruda(lv) });
+      }
+      case "extend_rfx_due_date_if_unchanged": {
+        const event = this.evento(u, body.event_id || body.id);
+        const patch: Fila = body.patch && typeof body.patch === "object" ? body.patch : {};
+        const nueva = String(patch.due_date ?? "");
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(nueva)) throw new Falla(400, "due_date (YYYY-MM-DD) is required.", "PLAZO_INVALIDO");
+        if (!("expected_due_date" in body)) throw new Falla(400, "expected_due_date is required.", "PLAZO_INVALIDO");
+        const esperado = body.expected_due_date === null ? null : String(body.expected_due_date).slice(0, 10);
+        if (nueva <= this.hoy() || (esperado && nueva <= esperado)) throw new Falla(400, "The new deadline must be after today and after the current one.", "PLAZO_INVALIDO");
+        if (event.status !== "open" && event.status !== "draft") throw new Falla(409, `The event is ${event.status}.`, "CONDICION_NO_CUMPLIDA");
+        const actual = event.due_date ? String(event.due_date).slice(0, 10) : null;
+        if (actual !== esperado) return { status: 409, body: { error: "The deadline changed since it was read; nothing was written.", code: "PLAZO_CAMBIO", current_due_date: actual }, headers: {} };
+        event.due_date = nueva;
+        this.bitacorar(u.email, "rfx.event.due_date", "rfx_events", event.id, actual, nueva, { condicional: true });
+        return ok({ row: { ...event } });
       }
       case "invite_rfx_lane_vendors": {
         // «Mark as invited» del Bid Room: solo cambia el estado, no envía nada.
