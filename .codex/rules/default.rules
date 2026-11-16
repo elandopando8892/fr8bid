@@ -3,7 +3,7 @@
 
 prefix_rule(
     pattern = ["git", "push"],
-    decision = "forbidden",
+    decision = "prompt",
     justification = "Solo Claude sube ramas, y con OK de Jose (AGENTS.md).",
 )
 prefix_rule(
