@@ -4,10 +4,10 @@ import { LECTURAS, sinSecretos } from "../servidor/proxy.js";
 import { sinProtegidos } from "../servidor/paso.js";
 import { esProtegido } from "../dominio/protegidos.js";
 import { describirModelo, cambiosComerciales } from "../dominio/modelo.js";
-import { candadosAdjudicacion, hoyMexico, recorrido, versionVigente } from "../dominio/recorrido.js";
+import { avisoDe, candadosAdjudicacion, entregaConfirmada, hoyMexico, primario, recorrido, versionVigente } from "../dominio/recorrido.js";
 import { seguimiento, siguienteIntento } from "../dominio/seguimiento.js";
 import { consultaSegmento, familiaCaja, POR_PAGINA } from "../dominio/segmento.js";
-import type { Detalle, Rol, Ruta } from "../dominio/tipos.js";
+import type { Detalle, Participacion, Rol, Ruta } from "../dominio/tipos.js";
 
 const id = z.string().regex(/^[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}$/i);
 const evento = { event_id: id };
@@ -23,13 +23,50 @@ export const herramientas = {
   carriers_sugeridos: { descripcion: "Carrier fit existente con evidencia y carencias; no revisa ni invita carriers.", schema: z.object(evento).strict() },
   tarifas_ruta: { descripcion: "Tarifas aprobadas de una ruta/caja D2D y ofertas de hasta cinco eventos seleccionados. No son pagos. Cada página examina hasta 1000 tarifas; seguir siguiente_offset aunque no haya coincidencias.", schema: z.object({ origen: z.string().min(2).max(100), destino: z.string().min(2).max(100), caja: z.enum(["dry_van", "reefer", "flatbed"]), operacion: z.enum(["D2D Export", "D2D Import"]), offset: z.number().int().min(0).max(100000).multipleOf(POR_PAGINA).default(0), event_ids: z.array(id).max(5).default([]) }).strict() },
   carrier: { descripcion: "Perfil ligero de un carrier por UUID. No busca contactos nuevos ni consume Apollo.", schema: z.object({ carrier_id: id }).strict() },
-  historial_carrier: { descripcion: "Hasta 300 registros del historial de contacto de un carrier. No equivale a historial contable ni a todas sus ofertas.", schema: z.object({ carrier_id: id }).strict() }
+  historial_carrier: { descripcion: "Hasta 300 registros del historial de contacto de un carrier. No equivale a historial contable ni a todas sus ofertas.", schema: z.object({ carrier_id: id }).strict() },
+  verificar_adjudicacion: { descripcion: "Revisa una adjudicación ya hecha: por ruta, primario y respaldo con la versión adjudicada y si su huella coincide con la oferta vigente, cierre en Rateware (rateware_closeout_at) y avisos de ganador, respaldo y no adjudicado. Declara lo que no puede leer. No adjudica, no entrega ni envía avisos.", schema: z.object({ ...evento, ...pagina }).strict() }
 };
 export type NombreHerramienta = keyof typeof herramientas;
 const normal = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 const ciudad = (s: string) => normal(s.split(",")[0]);
 const liga = (id: string) => `https://fr8bid.heymarksman.com/eventos/${encodeURIComponent(id)}`;
 const entrega = { estado: "sin_preparar" as const, operationId: null, error: null };
+// Lo que verificar_adjudicacion no puede comprobar con las lecturas de LECTURAS.
+const FALTANTES_ADJUDICACION = [
+  "Estado actual de la tarifa en Rateware («en revisión» / pending_review): no hay lectura en el MCP. El cierre registrado indica que la entrega se hizo; confirma el estado en Rateware o en la Mesa.",
+  "Recibo de la entrega (operation_id, insertadas, en revisión): solo se muestra al confirmar la entrega en la Mesa; aquí la prueba es rateware_closeout_at de cada primario.",
+  "Idioma de cada aviso: esta lectura no lo trae."
+];
+function verificarAdjudicacion(d: Detalle, r: Ruta) {
+  const aviso = (p: Participacion) => {
+    const a = avisoDe(d, p.id, "adjudicacion");
+    return a ? { resultado: a.resultado, estado: a.estado, enviado_en: a.enviadoEn, motivo: a.motivo } : null;
+  };
+  const decidida = (p: Participacion) => {
+    const v = versionVigente(p);
+    const adj = p.adjudicada;
+    const huella = !adj ? "sin_verificar" : v && v.numero === adj.numero && v.huella === adj.huella ? "coincide" : "no_coincide";
+    const adjudicada = adj ? p.versiones.find(x => x.numero === adj.numero) ?? null : null;
+    return { participacion_id: p.id, carrier_id: p.carrierId, carrier: p.carrier, rol: p.rol, version_adjudicada: adj?.numero ?? null, version_vigente: v?.numero ?? null,
+      huella, tarifa_adjudicada: adjudicada?.tarifaAllIn ?? null, moneda: adjudicada?.moneda ?? null, adjudicada_en: adj?.en ?? null, cierre_rateware_en: p.entregadaEn, aviso: aviso(p) };
+  };
+  const prim = primario(r);
+  const respaldos = r.participaciones.filter(p => p.rol === "respaldo");
+  const noAdjudicados = r.participaciones.filter(p => !p.rol && p.estado !== "excluida" && p.estado !== "declino" && versionVigente(p));
+  const problemas: string[] = [];
+  if (!prim && !r.desiertaMotivo) problemas.push("Ruta sin primario ni motivo de desierta.");
+  const filas = [...(prim ? [prim] : []), ...respaldos].map(decidida);
+  for (const f of filas) {
+    const quien = `${f.rol === "primario" ? "Primario" : "Respaldo"} ${f.carrier}`;
+    if (f.huella === "no_coincide") problemas.push(`${quien}: hay una versión posterior a la adjudicada (v${f.version_vigente} vs v${f.version_adjudicada}).`);
+    if (f.huella === "sin_verificar") problemas.push(`${quien}: no se pudo determinar la versión adjudicada.`);
+    if (f.rol === "primario" && !f.cierre_rateware_en) problemas.push(`${quien}: sin cierre en Rateware (no se ha entregado).`);
+    if (f.aviso?.estado !== "aceptado") problemas.push(`${quien}: aviso ${f.aviso ? f.aviso.estado : "no generado"}.`);
+  }
+  const otros = noAdjudicados.map(p => ({ participacion_id: p.id, carrier_id: p.carrierId, carrier: p.carrier, aviso: aviso(p) }));
+  for (const o of otros) if (o.aviso?.estado !== "aceptado") problemas.push(`No adjudicado ${o.carrier}: aviso ${o.aviso ? o.aviso.estado : "no generado"}.`);
+  return { ruta_id: r.id, numero: r.numero, origen: r.origen, destino: r.destino, equipo: r.equipo, desierta: r.desiertaMotivo, adjudicados: filas, no_adjudicados: otros, problemas, ok: problemas.length === 0 };
+}
 function paginar<T>(rows: T[], offset: number, limit: number) {
   return { filas: rows.slice(offset, offset + limit), total_recibido: rows.length, siguiente_offset: offset + limit < rows.length ? offset + limit : null };
 }
@@ -129,6 +166,12 @@ export function crearLecturas(t: Transporte, ahora: () => Date = () => new Date(
       else if (nombre === "seguimiento_evento") result = { ...common, ...paginar(seguimiento(d, ctx.hoy).map(s => ({ carrier_id: s.carrierId, carrier: s.carrier, estado: s.estado, rutas: s.rutas, ofertadas: s.ofertadas, declinadas: s.declinadas, intentos: s.intentos, ultimo_envio: s.ultimoEnvio, correo_abierto: s.correoAbiertoEn, apertura_posible: s.aperturaPosibleEn, correo_medido: s.correoMedido, liga_abierta: s.vistaEn, respondio_por: s.respondioPor, siguiente_intento: d.respuestas == null ? null : siguienteIntento(d, s, ahora()) })), a.offset, a.limit) };
       else if (nombre === "respuestas_evento") result = { ...common, ...paginar(Object.values(d.respuestas || {}), a.offset, a.limit), cobertura: "Canales y fechas; no incluye contenido del mensaje ni convierte una respuesta en oferta." };
       else if (nombre === "carriers_sugeridos") result = { ...common, sugerencias: await api.carrierFit(d) };
+      else if (nombre === "verificar_adjudicacion") {
+        const p = paginar(d.rutas, a.offset, a.limit);
+        const rutas = p.filas.map(r => verificarAdjudicacion(d, r));
+        result = { ...common, estado_evento: d.evento.estado, entrega_confirmada: entregaConfirmada(d, entrega), rutas, total_rutas: p.total_recibido, siguiente_offset: p.siguiente_offset,
+          rutas_con_problemas: rutas.filter(r => !r.ok).length, no_verificable: FALTANTES_ADJUDICACION };
+      }
       else if (nombre === "historial_oferta") {
         const p = d.rutas.flatMap(r => r.participaciones).find(p => p.id === a.participacion_id);
         if (!p) throw new Error("La participación no pertenece al evento");
