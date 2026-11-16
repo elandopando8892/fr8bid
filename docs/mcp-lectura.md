@@ -32,6 +32,7 @@ Herramientas: `eventos`, `evento`, `seguimiento_evento`, `respuestas_evento`, `o
 - Los fallos se devuelven sin copiar mensajes externos. Respuestas malformadas no se presentan como resultados vacíos; un detalle de otro evento falla. Si respuestas/revisiones no pudieron consultarse, se conserva su cobertura parcial y sus bloqueos.
 - Listados paginados sobre lo recibido, no sobre toda la base. Tarifas D2D por familias admitidas en el proxy; hasta 1000 registros examinados por página y cinco eventos seleccionados. Seguir el offset incluso sin coincidencias. Comparar ciudad exige verificar estado/país. Tarifas y ofertas no prueban pagos. Historial de contacto: hasta 300 registros. Salida mayor de 200000 caracteres falla sin truncar JSON.
 - Skills 1, 2, 5 y 14: `.claude/skills/fr8bid-{pendientes,estado-evento,comparar-ofertas,historico-tarifas}/SKILL.md`. Preparados para descubrimiento de Claude; `.agents` es de solo lectura en este entorno y no se modificó. No están instalados en ChatGPT ni se afirma sincronización con otros hosts.
+- Skill 8 (`fr8bid-a-quien-invito`, 16-nov-2026): «¿A quién invito para estas rutas?» con `evento`, `carriers_sugeridos` (Carrier fit) y, para casos dudosos, `tarifas_ruta`, `carrier` e `historial_carrier`. Sin herramienta nueva. Recomienda; marcar «Revisado» e invitar siguen en `preparar_revision`/`preparar_invitacion` con el «sí» del propietario. Faltan lecturas de `evidencia_carrier` (más allá de la que trae Carrier fit) y de las listas principal/«· Ampliada».
 
 ## OAuth y activación pendientes
 
