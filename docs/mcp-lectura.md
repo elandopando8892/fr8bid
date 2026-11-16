@@ -23,7 +23,7 @@ Método: `mcp-builder`, pruebas preparadas antes de los ajustes; su ejecución q
 
 Frase del usuario → skill → resolver evento → herramienta MCP → `/api/rateware` del origen configurado → proxy → Rateware con identidad del usuario. La autoridad financiera sigue en ERP. No hay pantalla nueva: la salida es un resumen o tabla con fecha, cobertura y enlace `/eventos/:id` a la Mesa.
 
-Herramientas: `eventos`, `evento`, `seguimiento_evento`, `respuestas_evento`, `ofertas_evento`, `historial_oferta`, `candados_ruta`, `carriers_sugeridos`, `tarifas_ruta`, `carrier`, `historial_carrier`.
+Herramientas: `eventos`, `evento`, `seguimiento_evento`, `respuestas_evento`, `ofertas_evento`, `historial_oferta`, `candados_ruta`, `carriers_sugeridos`, `tarifas_ruta`, `carrier`, `historial_carrier` y `verificar_adjudicacion`.
 
 - Contratos estrictos, sin `action` arbitraria. Solo lecturas, incluso con la bandera global de escrituras habilitada. Sin `preparar_*`, `confirmar`, adjudicación, entrega o envío. Prima se conserva abierta; HDships se rechaza antes de consultar sus IDs y se filtra de resultados.
 - Se reutilizan seguimiento/cadencia, modelo comercial, recorrido/candados, mapeadores y lectura de cierre existente. Comparación por moneda sin sumarle share al all-in. Historial: solo versiones disponibles, nunca promesa de exhaustividad.
@@ -32,6 +32,7 @@ Herramientas: `eventos`, `evento`, `seguimiento_evento`, `respuestas_evento`, `o
 - Los fallos se devuelven sin copiar mensajes externos. Respuestas malformadas no se presentan como resultados vacíos; un detalle de otro evento falla. Si respuestas/revisiones no pudieron consultarse, se conserva su cobertura parcial y sus bloqueos.
 - Listados paginados sobre lo recibido, no sobre toda la base. Tarifas D2D por familias admitidas en el proxy; hasta 1000 registros examinados por página y cinco eventos seleccionados. Seguir el offset incluso sin coincidencias. Comparar ciudad exige verificar estado/país. Tarifas y ofertas no prueban pagos. Historial de contacto: hasta 300 registros. Salida mayor de 200000 caracteres falla sin truncar JSON.
 - Skills 1, 2, 5 y 14: `.claude/skills/fr8bid-{pendientes,estado-evento,comparar-ofertas,historico-tarifas}/SKILL.md`. Preparados para descubrimiento de Claude; `.agents` es de solo lectura en este entorno y no se modificó. No están instalados en ChatGPT ni se afirma sincronización con otros hosts.
+- Skill 12 (`fr8bid-verificar-adjudicacion`, 16-nov-2026) con la lectura nueva `verificar_adjudicacion(event_id)`: por ruta, primario y respaldo con versión adjudicada y huella contra la oferta vigente (`coincide`/`no_coincide`/`sin_verificar`), cierre en Rateware (`rateware_closeout_at`) y avisos de ganador, respaldo y no adjudicado. Reutiliza `list_rfx_detail` y `list_outreach_messages` (ya en `LECTURAS`). Faltan lecturas, declaradas en `no_verificable`: estado actual de la tarifa «en revisión» en Rateware, recibo de la entrega e idioma de los avisos.
 
 ## OAuth y activación pendientes
 
