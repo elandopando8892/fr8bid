@@ -5,7 +5,7 @@ import { sinProtegidos } from "../servidor/paso.js";
 import { esProtegido } from "../dominio/protegidos.js";
 import { describirModelo, cambiosComerciales } from "../dominio/modelo.js";
 import { candadosAdjudicacion, hoyMexico, recorrido, versionVigente } from "../dominio/recorrido.js";
-import { seguimiento, siguienteIntento } from "../dominio/seguimiento.js";
+import { intentosWhatsapp, seguimiento, siguienteIntento } from "../dominio/seguimiento.js";
 import { consultaSegmento, familiaCaja, POR_PAGINA } from "../dominio/segmento.js";
 import type { Detalle, Rol, Ruta } from "../dominio/tipos.js";
 
@@ -23,7 +23,8 @@ export const herramientas = {
   carriers_sugeridos: { descripcion: "Carrier fit existente con evidencia y carencias; no revisa ni invita carriers.", schema: z.object(evento).strict() },
   tarifas_ruta: { descripcion: "Tarifas aprobadas de una ruta/caja D2D y ofertas de hasta cinco eventos seleccionados. No son pagos. Cada página examina hasta 1000 tarifas; seguir siguiente_offset aunque no haya coincidencias.", schema: z.object({ origen: z.string().min(2).max(100), destino: z.string().min(2).max(100), caja: z.enum(["dry_van", "reefer", "flatbed"]), operacion: z.enum(["D2D Export", "D2D Import"]), offset: z.number().int().min(0).max(100000).multipleOf(POR_PAGINA).default(0), event_ids: z.array(id).max(5).default([]) }).strict() },
   carrier: { descripcion: "Perfil ligero de un carrier por UUID. No busca contactos nuevos ni consume Apollo.", schema: z.object({ carrier_id: id }).strict() },
-  historial_carrier: { descripcion: "Hasta 300 registros del historial de contacto de un carrier. No equivale a historial contable ni a todas sus ofertas.", schema: z.object({ carrier_id: id }).strict() }
+  historial_carrier: { descripcion: "Hasta 300 registros del historial de contacto de un carrier. No equivale a historial contable ni a todas sus ofertas.", schema: z.object({ carrier_id: id }).strict() },
+  whatsapp_pendientes: { descripcion: "Carriers que pasaron el 3er intento por correo sin responder y a los que ya toca WhatsApp (cadencia de la Mesa), con número revisado por lada, texto sugerido y liga wa.me. No envía ni prepara nada: el mensaje lo manda una persona desde su teléfono.", schema: z.object({ ...evento, ...pagina }).strict() }
 };
 export type NombreHerramienta = keyof typeof herramientas;
 const normal = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
@@ -129,6 +130,15 @@ export function crearLecturas(t: Transporte, ahora: () => Date = () => new Date(
       else if (nombre === "seguimiento_evento") result = { ...common, ...paginar(seguimiento(d, ctx.hoy).map(s => ({ carrier_id: s.carrierId, carrier: s.carrier, estado: s.estado, rutas: s.rutas, ofertadas: s.ofertadas, declinadas: s.declinadas, intentos: s.intentos, ultimo_envio: s.ultimoEnvio, correo_abierto: s.correoAbiertoEn, apertura_posible: s.aperturaPosibleEn, correo_medido: s.correoMedido, liga_abierta: s.vistaEn, respondio_por: s.respondioPor, siguiente_intento: d.respuestas == null ? null : siguienteIntento(d, s, ahora()) })), a.offset, a.limit) };
       else if (nombre === "respuestas_evento") result = { ...common, ...paginar(Object.values(d.respuestas || {}), a.offset, a.limit), cobertura: "Canales y fechas; no incluye contenido del mensaje ni convierte una respuesta en oferta." };
       else if (nombre === "carriers_sugeridos") result = { ...common, sugerencias: await api.carrierFit(d) };
+      else if (nombre === "whatsapp_pendientes") {
+        // Misma lista que la Mesa (intentosWhatsapp): sin respuestas consultadas devuelve vacío.
+        const filas = intentosWhatsapp(d, ahora(), ctx.hoy).map(w => ({ carrier_id: w.s.carrierId, carrier: w.s.carrier, estado: w.s.estado, intentos_correo: w.s.intentos, ultimo_envio: w.s.ultimoEnvio,
+          rutas_pendientes: w.s.pendientes.map(f => ({ ruta_id: f.ruta.id, numero: f.ruta.numero, origen: f.ruta.origen, destino: f.ruta.destino, equipo: f.ruta.equipo })),
+          telefono: w.numero ? `+${w.numero}` : null, pais: w.telefono.pais, certeza: w.telefono.certeza, revision_telefono: w.telefono.motivo,
+          texto: w.texto, liga_whatsapp: w.liga, sin_liga_porque: w.motivo }));
+        result = { ...common, ...paginar(filas, a.offset, a.limit),
+          cobertura: common.respuestas_consultadas ? "Solo quienes ya agotaron los correos de la cadencia y siguen sin responder en rutas sin suficientes ofertas. País por reglas de lada; «dudoso» se confirma antes de enviar (la revisión con IA está en la Mesa)." : "No se pudieron consultar las respuestas de los carriers: sin eso no se sabe a quién ya no escribir, así que la lista sale vacía." };
+      }
       else if (nombre === "historial_oferta") {
         const p = d.rutas.flatMap(r => r.participaciones).find(p => p.id === a.participacion_id);
         if (!p) throw new Error("La participación no pertenece al evento");
