@@ -621,6 +621,69 @@ describe("MCP: captura, «ya respondió» y extender plazo con escrituras condic
     expect(y.sim.laneVendors.find(lv => lv.id === y.p.C)!.invitation_status).toBe("quoted");
   });
 
+  // Caso de producción (evento O-I): el carrier contestó POR CORREO sin tarifa. Rateware lo
+  // detecta (respondió por correo) pero sus participaciones siguen 'invited', sin responded_at
+  // ni nota. «Ya respondió» decide por lo guardado, no por el correo detectado.
+  const conCorreoDeB = async () => {
+    const x = await escenario();
+    const op = (body: Record<string, unknown>) => x.sim.llamar("rateware-api", body, "Bearer sim:operador").then(r => r.body);
+    const { rows: lanes } = await op({ action: "import_rfx_lanes", event_id: x.eventId, rows: [{ origin_city: "Saltillo", origin_state: "CO", origin_country: "MX", destination_city: "Laredo", destination_state: "TX", destination_country: "US", equipment: "Dry Van", weekly_volume: 2, target_rate: 1200, currency: "USD" }] });
+    const { rows } = await op({ action: "shortlist_rfx_lane_vendors", lane_id: lanes[0].id, vendor_ids: [x.carriers.B.id, x.carriers.C.id] });
+    for (const r of rows) Object.assign(x.sim.laneVendors.find(lv => lv.id === r.id)!, { invitation_status: "invited", invited_at: ENVIO });
+    const b2 = rows.find((r: any) => r.vendor_id === x.carriers.B.id).id as string;
+    const c2 = rows.find((r: any) => r.vendor_id === x.carriers.C.id).id as string;
+    for (const id of [x.p.B, b2]) x.sim.respuestasCarrier.push({ rfx_lane_vendor_id: id, vendor_id: x.carriers.B.id, channels: ["email"], count: 1, first_reply_at: "2026-10-29T15:00:00.000Z", last_reply_at: "2026-10-29T15:00:00.000Z" });
+    for (const id of [x.p.B, b2]) expect(x.sim.laneVendors.find(lv => lv.id === id)!).toMatchObject({ invitation_status: "invited", responded_at: null, bid_rate: null });
+    return { ...x, b2, c2 };
+  };
+
+  it("«ya respondió» con correo detectado y participaciones 'invited' sin tarifa: con carrier_id prepara todas y confirmar las marca", async () => {
+    const x = await conCorreoDeB();
+    const m = mcp(x);
+    // La cadencia sí lo excluye (ya contestó por correo): eso no cambia.
+    const i = await m.ej("preparar_intentos", { event_id: x.eventId });
+    expect(i.vista_previa.destinatarios.map((d: any) => d.participacion_id)).not.toContain(x.p.B);
+    const v = await m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.B.id, respuesta: "respondio", canal: "email", nota: "Sin unidades esta semana" });
+    expect(v.vista_previa.participaciones).toHaveLength(2);
+    expect(v.vista_previa.excluidas).toBeUndefined();
+    expect(v.vista_previa.contexto[0]).toMatch(/Llegó un correo de .*no bloquea/);
+    const r = await m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" });
+    expect(r.estado).toBe("aplicada");
+    expect(m.escritas().map(b => [b.action, b.id, "bid_rate" in b.patch]).sort()).toEqual([["mark_rfx_replied_if_empty", x.p.B, false], ["mark_rfx_replied_if_empty", x.b2, false]].sort());
+    for (const id of [x.p.B, x.b2]) expect(x.sim.laneVendors.find(lv => lv.id === id)!).toMatchObject({ invitation_status: "responded", bid_rate: null, notes: "Correo: Sin unidades esta semana" });
+    // Ya marcado: no se vuelve a preparar.
+    expect(await codigo(m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.B.id, respuesta: "respondio", canal: "email" }))).toBe("NADA_POR_MARCAR");
+  });
+
+  it("«ya respondió» con correo detectado: con participacion_ids también prepara y confirmar aplica", async () => {
+    const x = await conCorreoDeB();
+    const m = mcp(x);
+    const v = await m.ej("preparar_ya_respondio", { event_id: x.eventId, participacion_ids: [x.b2], respuesta: "rechazo", canal: "email", nota: "No cubre Laredo" });
+    expect(v.vista_previa.participaciones.map((p: any) => p.estado_actual)).toEqual(["invitada"]);
+    expect((await m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
+    expect(x.sim.laneVendors.find(lv => lv.id === x.b2)!).toMatchObject({ invitation_status: "declined", bid_rate: null });
+    expect(x.sim.laneVendors.find(lv => lv.id === x.p.B)!.invitation_status).toBe("invited");
+  });
+
+  it("«ya respondió» con correo detectado: con oferta se sigue rechazando; declinada o respondida queda excluida con motivo", async () => {
+    const x = await conCorreoDeB();
+    x.sim.respuestasCarrier.push({ rfx_lane_vendor_id: x.p.A, vendor_id: x.carriers.A.id, channels: ["email"], count: 1, first_reply_at: "2026-10-29T15:00:00.000Z", last_reply_at: "2026-10-29T15:00:00.000Z" });
+    const m = mcp(x);
+    expect(await codigo(m.ej("preparar_ya_respondio", { event_id: x.eventId, participacion_ids: [x.p.A], respuesta: "respondio", canal: "email" }))).toBe("YA_OFERTO");
+    expect(await codigo(m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.A.id, respuesta: "respondio", canal: "email" }))).toBe("NADA_POR_MARCAR");
+    // B: una ruta ya respondida y C: una declinada (guardadas en Rateware).
+    Object.assign(x.sim.laneVendors.find(lv => lv.id === x.p.B)!, { invitation_status: "responded", responded_at: "2026-10-29T16:00:00.000Z" });
+    Object.assign(x.sim.laneVendors.find(lv => lv.id === x.c2)!, { invitation_status: "declined", responded_at: "2026-10-29T16:00:00.000Z" });
+    const vb = await m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.B.id, respuesta: "respondio", canal: "email" });
+    expect(vb.vista_previa.participaciones).toHaveLength(1);
+    expect(vb.vista_previa.excluidas).toEqual([expect.objectContaining({ motivo: "ya marcado como respondió" })]);
+    const vc = await m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.C.id, respuesta: "respondio", canal: "email" });
+    expect(vc.vista_previa.excluidas).toEqual([expect.objectContaining({ motivo: "declinó" })]);
+    expect(await codigo(m.ej("preparar_ya_respondio", { event_id: x.eventId, participacion_ids: [x.c2], respuesta: "respondio", canal: "email" }))).toBe("NO_PENDIENTE");
+    expect((await m.ej("confirmar", { confirmacion_id: vb.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
+    expect(x.sim.laneVendors.find(lv => lv.id === x.b2)!.invitation_status).toBe("responded");
+  });
+
   it("plazo: el propietario lo extiende con el plazo leído; si otro lo cambia antes, PLAZO_CAMBIO y no se escribe", async () => {
     const x = await escenario();
     const m = mcp(x, "admin", "admin");

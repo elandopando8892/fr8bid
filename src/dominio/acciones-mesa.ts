@@ -4,7 +4,8 @@
 
 import { esProtegido } from "./protegidos.js";
 import { estadoRevision } from "./revision.js";
-import { esperaRespuesta, type SeguimientoCarrier } from "./seguimiento.js";
+import { versionVigente } from "./recorrido.js";
+import type { SeguimientoCarrier } from "./seguimiento.js";
 import type { Detalle, Participacion, Ruta } from "./tipos.js";
 
 const editable = (d: Detalle) => d.evento.estado === "abierto" || d.evento.estado === "borrador";
@@ -25,11 +26,27 @@ export function bloqueoCaptura(d: Detalle, p: Participacion): string | null {
 }
 export const candidatasCaptura = (d: Detalle, ruta: Ruta) => ruta.participaciones.filter((p) => !bloqueoCaptura(d, p));
 
-// «Ya respondió» sin tarifa: evento abierto y carrier que sigue esperando respuesta.
-export function bloqueoRespondio(d: Detalle, s: Pick<SeguimientoCarrier, "estado" | "carrier">): string | null {
+// «Ya respondió» sin tarifa. Se decide por lo GUARDADO en la participación
+// (rfx_lane_vendors): invitada o vista, sin oferta y sin adjudicar. Un correo o
+// WhatsApp detectado (seguimiento → «respondió por correo») NO la bloquea: es
+// justo el caso de esta acción (contestó por correo sin tarifa) y solo es contexto.
+export function motivoNoMarcable(p: Participacion): string | null {
+  if (p.versiones.length > 0 || versionVigente(p)) return "ya ofertó";
+  if (p.rol) return "adjudicado";
+  if (p.estado === "invitada" || p.estado === "vista") return null;
+  return p.estado === "respondio" ? "ya marcado como respondió" : p.estado === "declino" ? "declinó" : p.estado === "preseleccionada" ? "no invitado" : p.estado === "excluida" ? "excluida" : "no pendiente";
+}
+export const marcablesRespondio = <T extends { participacion: Participacion }>(filas: T[]): T[] => filas.filter((f) => !motivoNoMarcable(f.participacion));
+
+export function bloqueoRespondioEvento(d: Detalle): string | null {
   if (bloqueoEvento(d)) return bloqueoEvento(d);
-  if (d.evento.estado !== "abierto") return "Solo con el evento abierto a ofertas.";
-  if (!esperaRespuesta(s.estado)) return `${s.carrier} ya no está esperando respuesta (respondió, ofertó, declinó o rebotó).`;
+  return d.evento.estado !== "abierto" ? "Solo con el evento abierto a ofertas." : null;
+}
+// Evento abierto y al menos una ruta del carrier por marcar.
+export function bloqueoRespondio(d: Detalle, s: Pick<SeguimientoCarrier, "carrier" | "pendientes">): string | null {
+  const e = bloqueoRespondioEvento(d);
+  if (e) return e;
+  if (!marcablesRespondio(s.pendientes).length) return `${s.carrier} no tiene rutas por marcar (ya ofertó, declinó o ya está marcado).`;
   return null;
 }
 

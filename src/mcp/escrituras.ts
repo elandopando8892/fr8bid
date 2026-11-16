@@ -6,7 +6,7 @@ import { esProtegido } from "../dominio/protegidos.js";
 import { hoyMexico, versionVigente } from "../dominio/recorrido.js";
 import { claveIntento, intentosPorPreparar, seguimiento, textoIntento } from "../dominio/seguimiento.js";
 import { audienciaInvitacion, estadoRevision, resumenOmisiones } from "../dominio/revision.js";
-import { bloqueoBorradoresInvitacion, bloqueoCaptura, bloqueoEnvioInvitacion, bloqueoIntentos, bloqueoPlazo, bloqueoRespondio, bloqueoRevision } from "../dominio/acciones-mesa.js";
+import { bloqueoBorradoresInvitacion, bloqueoCaptura, bloqueoEnvioInvitacion, bloqueoIntentos, bloqueoPlazo, bloqueoRespondioEvento, bloqueoRevision, motivoNoMarcable } from "../dominio/acciones-mesa.js";
 import { REMITENTE, campanaDelEvento, campanaFr8bid, elegirPlantilla } from "../dominio/invitacion.js";
 import { MAXIMO_POR_LLAMADA, leerResultado, requiereAtencion } from "../dominio/tandas.js";
 import type { Aviso, Detalle, Participacion, Rol, Ruta } from "../dominio/tipos.js";
@@ -32,6 +32,8 @@ const CAMPANA_NUEVA = "$campana_creada";
 // confirmar acepta hasta este largo de confirmacion_id; preparar_* nunca firma uno mayor.
 export const LIMITE_TOKEN = 60000;
 const PARTIBLES = new Set(["intentos", "ya_respondio"]);
+// invitation_status crudos (src/cliente/mapear.ts) que ya no esperan respuesta: «ya respondió» no los toca.
+const YA_CONTESTADA = new Set(["responded", "quoted", "bid_submitted", "declined", "withdrawn", "awarded", "archived"]);
 // AGENTS.md regla 6: aprobación del PROPIETARIO por acción. Toda escritura real (intentos,
 // «Revisado», campaña y borradores, tanda) solo la confirma un correo de FR8BID_MCP_APROBADORES,
 // sobre una vista previa que él mismo preparó (el token es de su sesión). Los demás solo preparan.
@@ -334,36 +336,48 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       const d = await leer(a.event_id);
       const rechazo = a.respuesta === "rechazo";
       if (rechazo && esPrima(d.evento.folio)) throw new Rechazo("PRIMA_PROTEGIDO", "En PRIMA no se marca rechazo desde el chat; hazlo en la Mesa.", 403);
+      // El seguimiento solo da contexto (p. ej. «llegó un correo suyo»); no decide si se marca.
       const segs = seguimiento(d, hoy());
       let elegidas = todas(d).filter(x => a.participacion_ids ? a.participacion_ids.includes(x.p.id) : x.p.carrierId === a.carrier_id);
       if (a.participacion_ids && elegidas.length !== new Set(a.participacion_ids).size) throw new Rechazo("AJENA", "Alguna participación no pertenece al evento.", 404);
       if (!elegidas.length) throw new Rechazo("AJENA", "Ese carrier no está en este evento.", 404);
-      // Con carrier_id, como la Mesa: solo sus rutas pendientes (sin oferta ni declinadas);
-      // las demás se muestran como excluidas con su motivo.
+      // Estado GUARDADO de cada participación en Rateware (invitation_status, responded_at, bid_rate):
+      // es lo que decide y lo que fija la foto, para que confirmar no falle por un correo detectado.
+      const crudoDetalle = await crudo({ action: "list_rfx_detail", event_id: d.evento.id });
+      const filasCrudas = new Map<string, any>((crudoDetalle.lanes || []).flatMap((l: any) => l.invitations || []).map((v: any) => [String(v.id), v]));
+      const guardado = (id: string) => {
+        const v = filasCrudas.get(id);
+        return { invitation_status: v?.invitation_status ?? null, responded_at: v?.responded_at ?? null, bid_rate: v?.bid_rate ?? null };
+      };
+      // Mismas reglas que la Mesa («Ya respondió»), sobre lo guardado: sin tarifa y con
+      // invitation_status que aún espera respuesta; además, el estado crudo de Rateware.
+      const motivo = (p: Participacion): string | null => {
+        const g = guardado(p.id);
+        if (conOferta(p) || g.bid_rate !== null) return "ya ofertó";
+        if (g.invitation_status && YA_CONTESTADA.has(String(g.invitation_status))) return g.invitation_status === "declined" || g.invitation_status === "withdrawn" ? "declinó" : g.invitation_status === "archived" ? "excluida" : g.invitation_status === "awarded" ? "adjudicado" : "ya marcado como respondió";
+        return motivoNoMarcable(p);
+      };
+      const bloqueo = bloqueoRespondioEvento(d);
+      if (bloqueo) throw new Rechazo("NO_PERMITIDO", bloqueo);
+      // Con carrier_id, como la Mesa: solo sus rutas por marcar; las demás se muestran como excluidas con su motivo.
       const excluidas: { carrier: string; ruta: string; estado: string; motivo: string }[] = [];
       if (a.carrier_id) {
-        const sc = segs.find(x => x.carrierId === a.carrier_id);
-        if (!sc) throw new Rechazo("NO_INVITADA", "Ese carrier no está invitado en este evento.");
-        const bloqueo = bloqueoRespondio(d, sc);
-        if (bloqueo) throw new Rechazo("NO_PERMITIDO", bloqueo);
-        const pendientes = new Set(sc.pendientes.map(f => f.participacion.id));
-        for (const { p, r } of elegidas) if (!pendientes.has(p.id))
-          excluidas.push({ carrier: p.carrier, ruta: rutaTxt(r), estado: p.estado, motivo: conOferta(p) ? "ya ofertó" : p.estado === "declino" ? "declinó" : p.estado === "preseleccionada" ? "no invitado" : p.estado === "excluida" ? "excluida" : "no pendiente" });
-        elegidas = elegidas.filter(x => pendientes.has(x.p.id));
-        if (!elegidas.length) throw new Rechazo("NADA_POR_MARCAR", `${sc.carrier} no tiene rutas pendientes en este evento.`);
+        if (!segs.some(x => x.carrierId === a.carrier_id)) throw new Rechazo("NO_INVITADA", "Ese carrier no está invitado en este evento.");
+        for (const { p, r } of elegidas) { const m = motivo(p); if (m) excluidas.push({ carrier: p.carrier, ruta: rutaTxt(r), estado: p.estado, motivo: m }); }
+        elegidas = elegidas.filter(x => !motivo(x.p));
+        if (!elegidas.length) throw new Rechazo("NADA_POR_MARCAR", `${excluidas[0]?.carrier ?? "Ese carrier"} no tiene rutas por marcar en este evento (ya ofertó, declinó o ya está marcado).`);
       }
-      // Mismas reglas que la Mesa («Ya respondió»): evento abierto, carrier esperando
-      // respuesta y solo sus rutas pendientes (sin oferta, sin declinar).
       for (const { p, r } of elegidas) {
-        if (conOferta(p)) throw new Rechazo("YA_OFERTO", `${p.carrier} ya tiene oferta en ${rutaTxt(r)}; no se marca respuesta sin tarifa.`);
+        const m = motivo(p);
+        if (!m) continue;
+        if (m === "ya ofertó") throw new Rechazo("YA_OFERTO", `${p.carrier} ya tiene oferta en ${rutaTxt(r)}; no se marca respuesta sin tarifa.`);
         if (p.estado === (rechazo ? "declino" : "respondio")) throw new Rechazo("YA_MARCADA", `${p.carrier} ya está marcado así en ${rutaTxt(r)}.`);
-        const sc = segs.find(x => x.carrierId === p.carrierId);
-        if (!sc) throw new Rechazo("NO_INVITADA", `${p.carrier} no está invitado en ${rutaTxt(r)}.`);
-        const bloqueo = bloqueoRespondio(d, sc);
-        if (bloqueo) throw new Rechazo("NO_PERMITIDO", bloqueo);
-        if (!sc.pendientes.some(f => f.participacion.id === p.id)) throw new Rechazo("NO_PENDIENTE", `${p.carrier} no tiene pendiente ${rutaTxt(r)}.`);
+        if (m === "no invitado") throw new Rechazo("NO_INVITADA", `${p.carrier} no está invitado en ${rutaTxt(r)}.`);
+        throw new Rechazo("NO_PENDIENTE", `${p.carrier} no tiene pendiente ${rutaTxt(r)} (${m}).`);
       }
       elegidas = [...elegidas].sort((x, y) => x.p.id.localeCompare(y.p.id));
+      const contexto = segs.filter(s => s.respondioPor.length && elegidas.some(x => x.p.carrierId === s.carrierId))
+        .map(s => `Llegó un ${s.respondioPor.map(c => c === "correo" ? "correo" : c === "chat" ? "mensaje por el chat" : "WhatsApp").join(" y ")} de ${s.carrier}; no bloquea marcarlo.`);
       const cuerpos: Record<string, unknown>[] = [];
       // Mismo cuerpo que arma la Mesa (estado y nota), por la escritura condicional: Rateware
       // solo lo aplica si la participación sigue sin tarifa y nunca escribe bid_rate.
@@ -375,10 +389,12 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
         arg: { event_id: d.evento.id, participacion_ids: elegidas.map(x => x.p.id), respuesta: a.respuesta, canal: a.canal, nota: a.nota },
         grupos: porCarrier(elegidas.map(x => ({ id: x.p.id, carrierId: x.p.carrierId, carrier: x.p.carrier }))),
         cuerpos,
-        foto: elegidas.map(x => ({ p: x.p.id, estado: x.p.estado, versiones: x.p.versiones.length })),
+        // Foto del estado guardado (no del seguimiento): un correo detectado no la cambia.
+        foto: elegidas.map(x => ({ p: x.p.id, estado: x.p.estado, versiones: x.p.versiones.length, ...guardado(x.p.id) })),
         vista: { cambio: rechazo ? "Marcar que RECHAZÓ (declinó) sin tarifa" : "Marcar que RESPONDIÓ sin tarifa", canal_de_la_respuesta: a.canal,
           participaciones: elegidas.map(({ p, r }, i) => ({ carrier: p.carrier, ruta: rutaTxt(r), estado_actual: p.estado, nota_que_se_guarda: (cuerpos[i].patch as any).notes })),
           ...(excluidas.length ? { excluidas } : {}),
+          ...(contexto.length ? { contexto } : {}),
           efecto: "Sale de los intentos de seguimiento. No envía nada ni toca ofertas: si entra una oferta antes de confirmar, Rateware no lo aplica." } };
     },
 
