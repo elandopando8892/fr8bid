@@ -1,7 +1,7 @@
 // Cadencia de seguimiento por falta de profundidad (regla de Jose, 23-oct-2026).
 
 import { describe, expect, it } from "vitest";
-import { claveIntento, intentosPorPreparar, intentosWhatsapp, numeroWhatsapp, LIMITE_TEXTO_INTENTO, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento } from "../src/dominio/seguimiento";
+import { claveIntento, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, numeroWhatsapp, LIMITE_TEXTO_INTENTO, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento } from "../src/dominio/seguimiento";
 import { aviso } from "../src/cliente/mapear";
 import type { Aviso, Detalle, Participacion } from "../src/dominio/tipos";
 
@@ -68,11 +68,12 @@ describe("cadencia por falta de profundidad", () => {
     expect(de(cerrado, "a", horas(30))).toBeNull();
   });
 
-  it("quien respondió por correo o WhatsApp sin ofertar no recibe más intentos", () => {
+  it("quien respondió sin tarifa no entra a la cadencia de 8/12 h", () => {
     const sunline = { ...part("sun"), estado: "respondio" as const };
     const d = detalle([...parts, sunline], [...avisos, invitacion("sun", ENVIO)]);
     expect(seguimiento(d, "2026-10-23").find((x) => x.carrierId === "c-sun")?.estado).toBe("respondio");
-    expect(de(d, "sun", horas(8))).toBeNull();
+    // El plazo (31-dic) está lejos: aún no toca su recordatorio antes del cierre.
+    expect(de(d, "sun", horas(8))).toMatchObject({ antesDelCierre: 48, vencido: false });
     expect(intentosPorPreparar(d, horas(8), "2026-10-23").map((x) => x.participacion.id).sort()).toEqual(["a", "b"]);
   });
 
@@ -128,7 +129,7 @@ describe("cadencia por falta de profundidad", () => {
     d.respuestas = { sun: { participacionId: "sun", canales: ["correo"], primeraEn: ENVIO, ultimaEn: ENVIO } };
     expect(intentosWhatsapp(d, horas(33), "2026-10-23")).toEqual([]);
     const w = intentosWhatsapp(d, horas(34), "2026-10-23");
-    // Quien ya respondió (R2) no aparece; quien ofertó tampoco.
+    // Quien respondió sin tarifa (R2) no recibe WhatsApp; quien ofertó tampoco.
     expect(w.map((x) => x.s.carrierId)).toEqual(["c-a", "c-b", "c-c"]);
     const [a, b, c] = w;
     expect(a.numero).toBe("528112345678");
@@ -154,5 +155,90 @@ describe("cadencia por falta de profundidad", () => {
     const m = { id: "m1", rfx_lane_vendor_id: "a", status: "sent", metadata: { notice_type: "rfx_invitation" }, vendors: { vendor_name: "A", whatsapp_phone: "8112345678", whatsapp_do_not_contact: false } };
     expect(aviso(m)).toMatchObject({ whatsapp: "8112345678", whatsappNoContactar: false });
     expect(aviso({ ...m, vendors: null })).toMatchObject({ whatsapp: null, whatsappNoContactar: false });
+  });
+
+  // Regla de Jose (16-nov-2026): quien respondió sin tarifa sigue en la cadencia,
+  // con un recordatorio 48 h y 24 h antes del cierre (23:59 de México del plazo).
+  describe("respondió sin tarifa: recordatorio antes del cierre", () => {
+    const CIERRE = Date.parse("2026-12-31T23:59:00-06:00");
+    const antes = (h: number) => new Date(CIERRE - h * 3_600_000);
+    const conRespuesta = (extra: Aviso[] = []) => {
+      const d = detalle(parts, [...avisos, ...extra]);
+      // «a» contestó por correo preguntando volumen: sin bid_rate.
+      d.respuestas = { a: { participacionId: "a", canales: ["correo"], primeraEn: ENVIO, ultimaEn: ENVIO } };
+      return d;
+    };
+    const ids = (d: Detalle, ahora: Date) => intentosPorPreparar(d, ahora, "2026-12-29").map((x) => x.participacion.id).sort();
+
+    it("sigue mostrándose como «respondió sin tarifa»", () => {
+      const s = seguimiento(conRespuesta(), "2026-12-29").find((x) => x.carrierId === "c-a")!;
+      expect(s.estado).toBe("respondio");
+      expect(etiquetaSeguimiento(s)).toBe("respondió sin tarifa por correo");
+      expect(etiquetaSeguimiento({ ...s, respondioPor: [] })).toBe("respondió sin tarifa");
+    });
+
+    it("aparece 48 h antes del cierre con el texto de recordatorio y no fuera de esa ventana", () => {
+      const d = conRespuesta();
+      expect(de(d, "a", antes(49))).toMatchObject({ antesDelCierre: 48, vencido: false, tocaEn: antes(48).toISOString() });
+      expect(ids(d, antes(49))).not.toContain("a");
+      const [x] = intentosPorPreparar(d, antes(47), "2026-12-29").filter((y) => y.participacion.id === "a");
+      expect(x.paso).toMatchObject({ antesDelCierre: 48, canal: "correo", vencido: true });
+      const texto = textoIntento(d, x.paso);
+      expect(texto).toMatch(/^Gracias por su respuesta\./);
+      expect(texto).toContain("vence el 31 de diciembre de 2026 a las 23:59");
+      expect(texto).toContain("RFx-1021-PRIMAPro");
+      expect(texto).toContain("«Abrir Private Bid Room»");
+      expect(texto.length).toBeLessThanOrEqual(LIMITE_TEXTO_INTENTO);
+      expect(claveIntento("e", "a", x.paso.intento, x.paso.antesDelCierre)).toBe("fr8bid-intento-cierre-48h-e-a-bid");
+    });
+
+    it("ya enviado el de 48 h, vuelve a aparecer 24 h antes con «Último recordatorio»", () => {
+      const d = conRespuesta([invitacion("a", antes(46).toISOString(), 2)]);
+      expect(ids(d, antes(30))).not.toContain("a");
+      expect(de(d, "a", antes(30))).toMatchObject({ antesDelCierre: 24, vencido: false });
+      const [x] = intentosPorPreparar(d, antes(20), "2026-12-30").filter((y) => y.participacion.id === "a");
+      expect(x.paso).toMatchObject({ antesDelCierre: 24, vencido: true, intento: 3 });
+      expect(textoIntento(d, x.paso)).toMatch(/^Último recordatorio: el plazo para cotizar RFx-1021-PRIMAPro vence el 31 de diciembre de 2026/);
+      // Claves distintas entre sí y de los intentos 2 y 3 de la cadencia.
+      const claves = [claveIntento("e", "a", 3, 24), claveIntento("e", "a", 2, 48), claveIntento("e", "a", 2), claveIntento("e", "a", 3)];
+      expect(new Set(claves).size).toBe(4);
+      expect(claves.every((c) => c.startsWith("fr8bid-intento-"))).toBe(true);
+      // Ya enviado el de 24 h: se acaba.
+      const fin = conRespuesta([invitacion("a", antes(46).toISOString(), 2), invitacion("a", antes(20).toISOString(), 3)]);
+      expect(de(fin, "a", antes(10))).toBeNull();
+      expect(ids(fin, antes(10))).not.toContain("a");
+    });
+
+    it("si nadie mandó el de 48 h, dentro de las últimas 24 h solo toca el de 24 h", () => {
+      expect(de(conRespuesta(), "a", antes(5))).toMatchObject({ antesDelCierre: 24, vencido: true });
+    });
+
+    it("con el plazo vencido o sin plazo no hay nada", () => {
+      const d = conRespuesta();
+      expect(de(d, "a", new Date(CIERRE))).toBeNull();
+      expect(de(d, "a", new Date(CIERRE + 3_600_000))).toBeNull();
+      expect(ids(d, new Date(CIERRE + 3_600_000))).not.toContain("a");
+      const sinPlazo = conRespuesta();
+      sinPlazo.evento.plazo = null;
+      expect(de(sinPlazo, "a", antes(30))).toBeNull();
+    });
+
+    it("con oferta o declinado sale de la cadencia", () => {
+      const oferta = detalle([part("ms", true), part("a", true), part("b")], avisos);
+      oferta.respuestas = { a: { participacionId: "a", canales: ["correo"], primeraEn: ENVIO, ultimaEn: ENVIO } };
+      expect(seguimiento(oferta, "2026-12-30").find((x) => x.carrierId === "c-a")?.estado).toBe("oferto");
+      expect(de(oferta, "a", antes(20))).toBeNull();
+      const declino = detalle([part("ms", true), { ...part("a"), estado: "declino" as const }, part("b")], avisos);
+      expect(de(declino, "a", antes(20))).toBeNull();
+      expect(intentosPorPreparar(declino, antes(20), "2026-12-30").map((x) => x.participacion.id)).not.toContain("a");
+    });
+
+    it("la cadencia normal de quien no ha respondido no cambia", () => {
+      const d = conRespuesta();
+      expect(de(d, "b", horas(8))).toMatchObject({ intento: 2, canal: "correo", antesDelCierre: null, horasDesdeAnterior: 8, vencido: true });
+      expect(ids(d, horas(8))).toEqual(["b"]);
+      expect(textoIntento(d, { intento: 2, antesDelCierre: null })).toMatch(/^Seguimos buscando/);
+      expect(claveIntento("e", "b", 2, null)).toBe("fr8bid-intento-2-e-b-bid");
+    });
   });
 });

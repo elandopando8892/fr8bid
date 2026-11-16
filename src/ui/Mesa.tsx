@@ -1027,7 +1027,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
         {conteo("abrio_correo") > 0 && <li className="warn"><I.Sobre size={14} />{conteo("abrio_correo")} abrieron el correo, no la liga</li>}
         {sinAbrirMedidos > 0 && <li className="warn"><I.Reloj size={14} />{sinAbrirMedidos} no abrieron el correo</li>}
         {conteo("sin_abrir") - sinAbrirMedidos > 0 && <li className="warn"><I.Reloj size={14} />{conteo("sin_abrir") - sinAbrirMedidos} sin abrir la liga</li>}
-        {conteo("respondio") > 0 && <li><I.Chat size={14} />{conteo("respondio")} por otro canal</li>}
+        {conteo("respondio") > 0 && <li><I.Chat size={14} />{conteo("respondio")} respondieron sin tarifa</li>}
         {conteo("declino") > 0 && <li><I.Salir size={14} />{conteo("declino")} declinaron</li>}
         {conteo("rebote") > 0 && <li className="err"><I.Alerta size={14} />{conteo("rebote")} rebotaron</li>}
       </ul>
@@ -1040,11 +1040,11 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
         <div className="aviso-caja">
           <p>
             <b>Falta profundidad:</b> {flacas.map((x) => `ruta ${x.ruta.numero} con ${plural(x.ofertas, "oferta")}`).join(", ")} de {PROFUNDIDAD_MINIMA} mínimas.
-            Cadencia: 2º intento a las 8 h del envío, 3º 12 h después del 2º y luego WhatsApp.
+            Cadencia: 2º intento a las 8 h del envío, 3º 12 h después del 2º y luego WhatsApp. Quien respondió sin tarifa recibe un recordatorio 48 h y 24 h antes del cierre.
           </p>
           {tocan.length > 0 && (
             <p>
-              <span className="pill alerta">Ya toca</span> {[...new Set(tocan.map((x) => `${x!.intento}º intento por ${x!.canal === "whatsapp" ? "WhatsApp" : "correo"}`))].join(", ")} a {tocan.length} carrier(s).
+              <span className="pill alerta">Ya toca</span> {[...new Set(tocan.map((x) => (x!.antesDelCierre ? `recordatorio ${x!.antesDelCierre} h antes del cierre` : `${x!.intento}º intento por ${x!.canal === "whatsapp" ? "WhatsApp" : "correo"}`)))].join(", ")} a {tocan.length} carrier(s).
               {tocan.some((x) => x!.canal === "correo") ? "Fr8Bid no envía solo: el correo se prepara y se aprueba aquí abajo." : "Fr8Bid no envía solo."}
             </p>
           )}
@@ -1073,19 +1073,19 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
           {muestra && ctx.rol !== "viewer" && (
             <>
               <p className="tenue ayuda">
-                Texto del {muestra.paso.intento}º intento, del bid completo. Rateware lo pone dentro de su plantilla con todas las rutas y el botón a la liga privada. Va en el hilo solo si el carrier ya
+                Texto del {muestra.paso.antesDelCierre ? `recordatorio ${muestra.paso.antesDelCierre} h antes del cierre` : `${muestra.paso.intento}º intento`}, del bid completo. Rateware lo pone dentro de su plantilla con todas las rutas y el botón a la liga privada. Va en el hilo solo si el carrier ya
                 escribió; si no, sale como correo nuevo con asunto «Seguimiento {d.evento.folio} · {d.evento.nombre} · {d.rutas.length} rutas»:
               </p>
               <p className="texto-aviso">{textoIntento(d, muestra.paso)}</p>
               <Confirmar
                 etiqueta={`Preparar ${plural(porPreparar.length, "intento", "intentos")}`}
                 clase="btn-secundario"
-                advertencia={`Rateware deja ${porPreparar.length} borrador(es) en la Cola, uno por carrier sin respuesta. No se envía nada: el envío lo apruebas aquí mismo.`}
+                advertencia={`Rateware deja ${porPreparar.length} borrador(es) en la Cola, uno por carrier sin oferta. No se envía nada: el envío lo apruebas aquí mismo.`}
                 onConfirmar={() =>
                   accion(async () => {
                     let listos = 0;
                     for (const x of porPreparar) {
-                      await s.api.prepararIntento(d.evento.id, x.participacion.id, textoIntento(d, x.paso), claveIntento(d.evento.id, x.participacion.id, x.paso.intento));
+                      await s.api.prepararIntento(d.evento.id, x.participacion.id, textoIntento(d, x.paso), claveIntento(d.evento.id, x.participacion.id, x.paso.intento, x.paso.antesDelCierre));
                       listos++;
                     }
                     return listos;
@@ -1126,7 +1126,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                     {(() => {
                       const sig = siguiente.get(x.carrierId);
                       if (!sig) return "—";
-                      return <>{sig.intento}º por {sig.canal === "whatsapp" ? "WhatsApp" : "correo"} · {sig.enCola ? "borrador por aprobar" : sig.vencido ? <span className="pill alerta">ya toca</span> : fecha(sig.tocaEn)}</>;
+                      return <>{sig.antesDelCierre ? `recordatorio ${sig.antesDelCierre} h antes del cierre` : `${sig.intento}º por ${sig.canal === "whatsapp" ? "WhatsApp" : "correo"}`} · {sig.enCola ? "borrador por aprobar" : sig.vencido ? <span className="pill alerta">ya toca</span> : fecha(sig.tocaEn)}</>;
                     })()}
                   </td>}
                   <td className="acciones-chicas">
@@ -1205,8 +1205,18 @@ function IntentosPorEnviar({ d, ctx, accion }: { d: Detalle; ctx: Contexto; acci
     const p = carrierDe(a);
     return Boolean(p && estadoRevision(d, p.carrierId) === "revisado");
   };
-  // Si el carrier ya ofertó, declinó o contestó, el borrador ya no se manda.
-  const vigentes = new Set(seguimiento(d, ctx.hoy).filter((x) => esperaRespuesta(x.estado)).map((x) => x.carrierId));
+  // Si el carrier ya ofertó o declinó, el borrador ya no se manda. Quien respondió
+  // sin tarifa solo dentro de la ventana de su recordatorio antes del cierre.
+  const ahora = new Date();
+  const vigentes = new Set(
+    seguimiento(d, ctx.hoy)
+      .filter((x) => {
+        if (esperaRespuesta(x.estado)) return true;
+        const paso = x.estado === "respondio" ? siguienteIntento(d, x, ahora) : null;
+        return Boolean(paso?.antesDelCierre && paso.vencido);
+      })
+      .map((x) => x.carrierId)
+  );
   const sigue = (a: Aviso) => vigentes.has(carrierDe(a)?.carrierId ?? "");
   const porEnviar = intentos.filter((a) => revisado(a) && sigue(a));
   const detenidos = intentos.filter((a) => !porEnviar.includes(a));
@@ -1215,7 +1225,7 @@ function IntentosPorEnviar({ d, ctx, accion }: { d: Detalle; ctx: Contexto; acci
     <div className="aviso-caja">
       <p>
         <b>{plural(intentos.length, "intento preparado", "intentos preparados")}</b> sin enviar
-        {detenidos.length > 0 && <> · {detenidos.length} no se envían (el carrier ya respondió o no tiene «Revisado» vigente)</>}.
+        {detenidos.length > 0 && <> · {detenidos.length} no se envían (el carrier ya ofertó, declinó, respondió sin tarifa fuera de la ventana antes del cierre o no tiene «Revisado» vigente)</>}.
       </p>
       <button className="btn-texto" onClick={() => setVerTextos(!verTextos)}>{verTextos ? "Ocultar textos" : "Ver los textos exactos"}</button>
       {verTextos &&

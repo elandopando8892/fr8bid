@@ -46,7 +46,7 @@ export const ETIQUETA_SEGUIMIENTO: Record<EstadoSeguimiento, string> = {
   sin_abrir: "no ha abierto la liga",
   abrio_correo: "abrió el correo, no la liga",
   abrio: "abrió la liga, sin oferta",
-  respondio: "ya respondió por otro canal",
+  respondio: "respondió sin tarifa",
   oferto: "ofertó",
   declino: "declinó"
 };
@@ -55,7 +55,7 @@ const CANAL: Record<"correo" | "chat" | "whatsapp", string> = { correo: "correo"
 
 // Etiqueta del renglón: con píxel, «sin_abrir» ya dice que no abrió el correo.
 export function etiquetaSeguimiento(s: Pick<SeguimientoCarrier, "estado" | "correoMedido" | "aperturaPosibleEn" | "respondioPor">): string {
-  if (s.estado === "respondio" && s.respondioPor.length) return `respondió por ${s.respondioPor.map((c) => CANAL[c]).join(" y ")}`;
+  if (s.estado === "respondio" && s.respondioPor.length) return `respondió sin tarifa por ${s.respondioPor.map((c) => CANAL[c]).join(" y ")}`;
   if (s.estado === "sin_abrir" && s.correoMedido) return s.aperturaPosibleEn ? "sin apertura confirmada (Apple Mail precarga)" : "no abrió el correo";
   return ETIQUETA_SEGUIMIENTO[s.estado];
 }
@@ -96,9 +96,10 @@ export function seguimiento(d: Detalle, hoy: string): SeguimientoCarrier[] {
     const estado: EstadoSeguimiento =
       ofertadas > 0 ? "oferto"
       : declinadas === filas.length ? "declino"
-      // Regla de Jose (23-oct-2026): quien ya respondió por correo o WhatsApp
-      // (preguntó, rechazó o cotizó fuera de la liga) no recibe más intentos.
-      // Desde R2 (24-oct-2026) el correo y el chat del Bid Room se detectan solos.
+      // Respondió sin tarifa (preguntó por volumen, etc.): por correo, WhatsApp o
+      // el chat del Bid Room (detectados solos desde R2, 24-oct-2026). Desde el
+      // 16-nov-2026 (Jose) sigue en la cadencia, pero solo con el recordatorio
+      // 48 h y 24 h antes del cierre (siguienteIntento).
       : filas.some((f) => f.participacion.estado === "respondio") || contestadas.length > 0 ? "respondio"
       : suyas.some((a) => a.estado === "rebotado") && !aceptadas.length ? "rebote"
       : vista ? "abrio"
@@ -156,7 +157,11 @@ export const CADENCIA: PasoCadencia[] = [
   { intento: 4, canal: "whatsapp", horasDesdeAnterior: 12 }
 ];
 
-export interface SiguienteIntento extends PasoCadencia {
+export interface SiguienteIntento extends Omit<PasoCadencia, "horasDesdeAnterior"> {
+  // null en el recordatorio antes del cierre: cuenta desde el plazo, no desde el envío.
+  horasDesdeAnterior: number | null;
+  // 48 o 24: recordatorio a quien respondió sin tarifa; null en la cadencia normal.
+  antesDelCierre: number | null;
   tocaEn: string;
   vencido: boolean;
   enCola: boolean;
@@ -170,20 +175,54 @@ export function rutasSinProfundidad(d: Detalle, minimoOfertas = PROFUNDIDAD_MINI
     .filter((x) => x.ofertas < minimoOfertas);
 }
 
-// Siguiente paso para un carrier que sigue sin responder en alguna ruta sin
-// profundidad. null: no le toca seguimiento o ya se agotó la cadencia.
+// Regla de Jose (16-nov-2026): solo salen de la cadencia quien ofertó o declinó.
+// Quien respondió sin tarifa recibe un recordatorio para cotizar antes del
+// cierre: 48 h y 24 h antes, en vez de la cadencia de 8/12 h.
+export const RECORDATORIOS_CIERRE = [48, 24] as const;
+
+// Cierre del evento: rfx-bid-api cierra la liga al terminar el día de due_date
+// (23:59, hora del centro de México, UTC−6 sin horario de verano). null sin plazo.
+export function cierreDelPlazo(d: Detalle): number | null {
+  const plazo = d.evento.plazo?.slice(0, 10);
+  if (!plazo || !/^\d{4}-\d{2}-\d{2}$/.test(plazo)) return null;
+  return Date.parse(`${plazo}T23:59:00-06:00`);
+}
+
+// Cada recordatorio tiene su ventana: el de 48 h, de 48 h a 24 h antes del
+// cierre; el de 24 h, hasta el cierre. Un envío aceptado dentro (o después) de la
+// ventana la da por hecha; una ventana que pasó sin envío se salta.
+function recordatorioCierre(d: Detalle, s: SeguimientoCarrier, ahora: Date): SiguienteIntento | null {
+  const cierre = cierreDelPlazo(d);
+  const t = ahora.getTime();
+  if (cierre === null || t >= cierre) return null;
+  const ultimo = s.ultimoEnvio ? Date.parse(s.ultimoEnvio) : -Infinity;
+  for (let i = 0; i < RECORDATORIOS_CIERRE.length; i++) {
+    const h = RECORDATORIOS_CIERRE[i];
+    const desde = cierre - h * 3_600_000;
+    const siguiente = RECORDATORIOS_CIERRE[i + 1];
+    const hasta = siguiente === undefined ? cierre : cierre - siguiente * 3_600_000;
+    if (ultimo >= desde || t >= hasta) continue;
+    return { intento: s.intentos + 1, canal: "correo", horasDesdeAnterior: null, antesDelCierre: h, tocaEn: new Date(desde).toISOString(), vencido: desde <= t, enCola: s.borradorEnCola };
+  }
+  return null;
+}
+
+// Siguiente paso para un carrier que no ha ofertado ni declinado en alguna ruta
+// sin profundidad. null: no le toca seguimiento o ya se agotó la cadencia.
 export function siguienteIntento(d: Detalle, s: SeguimientoCarrier, ahora: Date, minimoOfertas = PROFUNDIDAD_MINIMA): SiguienteIntento | null {
-  if (!esperaRespuesta(s.estado) || !s.ultimoEnvio) return null;
+  if (s.estado !== "respondio" && (!esperaRespuesta(s.estado) || !s.ultimoEnvio)) return null;
   const flacas = new Set(rutasSinProfundidad(d, minimoOfertas).map((x) => x.ruta.id));
   if (!s.pendientes.some((f) => flacas.has(f.ruta.id))) return null;
+  if (s.estado === "respondio") return recordatorioCierre(d, s, ahora);
   const paso = CADENCIA.find((c) => c.intento === s.intentos + 1);
-  if (!paso) return null;
+  if (!paso || !s.ultimoEnvio) return null;
   const tocaEn = new Date(Date.parse(s.ultimoEnvio) + paso.horasDesdeAnterior * 3_600_000).toISOString();
-  return { ...paso, tocaEn, vencido: Date.parse(tocaEn) <= ahora.getTime(), enCola: s.borradorEnCola };
+  return { ...paso, antesDelCierre: null, tocaEn, vencido: Date.parse(tocaEn) <= ahora.getTime(), enCola: s.borradorEnCola };
 }
 
 // Intentos por correo que ya tocan y no tienen borrador en la Cola: lo que
-// «Preparar intento» deja como borrador en Rateware.
+// «Preparar intento» deja como borrador en Rateware. Incluye el recordatorio
+// antes del cierre a quien respondió sin tarifa (paso.antesDelCierre).
 export function intentosPorPreparar(d: Detalle, ahora: Date, hoy: string): { s: SeguimientoCarrier; paso: SiguienteIntento; participacion: Participacion; ruta: Ruta }[] {
   // Sin la revisión de respuestas no se sabe a quién ya no hay que escribirle.
   if (d.respuestas === null) return [];
@@ -204,10 +243,23 @@ export function intentosPorPreparar(d: Detalle, ahora: Date, hoy: string): { s: 
 // no ha contestado le llega como correo nuevo.
 export const LIMITE_TEXTO_INTENTO = 600;
 
-export function textoIntento(d: Detalle, paso: Pick<PasoCadencia, "intento">): string {
+// Fecha del plazo en español neutro: «31 de diciembre de 2026».
+const fechaPlazo = (plazo: string) =>
+  new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${plazo.slice(0, 10)}T12:00:00Z`));
+
+export function textoIntento(d: Detalle, paso: Pick<PasoCadencia, "intento"> & { antesDelCierre?: number | null }): string {
   const rutas = d.rutas.length;
   const moneda = d.rutas.find((r) => r.moneda)?.moneda;
   const cuales = rutas === 1 ? "la ruta" : `las ${rutas} rutas`;
+  const recorte = (t: string) => (t.length > LIMITE_TEXTO_INTENTO ? t.slice(0, LIMITE_TEXTO_INTENTO - 1) + "…" : t);
+  // Recordatorio a quien respondió sin tarifa: cotizar antes del cierre.
+  if (paso.antesDelCierre && d.evento.plazo) {
+    return recorte([
+      `${paso.antesDelCierre <= 24 ? "Último recordatorio: el" : "Gracias por su respuesta. Le recordamos que el"} plazo para cotizar ${d.evento.folio} vence el ${fechaPlazo(d.evento.plazo)} a las 23:59 (hora del centro de México).`,
+      `¿Nos comparte su tarifa all-in${moneda ? ` en ${moneda}` : ""} para ${rutas > 0 ? cuales : "las rutas"} con el botón «Abrir Private Bid Room»? Puede cotizar solo las rutas que le convengan o responder a este correo con su tarifa y la capturamos.`,
+      "Si no tiene unidad disponible, responda «sin unidad» y no le volvemos a escribir por este evento."
+    ].join(" "));
+  }
   const texto = [
     `${paso.intento === 2 ? "Seguimos" : "Último aviso: seguimos"} buscando su tarifa all-in${moneda ? ` en ${moneda}` : ""} para ${rutas > 0 ? cuales : "las rutas"} de este evento.`,
     `¿Nos comparte su oferta con el botón «Abrir Private Bid Room»? Puede cotizar solo las rutas que le convengan. También puede responder a este correo con su tarifa y la capturamos.`,
@@ -274,8 +326,11 @@ export function intentosWhatsapp(d: Detalle, ahora: Date, hoy: string, revisados
 // crear otro.
 // Clave de idempotencia del intento. «-bid»: el seguimiento del bid completo es otro
 // correo que el de una ruta (claves sin sufijo, hasta el 12-nov); con la misma clave
-// Rateware devolvería el borrador viejo aunque esté archivado.
-export const claveIntento = (eventoId: string, participacionId: string, intento: number) => `fr8bid-intento-${intento}-${eventoId}-${participacionId}-bid`;
+// Rateware devolvería el borrador viejo aunque esté archivado. El recordatorio antes
+// del cierre lleva «cierre-48h» / «cierre-24h» en vez del número: no choca con los
+// intentos de la cadencia ni entre sí. El proxy exige el prefijo «fr8bid-intento-».
+export const claveIntento = (eventoId: string, participacionId: string, intento: number, antesDelCierre?: number | null) =>
+  antesDelCierre ? `fr8bid-intento-cierre-${antesDelCierre}h-${eventoId}-${participacionId}-bid` : `fr8bid-intento-${intento}-${eventoId}-${participacionId}-bid`;
 
 export interface Recordatorio {
   para: string;
