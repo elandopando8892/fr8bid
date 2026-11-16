@@ -22,7 +22,7 @@ import {
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
 import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
 import { cambiosComerciales, describirModelo, modeloCorto, tarifaVenta } from "../dominio/modelo";
-import { bloqueoRespondio, bloqueoRevision, candidatasCaptura } from "../dominio/acciones-mesa";
+import { bloqueoRespondio, bloqueoRevision, candidatasCaptura, marcablesRespondio } from "../dominio/acciones-mesa";
 import { candidatosRecordatorio, claveIntento, esperaRespuesta, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
 import type { CarrierFit } from "../dominio/carrierFit";
@@ -1272,7 +1272,8 @@ function YaRespondio({ d, s: x, accion }: { d: Detalle; s: ReturnType<typeof seg
   const [canal, setCanal] = useState<"email" | "whatsapp" | "phone">("email");
   const [rechazo, setRechazo] = useState(false);
   const [nota, setNota] = useState("");
-  const ids = x.pendientes.map((f) => f.participacion.id);
+  // Solo rutas por marcar según lo guardado (invitada o vista, sin oferta); un correo detectado no las excluye.
+  const ids = marcablesRespondio(x.pendientes).map((f) => f.participacion.id);
   return (
     <div className="aviso-caja">
       <div className="rejilla">
