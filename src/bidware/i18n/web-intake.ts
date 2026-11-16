@@ -255,6 +255,10 @@ export const copy = {
   "noteSeasonality": { "es": "Temporalidad", "en": "Seasonality" },
   "noteLeadTime": { "es": "Anticipación", "en": "Lead time" },
   "source": { "es": "Fuente", "en": "Source" },
+  "laneN": { "es": "Ruta {0}", "en": "Lane {0}" },
+  "lanesCount": { "es": "{0} rutas", "en": "{0} lanes" },
+  "includeLane": { "es": "Incluir esta ruta en la solicitud", "en": "Include this lane in the request" },
+  "noLaneChosen": { "es": "al menos una ruta", "en": "at least one lane" },
   "readOnly": {
     "es": "Solo lectura: tu rol puede ver la bandeja pero no decidir.",
     "en": "Read only: your role can see the tray but not decide."
