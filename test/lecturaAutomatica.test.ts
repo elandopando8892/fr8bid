@@ -1,6 +1,6 @@
 // Lectura automática de correos de carriers (16-nov-2026): qué se lee y qué se recuerda.
 import { describe, expect, it } from "vitest";
-import { cargarLecturas, correosPendientes, guardarLecturas, lecturasPorRevisar, MAX_LECTURAS_POR_APERTURA, REINTENTO_MS, type LecturaGuardada } from "../src/dominio/lecturaAutomatica";
+import { cargarLecturas, combinarLecturas, correosPendientes, guardarLecturas, lecturasPorRevisar, MAX_LECTURAS_POR_APERTURA, REINTENTO_MS, type LecturaGuardada, type LecturaServidor } from "../src/dominio/lecturaAutomatica";
 import type { Detalle } from "../src/dominio/tipos";
 
 const correo = (id: string, en: string) => ({ id, en, de: null });
@@ -58,5 +58,28 @@ describe("lecturasPorRevisar y almacenamiento", () => {
     mapa.set("fr8bid-lecturas-ia-ev3", "{roto");
     expect(cargarLecturas("ev3", almacen)).toEqual({});
     expect(() => guardarLecturas("ev1", {}, { setItem: () => { throw new Error("lleno"); } })).not.toThrow();
+  });
+});
+
+describe("combinarLecturas (revisión programada de Rateware)", () => {
+  const fila = (id: string, extra: Partial<LecturaServidor> = {}): LecturaServidor => ({
+    gmail_message_id: id, vendor_id: "c1", received_at: "2026-11-16T20:00:00Z", status: "proposed",
+    reading: { lectura: { tipo: "oferta", resumen: "", ofertas: [], dudas: [] } as any, recortado: true }, error: null, created_at: "2026-11-16T20:15:00Z", ...extra
+  });
+  it("suma los borradores del servidor con el nombre del carrier y evita volver a leerlos", () => {
+    const todas = combinarLecturas({}, [fila("a")], capturables);
+    expect(todas.a).toMatchObject({ carrier: "JPI", en: "2026-11-16T20:00:00Z", fallo: null, revisado: false, lectura: { recortado: true } });
+    const d = detalle({ p1: { correos: [correo("a", "2026-11-16T20:00:00Z")] } });
+    expect(correosPendientes(d, capturables, todas)).toEqual([]);
+    expect(lecturasPorRevisar(todas, capturables).map((l) => l.correoId)).toEqual(["a"]);
+  });
+  it("lo de este navegador gana: un correo ya revisado no regresa", () => {
+    const todas = combinarLecturas({ a: guardada("a", { revisado: true }) }, [fila("a")], capturables);
+    expect(todas.a.revisado).toBe(true);
+  });
+  it("un fallo del servidor queda como fallo (se reintenta aquí al día siguiente)", () => {
+    const todas = combinarLecturas({}, [fila("f", { status: "failed", reading: null, error: "IA_FALLO" })], capturables);
+    expect(todas.f).toMatchObject({ lectura: null, fallo: "IA_FALLO" });
+    expect(lecturasPorRevisar(todas, capturables)).toEqual([]);
   });
 });

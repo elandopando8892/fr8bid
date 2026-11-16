@@ -274,3 +274,16 @@ describe("correo adjunto (.eml) ya convertido a texto", () => {
     expect(t.anexos).toEqual([{ nombre: "q.eml", texto: "$5,915.36" }]);
   });
 });
+
+describe("secretoValido (revisión programada)", () => {
+  const s = "x".repeat(40);
+  it("solo entra con el secreto exacto y configurado", async () => {
+    const { secretoValido } = await import("../src/servidor/lectura");
+    expect(secretoValido(s, s)).toBe(true);
+    expect(secretoValido(s + "y", s)).toBe(false);
+    expect(secretoValido("", "")).toBe(false);
+    expect(secretoValido(undefined, s)).toBe(false);
+    expect(secretoValido(["a"], s)).toBe(false);
+    expect(secretoValido("corto", "corto")).toBe(false); // secretos de menos de 32 caracteres no valen
+  });
+});

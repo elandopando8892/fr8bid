@@ -3,8 +3,8 @@
 // deja su propuesta como borrador. Nada se guarda como oferta sin confirmar.
 // Lo leído se recuerda en este navegador para no pagar dos veces la misma lectura.
 
-import type { Lectura } from "./lectura";
-import type { CorreoRespuesta, Detalle } from "./tipos";
+import type { Lectura } from "./lectura.js";
+import type { CorreoRespuesta, Detalle } from "./tipos.js";
 
 // Tope por apertura de la página: cada lectura cuesta unos 0.03 USD.
 export const MAX_LECTURAS_POR_APERTURA = 5;
@@ -86,4 +86,42 @@ export function lecturasPorRevisar(leidas: Record<string, LecturaGuardada>, capt
   return Object.values(leidas)
     .filter((l) => l.lectura && !l.revisado && capturables.has(l.carrierId))
     .sort((a, b) => b.en.localeCompare(a.en));
+}
+
+// Lecturas que dejó la revisión programada de Rateware (cada 15 min, aunque nadie abra la página).
+// Fila de list_rfx_reply_readings: reading es la respuesta de /api/lectura ({ lectura, recortado }).
+export interface LecturaServidor {
+  gmail_message_id: string;
+  vendor_id: string | null;
+  received_at: string | null;
+  status: "proposed" | "failed";
+  reading: { lectura?: Lectura; recortado?: boolean } | null;
+  error: string | null;
+  created_at: string;
+}
+
+// Une lo leído en el servidor con lo de este navegador. Lo local gana (ahí vive «revisado»), así que
+// un correo ya guardado o descartado aquí no regresa. Lo del servidor evita pagar dos veces la lectura.
+export function combinarLecturas(
+  locales: Record<string, LecturaGuardada>,
+  servidor: LecturaServidor[],
+  carriers: Map<string, string>
+): Record<string, LecturaGuardada> {
+  const salida = { ...locales };
+  for (const f of servidor) {
+    if (!f?.gmail_message_id || salida[f.gmail_message_id]) continue;
+    const carrierId = f.vendor_id || "";
+    const lectura = f.status === "proposed" && f.reading?.lectura ? { ...f.reading.lectura, recortado: Boolean(f.reading.recortado) } : null;
+    salida[f.gmail_message_id] = {
+      correoId: f.gmail_message_id,
+      carrierId,
+      carrier: carriers.get(carrierId) || "Carrier",
+      en: f.received_at || f.created_at,
+      leidoEn: f.created_at,
+      lectura,
+      fallo: lectura ? null : f.error || "La IA no pudo leer este correo.",
+      revisado: false
+    };
+  }
+  return salida;
 }

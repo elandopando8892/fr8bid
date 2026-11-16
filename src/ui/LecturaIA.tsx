@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { ErrorApi } from "../cliente/api";
 import type { AdjuntoLectura, AnexoTexto, CanalLectura, CorreoTraido, Lectura, TipoAdjunto } from "../dominio/lectura";
 import { bytesBase64, MAX_ADJUNTOS_LECTURA, MAX_BYTES_ADJUNTOS, MAX_TEXTO_LECTURA, TIPOS_ADJUNTO } from "../dominio/lectura";
-import { cargarLecturas, correosPendientes, guardarLecturas, lecturasPorRevisar, type LecturaGuardada } from "../dominio/lecturaAutomatica";
+import { cargarLecturas, combinarLecturas, correosPendientes, guardarLecturas, lecturasPorRevisar, type LecturaGuardada } from "../dominio/lecturaAutomatica";
 import type { CorreoRespuesta, Detalle, Participacion, Ruta } from "../dominio/tipos";
 import { Confirmar, dinero, plural } from "./comun";
 import * as I from "./Iconos";
@@ -91,14 +91,18 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
   const carriers = new Map<string, string>();
   for (const r of d.rutas) for (const p of r.participaciones) if (capturable(r, p)) carriers.set(p.carrierId, p.carrier);
 
-  // Lectura automática: al abrir el evento, la IA lee los correos nuevos de carriers (hasta 5 por apertura).
+  // Lectura automática: Rateware revisa cada 15 min y deja borradores; al abrir el evento se suman y la IA
+  // lee aquí solo los correos que falten (hasta 5 por apertura).
   // Solo deja borradores; guardar una oferta sigue pidiendo confirmación.
   useEffect(() => {
     if (enCurso.current || s.rol === "viewer" || d.evento.estado !== "abierto" || !carriers.size) return;
-    const pendientes = correosPendientes(d, carriers, cargarLecturas(d.evento.id));
-    if (!pendientes.length) return;
     enCurso.current = true;
     void (async () => {
+      // Primero lo que ya leyó la revisión programada de Rateware: no se paga dos veces.
+      const conServidor = combinarLecturas(cargarLecturas(d.evento.id), await s.api.lecturasServidor(d.evento.id), carriers);
+      guardarLecturas(d.evento.id, conServidor);
+      setLeidas(conServidor);
+      const pendientes = correosPendientes(d, carriers, conServidor);
       for (const x of pendientes) {
         setLeyendoAuto(x.carrier);
         const base = { correoId: x.correo.id, carrierId: x.carrierId, carrier: x.carrier, en: x.correo.en, leidoEn: new Date().toISOString(), revisado: false };
