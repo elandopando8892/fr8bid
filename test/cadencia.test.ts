@@ -95,11 +95,18 @@ describe("cadencia por falta de profundidad", () => {
     const conCola = detalle(parts, [...avisos, borrador]);
     expect(intentosPorPreparar(conCola, horas(8), "2026-10-23").map((x) => x.participacion.id)).toEqual(["b"]);
     expect(de(conCola, "a", horas(8))?.enCola).toBe(true);
-    const texto = textoIntento(d, d.rutas[0], { intento: 2 });
+    const texto = textoIntento(d, { intento: 2 });
     expect(texto.length).toBeLessThanOrEqual(LIMITE_TEXTO_INTENTO);
-    expect(texto).toContain("San Luis Potosí → Tulsa");
+    // Es del bid completo: cuenta las rutas del evento y no nombra una sola.
+    expect(texto).toContain(d.rutas.length === 1 ? "la ruta" : `las ${d.rutas.length} rutas`);
+    expect(textoIntento({ ...d, rutas: [d.rutas[0], d.rutas[0], d.rutas[0]] }, { intento: 2 })).toContain("las 3 rutas");
+    expect(texto).not.toContain("→");
+    expect(textoIntento(d, { intento: 3 })).toMatch(/^Último aviso/);
     expect(texto).not.toMatch(/token=/);
     expect(claveIntento("e", "a", 2)).toBe(claveIntento("e", "a", 2));
+    // No choca con las claves del seguimiento por ruta (sin sufijo), ya archivadas.
+    expect(claveIntento("e", "a", 2)).toBe("fr8bid-intento-2-e-a-bid");
+    expect(claveIntento("e", "a", 2).startsWith("fr8bid-intento-")).toBe(true);
   });
 
   it("el 4º intento abre WhatsApp con número y texto; sin número o «no contactar» no hay liga", () => {

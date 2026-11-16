@@ -2,22 +2,25 @@
 // recorrido usan esta misma capa; solo cambia el transporte (HTTP a /api o el
 // Rateware simulado detrás del mismo proxy).
 
-import type { ConsultaTelefono, Telefono } from "../dominio/telefonos";
-import { MAX_TELEFONOS, revisarTelefonos } from "../servidor/telefonos";
-import type { CorreoRevelado, PersonaApollo } from "../dominio/apollo";
-import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier } from "../dominio/contactos";
-import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit";
-import type { EntradaCatalogo } from "../dominio/condiciones-r1";
-import { MAX_PAGINAS, POR_PAGINA, claveSegmento, consultaSegmento, leerHistorialSegmento, segmentoDeRuta, type HistorialSegmento, type Segmento } from "../dominio/segmento";
-import { campanaDelEvento, campanaFr8bid, elegirPlantilla } from "../dominio/invitacion";
-import { operacionEntrega } from "../dominio/operacion";
-import { notasConCierre } from "../dominio/cierre";
-import { hoyMexico, primario, versionMasReciente, versionVigente } from "../dominio/recorrido";
-import { ESPERA_ENTRE_TANDAS_MS, esCuota, leerResultado, operacionTanda, planearTandas, requiereAtencion, type ResultadoEnvio } from "../dominio/tandas";
-import type { Aviso, Detalle, EntregaLocal, Recibo, ResumenEvento } from "../dominio/tipos";
-import { manejar, type Respuesta, type Servicio } from "../servidor/proxy";
-import type { RatewareSimulado } from "../simulado/rateware";
-import * as mapear from "./mapear";
+import type { ConsultaTelefono, Telefono } from "../dominio/telefonos.js";
+import { MAX_TELEFONOS, revisarTelefonos } from "../servidor/telefonos.js";
+import { leerRespuesta } from "../servidor/lectura.js";
+import { correoParaLectura, type AdjuntoLectura, type AnexoTexto, type CanalLectura, type CorreoTraido, type Lectura, type RutaLectura } from "../dominio/lectura.js";
+import type { CorreoRevelado, PersonaApollo } from "../dominio/apollo.js";
+import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier } from "../dominio/contactos.js";
+import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit.js";
+import type { EntradaCatalogo } from "../dominio/condiciones-r1.js";
+import { MAX_PAGINAS, POR_PAGINA, claveSegmento, consultaSegmento, leerHistorialSegmento, segmentoDeRuta, type HistorialSegmento, type Segmento } from "../dominio/segmento.js";
+import { campanaDelEvento, campanaFr8bid, elegirPlantilla } from "../dominio/invitacion.js";
+import { operacionEntrega } from "../dominio/operacion.js";
+import { notasConCierre } from "../dominio/cierre.js";
+import { env } from "../bidware/config/env.js";
+import { hoyMexico, primario, versionMasReciente, versionVigente } from "../dominio/recorrido.js";
+import { ESPERA_ENTRE_TANDAS_MS, esCuota, leerResultado, operacionTanda, planearTandas, requiereAtencion, type ResultadoEnvio } from "../dominio/tandas.js";
+import type { Aviso, Detalle, EntregaLocal, Recibo, ResumenEvento } from "../dominio/tipos.js";
+import { manejar, type Respuesta, type Servicio } from "../servidor/proxy.js";
+import type { RatewareSimulado } from "../simulado/rateware.js";
+import * as mapear from "./mapear.js";
 
 export type Transporte = (servicio: Servicio, body: Record<string, unknown>) => Promise<Respuesta>;
 
@@ -98,6 +101,29 @@ export function revisorHttp(token: () => Promise<string | null>): RevisorTelefon
   };
 }
 
+// Lectura con IA de la respuesta de un carrier (POST /api/lectura). Solo
+// propone: nada se guarda hasta que el equipo confirma.
+export type LectorRespuestas = (body: Record<string, unknown>) => Promise<{ status: number; body: any }>;
+
+export function lectorHttp(token: () => Promise<string | null>): LectorRespuestas {
+  return async (body) => {
+    const t = await token();
+    try {
+      const r = await fetch("/api/lectura", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(t ? { authorization: `Bearer ${t}` } : {}) },
+        body: JSON.stringify(body)
+      });
+      return { status: r.status, body: await r.json().catch(() => ({ error: "Respuesta no válida", code: "RESPUESTA_INVALIDA" })) };
+    } catch {
+      return { status: 504, body: { error: "Sin conexión con Fr8Bid.", code: "SIN_RESPUESTA" } };
+    }
+  };
+}
+
+// En el simulado no hay IA: responde «no configurada» y la captura sigue a mano.
+export const lectorSimulado: LectorRespuestas = async (body) => leerRespuesta(body, true, null);
+
 // En el simulado no hay IA: solo reglas (los dudosos siguen dudosos).
 export const revisorSimulado: RevisorTelefonos = async (telefonos) => revisarTelefonos({ telefonos }, true, null);
 
@@ -133,7 +159,28 @@ export interface RevisionTelefonos {
 }
 
 export class MesaApi {
-  constructor(private t: Transporte, private hoy: () => string = () => hoyMexico(), private revisor: RevisorTelefonos = revisorSimulado, private apollo: ConsultaApollo = apolloSimulado) {}
+  constructor(private t: Transporte, private hoy: () => string = () => hoyMexico(), private revisor: RevisorTelefonos = revisorSimulado, private apollo: ConsultaApollo = apolloSimulado, private lector: LectorRespuestas = lectorSimulado) {}
+
+  // La IA lee lo que contestó el carrier y propone la oferta por ruta. Solo
+  // viajan el texto (sin el correo citado), los archivos subidos, el nombre
+  // del carrier y origen, destino y equipo de cada ruta. No guarda nada: el resultado es un borrador para confirmar.
+  async leerRespuesta(c: { texto: string; canal: CanalLectura; carrier: string; rutas: RutaLectura[]; adjuntos?: AdjuntoLectura[]; anexos?: AnexoTexto[] }): Promise<Lectura & { recortado: boolean }> {
+    const r = await this.lector({ ...c, hoy: this.hoy() });
+    if (r.status < 200 || r.status >= 300) throw new ErrorApi(r.status, String(r.body?.code || r.status), String(r.body?.error || "La IA no respondió"));
+    return { ...r.body.lectura, recortado: Boolean(r.body.recortado) };
+  }
+
+  // Texto y PDF/imágenes de un correo del carrier, desde Gmail vía Rateware
+  // (solo lectura). Si Rateware aún no tiene la acción, el equipo pega el texto.
+  async traerCorreo(eventId: string, gmailMessageId: string): Promise<CorreoTraido> {
+    try {
+      return correoParaLectura(await this.rw({ action: "get_rfx_carrier_reply", event_id: eventId, gmail_message_id: gmailMessageId }));
+    } catch (e) {
+      if (e instanceof ErrorApi && e.status === 404) throw new ErrorApi(404, "CORREO_NO_ENCONTRADO", "Ese correo ya no está en Gmail o no es una respuesta a este evento. Pega el texto.");
+      if (e instanceof ErrorApi && e.status >= 500) throw new ErrorApi(e.status, "GMAIL_NO_RESPONDIO", "Gmail no respondió. Intenta de nuevo o pega el texto.");
+      throw new ErrorApi(e instanceof ErrorApi ? e.status : 400, "CORREO_NO_DISPONIBLE", "Rateware todavía no entrega el correo. Pega el texto o sube el archivo.");
+    }
+  }
 
   private async pedirApollo(body: Record<string, unknown>) {
     const r = await this.apollo(body);
@@ -327,13 +374,17 @@ export class MesaApi {
   }
   // 2º/3º intento: rateware-api deja un borrador en la Cola como respuesta en
   // el hilo de Gmail de la invitación (con la liga privada). No envía: el envío
-  // se aprueba en la Cola de Rateware.
+  // se aprueba en la Cola. scope «event»: el seguimiento es del bid completo, no
+  // de una ruta. app_origin: la liga del Bid Room sale con el dominio de Fr8Bid
+  // (sin él Rateware usa rateware.vercel.app).
   prepararIntento(eventId: string, participacionId: string, texto: string, clave: string) {
     return this.rw({
       action: "draft_bid_room_carrier_message",
       event_id: eventId,
       rfx_event_id: eventId,
       rfx_lane_vendor_id: participacionId,
+      scope: "event",
+      app_origin: env.appOrigin,
       body: texto,
       idempotency_key: clave,
       confirmed: true,
@@ -352,6 +403,8 @@ export class MesaApi {
     diasTransito: number | null;
     canal: "email" | "phone" | "whatsapp" | "other";
     notas: string;
+    // La propuso la IA a partir del texto del carrier y el equipo la confirmó.
+    leidaConIA?: boolean;
   }) {
     const etiqueta = { email: "Email", phone: "Phone", whatsapp: "WhatsApp", other: "Other" }[c.canal];
     const notas = c.notas.trim();
@@ -368,7 +421,7 @@ export class MesaApi {
         notes: notas || null,
         capture_source: "manual_operator",
         manual_source_channel: c.canal,
-        source_note: `Captured from ${etiqueta}${notas ? `: ${notas}` : ""}`
+        source_note: `Captured from ${etiqueta}${c.leidaConIA ? " (read by AI, confirmed by operator)" : ""}${notas ? `: ${notas}` : ""}`
       }
     });
   }

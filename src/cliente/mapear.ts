@@ -314,7 +314,10 @@ export function respuestas(filas: Fila[]): Record<string, RespuestaCarrier> {
     const canales = (Array.isArray(f.channels) ? f.channels : [])
       .map((c: string) => (c === "email" ? "correo" : c === "bid_room_chat" ? "chat" : c === "whatsapp" ? "whatsapp" : null))
       .filter((c: string | null): c is "correo" | "chat" | "whatsapp" => Boolean(c));
-    salida[id] = { participacionId: id, canales, primeraEn: String(f.first_reply_at || ""), ultimaEn: String(f.last_reply_at || f.first_reply_at || "") };
+    const correos = (Array.isArray(f.messages) ? f.messages : [])
+      .filter((m: Fila) => typeof m?.gmail_message_id === "string" && m.gmail_message_id)
+      .map((m: Fila) => ({ id: String(m.gmail_message_id), en: String(m.at || ""), de: m.from ? String(m.from) : null }));
+    salida[id] = { participacionId: id, canales, primeraEn: String(f.first_reply_at || ""), ultimaEn: String(f.last_reply_at || f.first_reply_at || ""), correos };
   }
   return salida;
 }

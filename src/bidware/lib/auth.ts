@@ -3,7 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { env } from "@/config/env";
 
 /**
- * Supabase Auth helpers (Google OAuth). Replaces the old Kinde integration.
+ * Supabase Auth helpers (Google OAuth).
  * The access token returned here is what the rateware Edge Functions receive
  * as the bearer, so the same session authorizes every shared-backend call.
  */

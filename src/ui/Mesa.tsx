@@ -23,6 +23,7 @@ import {
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
 import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
 import { cambiosComerciales, describirModelo, modeloCorto, tarifaVenta } from "../dominio/modelo";
+import { bloqueoRespondio, bloqueoRevision, candidatasCaptura, marcablesRespondio } from "../dominio/acciones-mesa";
 import { candidatosRecordatorio, claveIntento, esperaRespuesta, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
 import type { CarrierFit } from "../dominio/carrierFit";
@@ -35,6 +36,7 @@ import type { Aviso, Detalle, EntregaLocal, Participacion, Recibo, Ruta } from "
 import { EditorCondiciones, ListaCondiciones, MatrizCondiciones } from "./condiciones";
 import { aCarga, Confirmar, Desactualizado, dinero, EstadoVista, fecha, Liga, plural, Prueba, type Carga } from "./comun";
 import { useSesion } from "./sesion";
+import { LecturaIA } from "./LecturaIA";
 
 // Fecha corta sin hora, para columnas angostas.
 const dia = (iso: string | null | undefined) =>
@@ -458,7 +460,7 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
   const accionOmitida = (o: (typeof omitidas)[number]) => (
     <>
       {!o.p.correo && ctx.rol !== "viewer" && <ContactosSugeridos vendorId={o.p.carrierId} />}
-      {ctx.rol === "admin" && o.estado === "sin_revision" && o.p.correo && (
+      {ctx.rol === "admin" && !bloqueoRevision(d, o.p) && (
         <Confirmar
           etiqueta="Revisado"
           clase="btn-chico"
@@ -963,10 +965,10 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
           {muestra && ctx.rol !== "viewer" && (
             <>
               <p className="tenue ayuda">
-                Texto del {muestra.paso.intento}º intento. Rateware lo pone dentro de su plantilla con el resumen de la ruta y el botón a la liga privada. Va en el hilo solo si el carrier ya
-                escribió; si no, sale como correo nuevo con asunto «Seguimiento {d.evento.folio} · origen → destino»:
+                Texto del {muestra.paso.intento}º intento, del bid completo. Rateware lo pone dentro de su plantilla con todas las rutas y el botón a la liga privada. Va en el hilo solo si el carrier ya
+                escribió; si no, sale como correo nuevo con asunto «Seguimiento {d.evento.folio} · {d.evento.nombre} · {d.rutas.length} rutas»:
               </p>
-              <p className="texto-aviso">{textoIntento(d, muestra.ruta, muestra.paso)}</p>
+              <p className="texto-aviso">{textoIntento(d, muestra.paso)}</p>
               <Confirmar
                 etiqueta={`Preparar ${plural(porPreparar.length, "intento", "intentos")}`}
                 clase="btn-secundario"
@@ -975,7 +977,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                   accion(async () => {
                     let listos = 0;
                     for (const x of porPreparar) {
-                      await s.api.prepararIntento(d.evento.id, x.participacion.id, textoIntento(d, x.ruta, x.paso), claveIntento(d.evento.id, x.participacion.id, x.paso.intento));
+                      await s.api.prepararIntento(d.evento.id, x.participacion.id, textoIntento(d, x.paso), claveIntento(d.evento.id, x.participacion.id, x.paso.intento));
                       listos++;
                     }
                     return listos;
@@ -1035,7 +1037,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
                         <I.Sobre size={14} />{abierto === x.carrierId ? "Ocultar" : "Recordatorio"}
                       </button>
                     )}
-                    {esperaRespuesta(x.estado) && ctx.rol !== "viewer" && d.evento.estado === "abierto" && (
+                    {!bloqueoRespondio(d, x) && ctx.rol !== "viewer" && (
                       <button className="btn-chico" onClick={() => setAbierto(abierto === `r:${x.carrierId}` ? null : `r:${x.carrierId}`)}>
                         <I.Check size={14} />{abierto === `r:${x.carrierId}` ? "Ocultar" : "Ya respondió"}
                       </button>
@@ -1162,7 +1164,8 @@ function YaRespondio({ d, s: x, accion }: { d: Detalle; s: ReturnType<typeof seg
   const [canal, setCanal] = useState<"email" | "whatsapp" | "phone">("email");
   const [rechazo, setRechazo] = useState(false);
   const [nota, setNota] = useState("");
-  const ids = x.pendientes.map((f) => f.participacion.id);
+  // Solo rutas por marcar según lo guardado (invitada o vista, sin oferta); un correo detectado no las excluye.
+  const ids = marcablesRespondio(x.pendientes).map((f) => f.participacion.id);
   return (
     <div className="aviso-caja">
       <div className="rejilla">
@@ -1198,11 +1201,11 @@ function YaRespondio({ d, s: x, accion }: { d: Detalle; s: ReturnType<typeof seg
 // versión nueva; las anteriores no se tocan.
 function CapturaEquipo({ d, ruta, accion }: { d: Detalle; ruta: Ruta; accion: Props["accion"] }) {
   const s = useSesion();
-  const candidatas = ruta.participaciones.filter((x) => !["preseleccionada", "declino"].includes(x.estado) && !x.rol);
+  const candidatas = candidatasCaptura(d, ruta);
   const vacio = { id: "", tarifa: "", moneda: "USD", vigencia: "", capacidad: "", transito: "", canal: "email" as const, notas: "" };
   const [f, setF] = useState<{ id: string; tarifa: string; moneda: string; vigencia: string; capacidad: string; transito: string; canal: "email" | "phone" | "whatsapp" | "other"; notas: string }>(vacio);
   const [abierto, setAbierto] = useState(false);
-  if (s.rol === "viewer" || !candidatas.length || d.evento.estado === "adjudicado" || d.evento.estado === "archivado") return null;
+  if (s.rol === "viewer" || !candidatas.length) return null;
   if (!abierto) return <button className="btn-texto con-icono" onClick={() => setAbierto(true)}><I.Mas size={14} />Capturar oferta recibida por otro canal</button>;
   const tarifa = Number(f.tarifa.replace(/,/g, ""));
   const num = (x: string) => (x.trim() === "" ? null : Number(x));
@@ -1297,6 +1300,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
         </div>
       )}
       {d.evento.estado === "cerrado" && ctx.rol === "admin" && <AdjudicarEnLote d={d} ctx={ctx} accion={accion} />}
+      <LecturaIA d={d} accion={accion} advertenciaReal={ADVERTENCIA_REAL(s, d)} />
       {d.rutas.map((ruta, i) => {
         const filas = [...conOferta(ruta)].sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
         const sel = ruta.participaciones.find((x) => x.id === elegido) ?? null;

@@ -47,6 +47,8 @@ const READS: Record<string, Set<string>> = {
     "preview_quote_email", "list_quote_queue", "list_spot_request_quotes", "suggest_lane_miles",
     // The FCM estimate prices a route without saving it, like suggest_lane_miles (opened 2026-09-29).
     "estimate_lane_fcm",
+    // The website tray: its list and a ten-minute link to a received rate sheet (rateware#210).
+    "list_web_intake", "web_rate_sheet_url",
   ]),
 };
 
