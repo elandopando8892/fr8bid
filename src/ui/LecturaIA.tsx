@@ -3,10 +3,11 @@
 // ruta y el equipo la revisa. Nada se
 // guarda hasta confirmar; cada oferta entra como una versión más.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ErrorApi } from "../cliente/api";
 import type { AdjuntoLectura, AnexoTexto, CanalLectura, CorreoTraido, Lectura, TipoAdjunto } from "../dominio/lectura";
 import { bytesBase64, MAX_ADJUNTOS_LECTURA, MAX_BYTES_ADJUNTOS, MAX_TEXTO_LECTURA, TIPOS_ADJUNTO } from "../dominio/lectura";
+import { cargarLecturas, correosPendientes, guardarLecturas, lecturasPorRevisar, type LecturaGuardada } from "../dominio/lecturaAutomatica";
 import type { CorreoRespuesta, Detalle, Participacion, Ruta } from "../dominio/tipos";
 import { Confirmar, dinero, plural } from "./comun";
 import * as I from "./Iconos";
@@ -42,6 +43,32 @@ function aBase64(f: File): Promise<string> {
 
 const capturable = (ruta: Ruta, p: Participacion) => !["preseleccionada", "declino"].includes(p.estado) && !p.rol && !ruta.participaciones.some((x) => x.rol === "primario");
 
+const rutasLectura = (d: Detalle) => d.rutas.map((r) => ({ id: r.id, numero: r.numero, origen: r.origen, destino: r.destino, equipo: r.equipo, objetivo: r.objetivo }));
+const fecha = (en: string) => new Date(en).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Monterrey" });
+
+// Propuesta de la IA convertida en filas editables, solo en rutas donde ese carrier admite captura.
+function aFilas(d: Detalle, l: Lectura, carrierId: string): Fila[] {
+  return l.ofertas.flatMap((o) => {
+    const ruta = d.rutas.find((r) => r.id === o.rutaId);
+    if (!ruta) return [];
+    const p = ruta.participaciones.find((x) => x.carrierId === carrierId) ?? null;
+    const sirve = p && capturable(ruta, p) ? p : null;
+    return [{
+      ruta,
+      p: sirve,
+      incluir: Boolean(sirve) && o.tarifa !== null,
+      tarifa: o.tarifa === null ? "" : String(o.tarifa),
+      moneda: o.moneda || "",
+      vigencia: o.vigencia || "",
+      capacidad: o.capacidadSemanal === null ? "" : String(o.capacidadSemanal),
+      transito: o.diasTransito === null ? "" : String(o.diasTransito),
+      notas: o.notas,
+      cita: o.cita,
+      dudas: o.dudas
+    }];
+  });
+}
+
 export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: Accion; advertenciaReal: string }) {
   const s = useSesion();
   const [abierto, setAbierto] = useState(false);
@@ -56,25 +83,97 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
   const [trayendo, setTrayendo] = useState<string | null>(null);
   const [traido, setTraido] = useState<(CorreoTraido & { id: string }) | null>(null);
   const [anexos, setAnexos] = useState<AnexoTexto[]>([]);
+  const [leidas, setLeidas] = useState<Record<string, LecturaGuardada>>(() => cargarLecturas(d.evento.id));
+  const [leyendoAuto, setLeyendoAuto] = useState<string | null>(null);
+  const [revisando, setRevisando] = useState<LecturaGuardada | null>(null);
+  const enCurso = useRef(false);
 
   const carriers = new Map<string, string>();
   for (const r of d.rutas) for (const p of r.participaciones) if (capturable(r, p)) carriers.set(p.carrierId, p.carrier);
+
+  // Lectura automática: al abrir el evento, la IA lee los correos nuevos de carriers (hasta 5 por apertura).
+  // Solo deja borradores; guardar una oferta sigue pidiendo confirmación.
+  useEffect(() => {
+    if (enCurso.current || s.rol === "viewer" || d.evento.estado !== "abierto" || !carriers.size) return;
+    const pendientes = correosPendientes(d, carriers, cargarLecturas(d.evento.id));
+    if (!pendientes.length) return;
+    enCurso.current = true;
+    void (async () => {
+      for (const x of pendientes) {
+        setLeyendoAuto(x.carrier);
+        const base = { correoId: x.correo.id, carrierId: x.carrierId, carrier: x.carrier, en: x.correo.en, leidoEn: new Date().toISOString(), revisado: false };
+        let registro: LecturaGuardada;
+        try {
+          const t = await s.api.traerCorreo(d.evento.id, x.correo.id);
+          const l = await s.api.leerRespuesta({ texto: t.texto, canal: "email", carrier: x.carrier, adjuntos: t.adjuntos, anexos: t.anexos, rutas: rutasLectura(d) });
+          registro = { ...base, lectura: l, fallo: null };
+        } catch (e) {
+          registro = { ...base, lectura: null, fallo: e instanceof ErrorApi ? e.message : "La IA no pudo leer este correo." };
+        }
+        const todas = { ...cargarLecturas(d.evento.id), [x.correo.id]: registro };
+        guardarLecturas(d.evento.id, todas);
+        setLeidas(todas);
+      }
+      setLeyendoAuto(null);
+      enCurso.current = false;
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [d.evento.id, d.evento.estado, d.respuestas, s.rol]);
+
   if (s.rol === "viewer" || !carriers.size || d.evento.estado === "adjudicado" || d.evento.estado === "archivado") return null;
+
+  const porRevisar = lecturasPorRevisar(leidas, carriers);
+  const revisar = (g: LecturaGuardada) => {
+    setCarrierId(g.carrierId);
+    setCanal("email");
+    setTexto("");
+    setAdjuntos([]);
+    setAnexos([]);
+    setTraido(null);
+    setError(null);
+    setLectura(g.lectura);
+    setFilas(aFilas(d, g.lectura!, g.carrierId));
+    setRevisando(g);
+    setAbierto(true);
+  };
   if (!abierto)
     return (
-      <p className="sin-margen">
-        <button className="btn-texto con-icono" onClick={() => setAbierto(true)}><I.Mas size={14} />Leer con IA una respuesta por correo o WhatsApp</button>
-      </p>
+      <>
+        {(porRevisar.length > 0 || leyendoAuto) && (
+          <div className="aviso-caja">
+            <h3>Respuestas por correo leídas por la IA</h3>
+            {leyendoAuto && <p className="tenue">Leyendo el correo de {leyendoAuto}…</p>}
+            <ul className="sin-margen">
+              {porRevisar.map((g) => (
+                <li key={g.correoId}>
+                  <strong>{g.carrier}</strong> · {fecha(g.en)} · {TIPO[g.lectura!.tipo]}
+                  {g.lectura!.ofertas.length > 0 ? ` · ${plural(g.lectura!.ofertas.length, "ruta")}` : ""}{" "}
+                  <button className="btn-texto" onClick={() => revisar(g)}>Revisar</button>
+                </li>
+              ))}
+            </ul>
+            <p className="tenue">Son borradores: nada se guarda hasta que lo confirmes.</p>
+          </div>
+        )}
+        <p className="sin-margen">
+          <button className="btn-texto con-icono" onClick={() => setAbierto(true)}><I.Mas size={14} />Leer con IA una respuesta por correo o WhatsApp</button>
+        </p>
+      </>
     );
 
   const carrier = carriers.get(carrierId) || "";
-  const propia = (r: Ruta) => r.participaciones.find((p) => p.carrierId === carrierId) ?? null;
   const limpiar = () => {
     setLectura(null);
     setFilas([]);
     setError(null);
   };
   const cerrar = () => {
+    if (revisando) {
+      const todas = { ...cargarLecturas(d.evento.id), [revisando.correoId]: { ...revisando, revisado: true } };
+      guardarLecturas(d.evento.id, todas);
+      setLeidas(todas);
+      setRevisando(null);
+    }
     limpiar();
     setTexto("");
     setAdjuntos([]);
@@ -126,29 +225,9 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
     limpiar();
     setLeyendo(true);
     try {
-      const l = await s.api.leerRespuesta({ texto, canal, carrier, adjuntos, anexos, rutas: d.rutas.map((r) => ({ id: r.id, numero: r.numero, origen: r.origen, destino: r.destino, equipo: r.equipo, objetivo: r.objetivo })) });
+      const l = await s.api.leerRespuesta({ texto, canal, carrier, adjuntos, anexos, rutas: rutasLectura(d) });
       setLectura(l);
-      setFilas(
-        l.ofertas.flatMap((o) => {
-          const ruta = d.rutas.find((r) => r.id === o.rutaId);
-          if (!ruta) return [];
-          const p = propia(ruta);
-          const sirve = p && capturable(ruta, p) ? p : null;
-          return [{
-            ruta,
-            p: sirve,
-            incluir: Boolean(sirve) && o.tarifa !== null,
-            tarifa: o.tarifa === null ? "" : String(o.tarifa),
-            moneda: o.moneda || "",
-            vigencia: o.vigencia || "",
-            capacidad: o.capacidadSemanal === null ? "" : String(o.capacidadSemanal),
-            transito: o.diasTransito === null ? "" : String(o.diasTransito),
-            notas: o.notas,
-            cita: o.cita,
-            dudas: o.dudas
-          }];
-        })
-      );
+      setFilas(aFilas(d, l, carrierId));
     } catch (e) {
       setError(e instanceof ErrorApi ? e.message : "La IA no pudo leer esta respuesta. Captúrala a mano.");
     } finally {
@@ -168,7 +247,7 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
       <h2>Leer respuesta con IA</h2>
       <div className="rejilla">
         <label className="campo"><span>Carrier</span>
-          <select value={carrierId} onChange={(e) => { setCarrierId(e.target.value); setTraido(null); setAnexos([]); limpiar(); }}>
+          <select value={carrierId} onChange={(e) => { setCarrierId(e.target.value); setTraido(null); setAnexos([]); setRevisando(null); limpiar(); }}>
             <option value="">Elige…</option>
             {[...carriers].sort((a, b) => a[1].localeCompare(b[1])).map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
           </select>
@@ -185,7 +264,7 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
           <ul className="sin-margen">
             {correos.slice(0, 5).map((c) => (
               <li key={c.id}>
-                {new Date(c.en).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Monterrey" })}
+                {fecha(c.en)}
                 {c.de ? ` · ${c.de}` : ""}{" "}
                 <button className="btn-texto" disabled={Boolean(trayendo) || leyendo} onClick={() => void traer(c)}>
                   {trayendo === c.id ? "Trayendo…" : traido?.id === c.id ? "Traído" : "Traer este correo"}
@@ -225,6 +304,7 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
       {lectura && (
         <div className="aviso-caja">
           <h3>Borrador de la IA · {TIPO[lectura.tipo]}</h3>
+          {revisando && <p className="tenue">Leído automáticamente del correo del {fecha(revisando.en)}.</p>}
           {lectura.resumen && <p>{lectura.resumen}</p>}
           {lectura.recortado && <p className="tenue">No se leyó el correo citado (nuestra invitación con el objetivo).</p>}
           {lectura.dudas.length > 0 && <ul className="tenue">{lectura.dudas.map((x, i) => <li key={i}>{x}</li>)}</ul>}
