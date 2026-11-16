@@ -13,12 +13,12 @@ describe("contrato HTTP MCP", () => {
       return { status: r.status, body: await r.json() };
     } finally { await servidor.close(); }
   }
-  it("negocia y publica únicamente doce herramientas de lectura", async () => {
+  it("negocia y publica únicamente trece herramientas de lectura", async () => {
     const init = await rpc("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "test", version: "1" } });
     expect(init.status).toBe(200);
     expect(init.body.result.serverInfo.name).toBe("fr8bid-mcp-server");
     const lista = await rpc("tools/list");
-    expect(lista.body.result.tools).toHaveLength(12);
+    expect(lista.body.result.tools).toHaveLength(13);
     expect(lista.body.result.tools.every((t: any) => t.annotations.readOnlyHint)).toBe(true);
     const r = await rpc("tools/call", { name: "eventos", arguments: {} });
     expect(r.body.result.structuredContent.eventos).toEqual([]);
