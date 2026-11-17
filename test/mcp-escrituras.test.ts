@@ -96,6 +96,25 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     expect(await codigo(m.ej("preparar_ya_respondio", { event_id: x.eventId, participacion_ids: [x.p.B], respuesta: "respondio", canal: "email" }))).toBe("YA_MARCADA");
   });
 
+  it("quien respondió sin tarifa recibe el recordatorio 48 h antes del cierre, con su propia clave", async () => {
+    const x = await escenario();
+    const m = mcp(x);
+    const v = await m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.B.id, respuesta: "respondio", canal: "email", nota: "Pregunta el volumen" });
+    expect((await m.ej("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
+    // due_date 2026-11-20: cierra 23:59 de México = 2026-11-21T05:59Z; 47 h antes ya toca el de 48 h.
+    x.reloj("2026-11-19T06:59:00Z");
+    const i = await m.ej("preparar_intentos", { event_id: x.eventId });
+    const b = i.vista_previa.destinatarios.find((d: any) => d.participacion_id === x.p.B);
+    expect(b).toMatchObject({ tipo: "recordatorio 48 h antes del cierre (respondió sin tarifa)" });
+    expect(b.texto).toMatch(/^Gracias por su respuesta\. Le recordamos que el plazo para cotizar RFx-FR8BID-PRUEBA-01 vence el 20 de noviembre de 2026/);
+    expect(m.escritas()).toHaveLength(1); // preparar no escribe
+    expect((await m.ej("confirmar", { confirmacion_id: i.confirmacion_id, frase_ok: "sí" })).estado).toBe("aplicada");
+    const claves = m.escritas().filter(e => e.action === "draft_bid_room_carrier_message").map(e => ({ p: e.rfx_lane_vendor_id, k: e.idempotency_key }));
+    expect(claves.find(c => c.p === x.p.B)?.k).toBe(`fr8bid-intento-cierre-48h-${x.eventId}-${x.p.B}-bid`);
+    // C (sin respuesta) sigue con su cadencia normal.
+    expect(claves.find(c => c.p === x.p.C)?.k).toBe(`fr8bid-intento-2-${x.eventId}-${x.p.C}-bid`);
+  });
+
   it("token: firma, vencimiento, otro usuario o cliente y h alterado se rechazan sin escribir", async () => {
     const x = await escenario();
     const m = mcp(x);
@@ -505,7 +524,7 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     expect(m.escritas()).toEqual([]);
   });
 
-  it("HDships no se toca y PRIMA no se cierra ni se rechaza", async () => {
+  it("HDships no se toca y PRIMA no se cierra, no se rechaza ni recibe avisos", async () => {
     const x = await escenario();
     const m = mcp(x, "admin", "admin");
     const [hd] = EVENTOS_PROTEGIDOS;
@@ -516,6 +535,8 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
     // PRIMA: no se marca rechazo y el plazo solo se extiende (nunca hacia atrás, nunca estado).
     expect(await codigo(m.ej("preparar_ya_respondio", { event_id: x.eventId, carrier_id: x.carriers.C.id, respuesta: "rechazo", canal: "email" }))).toBe("PRIMA_PROTEGIDO");
     expect(await codigo(m.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-10-28" }))).toBe("FECHA_PASADA");
+    // PRIMA sin avisos (17-nov-2026): preparar_intentos no prepara nada.
+    expect(await codigo(m.ej("preparar_intentos", { event_id: x.eventId }))).toBe("EVENTO_SIN_AVISOS");
     expect(await codigo(m.ej("preparar_cambio_evento", { event_id: x.eventId, nueva_fecha: "2026-12-01", status: "closed" }))).toBe("ZodError");
     expect(ESCRITURAS_MCP.has("update_rfx_event")).toBe(false);
     expect(m.escritas()).toEqual([]);
