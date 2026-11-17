@@ -12,9 +12,10 @@ import type { Vendor } from "@/types/domain";
 import {
   decisionError,
   dismissWebIntake,
-  laneFromLead,
+  lanesFromLead,
+  laneCount,
+  missingForLanes,
   listWebIntake,
-  missingForPromotion,
   promoteWebLead,
   registerWebRateSheet,
   webRateSheetUrl,
@@ -135,7 +136,8 @@ export function WebIntakeTray({ onPromoted }: { onPromoted?: () => void }) {
                 <td>
                   {row.kind === "lead" ? (
                     <>
-                      <div>{text(row.lead, "origin_city")} → {text(row.lead, "destination_city")}</div>
+                      <div>{text(row.lead, "origin_city")} → {text(row.lead, "destination_city")}
+                        {laneCount(row.lead) > 1 && <span className="cell-sub"> · {tr("lanesCount", laneCount(row.lead))}</span>}</div>
                       <div className="cell-sub">{[text(row.lead, "truck_type"), text(row.lead, "loads_per_week") && `${text(row.lead, "loads_per_week")}/sem`]
                         .filter(Boolean).join(" · ")}</div>
                     </>
@@ -199,12 +201,15 @@ export function WebIntakeTray({ onPromoted }: { onPromoted?: () => void }) {
 function PromoteDialog({ row, onClose, onDone }: { row: WebIntake; onClose: () => void; onDone: () => void }) {
   useLang();
   const [shipper, setShipper] = useState<ShipperOption | null>(null);
-  const [lane, setLane] = useState<WebLane>(() => laneFromLead(row.lead));
+  const [lanes, setLanes] = useState<WebLane[]>(() => lanesFromLead(row.lead));
+  const [included, setIncluded] = useState<boolean[]>(() => lanesFromLead(row.lead).map(() => true));
   const [currency, setCurrency] = useState<"USD" | "MXN">(text(row.lead, "currency").toUpperCase() === "MXN" ? "MXN" : "USD");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const missing = missingForPromotion(lane, shipper?.id ?? null);
-  const set = (key: keyof WebLane) => (e: { target: { value: string } }) => setLane((l) => ({ ...l, [key]: e.target.value }));
+  const chosen = lanes.filter((_, i) => included[i]);
+  const missing = missingForLanes(chosen, shipper?.id ?? null);
+  const set = (index: number, key: keyof WebLane) => (e: { target: { value: string } }) =>
+    setLanes((all) => all.map((l, i) => (i === index ? { ...l, [key]: e.target.value } : l)));
   const fields: [keyof WebLane, string, boolean][] = [
     ["origin_text", tr("origin"), true], ["destination_text", tr("destination"), true], ["truck_type", tr("truckType"), true],
     ["weekly_volume", tr("loadsPerWeek"), true], ["trailer_requirements", tr("trailer"), false], ["average_weight", tr("weight"), false],
@@ -217,7 +222,7 @@ function PromoteDialog({ row, onClose, onDone }: { row: WebIntake; onClose: () =
     setBusy(true);
     setError(null);
     try {
-      await promoteWebLead(row.id, shipper.id, lane, currency);
+      await promoteWebLead(row.id, shipper.id, chosen, currency);
       onDone();
     } catch (e) {
       setError(decisionError(e));
@@ -244,17 +249,30 @@ function PromoteDialog({ row, onClose, onDone }: { row: WebIntake; onClose: () =
         <span>{tr("shipper")}</span>
         <ShipperPicker value={shipper} onChange={setShipper} autoFocus />
       </div>
-      <div className="web-intake-grid">
-        {fields.map(([key, label, required]) => (
-          <label key={key} className="intake-field">
-            <span>{label}{required ? " *" : ""}</span>
-            <input value={lane[key]} onChange={set(key)} inputMode={key === "weekly_volume" || key === "average_weight" ? "decimal" : undefined} />
+      {lanes.map((lane, index) => (
+        <fieldset key={index} className="web-intake-grid" disabled={!included[index]}>
+          {lanes.length > 1 && (
+            <legend>
+              <label>
+                <input type="checkbox" checked={included[index]} disabled={false}
+                  onChange={(e) => setIncluded((all) => all.map((v, i) => (i === index ? e.target.checked : v)))} />
+                {" "}{tr("laneN", index + 1)} · {tr("includeLane")}
+              </label>
+            </legend>
+          )}
+          {fields.map(([key, label, required]) => (
+            <label key={key} className="intake-field">
+              <span>{label}{required ? " *" : ""}</span>
+              <input value={lane[key]} onChange={set(index, key)} inputMode={key === "weekly_volume" || key === "average_weight" ? "decimal" : undefined} />
+            </label>
+          ))}
+          <label className="intake-field web-intake-wide">
+            <span>{tr("notes")}</span>
+            <textarea rows={3} value={lane.notes} onChange={set(index, "notes")} />
           </label>
-        ))}
-        <label className="intake-field web-intake-wide">
-          <span>{tr("notes")}</span>
-          <textarea rows={3} value={lane.notes} onChange={set("notes")} />
-        </label>
+        </fieldset>
+      ))}
+      <div className="web-intake-grid">
         <label className="intake-field">
           <span>{tr("currency")}</span>
           <select value={currency} onChange={(e) => setCurrency(e.target.value as "USD" | "MXN")}>

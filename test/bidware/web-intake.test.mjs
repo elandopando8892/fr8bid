@@ -84,3 +84,33 @@ test('server refusals read as the team would say them', () => {
   assert.match(m.decisionError(new Error('web_lead_shipper_required')), /shipper o carrier/);
   assert.match(m.decisionError(new Error('anything else')), /No se guardó nada/);
 });
+
+test('several lanes: every lane of the request, in order, each checked on its own', () => {
+  const lead = { origin_city: 'Monterrey, NL', destination_city: 'Dallas, TX', truck_type: 'Tractor', loads_per_week: '3', operation: 'Autopartes',
+    lanes: [{ origin_city: 'Querétaro, QRO', destination_city: 'Houston, TX', loads_per_week: '2' }, 'not a lane', null] };
+  const lanes = m.lanesFromLead(lead);
+  assert.equal(lanes.length, 2);
+  assert.equal(m.laneCount(lead), 2);
+  assert.equal(m.laneCount({ origin_city: 'A' }), 1);
+  assert.equal(lanes[1].origin_text, 'Querétaro, QRO');
+  assert.equal(lanes[1].notes, '', 'the lead-level notes stay on the first lane');
+  assert.deepEqual(m.missingForLanes(lanes, SHIPPER), ['Ruta 2: Tipo de equipo']);
+  assert.deepEqual(m.missingForLanes([lanes[0]], null), ['Shipper']);
+  assert.deepEqual(m.missingForLanes([], SHIPPER), ['al menos una ruta']);
+  assert.equal(m.lanesFromLead({ lanes: Array.from({ length: 12 }, () => ({ origin_city: 'A' })) }).length, m.MAX_WEB_LANES);
+});
+
+test('several lanes go as one `lanes` array; one lane keeps the original shape', async () => {
+  const calls = api(() => ({ project_id: ID, replayed: false }));
+  const a = { ...m.laneFromLead({ origin_city: 'Monterrey', destination_city: 'Dallas', truck_type: 'Tractor' }), weekly_volume: '2' };
+  const b = { ...a, origin_text: ' Querétaro ' };
+  await m.promoteWebLead(ID, SHIPPER, [a, b], 'USD');
+  await m.promoteWebLead(ID, SHIPPER, [a], 'USD');
+  assert.deepEqual(calls[0].payload.lanes.map(l => l.origin_text), ['Monterrey', 'Querétaro']);
+  assert.equal('lane' in calls[0].payload, false);
+  assert.equal(calls[1].payload.lane.origin_text, 'Monterrey');
+  assert.equal('lanes' in calls[1].payload, false);
+  await assert.rejects(() => m.promoteWebLead(ID, SHIPPER, [], 'USD'));
+  await assert.rejects(() => m.promoteWebLead(ID, SHIPPER, Array.from({ length: 11 }, () => a), 'USD'));
+  assert.equal(calls.length, 2, 'invalid lane lists never reach the API');
+});
