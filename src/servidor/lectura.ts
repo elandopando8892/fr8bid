@@ -38,6 +38,17 @@ export interface Respuesta {
   body: { lectura: Lectura; recortado: boolean } | { error: string; code: string };
 }
 
+// La revisión programada de Rateware (cada 15 min) llama sin sesión de usuario: entra solo con el
+// secreto compartido FR8BID_LECTURA_SECRET. Comparación de tiempo constante; sin secreto configurado, nadie entra así.
+export function secretoValido(dado: unknown, esperado: string | undefined): boolean {
+  const a = typeof dado === "string" ? dado.trim() : "";
+  const b = (esperado || "").trim();
+  if (b.length < 32 || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 const corto = (x: unknown, max: number) => String(x ?? "").trim().slice(0, max);
 
 export async function leerRespuesta(body: any, sesionValida: boolean, leer: Leer | null): Promise<Respuesta> {

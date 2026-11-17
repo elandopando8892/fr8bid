@@ -7,6 +7,7 @@ import { MAX_TELEFONOS, revisarTelefonos } from "../servidor/telefonos.js";
 import { leerRespuesta } from "../servidor/lectura.js";
 import { correoParaLectura, type AdjuntoLectura, type AnexoTexto, type CanalLectura, type CorreoTraido, type Lectura, type RutaLectura } from "../dominio/lectura.js";
 import type { CorreoRevelado, PersonaApollo } from "../dominio/apollo.js";
+import type { LecturaServidor } from "../dominio/lecturaAutomatica.js";
 import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier } from "../dominio/contactos.js";
 import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit.js";
 import type { EntradaCatalogo } from "../dominio/condiciones-r1.js";
@@ -179,6 +180,17 @@ export class MesaApi {
       if (e instanceof ErrorApi && e.status === 404) throw new ErrorApi(404, "CORREO_NO_ENCONTRADO", "Ese correo ya no está en Gmail o no es una respuesta a este evento. Pega el texto.");
       if (e instanceof ErrorApi && e.status >= 500) throw new ErrorApi(e.status, "GMAIL_NO_RESPONDIO", "Gmail no respondió. Intenta de nuevo o pega el texto.");
       throw new ErrorApi(e instanceof ErrorApi ? e.status : 400, "CORREO_NO_DISPONIBLE", "Rateware todavía no entrega el correo. Pega el texto o sube el archivo.");
+    }
+  }
+
+  // Borradores que dejó la revisión programada de Rateware (solo lectura). Si Rateware aún no tiene
+  // la acción o no responde, se sigue con la lectura al abrir la página.
+  async lecturasServidor(eventId: string): Promise<LecturaServidor[]> {
+    try {
+      const r: any = await this.rw({ action: "list_rfx_reply_readings", event_id: eventId });
+      return Array.isArray(r?.readings) ? r.readings : [];
+    } catch {
+      return [];
     }
   }
 
