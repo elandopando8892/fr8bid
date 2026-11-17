@@ -2,10 +2,10 @@ import { z } from "zod";
 import { ErrorApi, MesaApi, type Transporte } from "../cliente/api.js";
 import { LECTURAS, sinSecretos } from "../servidor/proxy.js";
 import { sinProtegidos } from "../servidor/paso.js";
-import { esPrima, esProtegido, eventoSinAvisos, MOTIVO_SIN_AVISOS } from "../dominio/protegidos.js";
+import { esPrima, esProtegido, eventoSinAvisos } from "../dominio/protegidos.js";
 import { hoyMexico, versionVigente } from "../dominio/recorrido.js";
 import { claveIntento, intentosPorPreparar, intentosWhatsapp, seguimiento, textoIntento } from "../dominio/seguimiento.js";
-import { bloqueosMeta, enmascarar, estadoPlantilla, MENSAJE_PLANTILLA_PENDIENTE, PLANTILLA_RECORDATORIO, recordatorioYaEnviado, textoRecordatorio, VENTANA_RATEWARE, variablesRecordatorio } from "../dominio/whatsapp-meta.js";
+import { BLOQUEO_SIN_AVISOS, bloqueosMeta, enmascarar, estadoPlantilla, MENSAJE_PLANTILLA_PENDIENTE, PLANTILLA_RECORDATORIO, recordatorioYaEnviado, textoRecordatorio, VENTANA_RATEWARE, variablesRecordatorio } from "../dominio/whatsapp-meta.js";
 import { audienciaInvitacion, estadoRevision, resumenOmisiones } from "../dominio/revision.js";
 import { bloqueoBorradoresInvitacion, bloqueoCaptura, bloqueoEnvioInvitacion, bloqueoIntentos, bloqueoPlazo, bloqueoRespondioEvento, bloqueoRevision, motivoNoMarcable } from "../dominio/acciones-mesa.js";
 import { REMITENTE, campanaDelEvento, campanaFr8bid, elegirPlantilla } from "../dominio/invitacion.js";
@@ -557,7 +557,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       if (a.ventana !== "intento_4") throw new Rechazo("VENTANA_NO_DISPONIBLE", "Los recordatorios 48 h y 24 h antes del cierre (a quien respondió sin tarifa) llegan con la cadencia de fr8bid#72; hoy solo el 4º intento por WhatsApp. Rateware ya los acepta (rateware PR #215).", 400);
       const d = await leer(a.event_id);
       // PRIMA: sin avisos por decisión del propietario (17-nov-2026).
-      if (eventoSinAvisos(d.evento)) throw new Rechazo("EVENTO_SIN_AVISOS", `${MOTIVO_SIN_AVISOS}. No se preparó nada.`);
+      if (eventoSinAvisos(d.evento)) throw new Rechazo("EVENTO_SIN_AVISOS", `${BLOQUEO_SIN_AVISOS.motivo}. No se preparó nada.`);
       // Mismas reglas que los intentos por correo: evento abierto y respuestas consultadas.
       const bloqueo = bloqueoIntentos(d);
       if (bloqueo) throw new Rechazo(d.respuestas == null ? "SIN_RESPUESTAS" : "NO_PERMITIDO", `${bloqueo} No se preparó nada.`);

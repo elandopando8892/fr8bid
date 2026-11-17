@@ -3,6 +3,7 @@
 // APROBADA contra Meta, y no repite el mismo recordatorio (participación + ventana). Aquí solo se
 // decide si está listo y se arma la misma vista previa; la liga privada nunca pasa por Fr8Bid.
 
+import { MOTIVO_SIN_AVISOS } from "./protegidos.js";
 import type { IntentoWhatsapp } from "./seguimiento.js";
 import type { Detalle } from "./tipos.js";
 
@@ -60,7 +61,9 @@ export function enmascarar(numero: string | null | undefined): string | null {
   return `+${lada} •••• ••${d.slice(-4)}`;
 }
 
-export interface BloqueoMeta { codigo: "no_contactar" | "sin_numero" | "numero_dudoso" | "sin_permiso" | "permiso_no_verificado" | "plantilla_no_aprobada" | "plantilla_no_verificada"; motivo: string }
+export interface BloqueoMeta { codigo: "evento_sin_avisos" | "no_contactar" | "sin_numero" | "numero_dudoso" | "sin_permiso" | "permiso_no_verificado" | "plantilla_no_aprobada" | "plantilla_no_verificada"; motivo: string }
+// PRIMA (eventoSinAvisos): nadie queda listo, por decisión del propietario (17-nov-2026).
+export const BLOQUEO_SIN_AVISOS: BloqueoMeta = { codigo: "evento_sin_avisos", motivo: MOTIVO_SIN_AVISOS };
 const PERMISOS = new Set(["consent", "contractual", "manual"]);
 
 /**
