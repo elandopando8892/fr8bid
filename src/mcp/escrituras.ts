@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ErrorApi, MesaApi, type Transporte } from "../cliente/api.js";
 import { LECTURAS, sinSecretos } from "../servidor/proxy.js";
 import { sinProtegidos } from "../servidor/paso.js";
-import { esProtegido } from "../dominio/protegidos.js";
+import { esPrima, esProtegido, eventoSinAvisos } from "../dominio/protegidos.js";
 import { hoyMexico, versionVigente } from "../dominio/recorrido.js";
 import { claveIntento, intentosPorPreparar, seguimiento, textoIntento } from "../dominio/seguimiento.js";
 import { audienciaInvitacion, estadoRevision, resumenOmisiones } from "../dominio/revision.js";
@@ -25,9 +25,9 @@ import { ESCRITURAS_MCP } from "./transporte.js";
 const APP = "https://fr8bid.heymarksman.com";
 export const ligaMesa = (id: string) => `${APP}/eventos/${encodeURIComponent(id)}`;
 export const FUERA_DEL_MCP = ["award_rfx_lane_vendor", "clear_rfx_award", "closeout_awarded_rfx_to_rateware", "generate_rfx_award_notices"];
-// PRIMA nunca se cierra ni se rechaza desde el chat (decisión del propietario).
-const FOLIOS_SIN_CIERRE = new Set(["rfx-1021-primapro"]);
-export const esPrima = (folio: unknown) => FOLIOS_SIN_CIERRE.has(String(folio ?? "").trim().toLowerCase());
+// PRIMA nunca se cierra ni se rechaza desde el chat ni recibe avisos (decisión del
+// propietario); la identificación vive en dominio/protegidos.ts.
+export { esPrima };
 const CAMPANA_NUEVA = "$campana_creada";
 // confirmar acepta hasta este largo de confirmacion_id; preparar_* nunca firma uno mayor.
 export const LIMITE_TOKEN = 60000;
@@ -303,7 +303,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       // Mismas reglas que la Mesa: evento abierto y respuestas consultadas (null o
       // undefined por PASO_EN_RATEWARE: sin saber quién respondió no se insiste).
       const bloqueo = bloqueoIntentos(d);
-      if (bloqueo) throw new Rechazo(d.respuestas == null ? "SIN_RESPUESTAS" : "NO_PERMITIDO", `${bloqueo} No se preparó nada.`);
+      if (bloqueo) throw new Rechazo(eventoSinAvisos(d.evento) ? "EVENTO_SIN_AVISOS" : d.respuestas == null ? "SIN_RESPUESTAS" : "NO_PERMITIDO", `${bloqueo} No se preparó nada.`);
       let lista = intentosPorPreparar(d, ahora(), hoy());
       // Con participacion_ids: primero el carrier de cada ID y luego su intento con la
       // participación elegida (no la primera pendiente).
@@ -314,20 +314,22 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
           return elegida ? [{ ...x, participacion: elegida.participacion, ruta: elegida.ruta }] : [];
         });
       }
-      if (!lista.length) throw new Rechazo("NADA_POR_PREPARAR", "Nadie tiene un intento pendiente por la cadencia (ya respondió, ya ofertó, ya está en la Cola o aún no toca).");
+      if (!lista.length) throw new Rechazo("NADA_POR_PREPARAR", "Nadie tiene un intento pendiente por la cadencia (ya ofertó, declinó, ya está en la Cola o aún no toca; a quien respondió sin tarifa solo le toca 48 h y 24 h antes del cierre).");
       lista.sort((x, y) => x.participacion.id.localeCompare(y.participacion.id));
       const cuerpos: Record<string, unknown>[] = [];
-      for (const x of lista) cuerpos.push({ ...(await cuerpoDe(m => m.prepararIntento(d.evento.id, x.participacion.id, textoIntento(d, x.paso), claveIntento(d.evento.id, x.participacion.id, x.paso.intento)))), app_origin: APP });
+      for (const x of lista) cuerpos.push({ ...(await cuerpoDe(m => m.prepararIntento(d.evento.id, x.participacion.id, textoIntento(d, x.paso), claveIntento(d.evento.id, x.participacion.id, x.paso.intento, x.paso.antesDelCierre)))), app_origin: APP });
       return { act: "intentos", ev: d.evento.id, evento: resumenEvento(d),
         arg: { event_id: d.evento.id, participacion_ids: lista.map(x => x.participacion.id) },
         grupos: porCarrier(lista.map(x => ({ id: x.participacion.id, carrierId: x.s.carrierId, carrier: x.s.carrier }))),
         cuerpos,
         // Destinatario fijado: si cambia el carrier o su correo, confirmar se niega.
-        foto: lista.map(x => ({ p: x.participacion.id, carrier_id: x.s.carrierId, correo: x.s.correo, intento: x.paso.intento, estado: x.s.estado, en_cola: x.paso.enCola })),
+        // antes_del_cierre: el recordatorio de 48 h y el de 24 h son pasos distintos aunque
+        // el número de intento coincida; si cambia de ventana, confirmar se niega.
+        foto: lista.map(x => ({ p: x.participacion.id, carrier_id: x.s.carrierId, correo: x.s.correo, intento: x.paso.intento, antes_del_cierre: x.paso.antesDelCierre, estado: x.s.estado, en_cola: x.paso.enCola })),
         vista: {
           canal: "Correo. Al confirmar queda como BORRADOR en la Cola de Rateware; NO se envía hasta que el Administrador lo apruebe en la Mesa (Seguimiento) o en la Cola.",
-          destinatarios: lista.map(x => ({ carrier: x.s.carrier, correo: x.s.correo, participacion_id: x.participacion.id, ruta: rutaTxt(x.ruta), intento: x.paso.intento, toco_en: x.paso.tocaEn, texto: textoIntento(d, x.paso) })),
-          excluidos: "Quien ya respondió (correo, chat o marcado), ofertó, declinó o ya tiene borrador en la Cola no aparece."
+          destinatarios: lista.map(x => ({ carrier: x.s.carrier, correo: x.s.correo, participacion_id: x.participacion.id, ruta: rutaTxt(x.ruta), intento: x.paso.intento, tipo: x.paso.antesDelCierre ? `recordatorio ${x.paso.antesDelCierre} h antes del cierre (respondió sin tarifa)` : "cadencia", toco_en: x.paso.tocaEn, texto: textoIntento(d, x.paso) })),
+          excluidos: "Quien ofertó, declinó o ya tiene borrador en la Cola no aparece. Quien respondió sin tarifa solo aparece 48 h y 24 h antes del cierre."
         } };
     },
 

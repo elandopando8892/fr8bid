@@ -2,7 +2,7 @@
 // Cada función devuelve null si la acción procede o el motivo por el que no.
 // El MCP las aplica al preparar y otra vez al confirmar (el evento pudo cambiar).
 
-import { esProtegido } from "./protegidos.js";
+import { MOTIVO_SIN_AVISOS, esProtegido, eventoSinAvisos } from "./protegidos.js";
 import { estadoRevision } from "./revision.js";
 import { versionVigente } from "./recorrido.js";
 import type { SeguimientoCarrier } from "./seguimiento.js";
@@ -65,6 +65,7 @@ export function bloqueoRevision(d: Detalle, p: Pick<Participacion, "carrierId" |
 // Intentos de seguimiento: evento abierto y respuestas consultadas.
 export function bloqueoIntentos(d: Detalle): string | null {
   if (bloqueoEvento(d)) return bloqueoEvento(d);
+  if (eventoSinAvisos(d.evento)) return `${MOTIVO_SIN_AVISOS}.`;
   if (d.evento.estado !== "abierto") return "Solo con el evento abierto a ofertas.";
   if (d.respuestas == null) return "No se pudo saber quién ya respondió; intenta más tarde.";
   return null;

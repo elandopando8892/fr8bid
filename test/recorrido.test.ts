@@ -912,13 +912,13 @@ describe("seguimiento por carrier y recordatorio", () => {
 
     // Abrir la liga gana sobre abrir el correo.
     await s.llamar("rfx-bid-api", { action: "get_invitation", token: s.tokenDe(lvDe(carriers.A.id)) }, null);
-    // C contesta por WhatsApp (Meta): Rateware lo trae en la revisión de respuestas y ya no se le insiste.
+    // C contesta por WhatsApp (Meta): Rateware lo trae en la revisión de respuestas; queda «respondió sin tarifa» (sin recordatorio de Gmail).
     s.respuestasCarrier.push({ rfx_lane_vendor_id: lvDe(carriers.C.id), vendor_id: carriers.C.id, channels: ["whatsapp"], count: 1, first_reply_at: "2026-10-24T18:00:00.000Z", last_reply_at: "2026-10-24T18:00:00.000Z" });
     d = await adm.detalle(id);
     filas = seguimiento(d, "2026-10-25");
     expect(de("Carrier Prueba A").estado).toBe("abrio");
     expect(de("Carrier Prueba C")).toMatchObject({ estado: "respondio", respondioPor: ["whatsapp"] });
-    expect(etiquetaSeguimiento(de("Carrier Prueba C"))).toBe("respondió por WhatsApp");
+    expect(etiquetaSeguimiento(de("Carrier Prueba C"))).toBe("respondió sin tarifa por WhatsApp");
     expect(candidatosRecordatorio(d, "2026-10-25").map((x) => x.carrier)).toEqual(["Carrier Prueba A", "Carrier Prueba B"]);
   });
 
