@@ -94,7 +94,12 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
     // participación sigue sin tarifa o si el plazo sigue igual al leído; si no, 409.
     "capture_rfx_bid_if_empty",
     "mark_rfx_replied_if_empty",
-    "extend_rfx_due_date_if_unchanged"
+    "extend_rfx_due_date_if_unchanged",
+    // MCP: intento/recordatorio por WhatsApp con plantilla de Meta (rateware PR #215). Rateware
+    // revalida número, «no contactar», permiso y plantilla APROBADA contra Meta, y no repite
+    // el mismo recordatorio; desde el MCP solo lo confirma el propietario.
+    "prepare_whatsapp_rfx_reminder",
+    "send_whatsapp_outreach_messages"
   ]),
   "rfx-bid-api": new Set(["submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
@@ -296,6 +301,10 @@ export async function manejar(
     const bloqueo = await guardaAvisos(action, body!, autorizacion, op);
     if (bloqueo) return bloqueo;
   }
+  if (action === "prepare_whatsapp_rfx_reminder" || action === "send_whatsapp_outreach_messages") {
+    const bloqueo = await guardaWhatsapp(action, body!, autorizacion, op);
+    if (bloqueo) return bloqueo;
+  }
 
   let respuesta: Respuesta;
   try {
@@ -395,6 +404,35 @@ async function guardaParticipaciones(action: string, body: Record<string, unknow
 // Aquí, con lecturas frescas: avisos solo tras el recibo, solo mensajes de este
 // evento y solo la versión que el Administrador vio. Desde el 24-oct-2026 los
 // avisos de no adjudicación y de respaldo también salen desde la Mesa.
+// WhatsApp por plantilla de Meta (rateware PR #215): solo el recordatorio de RFx y un mensaje por envío,
+// con su versión y aprobación; el mensaje debe ser un recordatorio de WhatsApp de ese evento (lectura fresca).
+// Rateware vuelve a revisar número, «no contactar», permiso, plantilla APROBADA y duplicados.
+async function guardaWhatsapp(action: string, body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
+  const eventId = body.rfx_event_id;
+  if (!eventId) return error(400, "FALTA_EVENTO", "Esta acción necesita el evento.");
+  if (action === "prepare_whatsapp_rfx_reminder") {
+    if (body.purpose !== "rfx_reminder" || !body.vendor_id || !body.reminder_window) return error(400, "SOLO_RECORDATORIO", "Solo el recordatorio de RFx por WhatsApp.");
+    return null;
+  }
+  const ids: unknown[] = Array.isArray(body.ids) ? body.ids : [];
+  const versiones = Array.isArray(body.expected_versions) ? body.expected_versions as any[] : [];
+  if (ids.length !== 1 || !ids[0] || versiones.length !== 1 || versiones[0]?.id !== ids[0] || !versiones[0]?.updated_at || !versiones[0]?.whatsapp_approval)
+    return error(400, "UN_WHATSAPP", "Un WhatsApp a la vez, con su versión y su aprobación.");
+  if (body.confirmed !== true || body.confirmation_action !== "send_whatsapp_outreach_messages") return error(400, "SIN_CONFIRMAR", "Enviar requiere confirmación explícita.");
+  let mensajes: Respuesta;
+  try {
+    mensajes = await conLimite(op.enviar("rateware-api", { action: "list_outreach_messages", rfx_event_id: eventId, channel: "whatsapp", limit: 200 }, autorizacion), op.timeoutMs ?? 25000);
+  } catch {
+    return error(504, "SIN_RESPUESTA", "No se pudo comprobar el mensaje. No se envió nada.");
+  }
+  if (mensajes.status !== 200) return { ...mensajes, body: sinSecretos(mensajes.body) };
+  const filas: any[] = mensajes.body?.rows ?? mensajes.body?.messages ?? [];
+  const m = filas.find((x) => x?.id === ids[0]);
+  if (!m || m.channel !== "whatsapp" || m.rfx_event_id !== eventId || m.metadata?.whatsapp_purpose !== "rfx_reminder")
+    return error(409, "MENSAJE_AJENO", "El mensaje no es un recordatorio de WhatsApp de este evento. No se envió nada.");
+  return null;
+}
+
 async function guardaAvisos(action: string, body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
   const eventId = action === "send_outreach_messages" ? body.rfx_event_id : body.event_id;
   if (!eventId) return error(400, "FALTA_EVENTO", "Esta acción necesita el evento.");

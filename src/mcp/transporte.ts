@@ -26,7 +26,11 @@ export const ESCRITURAS_MCP = new Set([
   "send_outreach_messages",
   "capture_rfx_bid_if_empty",
   "mark_rfx_replied_if_empty",
-  "extend_rfx_due_date_if_unchanged"
+  "extend_rfx_due_date_if_unchanged",
+  // Intento/recordatorio por WhatsApp con la plantilla de Meta (rateware PR #215): borrador +
+  // aprobación de 15 min y luego el envío con sus candados. Solo el propietario lo confirma.
+  "prepare_whatsapp_rfx_reminder",
+  "send_whatsapp_outreach_messages"
 ]);
 
 /**

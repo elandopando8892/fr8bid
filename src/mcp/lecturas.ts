@@ -2,11 +2,12 @@ import { z } from "zod";
 import { ErrorApi, MesaApi, type Transporte } from "../cliente/api.js";
 import { LECTURAS, sinSecretos } from "../servidor/proxy.js";
 import { sinProtegidos } from "../servidor/paso.js";
-import { esProtegido } from "../dominio/protegidos.js";
+import { esProtegido, eventoSinAvisos } from "../dominio/protegidos.js";
 import { describirModelo, cambiosComerciales } from "../dominio/modelo.js";
 import { avisoDe, candadosAdjudicacion, entregaConfirmada, hoyMexico, primario, recorrido, versionVigente } from "../dominio/recorrido.js";
-import { seguimiento, siguienteIntento } from "../dominio/seguimiento.js";
+import { intentosWhatsapp, seguimiento, siguienteIntento } from "../dominio/seguimiento.js";
 import { consultaSegmento, familiaCaja, POR_PAGINA } from "../dominio/segmento.js";
+import { BLOQUEO_SIN_AVISOS, bloqueosMeta, enmascarar, estadoPlantilla, PLANTILLA_RECORDATORIO, recordatorioYaEnviado, textoRecordatorio, variablesRecordatorio, type EstadoPlantilla } from "../dominio/whatsapp-meta.js";
 import type { Detalle, Participacion, Rol, Ruta } from "../dominio/tipos.js";
 
 const id = z.string().regex(/^[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}$/i);
@@ -24,6 +25,7 @@ export const herramientas = {
   tarifas_ruta: { descripcion: "Tarifas aprobadas de una ruta/caja D2D y ofertas de hasta cinco eventos seleccionados. No son pagos. Cada página examina hasta 1000 tarifas; seguir siguiente_offset aunque no haya coincidencias.", schema: z.object({ origen: z.string().min(2).max(100), destino: z.string().min(2).max(100), caja: z.enum(["dry_van", "reefer", "flatbed"]), operacion: z.enum(["D2D Export", "D2D Import"]), offset: z.number().int().min(0).max(100000).multipleOf(POR_PAGINA).default(0), event_ids: z.array(id).max(5).default([]) }).strict() },
   carrier: { descripcion: "Perfil ligero de un carrier por UUID. No busca contactos nuevos ni consume Apollo.", schema: z.object({ carrier_id: id }).strict() },
   historial_carrier: { descripcion: "Hasta 300 registros del historial de contacto de un carrier. No equivale a historial contable ni a todas sus ofertas.", schema: z.object({ carrier_id: id }).strict() },
+  whatsapp_pendientes: { descripcion: "Carriers que pasaron el 3er intento por correo sin responder y a los que ya toca WhatsApp (cadencia de la Mesa). Por carrier: listo_para_meta y bloqueos (número dudoso o sin lada, no contactar, sin permiso, plantilla de Meta no aprobada), vista previa de la plantilla con el número enmascarado y, solo como respaldo_manual, el texto y la liga wa.me. No envía ni prepara nada: el envío por Meta es preparar_whatsapp_intento", schema: z.object({ ...evento, ...pagina }).strict() },
   verificar_adjudicacion: { descripcion: "Revisa una adjudicación ya hecha: por ruta, primario y respaldo con la versión adjudicada y si su huella coincide con la oferta vigente, cierre en Rateware (rateware_closeout_at) y avisos de ganador, respaldo y no adjudicado. Declara lo que no puede leer. No adjudica, no entrega ni envía avisos.", schema: z.object({ ...evento, ...pagina }).strict() }
 };
 export type NombreHerramienta = keyof typeof herramientas;
@@ -166,6 +168,37 @@ export function crearLecturas(t: Transporte, ahora: () => Date = () => new Date(
       else if (nombre === "seguimiento_evento") result = { ...common, ...paginar(seguimiento(d, ctx.hoy).map(s => ({ carrier_id: s.carrierId, carrier: s.carrier, estado: s.estado, rutas: s.rutas, ofertadas: s.ofertadas, declinadas: s.declinadas, intentos: s.intentos, ultimo_envio: s.ultimoEnvio, correo_abierto: s.correoAbiertoEn, apertura_posible: s.aperturaPosibleEn, correo_medido: s.correoMedido, liga_abierta: s.vistaEn, respondio_por: s.respondioPor, siguiente_intento: d.respuestas == null ? null : siguienteIntento(d, s, ahora()) })), a.offset, a.limit) };
       else if (nombre === "respuestas_evento") result = { ...common, ...paginar(Object.values(d.respuestas || {}), a.offset, a.limit), cobertura: "Canales y fechas; no incluye contenido del mensaje ni convierte una respuesta en oferta." };
       else if (nombre === "carriers_sugeridos") result = { ...common, sugerencias: await api.carrierFit(d) };
+      else if (nombre === "whatsapp_pendientes") {
+        // Misma lista que la Mesa (intentosWhatsapp): sin respuestas consultadas devuelve vacío.
+        const lista = intentosWhatsapp(d, ahora(), ctx.hoy);
+        const p = paginar(lista, a.offset, a.limit);
+        // Base de permiso (list_vendors) y estado de la plantilla (list_outreach_templates → whatsapp_meta):
+        // si no se pueden leer, el carrier no queda listo, con su motivo.
+        const ids = p.filas.map(w => w.s.carrierId);
+        const [vendors, plantillas, whatsapps] = ids.length ? await Promise.all([
+          pedir({ action: "list_vendors", ids, lightweight: true }).then(b => b.rows as any[], () => null),
+          pedir({ action: "list_outreach_templates" }).then(b => estadoPlantilla(b.rows), () => null),
+          pedir({ action: "list_outreach_messages", rfx_event_id: d.evento.id, channel: "whatsapp" }).then(b => (b.rows ?? b.messages) as any[], () => null)
+        ]) : [null, null, null];
+        const permisoDe = (id: string) => vendors ? (vendors.find(v => v?.id === id)?.whatsapp_permission_basis ?? null) : undefined;
+        const filas = p.filas.map(w => {
+          const bloqueos: { codigo: string; motivo: string }[] = bloqueosMeta(w, permisoDe(w.s.carrierId), plantillas as EstadoPlantilla | null);
+          if (recordatorioYaEnviado(whatsapps, d.evento.id, w.s.carrierId, "intento_4")) bloqueos.unshift({ codigo: "ya_enviado", motivo: "Ya se le mandó este WhatsApp por Meta; no se repite." });
+          // PRIMA: nunca queda listo (decisión del propietario, 17-nov-2026).
+          if (eventoSinAvisos(d.evento)) bloqueos.unshift(BLOQUEO_SIN_AVISOS);
+          return { carrier_id: w.s.carrierId, carrier: w.s.carrier, estado: w.s.estado, intentos_correo: w.s.intentos, ultimo_envio: w.s.ultimoEnvio,
+            rutas_pendientes: w.s.pendientes.map(f => ({ ruta_id: f.ruta.id, numero: f.ruta.numero, origen: f.ruta.origen, destino: f.ruta.destino, equipo: f.ruta.equipo })),
+            telefono: w.numero ? `+${w.numero}` : null, pais: w.telefono.pais, certeza: w.telefono.certeza, revision_telefono: w.telefono.motivo,
+            listo_para_meta: bloqueos.length === 0, bloqueos,
+            meta: { plantilla: PLANTILLA_RECORDATORIO.nombre, estado_plantilla: plantillas?.estado ?? "NO_VERIFICADA", para: enmascarar(w.numero),
+              texto: textoRecordatorio(variablesRecordatorio(d, w.s.carrier)) },
+            // Solo si Meta no está lista: una persona lo manda desde su teléfono.
+            respaldo_manual: { texto: w.texto, liga_whatsapp: w.liga, sin_liga_porque: w.motivo } };
+        });
+        result = { ...common, filas, total_recibido: p.total_recibido, siguiente_offset: p.siguiente_offset,
+          plantilla_meta: { nombre: PLANTILLA_RECORDATORIO.nombre, estado: plantillas?.estado ?? "NO_VERIFICADA" },
+          cobertura: common.respuestas_consultadas ? "Solo quienes ya agotaron los correos de la cadencia y siguen sin responder en rutas sin suficientes ofertas. País por reglas de lada; «dudoso» se confirma antes de enviar (la revisión con IA está en la Mesa). El envío por Meta es preparar_whatsapp_intento (solo con listo_para_meta); respaldo_manual es para mandarlo a mano." : "No se pudieron consultar las respuestas de los carriers: sin eso no se sabe a quién ya no escribir, así que la lista sale vacía." };
+      }
       else if (nombre === "verificar_adjudicacion") {
         const p = paginar(d.rutas, a.offset, a.limit);
         const rutas = p.filas.map(r => verificarAdjudicacion(d, r));
