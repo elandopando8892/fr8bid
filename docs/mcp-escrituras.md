@@ -16,6 +16,7 @@ El endpoint `/api/mcp` sigue con las 11 lecturas para todos los roles y, para Op
 | `preparar_invitacion` fase `borradores` | Operador | `create_outreach_campaign` (si falta; `claveCampana`) + `generate_outreach_drafts`, solo carriers con «Revisado» vigente. |
 | `preparar_invitacion` fase `envio` | Administrador | `send_outreach_messages` de una tanda de hasta `MAXIMO_POR_LLAMADA` (100) con `expected_versions` y `operation_id` (`operacionTanda`). Evento abierto; el MCP no publica. |
 | `preparar_cambio_evento` | Administrador | `extend_rfx_due_date_if_unchanged` con `expected_due_date` = el plazo leído al preparar. Solo hacia adelante (posterior al actual y a hoy), evento abierto o en borrador; nunca estado. |
+| `preparar_whatsapp_intento` | Operador (confirma solo el propietario) | `prepare_whatsapp_rfx_reminder` (borrador + aprobación de 15 min de Rateware) y `send_whatsapp_outreach_messages` de **1** WhatsApp con la plantilla de Meta `rateware_rfx_reminder_es`. 4º intento de la cadencia (`intentosWhatsapp`). Ver «WhatsApp por plantilla de Meta». |
 | `confirmar` | según la acción | Ejecuta la vista previa firmada. |
 
 Las vistas previas llevan destinatarios, canal (si queda en la Cola o se envía) y texto exacto, y quiénes quedan fuera y por qué. En tandas y plantillas se muestran asunto, `text_body` y una versión segura de `html_body` (texto extraído, sin scripts ni estilos, truncado a 4 000 caracteres con el largo total); si texto y HTML difieren, se muestran ambas variantes (`variantes_distintas`). Un mensaje sin asunto o sin cuerpo visible no entra en la tanda y se lista con su motivo. Los cuerpos se arman con los mismos métodos de `MesaApi` que usa la Mesa (sin ejecutarlos), salvo `app_origin`, fijo en `https://fr8bid.heymarksman.com`.
@@ -35,6 +36,17 @@ La condición va en el mismo `UPDATE` de Rateware, así que la carrera entre la 
 El proxy (`src/servidor/proxy.ts`) también las tiene en su lista cerrada `ESCRITURAS`, con guardas: captura con tarifa > 0, «ya respondió» solo `responded`/`declined` y sin `bid_rate`, participación del evento (lectura fresca), y plazo con `patch` = solo `due_date` y `expected_due_date`. El simulado (`src/simulado/rateware.ts`) implementa las tres con la misma semántica (409 incluidos) y `sinDesplegar` para probar el caso de Rateware sin la acción.
 
 Nota: la página del evento sigue usando `update_rfx_bid`/`update_rfx_event` (sin cambio); su guarda `YA_OFERTO` relee antes de escribir, pero no es atómica.
+
+## WhatsApp por plantilla de Meta (16-nov-2026)
+
+Prerrequisitos: **rateware PR #215** desplegado (acción `prepare_whatsapp_rfx_reminder` y el recordatorio en `send_whatsapp_outreach_messages`) y la plantilla `rateware_rfx_reminder_es` (UTILITY, es_MX) **registrada y APROBADA en Meta**. Este PR no registra la plantilla ni llama a Meta.
+
+- `whatsapp_pendientes` (lectura) sigue listando el 4º intento y ahora da por carrier `listo_para_meta` y `bloqueos`: número dudoso o sin lada explícita en Rateware (Rateware nunca infiere el país), «no contactar», sin base de permiso (`consent`/`contractual`/`manual`, de `list_vendors`), plantilla no aprobada (de `list_outreach_templates` → `whatsapp_meta`) o ya enviado. La liga wa.me queda solo en `respaldo_manual`.
+- `preparar_whatsapp_intento(event_id, carrier_id)`: mismas reglas que los intentos (`bloqueoIntentos`: evento abierto y respuestas consultadas), solo a quien le toca el 4º intento y solo si está listo para Meta; si no, no prepara nada y remite al respaldo manual. HDships fuera (`esProtegido`). La vista previa muestra destinatario enmascarado (`+52 •••• ••5678`), plantilla y variables {{1}} carrier, {{2}} «evento (folio)», {{3}} cierre «dd/mm/aaaa a las 23:59 (hora CDMX)»; {{4}} es la liga privada del Bid Room que pone Rateware y nunca pasa por Fr8Bid.
+- `confirmar` (solo el propietario, con «sí» explícito): relee y compara la foto (número, permiso, plantilla, «no contactar»); llama `prepare_whatsapp_rfx_reminder`, compara {{1}}..{{3}} que armó Rateware con los aprobados (si difieren: `TEXTO_DISTINTO`, no envía) y envía con la aprobación de 15 min. Resultado: `aplicada` (enviado), `rechazada` (`PLANTILLA_RECORDATORIO_PENDIENTE` → «plantilla de recordatorio pendiente de aprobación en Meta», `RECORDATORIO_DUPLICADO`, `ACCION_NO_DESPLEGADA` si Rateware aún no tiene la acción…) o `incierta` (entrega desconocida; no se reintenta).
+- Proxy: `guardaWhatsapp` exige el recordatorio (`purpose=rfx_reminder`) y, para enviar, un mensaje recordatorio de WhatsApp de ese evento (lectura fresca), con versión, aprobación y confirmación. Rateware revalida número, «no contactar», permiso y plantilla APROBADA con cuerpo idéntico contra Meta antes del POST, y no repite el mismo recordatorio (participación + ventana).
+- Ventanas `48h`/`24h` (recordatorio a quien respondió sin tarifa antes del cierre): Rateware ya las acepta; en Fr8Bid responden `VENTANA_NO_DISPONIBLE` hasta que entre la cadencia de fr8bid#72, que usará esta misma herramienta.
+- PRIMA no cambia de estado: el recordatorio no cierra ni rechaza.
 
 ## Camino de cada escritura
 
