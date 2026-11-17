@@ -34,7 +34,7 @@ export function crearServidor(t: Transporte, rol: Rol, ahora?: () => Date, escri
     const { t: te, ...identidad } = escrituras;
     const ejecutar = crearEscrituras(te, { ...identidad, rol, ahora });
     for (const [nombre, h] of Object.entries(herramientasEscritura)) {
-      const confirmar = nombre === "confirmar";
+      const confirmar = nombre === "confirmar" || nombre === "confirmar_creacion_evento";
       servidor.registerTool(nombre, {
         description: h.descripcion,
         inputSchema: h.schema.shape,

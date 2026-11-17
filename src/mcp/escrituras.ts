@@ -1,3 +1,4 @@
+import { crearEventos, herramientasCrearEvento } from "./crear-evento.js";
 import { z } from "zod";
 import { ErrorApi, MesaApi, type Transporte } from "../cliente/api.js";
 import { LECTURAS, sinSecretos } from "../servidor/proxy.js";
@@ -57,6 +58,7 @@ const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(s => {
 const vista = "Solo lee y devuelve una vista previa con confirmacion_id; no escribe nada. Muestra la vista previa completa y pide un «sí» explícito antes de llamar a confirmar.";
 
 export const herramientasEscritura = {
+  ...herramientasCrearEvento,
   preparar_intentos: { rol: "operator" as Rol, descripcion: `Seguimiento (2º/3º intento por correo) a carriers que no han contestado, según la cadencia; excluye a quien ya respondió u ofertó. Al confirmar quedan como BORRADOR en la Cola de Rateware (no se envían). ${vista}`,
     schema: z.object({ event_id: id, participacion_ids: ids.optional() }).strict() },
   preparar_ya_respondio: { rol: "operator" as Rol, descripcion: `Marca que un carrier respondió o rechazó sin tarifa (lo saca de los intentos). Indica carrier_id o participacion_ids. Nunca sobre una participación con oferta: Rateware solo lo aplica si sigue sin tarifa. ${vista}`,
@@ -792,6 +794,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
 
   return async (nombre: string, args: Record<string, unknown>): Promise<Record<string, any>> => {
     if (!Object.hasOwn(herramientasEscritura, nombre)) throw new Rechazo("FUERA_DEL_MCP", "Herramienta fuera del MCP.", 400);
+    if (nombre === "preparar_evento" || nombre === "confirmar_creacion_evento") return crearEventos(t, ctx)(nombre, args);
     if (nombre === "confirmar") return confirmar(args);
     return preparar(nombre as NombreEscritura, args);
   };
