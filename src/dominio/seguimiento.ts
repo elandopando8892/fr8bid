@@ -4,6 +4,7 @@
 // abre como borrador en Gmail y el Administrador decide si lo manda.
 
 import { clasificarTelefono, type PistaCarrier, type Telefono } from "./telefonos.js";
+import { eventoSinAvisos } from "./protegidos.js";
 import { versionVigente } from "./recorrido.js";
 import type { Aviso, Detalle, Participacion, Ruta } from "./tipos.js";
 
@@ -135,7 +136,7 @@ export function seguimiento(d: Detalle, hoy: string): SeguimientoCarrier[] {
 
 // Solo con el evento abierto, a quien no ha ofertado ni declinado y tiene correo.
 export function candidatosRecordatorio(d: Detalle, hoy: string): SeguimientoCarrier[] {
-  if (d.evento.estado !== "abierto" || d.respuestas === null) return [];
+  if (d.evento.estado !== "abierto" || d.respuestas === null || eventoSinAvisos(d.evento)) return [];
   return seguimiento(d, hoy).filter((s) => esperaRespuesta(s.estado) && s.correo);
 }
 
@@ -210,6 +211,8 @@ function recordatorioCierre(d: Detalle, s: SeguimientoCarrier, ahora: Date): Sig
 // Siguiente paso para un carrier que no ha ofertado ni declinado en alguna ruta
 // sin profundidad. null: no le toca seguimiento o ya se agotó la cadencia.
 export function siguienteIntento(d: Detalle, s: SeguimientoCarrier, ahora: Date, minimoOfertas = PROFUNDIDAD_MINIMA): SiguienteIntento | null {
+  // PRIMA: ni 2º/3º intento, ni WhatsApp, ni recordatorio 48 h/24 h.
+  if (eventoSinAvisos(d.evento)) return null;
   if (s.estado !== "respondio" && (!esperaRespuesta(s.estado) || !s.ultimoEnvio)) return null;
   const flacas = new Set(rutasSinProfundidad(d, minimoOfertas).map((x) => x.ruta.id));
   if (!s.pendientes.some((f) => flacas.has(f.ruta.id))) return null;

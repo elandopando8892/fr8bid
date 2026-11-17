@@ -23,6 +23,7 @@ import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones }
 import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
 import { cambiosComerciales, describirModelo, modeloCorto, tarifaVenta } from "../dominio/modelo";
 import { bloqueoRespondio, bloqueoRevision, candidatasCaptura, marcablesRespondio } from "../dominio/acciones-mesa";
+import { eventoSinAvisos } from "../dominio/protegidos.js";
 import { candidatosRecordatorio, claveIntento, esperaRespuesta, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
 import type { CarrierFit } from "../dominio/carrierFit";
@@ -1016,7 +1017,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
   return (
     <div className="tarjeta">
       <div className="fila">
-        <h2 className="fila-icono"><I.Usuarios size={17} />Seguimiento <span className="tenue">· {plural(filas.length, "invitado")}</span></h2>
+        <h2 className="fila-icono"><I.Usuarios size={17} />Seguimiento <span className="tenue">· {plural(filas.length, "invitado")}{eventoSinAvisos(d.evento) ? " · sin recordatorios (PRIMA)" : ""}</span></h2>
         {!hayPendientes && (
           <button className="btn-texto con-icono" onClick={() => setVerTabla(!verTabla)}><I.Lista size={15} />{verTabla ? "Ocultar detalle" : "Ver por carrier"}</button>
         )}

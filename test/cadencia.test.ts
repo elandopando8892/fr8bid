@@ -1,8 +1,10 @@
 // Cadencia de seguimiento por falta de profundidad (regla de Jose, 23-oct-2026).
 
 import { describe, expect, it } from "vitest";
-import { claveIntento, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, numeroWhatsapp, LIMITE_TEXTO_INTENTO, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento } from "../src/dominio/seguimiento";
+import { candidatosRecordatorio, claveIntento, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, numeroWhatsapp, LIMITE_TEXTO_INTENTO, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento } from "../src/dominio/seguimiento";
 import { aviso } from "../src/cliente/mapear";
+import { bloqueoIntentos } from "../src/dominio/acciones-mesa";
+import { MOTIVO_SIN_AVISOS, eventoSinAvisos } from "../src/dominio/protegidos";
 import type { Aviso, Detalle, Participacion } from "../src/dominio/tipos";
 
 const ENVIO = "2026-10-22T15:13:00.000Z";
@@ -29,7 +31,7 @@ function invitacion(p: string, enviadoEn: string, n = 1): Aviso {
 
 function detalle(parts: Participacion[], avisos: Aviso[]): Detalle {
   return {
-    evento: { id: "e", folio: "RFx-1021-PRIMAPro", nombre: "Prima", shipper: "PRIMA", estado: "abierto", plazo: "2026-12-31", prueba: false },
+    evento: { id: "e", folio: "RFx-1030-Flatbed", nombre: "Prima", shipper: "PRIMA", estado: "abierto", plazo: "2026-12-31", prueba: false },
     rutas: [{ id: "r1", numero: 1, origen: "San Luis Potosí", destino: "Tulsa", equipo: "Flatbed 53'", volumenSemanal: 2, objetivo: 5000, moneda: "USD", desiertaMotivo: null, condiciones: [], participaciones: parts }],
     avisos,
     recibo: null
@@ -134,7 +136,7 @@ describe("cadencia por falta de profundidad", () => {
     const [a, b, c] = w;
     expect(a.numero).toBe("528112345678");
     expect(a.liga).toMatch(/^https:\/\/wa\.me\/528112345678\?text=/);
-    expect(a.texto).toContain("RFx-1021-PRIMAPro");
+    expect(a.texto).toContain("RFx-1030-Flatbed");
     expect(a.texto).toContain("San Luis Potosí → Tulsa");
     expect(a.texto).not.toMatch(/token=|https?:/);
     expect(b).toMatchObject({ liga: null, motivo: "sin número de WhatsApp en Rateware" });
@@ -186,7 +188,7 @@ describe("cadencia por falta de profundidad", () => {
       const texto = textoIntento(d, x.paso);
       expect(texto).toMatch(/^Gracias por su respuesta\./);
       expect(texto).toContain("vence el 31 de diciembre de 2026 a las 23:59");
-      expect(texto).toContain("RFx-1021-PRIMAPro");
+      expect(texto).toContain("RFx-1030-Flatbed");
       expect(texto).toContain("«Abrir Private Bid Room»");
       expect(texto.length).toBeLessThanOrEqual(LIMITE_TEXTO_INTENTO);
       expect(claveIntento("e", "a", x.paso.intento, x.paso.antesDelCierre)).toBe("fr8bid-intento-cierre-48h-e-a-bid");
@@ -198,7 +200,7 @@ describe("cadencia por falta de profundidad", () => {
       expect(de(d, "a", antes(30))).toMatchObject({ antesDelCierre: 24, vencido: false });
       const [x] = intentosPorPreparar(d, antes(20), "2026-12-30").filter((y) => y.participacion.id === "a");
       expect(x.paso).toMatchObject({ antesDelCierre: 24, vencido: true, intento: 3 });
-      expect(textoIntento(d, x.paso)).toMatch(/^Último recordatorio: el plazo para cotizar RFx-1021-PRIMAPro vence el 31 de diciembre de 2026/);
+      expect(textoIntento(d, x.paso)).toMatch(/^Último recordatorio: el plazo para cotizar RFx-1030-Flatbed vence el 31 de diciembre de 2026/);
       // Claves distintas entre sí y de los intentos 2 y 3 de la cadencia.
       const claves = [claveIntento("e", "a", 3, 24), claveIntento("e", "a", 2, 48), claveIntento("e", "a", 2), claveIntento("e", "a", 3)];
       expect(new Set(claves).size).toBe(4);
@@ -239,6 +241,41 @@ describe("cadencia por falta de profundidad", () => {
       expect(ids(d, horas(8))).toEqual(["b"]);
       expect(textoIntento(d, { intento: 2, antesDelCierre: null })).toMatch(/^Seguimos buscando/);
       expect(claveIntento("e", "b", 2, null)).toBe("fr8bid-intento-2-e-b-bid");
+    });
+  });
+
+  // Decisión del propietario (17-nov-2026): PRIMA no recibe ningún recordatorio ni aviso.
+  describe("PRIMA (RFx-1021-PRIMAPro): sin avisos", () => {
+    const prima = (respondio = false) => {
+      const d = detalle(parts, avisos);
+      d.evento.folio = "RFx-1021-PRIMAPro";
+      d.respuestas = respondio ? { a: { participacionId: "a", canales: ["correo"], primeraEn: ENVIO, ultimaEn: ENVIO } } : {};
+      return d;
+    };
+    const CIERRE = Date.parse("2026-12-31T23:59:00-06:00");
+
+    it("se identifica por folio sin importar mayúsculas", () => {
+      expect(eventoSinAvisos({ folio: " rfx-1021-primapro " })).toBe(true);
+      expect(eventoSinAvisos({ folio: "RFx-1030-Flatbed" })).toBe(false);
+      expect(eventoSinAvisos(null)).toBe(false);
+    });
+
+    it("ni 2º/3º intento ni WhatsApp", () => {
+      const d = prima();
+      for (const h of [8, 22, 40]) expect(de(d, "a", horas(h))).toBeNull();
+      expect(intentosPorPreparar(d, horas(40), "2026-10-24")).toEqual([]);
+      expect(intentosWhatsapp(d, horas(40), "2026-10-24")).toEqual([]);
+      expect(candidatosRecordatorio(d, "2026-10-24")).toEqual([]);
+      expect(bloqueoIntentos(d)).toBe(`${MOTIVO_SIN_AVISOS}.`);
+    });
+
+    it("ni recordatorio 48 h ni 24 h a quien respondió sin tarifa", () => {
+      const d = prima(true);
+      for (const h of [47, 20]) {
+        const ahora = new Date(CIERRE - h * 3_600_000);
+        expect(de(d, "a", ahora)).toBeNull();
+        expect(intentosPorPreparar(d, ahora, "2026-12-30")).toEqual([]);
+      }
     });
   });
 });
