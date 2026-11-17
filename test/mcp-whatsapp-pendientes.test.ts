@@ -52,6 +52,16 @@ describe("whatsapp_pendientes (#4)", () => {
     expect(JSON.stringify(r)).not.toMatch(/invitation_token|bid_link|token=/i);
   });
 
+  it("PRIMA (RFx-1021-PRIMAPro) nunca queda listo: sin avisos por decisión del propietario", async () => {
+    const x = await preparar({ whatsapp: "+528112345678", permiso: "consent", plantilla: "APPROVED" });
+    x.sim.events.find(e => e.id === x.eventId)!.rfx_id = "RFx-1021-PRIMAPro";
+    const r: any = await x.leer("whatsapp_pendientes", { event_id: x.eventId });
+    expect(x.escrituras()).toEqual([]);
+    // Con la cadencia de #72 PRIMA ya no lista a nadie; aquí, si aparece, va bloqueado.
+    expect(r.filas.filter((f: any) => f.listo_para_meta)).toEqual([]);
+    for (const f of r.filas) expect(f.bloqueos[0]).toEqual({ codigo: "evento_sin_avisos", motivo: "PRIMA: sin avisos por decisión del propietario" });
+  });
+
   it("antes de las 12 h del 3er intento no aparece; tampoco quienes ya ofertaron", async () => {
     const x = await preparar({ ahora: horas(31) });
     const r: any = await x.leer("whatsapp_pendientes", { event_id: x.eventId });

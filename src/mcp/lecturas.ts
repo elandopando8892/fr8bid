@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ErrorApi, MesaApi, type Transporte } from "../cliente/api.js";
 import { LECTURAS, sinSecretos } from "../servidor/proxy.js";
 import { sinProtegidos } from "../servidor/paso.js";
-import { esProtegido } from "../dominio/protegidos.js";
+import { esProtegido, eventoSinAvisos, MOTIVO_SIN_AVISOS } from "../dominio/protegidos.js";
 import { describirModelo, cambiosComerciales } from "../dominio/modelo.js";
 import { avisoDe, candadosAdjudicacion, entregaConfirmada, hoyMexico, primario, recorrido, versionVigente } from "../dominio/recorrido.js";
 import { intentosWhatsapp, seguimiento, siguienteIntento } from "../dominio/seguimiento.js";
@@ -184,6 +184,8 @@ export function crearLecturas(t: Transporte, ahora: () => Date = () => new Date(
         const filas = p.filas.map(w => {
           const bloqueos: { codigo: string; motivo: string }[] = bloqueosMeta(w, permisoDe(w.s.carrierId), plantillas as EstadoPlantilla | null);
           if (recordatorioYaEnviado(whatsapps, d.evento.id, w.s.carrierId, "intento_4")) bloqueos.unshift({ codigo: "ya_enviado", motivo: "Ya se le mandó este WhatsApp por Meta; no se repite." });
+          // PRIMA: nunca queda listo (decisión del propietario, 17-nov-2026).
+          if (eventoSinAvisos(d.evento)) bloqueos.unshift({ codigo: "evento_sin_avisos", motivo: MOTIVO_SIN_AVISOS });
           return { carrier_id: w.s.carrierId, carrier: w.s.carrier, estado: w.s.estado, intentos_correo: w.s.intentos, ultimo_envio: w.s.ultimoEnvio,
             rutas_pendientes: w.s.pendientes.map(f => ({ ruta_id: f.ruta.id, numero: f.ruta.numero, origen: f.ruta.origen, destino: f.ruta.destino, equipo: f.ruta.equipo })),
             telefono: w.numero ? `+${w.numero}` : null, pais: w.telefono.pais, certeza: w.telefono.certeza, revision_telefono: w.telefono.motivo,

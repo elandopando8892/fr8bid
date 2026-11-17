@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ErrorApi, MesaApi, type Transporte } from "../cliente/api.js";
 import { LECTURAS, sinSecretos } from "../servidor/proxy.js";
 import { sinProtegidos } from "../servidor/paso.js";
-import { esProtegido } from "../dominio/protegidos.js";
+import { esPrima, esProtegido, eventoSinAvisos, MOTIVO_SIN_AVISOS } from "../dominio/protegidos.js";
 import { hoyMexico, versionVigente } from "../dominio/recorrido.js";
 import { claveIntento, intentosPorPreparar, intentosWhatsapp, seguimiento, textoIntento } from "../dominio/seguimiento.js";
 import { bloqueosMeta, enmascarar, estadoPlantilla, MENSAJE_PLANTILLA_PENDIENTE, PLANTILLA_RECORDATORIO, recordatorioYaEnviado, textoRecordatorio, VENTANA_RATEWARE, variablesRecordatorio } from "../dominio/whatsapp-meta.js";
@@ -28,9 +28,9 @@ import { ESCRITURAS_MCP } from "./transporte.js";
 const APP = "https://fr8bid.heymarksman.com";
 export const ligaMesa = (id: string) => `${APP}/eventos/${encodeURIComponent(id)}`;
 export const FUERA_DEL_MCP = ["award_rfx_lane_vendor", "clear_rfx_award", "closeout_awarded_rfx_to_rateware", "generate_rfx_award_notices"];
-// PRIMA nunca se cierra ni se rechaza desde el chat (decisión del propietario).
-const FOLIOS_SIN_CIERRE = new Set(["rfx-1021-primapro"]);
-export const esPrima = (folio: unknown) => FOLIOS_SIN_CIERRE.has(String(folio ?? "").trim().toLowerCase());
+// PRIMA nunca se cierra ni se rechaza desde el chat ni recibe avisos (decisión del
+// propietario); la identificación vive en dominio/protegidos.ts.
+export { esPrima };
 const CAMPANA_NUEVA = "$campana_creada";
 // El envío por WhatsApp usa el borrador y la aprobación que devuelve el paso anterior.
 const RECORDATORIO = "$recordatorio_preparado";
@@ -556,6 +556,8 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
     async whatsapp_intento(a: { event_id: string; carrier_id: string; ventana: "intento_4" | "48h" | "24h" }) {
       if (a.ventana !== "intento_4") throw new Rechazo("VENTANA_NO_DISPONIBLE", "Los recordatorios 48 h y 24 h antes del cierre (a quien respondió sin tarifa) llegan con la cadencia de fr8bid#72; hoy solo el 4º intento por WhatsApp. Rateware ya los acepta (rateware PR #215).", 400);
       const d = await leer(a.event_id);
+      // PRIMA: sin avisos por decisión del propietario (17-nov-2026).
+      if (eventoSinAvisos(d.evento)) throw new Rechazo("EVENTO_SIN_AVISOS", `${MOTIVO_SIN_AVISOS}. No se preparó nada.`);
       // Mismas reglas que los intentos por correo: evento abierto y respuestas consultadas.
       const bloqueo = bloqueoIntentos(d);
       if (bloqueo) throw new Rechazo(d.respuestas == null ? "SIN_RESPUESTAS" : "NO_PERMITIDO", `${bloqueo} No se preparó nada.`);

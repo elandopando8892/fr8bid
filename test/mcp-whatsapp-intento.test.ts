@@ -51,6 +51,16 @@ describe("preparar_whatsapp_intento: 4º intento por la plantilla de Meta (ratew
     expect(JSON.stringify(v)).not.toMatch(/\+528112345678|token=|invitation_token/);
   });
 
+  it("PRIMA (RFx-1021-PRIMAPro): se rechaza con EVENTO_SIN_AVISOS y no escribe nada", async () => {
+    const x = await escenario();
+    x.sim.events.find(e => e.id === x.eventId)!.rfx_id = "RFx-1021-PRIMAPro";
+    const m = mcp(x);
+    const p = m.ej("preparar_whatsapp_intento", { event_id: x.eventId, carrier_id: x.carrierC });
+    await expect(p).rejects.toMatchObject({ codigo: "EVENTO_SIN_AVISOS", message: expect.stringMatching(/^PRIMA: sin avisos por decisión del propietario/) });
+    expect(m.escritas()).toEqual([]);
+    expect(enviadosWhatsapp(x)).toEqual([]);
+  });
+
   it("nada se envía sin «sí»: sin frase, con duda o de alguien que no es el propietario", async () => {
     const x = await escenario();
     const m = mcp(x);
