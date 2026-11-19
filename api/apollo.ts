@@ -1,11 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { consultarApollo, type LlamarApollo } from "../src/servidor/apollo.js";
 
-// POST /api/apollo → buscar personas de un carrier (gratis) o revelar un correo
-// (1 crédito, con confirmación). Solo con sesión válida de rateware-prod: la
-// clave de Apollo nunca sale del servidor.
+// Legacy search only. Paid enrichment uses the durable company operation.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Solo POST", code: "METODO" });
+  if (req.body?.accion === "revelar") return res.status(409).json({ error: "Abre Contactos de empresas en la Mesa para confirmar y guardar el resultado.", code: "USAR_CONTACTOS_EMPRESA" });
   const base = process.env.RATEWARE_SUPABASE_URL;
   const anon = process.env.RATEWARE_SUPABASE_ANON_KEY;
   const auth = req.headers.authorization || "";
