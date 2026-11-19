@@ -4,6 +4,7 @@ import { autenticar, configuracion } from "../src/mcp/auth.js";
 import { crearServidor } from "../src/mcp/servidor.js";
 import { transporteApi, transporteEscritura } from "../src/mcp/transporte.js";
 import { secretoConfirmacion } from "../src/mcp/confirmacion.js";
+import { transporteContactos } from "../src/mcp/contactos.js";
 import { transporteListas } from "../src/mcp/listas.js";
 import { aprobadoresDe } from "../src/mcp/escrituras.js";
 
@@ -34,7 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Escrituras (Entrega 2) solo para Operador/Administrador; sin FR8BID_MCP_CONFIRM_SECRET
   // preparar_*/confirmar responden «confirmaciones pendientes de configurar» y las lecturas siguen.
   const escrituras = sesion.rol === "viewer" ? undefined
-    : { t: transporteEscritura(c.resource, sesion.token), tl: transporteListas(c.resource, sesion.token), userId: sesion.userId, clientId: sesion.clientId, email: sesion.email, aprobadores: aprobadoresDe(process.env), secreto: secretoConfirmacion(process.env) };
+    : { t: transporteEscritura(c.resource, sesion.token), tc: transporteContactos(c.resource, sesion.token), tl: transporteListas(c.resource, sesion.token), userId: sesion.userId, clientId: sesion.clientId, email: sesion.email, aprobadores: aprobadoresDe(process.env), secreto: secretoConfirmacion(process.env) };
   const servidor = crearServidor(transporteApi(c.resource, sesion.token), sesion.rol, undefined, escrituras);
   const transporte = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   try {
