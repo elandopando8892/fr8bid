@@ -13,12 +13,13 @@ export function transporteApi(resource: string, token: string, request: typeof f
 
 // Lista cerrada de escrituras del MCP (Entrega 2): subconjunto de ESCRITURAS del
 // proxy. Fuera a propósito: adjudicar, limpiar adjudicación, entregar a Rateware y
-// avisos de adjudicación (se hacen en la Mesa), además de crear eventos, importar
+// avisos de adjudicación (se hacen en la Mesa), además del alta genérica de eventos, importar
 // rutas, preseleccionar, condiciones y marcar invitadas por otro canal. update_rfx_bid y
 // update_rfx_event NO están: capturar, «ya respondió» y extender plazo van por las
 // escrituras condicionales atómicas de Rateware (bid_rate IS NULL / due_date = el leído),
 // para que dos confirmaciones concurrentes nunca pisen una oferta ni acorten un plazo.
 export const ESCRITURAS_MCP = new Set([
+  "create_rfx_event_draft",
   "draft_bid_room_carrier_message",
   "record_rfx_invitation_wave_review",
   "create_outreach_campaign",
