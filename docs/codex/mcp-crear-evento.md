@@ -31,7 +31,7 @@ La creación no autoriza `preparar_revision`, invitaciones, envíos ni adjudicac
 ## Seguridad y dependencias
 
 - PR Fr8Bid: rama `codex/fr8bid-mcp-crear-evento`.
-- PR Rateware: rama `codex/rateware-mcp-crear-evento`, adaptador y RPC `create_rfx_event_draft_once` con migración `20261117171742_rfx_event_draft_atomic.sql`.
+- PR Rateware: rama `codex/rateware-mcp-crear-evento`, adaptador y RPC `create_rfx_event_draft_once` con migración `20261119123200_rfx_event_draft_atomic.sql`.
 - No se modifica Auth ni se añaden credenciales. Cada petición usa OAuth y el bearer del usuario; Rateware revalida contra Auth y resuelve el workspace. Su cliente interno existente ejecuta el RPC únicamente después de esas verificaciones. El RPC no se concede a anon/authenticated.
 - El propietario permitido en Rateware es `sales@heymarksman.com`, coherente con el valor por omisión del MCP. Una configuración adicional de aprobadores en Fr8Bid no amplía esa autoridad del backend.
 - `FR8BID_ESCRITURAS_REALES` permanece intacto: `no` y `borradores` no habilitan esta creación; requiere `si`. No se cambió ninguna variable.
