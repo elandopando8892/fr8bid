@@ -65,7 +65,7 @@ export interface Respuesta {
 export type Enviar = (servicio: Servicio, body: Record<string, unknown>, autorizacion: string | null) => Promise<Respuesta>;
 
 export const LECTURAS: Record<Servicio, Set<string>> = {
-  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware", "list_rfx_carrier_replies", "get_rfx_carrier_reply", "list_rfx_reply_readings", "list_outreach_campaigns", "list_outreach_templates", "list_vendors", "list_contact_history"]),
+  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware", "list_rfx_carrier_replies", "get_rfx_carrier_reply", "list_rfx_reply_readings", "list_outreach_campaigns", "list_outreach_templates", "list_vendors", "list_contact_history", "list_carrier_list_templates", "get_carrier_list_template"]),
   "rfx-bid-api": new Set(["get_invitation"])
 };
 
@@ -99,7 +99,11 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
     // revalida número, «no contactar», permiso y plantilla APROBADA contra Meta, y no repite
     // el mismo recordatorio; desde el MCP solo lo confirma el propietario.
     "prepare_whatsapp_rfx_reminder",
-    "send_whatsapp_outreach_messages"
+    "send_whatsapp_outreach_messages",
+    // MCP: alta de un carrier en una lista (vendor_segments participant_template). Solo
+    // vendor_ids y con expected_version: Rateware la aplica únicamente si la lista sigue
+    // en esa versión (409 template_version_conflict si otro la cambió).
+    "update_carrier_list_template"
   ]),
   "rfx-bid-api": new Set(["submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
@@ -247,6 +251,15 @@ export async function manejar(
     if (!body?.event_id) return error(400, "FALTA_EVENTO", "Extender el plazo necesita event_id.");
     if (!patch || Object.keys(patch).join(",") !== "due_date" || !("expected_due_date" in body!))
       return error(400, "SOLO_PLAZO", "Solo se extiende el plazo y con el plazo leído (expected_due_date).");
+  }
+
+  if (action === "update_carrier_list_template") {
+    // Solo membresía, con la versión leída: nunca nombre, descripción ni estado (archivar o
+    // restaurar es del Administrador en Rateware).
+    const patch = body?.patch && typeof body.patch === "object" ? (body.patch as Record<string, unknown>) : null;
+    const claves = Object.keys(body ?? {}).filter(k => k !== "action").sort().join(",");
+    if (claves !== "expected_version,patch,template_id" || !patch || Object.keys(patch).join(",") !== "vendor_ids" || !Array.isArray(patch.vendor_ids) || !Number.isSafeInteger(body?.expected_version))
+      return error(400, "SOLO_MIEMBROS", "Desde Fr8Bid solo se cambia la membresía de una lista, con expected_version.");
   }
 
   if (esEscritura && !op.permitirEscrituras && op.soloBorradores && !SOLO_BORRADORES[servicio].has(action)) {
