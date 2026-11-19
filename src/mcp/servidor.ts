@@ -5,9 +5,11 @@ import { crearEscrituras, herramientasEscritura, Rechazo, type ContextoEscritura
 import type { Transporte } from "../cliente/api.js";
 import type { Rol } from "../dominio/tipos.js";
 import { ErrorApi } from "../cliente/api.js";
+import { ACTOS_CONTACTOS, actoDe, crearContactos, herramientasContactos, type TransporteContactos } from "./contactos.js";
+import { ACTOS_LISTAS, crearListas, herramientasListas } from "./listas.js";
 
 /** Escrituras: transporte de escritura propio (ESCRITURAS_MCP) y la identidad OAuth de la sesión. */
-export type OpcionesEscritura = Omit<ContextoEscrituras, "rol" | "ahora"> & { t: Transporte };
+export type OpcionesEscritura = Omit<ContextoEscrituras, "rol" | "ahora"> & { t: Transporte; tc?: TransporteContactos; tl?: Transporte };
 
 export function crearServidor(t: Transporte, rol: Rol, ahora?: () => Date, escrituras?: OpcionesEscritura) {
   const servidor = new McpServer({ name: "fr8bid-mcp-server", version: "0.2.0" });
@@ -31,8 +33,42 @@ export function crearServidor(t: Transporte, rol: Rol, ahora?: () => Date, escri
   // preparar_* y confirmar solo para Operador/Administrador; el rol se vuelve a
   // comprobar al preparar y al confirmar (según la acción).
   if (escrituras && rol !== "viewer") {
-    const { t: te, ...identidad } = escrituras;
-    const ejecutar = crearEscrituras(te, { ...identidad, rol, ahora });
+    const { t: te, tc, tl, ...identidad } = escrituras;
+    const escribir = crearEscrituras(te, { ...identidad, rol, ahora });
+    // Contactos (carrier-contacts-api por /api/contactos-empresa) y listas (vendor_segments por
+    // /api/rateware). confirmar se enruta por el acto del confirmacion_id; cada módulo verifica
+    // firma, sesión, rol y propietario completos.
+    const contactos = tc ? crearContactos(tc, { ...identidad, rol, ahora }) : null;
+    const listas = tl ? crearListas(tl, { ...identidad, rol, ahora }) : null;
+    const ejecutar = (nombre: string, args: Record<string, unknown>) => {
+      const acto = nombre === "confirmar" ? actoDe(String(args.confirmacion_id ?? "")) ?? "" : "";
+      if (contactos && ACTOS_CONTACTOS.has(acto)) return contactos(nombre, args);
+      if (listas && ACTOS_LISTAS.has(acto)) return listas(nombre, args);
+      return escribir(nombre, args);
+    };
+    const modulos: [Record<string, { descripcion: string; schema: z.ZodObject<any> }>, (n: string, a: Record<string, unknown>) => Promise<Record<string, any>>][] = [];
+    if (contactos) modulos.push([herramientasContactos, contactos]);
+    if (listas) modulos.push([herramientasListas, listas]);
+    for (const [definiciones, modulo] of modulos) for (const [nombre, h] of Object.entries(definiciones)) {
+      servidor.registerTool(nombre, {
+        description: h.descripcion,
+        inputSchema: h.schema.shape,
+        // buscar_contacto con Apollo guarda la lista de candidatos (1 h) en Rateware: no es solo lectura.
+        annotations: { readOnlyHint: nombre !== "buscar_contacto", destructiveHint: false, idempotentHint: true, openWorldHint: true }
+      }, async (args: Record<string, unknown>) => {
+        try {
+          const result = await modulo(nombre, args);
+          return { content: [{ type: "text" as const, text: JSON.stringify(result) }], structuredContent: result };
+        } catch (e) {
+          if (e instanceof Rechazo) {
+            const result = { estado: "rechazada", codigo: e.codigo, mensaje: e.message, escrito: false };
+            return { isError: true, content: [{ type: "text" as const, text: `${e.codigo}: ${e.message}` }], structuredContent: result };
+          }
+          const code = e instanceof z.ZodError ? "ARGUMENTOS" : "NO_COMPLETADO";
+          return { isError: true, content: [{ type: "text" as const, text: `${code}: no se pudo completar. Revisa los parámetros o la sesión. No se reintentó.` }] };
+        }
+      });
+    }
     for (const [nombre, h] of Object.entries(herramientasEscritura)) {
       const confirmar = nombre === "confirmar" || nombre === "confirmar_creacion_evento";
       servidor.registerTool(nombre, {

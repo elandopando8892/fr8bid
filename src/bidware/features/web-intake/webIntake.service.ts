@@ -95,6 +95,26 @@ export function laneFromLead(lead: Record<string, unknown>): WebLane {
   };
 }
 
+/** Most lanes one website request can carry (rateware#214): the lead's own plus nine in lead.lanes. */
+export const MAX_WEB_LANES = 10;
+
+/**
+ * Every lane of a website request, in the visitor's order: the first from the
+ * lead's own fields (with its notes), the rest from lead.lanes, which use the
+ * same field names. Entries that are not objects are ignored.
+ */
+export function lanesFromLead(lead: Record<string, unknown>): WebLane[] {
+  const extra = Array.isArray(lead.lanes) ? lead.lanes : [];
+  const more = extra.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
+    .map((entry) => laneFromLead(entry));
+  return [laneFromLead(lead), ...more].slice(0, MAX_WEB_LANES);
+}
+
+/** How many lanes a stored lead brings, for the tray's list. */
+export function laneCount(lead: Record<string, unknown>): number {
+  return lanesFromLead(lead).length;
+}
+
 /** Where a lead came from, as the site captured it: campaign, else landing page. */
 export function leadSource(row: Pick<WebIntake, "attribution">): string {
   const a = row.attribution && typeof row.attribution === "object" ? row.attribution : {};
@@ -116,6 +136,14 @@ export function missingForPromotion(lane: WebLane, shipperId: string | null): st
   if (!loads(lane.weekly_volume.trim())) missing.push(tr("loadsPerWeek"));
   if (lane.average_weight.trim() && !/^\d+(\.\d+)?$/.test(lane.average_weight.trim())) missing.push(tr("weight"));
   return missing;
+}
+
+/** What blocks promoting the chosen lanes; with several, each item names its lane. */
+export function missingForLanes(lanes: WebLane[], shipperId: string | null): string[] {
+  if (!lanes.length) return [tr("noLaneChosen")];
+  const shipper = shipperId ? [] : [tr("shipper")];
+  if (lanes.length === 1) return [...shipper, ...missingForPromotion(lanes[0], "x")];
+  return [...shipper, ...lanes.flatMap((lane, i) => missingForPromotion(lane, "x").map((item) => `${tr("laneN", String(i + 1))}: ${item}`))];
 }
 
 /** Server refusals in the team's words; anything else stays generic. */
@@ -144,10 +172,14 @@ export async function listWebIntake(): Promise<WebIntake[]> {
   }
 }
 
-export async function promoteWebLead(intakeId: string, shipperId: string, lane: WebLane, currency: "USD" | "MXN") {
-  const clean = Object.fromEntries(Object.entries(lane).map(([k, v]) => [k, v.trim()]).filter(([, v]) => v));
+export async function promoteWebLead(intakeId: string, shipperId: string, lanes: WebLane | WebLane[], currency: "USD" | "MXN") {
+  const list = Array.isArray(lanes) ? lanes : [lanes];
+  if (!list.length || list.length > MAX_WEB_LANES) throw new Error(tr("errLane"));
+  const clean = list.map((lane) => Object.fromEntries(Object.entries(lane).map(([k, v]) => [k, v.trim()]).filter(([, v]) => v)));
+  // One lane keeps the original request shape, so it works with any quotedesk-api;
+  // several go as `lanes`, which an older quotedesk-api refuses before writing anything.
   return callQuotedeskApi<{ project_id: string; replayed: boolean }>("promote_web_lead", {
-    intake_id: intakeId, shipper_id: shipperId, lane: clean, currency,
+    intake_id: intakeId, shipper_id: shipperId, ...(clean.length === 1 ? { lane: clean[0] } : { lanes: clean }), currency,
   });
 }
 
