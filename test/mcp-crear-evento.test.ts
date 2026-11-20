@@ -36,6 +36,53 @@ function scenario(extra:Partial<ContextoEscrituras>={}) {
 }
 
 describe('RFx draft preparation and human confirmation',()=>{
+  const trailerDraft = {
+    name: 'PRUEBA MCP — no usar',
+    event_type: 'spot',
+    bid_visibility_mode: 'private',
+    lanes: [{origin:'Monterrey, NL, MX', destination:'Laredo, TX, US', trailer:'Dry Van', equipment:'Container', currency:'USD'}],
+  };
+  it('preview trailer forwards Dry Van independently of equipment without writing', async () => {
+    const s = scenario();
+    const p = await s.run('preparar_evento', trailerDraft);
+    expect(p).toMatchObject({estado:'preparada', escrito:false});
+    expect(s.calls).toEqual([{action:'preview_rfx_event_creation', payload:trailerDraft}]);
+  });
+  it.each([
+    [400, 'unknown_catalog_trailer', 'trailer'],
+    [400, 'unknown_catalog_equipment', 'equipment'],
+    [403, 'role_or_organization_forbidden', 'organización'],
+    [503, 'internal_backend_error', 'vista previa'],
+  ])('preview trailer reports safe errors for status %i and code %s', async (status, code, detail) => {
+    const s = scenario();
+    const t: typeof s.t = async (_service, body) => {
+      expect(body.action).toBe('preview_rfx_event_creation');
+      return {status, headers:{}, body:{code, message:'private backend detail'}};
+    };
+    const server = crearServidor(t, 'operator', s.ctx.ahora, {...s.ctx, t});
+    const transport = new WebStandardStreamableHTTPServerTransport({sessionIdGenerator:undefined, enableJsonResponse:true});
+    await server.connect(transport);
+    try {
+      const response = await transport.handleRequest(new Request('http://localhost/mcp', {
+        method:'POST',
+        headers:{'content-type':'application/json', accept:'application/json, text/event-stream'},
+        body:JSON.stringify({jsonrpc:'2.0', id:1, method:'tools/call', params:{name:'preparar_evento', arguments:trailerDraft}}),
+      }));
+      const output = await response.json();
+      expect(output.result).toMatchObject({
+        isError:true,
+        structuredContent:{
+          codigo:status === 503 ? 'PREPARACION_NO_DISPONIBLE' : code,
+          mensaje:expect.stringContaining(detail),
+          escrito:false,
+        },
+      });
+      expect(JSON.stringify(output)).not.toContain('private backend detail');
+    } finally {
+      await server.close();
+    }
+  });
+
   it('acceptance scenario stays incomplete without inventing required currency or shipment data',async()=>{
     const s=scenario(), p=await s.run('preparar_evento',payload);
     expect(p.estado).toBe('incompleta'); expect(p.confirmacion_id).toBeNull(); expect(p.escrito).toBe(false);
@@ -88,7 +135,7 @@ describe('RFx draft preparation and human confirmation',()=>{
   it('HTTP MCP discovery declares read and write accurately and excludes viewer',async()=>{
     for(const role of ['operator','viewer'] as const){const s=scenario(),server=crearServidor(s.t,role,s.ctx.ahora,{...s.ctx,t:s.t});const transport=new WebStandardStreamableHTTPServerTransport({sessionIdGenerator:undefined});await server.connect(transport);
       const response=await transport.handleRequest(new Request('http://localhost/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list',params:{}})}));
-      const raw=await response.text();expect(raw.includes('preparar_evento')).toBe(role==='operator');expect(raw.includes('confirmar_creacion_evento')).toBe(role==='operator');await server.close();
+      const raw=await response.text();expect(raw.includes('preparar_evento')).toBe(role==='operator');expect(raw.includes('confirmar_creacion_evento')).toBe(role==='operator');expect(raw.includes('"trailer"')).toBe(role==='operator');await server.close();
     }
   });
   it('write transport forwards user token once, with no service credential',async()=>{

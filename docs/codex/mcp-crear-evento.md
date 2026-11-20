@@ -16,9 +16,9 @@ Se reutilizan los patrones de confirmación del MCP y de operaciones idempotente
 
 ## Contratos y experiencia
 
-`preparar_evento` exige nombre, tipo `spot|bid|rfx`, visibilidad explícita y 1–50 rutas con origen/destino. Acepta descripción, cliente/customer_id, fechas ISO, equipo, operación, servicio, moneda, target y los apartados de condiciones ya existentes. Rechaza campos de autoridad, estado, invitaciones y datos no admitidos. No inventa fechas ni completa desconocidos.
+`preparar_evento` exige nombre, tipo `spot|bid|rfx`, visibilidad explícita y 1–50 rutas con origen/destino. Acepta descripción, cliente/customer_id, fechas ISO, `equipment`, `trailer`, operación, servicio, moneda, target y los apartados de condiciones ya existentes. Usa `trailer: "Dry Van"` para el tipo de caja. Cada campo opcional se valida y se guarda por separado. Rechaza campos de autoridad, estado, invitaciones y datos no admitidos. No inventa fechas ni completa desconocidos.
 
-La vista previa muestra `payload.event`, `payload.lanes`, `missing`, `blocking`, `warnings` e impacto: un borrador y sus rutas, sin invitaciones. Valida equipo/operación/servicio con catálogos activos del workspace; customer_id con el acceso existente a shippers. La moneda sigue el contrato Rateware de código de tres letras; no existe un catálogo administrado de monedas. Las direcciones son texto, no geocodificación certificada.
+La vista previa muestra `payload.event`, `payload.lanes`, `missing`, `blocking`, `warnings` e impacto: un borrador y sus rutas, sin invitaciones. Valida equipo, caja, operación y servicio con sus catálogos activos del workspace, y customer_id con el acceso existente a shippers. En un rechazo conocido muestra el código de Rateware y un mensaje en español. La moneda sigue el contrato Rateware de código de tres letras; no existe un catálogo administrado de monedas. Las direcciones son texto, no geocodificación certificada.
 
 Falta moneda: `estado: incompleta`, `confirmacion_id: null`. La columna de rutas es NOT NULL; no se aplica el default USD. Equipo, cliente, target y plazo desconocidos permanecen null cuando el contrato admite borrador. Peso, dimensiones y horarios siguen en los apartados libres del contrato; se advierte que deben revisarse, no se extraen ni inventan.
 

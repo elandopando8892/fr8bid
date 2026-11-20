@@ -18,7 +18,8 @@ export const esquemaEvento = z.object({
     origin: texto, destination: texto,
     origin_city: opcional, origin_state: opcional, origin_country: opcional,
     destination_city: opcional, destination_state: opcional, destination_country: opcional,
-    equipment: opcional, operation: opcional, service: opcional,
+    equipment: opcional, trailer: opcional.describe("Tipo de caja del catálogo trailer, por ejemplo Dry Van. Independiente de equipment."),
+    operation: opcional, service: opcional,
     currency: opcional, target_rate: z.number().nonnegative().max(1_000_000).nullable().optional(),
     logistics_model: opcional, operation_criteria: opcional, business_rules: opcional,
     service_specifications: opcional, carrier_requirements: opcional, other_notes: opcional, notes: opcional
@@ -27,18 +28,42 @@ export const esquemaEvento = z.object({
 export const esquemaConfirmarEvento = z.object({ confirmacion_id: z.string().min(20).max(60000), frase_ok: z.string().min(1).max(300) }).strict();
 export const herramientasCrearEvento = {
   preparar_evento: { rol: "operator" as const, schema: esquemaEvento,
-    descripcion: "Prepara un RFx draft y sus rutas, valida catálogos en Rateware y muestra faltantes. No persiste ni invita. Muestra la vista previa completa y pide aprobación humana en otro mensaje antes de confirmar_creacion_evento." },
+    descripcion: "Prepara un RFx draft y sus rutas, valida catálogos en Rateware y muestra faltantes. Usa trailer para el tipo de caja (por ejemplo Dry Van) y equipment para el equipo. No persiste ni invita. Muestra la vista previa completa y pide aprobación humana en otro mensaje antes de confirmar_creacion_evento." },
   confirmar_creacion_evento: { rol: "operator" as const, schema: esquemaConfirmarEvento,
     descripcion: "Crea únicamente el borrador y sus rutas de la vista previa, con frase_ok literal del propietario. Confirmación de 15 minutos, ligada a sesión y organización. No invita, envía ni adjudica; no reintenta resultados inciertos." }
 };
+
+const erroresVista = new Map([
+  ["invalid_fields", "Rateware recibió campos que no admite en el borrador."],
+  ["invalid_event", "Revisa el nombre, el tipo o la visibilidad del evento."],
+  ["invalid_date", "Revisa que las fechas existan y usen el formato AAAA-MM-DD."],
+  ["invalid_customer", "El identificador del cliente es inválido."],
+  ["invalid_lanes", "El borrador debe incluir entre 1 y 50 rutas."],
+  ["invalid_number", "Una ruta tiene un valor numérico fuera del rango permitido."],
+  ["invalid_text", "Un campo de texto está vacío o supera la longitud permitida."],
+  ["missing_route", "Indica origen y destino para cada ruta."],
+  ["unknown_catalog_equipment", "El valor de equipment no existe en su catálogo. Para el tipo de caja, usa trailer."],
+  ["unknown_catalog_trailer", "El valor de trailer no existe en el catálogo de tipos de caja."],
+  ["unknown_catalog_operation", "El valor de operation no existe en su catálogo."],
+  ["unknown_catalog_service", "El valor de service no existe en su catálogo."],
+  ["invalid_currency", "Indica la moneda con un código de tres letras, como USD."],
+  ["role_or_organization_forbidden", "La sesión de Rateware no tiene el rol o la organización requeridos."],
+  ["customer_not_in_workspace", "El cliente no pertenece al espacio de trabajo de Rateware."],
+  ["SIN_SESION", "Inicia sesión antes de preparar el borrador."],
+]);
 
 export function crearEventos(t: Transporte, ctx: ContextoEscrituras) {
   const ahora = ctx.ahora ?? (() => new Date());
   async function vista(payload: unknown) {
     const r = await t("rateware-api", { action: "preview_rfx_event_creation", payload });
+    const code = r.body?.code;
+    if ([400, 401, 403].includes(r.status) && typeof code === "string") {
+      const mensaje = erroresVista.get(code);
+      if (mensaje) throw new Rechazo(code, mensaje, r.status);
+    }
     if (r.status !== 200 || !r.body || typeof r.body.actor_id !== "string" || typeof r.body.organization_id !== "string" ||
       typeof r.body.can_create !== "boolean" || !Array.isArray(r.body.missing) || !Array.isArray(r.body.warnings) || !r.body.payload) {
-      throw new Rechazo("PREPARACION_NO_DISPONIBLE", "Rateware no confirmó el contrato de creación. No se escribió nada.", 503);
+      throw new Rechazo("PREPARACION_NO_DISPONIBLE", "Rateware no devolvió una vista previa válida.", 503);
     }
     if (r.body.actor_id !== ctx.userId) throw new Rechazo("IDENTIDAD_CAMBIO", "La identidad de Rateware no coincide con la sesión.", 403);
     return r.body;
