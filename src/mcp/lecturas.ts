@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { consultarTarifario, esquemaTarifario } from "./tarifario.js";
 import { ErrorApi, MesaApi, type Transporte } from "../cliente/api.js";
 import { LECTURAS, sinSecretos } from "../servidor/proxy.js";
 import { sinProtegidos } from "../servidor/paso.js";
@@ -14,6 +15,7 @@ const id = z.string().regex(/^[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a
 const evento = { event_id: id };
 const pagina = { offset: z.number().int().min(0).max(100000).default(0), limit: z.number().int().min(1).max(100).default(30) };
 export const herramientas = {
+  consultar_tarifario: { descripcion: "Tarifario general de Rateware, histórico y actual. Especifica origen y destino como ciudad, estado, país, y equipo. Usa tipo_servicio solo si conoces el servicio. Cada fila conserva importe, moneda, vigencia y procedencia. Continúa con siguiente_cursor incluso si la página queda vacía.", schema: esquemaTarifario },
   eventos: { descripcion: "Busca eventos por nombre/folio/shipper y estado; devuelve IDs para las demás consultas. Paginación local del listado recibido, cobertura de origen declarada.", schema: z.object({ buscar: z.string().max(100).optional(), estado: z.enum(["borrador", "abierto", "cerrado", "adjudicado", "archivado"]).optional(), ...pagina }).strict() },
   evento: { descripcion: "Foto del evento y su recorrido; no cambia estado. La liga abre la Mesa, no ejecuta botones.", schema: z.object(evento).strict() },
   seguimiento_evento: { descripcion: "Invitaciones, aperturas, respuestas y siguiente intento por cadencia existente; nunca envía ni prepara mensajes.", schema: z.object({ ...evento, ...pagina }).strict() },
@@ -137,7 +139,9 @@ export function crearLecturas(t: Transporte, ahora: () => Date = () => new Date(
     if (esProtegido(a.event_id) || (a.event_ids as string[] | undefined)?.some(esProtegido)) throw new Error("Evento protegido");
     const fecha = ahora().toISOString();
     let result: Record<string, unknown>;
-    if (nombre === "eventos") {
+    if (nombre === "consultar_tarifario") {
+      result = await consultarTarifario(a, hoyMexico(ahora()), pedir);
+    } else if (nombre === "eventos") {
       const rows = (await api.eventos()).filter(e => !esProtegido(e.id) && (!a.estado || e.estado === a.estado) && (!a.buscar || normal(`${e.folio} ${e.nombre} ${e.shipper}`).includes(normal(a.buscar))));
       const p = paginar(rows, a.offset, a.limit);
       result = { eventos: p.filas.map(({ rutas: _rutas, ...e }) => e), total_recibido: p.total_recibido, siguiente_offset: p.siguiente_offset, cobertura: "Listado recibido de la API; no garantiza exhaustividad del origen." };
@@ -219,6 +223,13 @@ export function crearLecturas(t: Transporte, ahora: () => Date = () => new Date(
     }
     const limpio = sinSecretos({ ...result, consultado_en: fecha, solo_lectura: true });
     if (JSON.stringify(limpio).length > 200000) {
+      if (nombre === "consultar_tarifario") return {
+        estado:"incompleta", completa:false, cursor_entrada:a.cursor ?? null, limit_sugerido:Math.max(1,Math.floor(a.limit/2)),
+        error:{codigo:"RESPUESTA_DEMASIADO_GRANDE", sugerencia:a.limit===1
+          ? "Una tarifa supera el límite de respuesta. La cobertura queda incompleta."
+          : "Reduce limit y repite desde el mismo cursor."},
+        consultado_en:fecha, solo_lectura:true,
+      };
       const rutas: any[] = Array.isArray(limpio.rutas) ? limpio.rutas : [];
       const grande = rutas.find(r => JSON.stringify(r).length > 200000);
       return { error: { codigo: "RESPUESTA_DEMASIADO_GRANDE", ruta_id: grande?.ruta_id ?? grande?.id ?? a.ruta_id ?? null,

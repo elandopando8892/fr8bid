@@ -11,6 +11,7 @@
 
 import { detalle } from "../cliente/mapear.js";
 import { UUID_RATEWARE } from "../dominio/operacion.js";
+import { paginaTarifario } from "../mcp/tarifario.js";
 import { claveCampana, esPlantillaInvitacion } from "../dominio/invitacion.js";
 import { esProtegido } from "../dominio/protegidos.js";
 import { candadosAdjudicacion, hoyMexico, puedeAdjudicar } from "../dominio/recorrido.js";
@@ -65,7 +66,7 @@ export interface Respuesta {
 export type Enviar = (servicio: Servicio, body: Record<string, unknown>, autorizacion: string | null) => Promise<Respuesta>;
 
 export const LECTURAS: Record<Servicio, Set<string>> = {
-  "rateware-api": new Set(["preview_rfx_event_creation", "list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware", "list_rfx_carrier_replies", "get_rfx_carrier_reply", "list_rfx_reply_readings", "list_outreach_campaigns", "list_outreach_templates", "list_vendors", "list_contact_history", "list_carrier_list_templates", "get_carrier_list_template"]),
+  "rateware-api": new Set(["list_carrier_tariff_candidates", "preview_rfx_event_creation", "list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware", "list_rfx_carrier_replies", "get_rfx_carrier_reply", "list_rfx_reply_readings", "list_outreach_campaigns", "list_outreach_templates", "list_vendors", "list_contact_history", "list_carrier_list_templates", "get_carrier_list_template"]),
   "rfx-bid-api": new Set(["get_invitation"])
 };
 
@@ -222,6 +223,10 @@ export async function manejar(
     // Solo la consulta del historial del segmento: caja y operación, sin
     // búsqueda libre ni otros filtros (no es una puerta al tarifario).
     return error(400, "SOLO_HISTORIAL_SEGMENTO", "Fr8Bid solo consulta el historial del segmento de una ruta.");
+  }
+
+  if (action === "list_carrier_tariff_candidates" && !paginaTarifario.safeParse(body).success) {
+    return error(400, "CONSULTA_TARIFARIO_INVALIDA", "Indica ciudades de origen y destino y una página válida del tarifario.");
   }
 
   if (action === "list_vendors" && !esConsultaContactos(body!)) {

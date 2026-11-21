@@ -22,10 +22,15 @@ export function crearServidor(t: Transporte, rol: Rol, ahora?: () => Date, escri
     }, async (args: Record<string, unknown>) => {
       try {
         const result = await leer(nombre, args);
-        return { content: [{ type: "text" as const, text: JSON.stringify(result) }], structuredContent: result };
+        return { ...(nombre === "consultar_tarifario" && result.error && {isError:true}),
+          content: [{ type: "text" as const, text: JSON.stringify(result) }], structuredContent: result };
       } catch (e) {
         // No devolver mensajes externos: pueden contener credenciales o datos ajenos.
         const code = e instanceof z.ZodError ? "ARGUMENTOS" : e instanceof ErrorApi ? `HTTP_${e.status}` : "LECTURA_NO_COMPLETADA";
+        if (nombre === "consultar_tarifario") {
+          const result = { estado:"incompleta", completa:false, codigo:code, solo_lectura:true };
+          return {isError:true, content:[{type:"text" as const, text:`${code}: no se pudo verificar esta página del tarifario de Rateware.`}], structuredContent:result};
+        }
         return { isError: true, content: [{ type: "text" as const, text: `${code}: no se pudo completar la consulta. Revisa los parámetros, la sesión o la Mesa. No se reintentó ni se escribió nada.` }] };
       }
     });
