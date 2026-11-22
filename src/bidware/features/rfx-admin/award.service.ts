@@ -296,13 +296,10 @@ export interface NoticeCopy {
 /** The notice as the handler words it, per group and language. */
 export function noticeCopy(group: NoticeGroup, language: "es" | "en", rfxKey: string): NoticeCopy {
   const es = language === "es";
-  // The subject speaks the notice's language too (rateware, 2026-09-29).
+  // The body speaks the notice's language; the subject is always Spanish
+  // (Jose, 6/7-nov; rateware awardNoticeSubject, 22-nov).
   const prefix =
-    group === "primary"
-      ? es ? "Adjudicación" : "Award"
-      : group === "backup"
-        ? es ? "Capacidad de respaldo" : "Backup status"
-        : es ? "Cierre de RFx" : "RFx closeout";
+    group === "primary" ? "Adjudicación" : group === "backup" ? "Capacidad de respaldo" : "Cierre de RFx";
   const intro = es
     ? "Esta actualización corresponde exclusivamente a esta oportunidad y resume las rutas, tarifas y capacidad registradas en el Bid Room."
     : "This update applies only to this opportunity and summarizes the routes, rates, and capacity recorded in the Bid Room.";

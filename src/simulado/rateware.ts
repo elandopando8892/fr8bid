@@ -529,7 +529,7 @@ export class RatewareSimulado {
         // Como rateware-api: responde en el hilo solo si encuentra un correo
         // del carrier; si no (el caso de quien no ha respondido), sale como
         // correo nuevo. Asunto «Seguimiento <folio> · <origen> → <destino>»
-        // (decisión de Jose, 6-nov; «Follow-up …» si el mensaje va en inglés).
+        // (decisión de Jose, 6-nov; el asunto va en español aunque el mensaje vaya en inglés).
         const lane = this.lanes.find((l) => l.id === lv.rfx_lane_id);
         const ruta = [lane?.origin_city, lane?.destination_city].filter(Boolean).join(" → ");
         const m = this.filaMensaje(event, lv, vendor, `Seguimiento ${event.rfx_id}${ruta ? ` · ${ruta}` : ""}`, texto, {
