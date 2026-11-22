@@ -167,8 +167,13 @@ describe("modelo de Codex en el arnés", () => {
   it("--modelo gana a CODEX_MODELO, y este al valor por omisión", () => {
     expect(modeloCodex("gpt-a", { CODEX_MODELO: "gpt-b" })).toBe("gpt-a");
     expect(modeloCodex(undefined, { CODEX_MODELO: "gpt-b" })).toBe("gpt-b");
-    expect(modeloCodex("", {})).toBe(MODELO_POR_OMISION);
+    expect(modeloCodex(undefined, { CODEX_MODELO: "" })).toBe(MODELO_POR_OMISION);
     expect(modeloCodex(undefined)).toBe("gpt-6.1-terra");
+  });
+
+  it("un --modelo vacío o sin valor se rechaza en vez de cambiarse por otro", () => {
+    expect(() => modeloCodex("", { CODEX_MODELO: "gpt-b" })).toThrow(/Modelo inválido/);
+    expect(() => modeloCodex(true, {})).toThrow(/Modelo inválido/);
   });
 
   it("rechaza modelos con espacios o metacaracteres, vengan de la opción o del entorno", () => {
@@ -178,7 +183,7 @@ describe("modelo de Codex en el arnés", () => {
     }
   });
 
-  it("revisar y delegar pasan el modelo a codex exec, sin red ni aprobaciones, y el prompt por stdin", () => {
+  it("los argumentos de codex exec llevan el modelo, van sin red ni aprobaciones y el prompt entra por stdin", () => {
     for (const sandbox of ["read-only", "workspace-write"]) {
       const args = argumentosCodexExec({ cwd: "/repo", sandbox, salida: "/tmp/s.md", modelo: modeloCodex(undefined, {}) });
       expect(args[0]).toBe("exec");

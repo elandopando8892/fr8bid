@@ -13,7 +13,7 @@ export function rutasSecretos(archivos: string[]): string[];
 export function construirPromptDelegacion(o: { tarea: string; rama: string; base: string }): string;
 export function construirPromptRevision(o: { base: string; diff: string; enfoque?: string }): string;
 export const MODELO_POR_OMISION: string;
-export function modeloCodex(opcion: string | undefined | null, entorno?: Record<string, string | undefined>): string;
+export function modeloCodex(opcion: string | boolean | undefined | null, entorno?: Record<string, string | undefined>): string;
 export function argumentosCodexExec(o: { cwd: string; sandbox: string; salida: string; modelo: string }): string[];
 export function argShell(arg: string, win: boolean): string;
 export function leerVeredicto(texto: string | null | undefined): Veredicto;
