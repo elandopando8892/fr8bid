@@ -73,7 +73,7 @@ export const herramientasEscritura = {
     schema: z.object({ event_id: id, nueva_fecha: fecha }).strict() },
   preparar_whatsapp_intento: { rol: "operator" as Rol, descripcion: `Intento por WhatsApp con la plantilla de Meta aprobada (${PLANTILLA_RECORDATORIO.nombre}) a un carrier al que ya le toca (4º intento de la cadencia). Muestra destinatario enmascarado, plantilla y variables; Rateware pone la liga privada del Bid Room. Al confirmar SE ENVÍA 1 WhatsApp; solo lo confirma el propietario. Si no está listo (número dudoso, no contactar, sin permiso o plantilla no aprobada) no prepara nada: usa el respaldo manual de whatsapp_pendientes. ventana 48h/24h (respondió sin tarifa) llega con fr8bid#72. ${vista}`,
     schema: z.object({ event_id: id, carrier_id: id, ventana: z.enum(["intento_4", "48h", "24h"]).default("intento_4") }).strict() },
-  confirmar: { rol: "operator" as Rol, descripcion: "Ejecuta una vista previa ya mostrada. confirmacion_id = el de preparar_*; frase_ok = el texto literal con el que el usuario dijo «sí» (vacío = rechazo). Vence a los 15 min, vuelve a comprobar el evento y no reintenta. Adjudicar, entregar a Rateware y avisos de adjudicación no están aquí: se hacen en la Mesa.",
+  confirmar: { rol: "operator" as Rol, descripcion: "Ejecuta una vista previa ya mostrada. confirmacion_id = el de preparar_*; frase_ok = el texto literal con el que el usuario dijo «sí» (vacío = rechazo). Vence a los 15 min, vuelve a comprobar el evento y no reintenta. Adjudicar, entregar a Rateware y avisos de adjudicación no están aquí: se hacen en la página del evento en Fr8Bid.",
     schema: z.object({ confirmacion_id: z.string().min(20).max(LIMITE_TOKEN), frase_ok: z.string().max(300).optional() }).strict() }
 };
 export type NombreEscritura = keyof typeof herramientasEscritura;
@@ -90,7 +90,7 @@ const permite = (rol: Rol, minimo: Rol) => RANGO[rol] >= RANGO[minimo];
 export class Rechazo extends Error {
   constructor(public codigo: string, mensaje: string, public status = 409) { super(mensaje); }
 }
-const PENDIENTE = () => new Rechazo("CONFIRMACIONES_PENDIENTES", "Confirmaciones pendientes de configurar (falta FR8BID_MCP_CONFIRM_SECRET). Las consultas siguen disponibles; este cambio hazlo en la Mesa.", 503);
+const PENDIENTE = () => new Rechazo("CONFIRMACIONES_PENDIENTES", "Confirmaciones pendientes de configurar (falta FR8BID_MCP_CONFIRM_SECRET). Las consultas siguen disponibles; este cambio hazlo en la página del evento en Fr8Bid.", 503);
 // frase_ok: lista blanca de afirmaciones explícitas. Cualquier negación o duda
 // la invalida aunque también diga «sí».
 const normalizar = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9ñ]+/g, " ").trim().replace(/\s+/g, " ");
@@ -155,7 +155,7 @@ export const CONFLICTOS_CONDICIONALES: Record<string, string> = {
 };
 // Rateware sin la acción desplegada responde 400 «Unknown action.» antes de escribir.
 export const accionNoDesplegada = (status: number, b: any) => status === 400 && (/unknown action/i.test(String(b?.error ?? "")) || b?.code === "UNSUPPORTED_ACTION");
-export const MENSAJE_NO_DESPLEGADA = "Rateware todavía no tiene esta acción (escrituras condicionales de rateware PR #213 sin desplegar). No se escribió nada; hazlo en la Mesa.";
+export const MENSAJE_NO_DESPLEGADA = "Rateware todavía no tiene esta acción (escrituras condicionales de rateware PR #213 sin desplegar). No se escribió nada; hazlo en la página del evento en Fr8Bid.";
 export const MENSAJE_NO_DESPLEGADA_WHATSAPP = "Rateware todavía no tiene el recordatorio por WhatsApp (rateware PR #215 sin desplegar). No se envió nada; usa el respaldo manual de whatsapp_pendientes.";
 const ACCIONES_WHATSAPP = new Set(["prepare_whatsapp_rfx_reminder", "send_whatsapp_outreach_messages"]);
 export const mensajeNoDesplegada = (action: string) => ACCIONES_WHATSAPP.has(action) ? MENSAJE_NO_DESPLEGADA_WHATSAPP : MENSAJE_NO_DESPLEGADA;
@@ -356,7 +356,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
         // el número de intento coincida; si cambia de ventana, confirmar se niega.
         foto: lista.map(x => ({ p: x.participacion.id, carrier_id: x.s.carrierId, correo: x.s.correo, intento: x.paso.intento, antes_del_cierre: x.paso.antesDelCierre, estado: x.s.estado, en_cola: x.paso.enCola })),
         vista: {
-          canal: "Correo. Al confirmar queda como BORRADOR en la Cola de Rateware; NO se envía hasta que el Administrador lo apruebe en la Mesa (Seguimiento) o en la Cola.",
+          canal: "Correo. Al confirmar queda como BORRADOR en la Cola de Rateware; NO se envía hasta que el Administrador lo apruebe en la página del evento en Fr8Bid (Seguimiento) o en la Cola.",
           destinatarios: lista.map(x => ({ carrier: x.s.carrier, correo: x.s.correo, participacion_id: x.participacion.id, ruta: rutaTxt(x.ruta), intento: x.paso.intento, tipo: x.paso.antesDelCierre ? `recordatorio ${x.paso.antesDelCierre} h antes del cierre (respondió sin tarifa)` : "cadencia", toco_en: x.paso.tocaEn, texto: textoIntento(d, x.paso) })),
           excluidos: "Quien ofertó, declinó o ya tiene borrador en la Cola no aparece. Quien respondió sin tarifa solo aparece 48 h y 24 h antes del cierre."
         } };
@@ -366,7 +366,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       if (!!a.carrier_id === !!a.participacion_ids) throw new Rechazo("ARGUMENTOS", "Indica carrier_id o participacion_ids (solo uno).", 400);
       const d = await leer(a.event_id);
       const rechazo = a.respuesta === "rechazo";
-      if (rechazo && esPrima(d.evento.folio)) throw new Rechazo("PRIMA_PROTEGIDO", "En PRIMA no se marca rechazo desde el chat; hazlo en la Mesa.", 403);
+      if (rechazo && esPrima(d.evento.folio)) throw new Rechazo("PRIMA_PROTEGIDO", "En PRIMA no se marca rechazo desde el chat; hazlo en la página del evento en Fr8Bid.", 403);
       // El seguimiento solo da contexto (p. ej. «llegó un correo suyo»); no decide si se marca.
       const segs = seguimiento(d, hoy());
       let elegidas = todas(d).filter(x => a.participacion_ids ? a.participacion_ids.includes(x.p.id) : x.p.carrierId === a.carrier_id);
@@ -436,7 +436,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       const crudoDetalle = await crudo({ action: "list_rfx_detail", event_id: d.evento.id });
       const fila = (crudoDetalle.lanes || []).flatMap((l: any) => l.invitations || []).find((v: any) => v.id === a.participacion_id);
       const bidRate = fila?.bid_rate ?? null;
-      if (conOferta(x.p) || bidRate !== null) throw new Rechazo("YA_HAY_OFERTA", "Esta participación ya tiene oferta; el MCP no modifica ofertas. Revísala en la Mesa.");
+      if (conOferta(x.p) || bidRate !== null) throw new Rechazo("YA_HAY_OFERTA", "Esta participación ya tiene oferta; el MCP no modifica ofertas. Revísala en la página del evento en Fr8Bid.");
       // Mismas reglas que la Mesa (Captura del equipo) más «nunca sobre una participación excluida».
       const bloqueo = bloqueoCaptura(d, x.p) ?? (x.p.estado === "excluida" ? "La participación está excluida." : null);
       if (bloqueo) throw new Rechazo("NO_PERMITIDO", bloqueo);
@@ -704,7 +704,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
         const rechazoWhatsapp = !ok && ACCIONES_WHATSAPP.has(String(body.action)) && Object.hasOwn(RECHAZOS_WHATSAPP, String(r.body?.code)) ? RECHAZOS_WHATSAPP[String(r.body.code)] : null;
         if (rechazoWhatsapp) mensajeWhatsapp = rechazoWhatsapp;
         const paso: Record<string, unknown> = { accion: body.action, status: r.status, ok, codigo: ok ? null : invalida ? "RESPUESTA_INVALIDA" : noDesplegada ? "ACCION_NO_DESPLEGADA" : String(r.body?.code || r.status),
-          ...(r.status === 423 ? { mensaje: "Rateware real tiene las escrituras de Fr8Bid cerradas (FR8BID_ESCRITURAS_REALES). Hazlo en la Mesa o pide la aprobación del propietario." } : {}),
+          ...(r.status === 423 ? { mensaje: "Rateware real tiene las escrituras de Fr8Bid cerradas (FR8BID_ESCRITURAS_REALES). Hazlo en la página del evento en Fr8Bid o pide la aprobación del propietario." } : {}),
           ...(noDesplegada ? { mensaje: mensajeNoDesplegada(String(body.action)) } : {}),
           ...(rechazoWhatsapp ? { mensaje: rechazoWhatsapp } : {}),
           ...(conflicto ? { mensaje: CONFLICTOS_CONDICIONALES[conflicto] } : {}),
@@ -783,7 +783,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
           ? "Resultado incierto: Rateware no confirmó. No reintentes; revisa en la página del evento antes de repetir."
           : estado === "sin_efecto" ? "Rateware no aplicó nada de lo aprobado (ver omisiones). No reintentes; revisa en la página del evento."
           : estado === "parcial" ? "Se aplicó solo una parte (ver omisiones). No reintentes automáticamente; revisa en la página del evento."
-          : "No se completó. No reintentes automáticamente; revisa la Mesa." };
+          : "No se completó. No reintentes automáticamente; revisa la página del evento en Fr8Bid." };
     } catch (e) {
       log.resultado = e instanceof Rechazo ? `rechazada:${e.codigo}` : "error";
       throw e;

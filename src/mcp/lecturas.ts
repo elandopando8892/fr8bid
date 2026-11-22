@@ -17,17 +17,17 @@ const pagina = { offset: z.number().int().min(0).max(100000).default(0), limit: 
 export const herramientas = {
   consultar_tarifario: { descripcion: "Tarifario general de Rateware, histórico y actual. Especifica origen y destino como ciudad, estado, país, y equipo. Usa tipo_servicio solo si conoces el servicio. Cada fila conserva importe, moneda, vigencia y procedencia. Continúa con siguiente_cursor incluso si la página queda vacía.", schema: esquemaTarifario },
   eventos: { descripcion: "Busca eventos por nombre/folio/shipper y estado; devuelve IDs para las demás consultas. Paginación local del listado recibido, cobertura de origen declarada.", schema: z.object({ buscar: z.string().max(100).optional(), estado: z.enum(["borrador", "abierto", "cerrado", "adjudicado", "archivado"]).optional(), ...pagina }).strict() },
-  evento: { descripcion: "Foto del evento y su recorrido; no cambia estado. La liga abre la Mesa, no ejecuta botones.", schema: z.object(evento).strict() },
+  evento: { descripcion: "Foto del evento y su recorrido; no cambia estado. La liga abre la página del evento en Fr8Bid, no ejecuta botones.", schema: z.object(evento).strict() },
   seguimiento_evento: { descripcion: "Invitaciones, aperturas, respuestas y siguiente intento por cadencia existente; nunca envía ni prepara mensajes.", schema: z.object({ ...evento, ...pagina }).strict() },
   respuestas_evento: { descripcion: "Canales y fechas de respuesta. No contiene el texto ni acredita una tarifa capturada. Distingue consulta incompleta.", schema: z.object({ ...evento, ...pagina }).strict() },
   ofertas_evento: { descripcion: "Compara all-in y target por ruta, moneda, modelo, vigencia y condiciones, con candados. No adjudica.", schema: z.object({ ...evento, ruta_id: id.optional(), ...pagina }).strict() },
   historial_oferta: { descripcion: "Versiones disponibles de una participación del evento; Rateware real puede devolver solo la vigente.", schema: z.object({ ...evento, participacion_id: id }).strict() },
-  candados_ruta: { descripcion: "Candados de primario y respaldo de una ruta, calculados con las reglas de la Mesa y el rol actual.", schema: z.object({ ...evento, ruta_id: id }).strict() },
+  candados_ruta: { descripcion: "Candados de primario y respaldo de una ruta, calculados con las reglas de Fr8Bid y el rol actual.", schema: z.object({ ...evento, ruta_id: id }).strict() },
   carriers_sugeridos: { descripcion: "Carrier fit existente con evidencia y carencias; no revisa ni invita carriers.", schema: z.object(evento).strict() },
   tarifas_ruta: { descripcion: "Tarifas aprobadas de una ruta/caja D2D y ofertas de hasta cinco eventos seleccionados. No son pagos. Cada página examina hasta 1000 tarifas; seguir siguiente_offset aunque no haya coincidencias.", schema: z.object({ origen: z.string().min(2).max(100), destino: z.string().min(2).max(100), caja: z.enum(["dry_van", "reefer", "flatbed"]), operacion: z.enum(["D2D Export", "D2D Import"]), offset: z.number().int().min(0).max(100000).multipleOf(POR_PAGINA).default(0), event_ids: z.array(id).max(5).default([]) }).strict() },
   carrier: { descripcion: "Perfil ligero de un carrier por UUID. No busca contactos nuevos ni consume Apollo.", schema: z.object({ carrier_id: id }).strict() },
   historial_carrier: { descripcion: "Hasta 300 registros del historial de contacto de un carrier. No equivale a historial contable ni a todas sus ofertas.", schema: z.object({ carrier_id: id }).strict() },
-  whatsapp_pendientes: { descripcion: "Carriers que pasaron el 3er intento por correo sin responder y a los que ya toca WhatsApp (cadencia de la Mesa). Por carrier: listo_para_meta y bloqueos (número dudoso o sin lada, no contactar, sin permiso, plantilla de Meta no aprobada), vista previa de la plantilla con el número enmascarado y, solo como respaldo_manual, el texto y la liga wa.me. No envía ni prepara nada: el envío por Meta es preparar_whatsapp_intento", schema: z.object({ ...evento, ...pagina }).strict() },
+  whatsapp_pendientes: { descripcion: "Carriers que pasaron el 3er intento por correo sin responder y a los que ya toca WhatsApp (cadencia de Fr8Bid). Por carrier: listo_para_meta y bloqueos (número dudoso o sin lada, no contactar, sin permiso, plantilla de Meta no aprobada), vista previa de la plantilla con el número enmascarado y, solo como respaldo_manual, el texto y la liga wa.me. No envía ni prepara nada: el envío por Meta es preparar_whatsapp_intento", schema: z.object({ ...evento, ...pagina }).strict() },
   verificar_adjudicacion: { descripcion: "Revisa una adjudicación ya hecha: por ruta, primario y respaldo con la versión adjudicada y si su huella coincide con la oferta vigente, cierre en Rateware (rateware_closeout_at) y avisos de ganador, respaldo y no adjudicado. Declara lo que no puede leer. No adjudica, no entrega ni envía avisos.", schema: z.object({ ...evento, ...pagina }).strict() }
 };
 export type NombreHerramienta = keyof typeof herramientas;
@@ -37,8 +37,8 @@ const liga = (id: string) => `https://fr8bid.heymarksman.com/eventos/${encodeURI
 const entrega = { estado: "sin_preparar" as const, operationId: null, error: null };
 // Lo que verificar_adjudicacion no puede comprobar con las lecturas de LECTURAS.
 const FALTANTES_ADJUDICACION = [
-  "Estado actual de la tarifa en Rateware («en revisión» / pending_review): no hay lectura en el MCP. El cierre registrado indica que la entrega se hizo; confirma el estado en Rateware o en la Mesa.",
-  "Recibo de la entrega (operation_id, insertadas, en revisión): solo se muestra al confirmar la entrega en la Mesa; aquí la prueba es rateware_closeout_at de cada primario.",
+  "Estado actual de la tarifa en Rateware («en revisión» / pending_review): no hay lectura en el MCP. El cierre registrado indica que la entrega se hizo; confirma el estado en Rateware o en la página del evento en Fr8Bid.",
+  "Recibo de la entrega (operation_id, insertadas, en revisión): solo se muestra al confirmar la entrega en la página del evento en Fr8Bid; aquí la prueba es rateware_closeout_at de cada primario.",
   "Idioma de cada aviso: esta lectura no lo trae."
 ];
 function verificarAdjudicacion(d: Detalle, r: Ruta) {
@@ -201,7 +201,7 @@ export function crearLecturas(t: Transporte, ahora: () => Date = () => new Date(
         });
         result = { ...common, filas, total_recibido: p.total_recibido, siguiente_offset: p.siguiente_offset,
           plantilla_meta: { nombre: PLANTILLA_RECORDATORIO.nombre, estado: plantillas?.estado ?? "NO_VERIFICADA" },
-          cobertura: common.respuestas_consultadas ? "Solo quienes ya agotaron los correos de la cadencia y siguen sin responder en rutas sin suficientes ofertas. País por reglas de lada; «dudoso» se confirma antes de enviar (la revisión con IA está en la Mesa). El envío por Meta es preparar_whatsapp_intento (solo con listo_para_meta); respaldo_manual es para mandarlo a mano." : "No se pudieron consultar las respuestas de los carriers: sin eso no se sabe a quién ya no escribir, así que la lista sale vacía." };
+          cobertura: common.respuestas_consultadas ? "Solo quienes ya agotaron los correos de la cadencia y siguen sin responder en rutas sin suficientes ofertas. País por reglas de lada; «dudoso» se confirma antes de enviar (la revisión con IA está en la página del evento en Fr8Bid). El envío por Meta es preparar_whatsapp_intento (solo con listo_para_meta); respaldo_manual es para mandarlo a mano." : "No se pudieron consultar las respuestas de los carriers: sin eso no se sabe a quién ya no escribir, así que la lista sale vacía." };
       }
       else if (nombre === "verificar_adjudicacion") {
         const p = paginar(d.rutas, a.offset, a.limit);
@@ -233,7 +233,7 @@ export function crearLecturas(t: Transporte, ahora: () => Date = () => new Date(
       const rutas: any[] = Array.isArray(limpio.rutas) ? limpio.rutas : [];
       const grande = rutas.find(r => JSON.stringify(r).length > 200000);
       return { error: { codigo: "RESPUESTA_DEMASIADO_GRANDE", ruta_id: grande?.ruta_id ?? grande?.id ?? a.ruta_id ?? null,
-        sugerencia: grande ? "Filtra la consulta; esta ruta supera el límite por sí sola. Revisa sus ofertas en la Mesa." : "Filtra por ruta o reduce limit; revisa el detalle en la Mesa." },
+        sugerencia: grande ? "Filtra la consulta; esta ruta supera el límite por sí sola. Revisa sus ofertas en la página del evento en Fr8Bid." : "Filtra por ruta o reduce limit; revisa el detalle en la página del evento en Fr8Bid." },
         consultado_en: fecha, solo_lectura: true };
     }
     return limpio;

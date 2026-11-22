@@ -21,7 +21,7 @@ import { APROBADORES_POR_OMISION, Rechazo, esAfirmacion } from "./escrituras.js"
 export interface RespuestaContactos { status: number; body: any }
 export type TransporteContactos = (body: Record<string, unknown>) => Promise<RespuestaContactos>;
 
-/** Acciones de carrier-contacts-api que usa el MCP; resolve_known y apply_result quedan en la Mesa. */
+/** Acciones de carrier-contacts-api que usa el MCP; resolve_known y apply_result quedan en la página del evento en Fr8Bid. */
 export const ACCIONES_CONTACTOS_MCP = new Set(["context", "operation", "search", "prepare_reveal", "confirm_reveal", "choose_known"]);
 const ESCRITURAS_CONTACTOS = new Set(["search", "prepare_reveal", "confirm_reveal", "choose_known"]);
 
