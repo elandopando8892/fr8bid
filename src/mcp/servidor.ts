@@ -31,7 +31,7 @@ export function crearServidor(t: Transporte, rol: Rol, ahora?: () => Date, escri
           const result = { estado:"incompleta", completa:false, codigo:code, solo_lectura:true };
           return {isError:true, content:[{type:"text" as const, text:`${code}: no se pudo verificar esta página del tarifario de Rateware.`}], structuredContent:result};
         }
-        return { isError: true, content: [{ type: "text" as const, text: `${code}: no se pudo completar la consulta. Revisa los parámetros, la sesión o la Mesa. No se reintentó ni se escribió nada.` }] };
+        return { isError: true, content: [{ type: "text" as const, text: `${code}: no se pudo completar la consulta. Revisa los parámetros, la sesión o la página del evento en Fr8Bid. No se reintentó ni se escribió nada.` }] };
       }
     });
   }
@@ -91,7 +91,7 @@ export function crearServidor(t: Transporte, rol: Rol, ahora?: () => Date, escri
             return { isError: true, content: [{ type: "text" as const, text: `${e.codigo}: ${e.message}` }], structuredContent: result };
           }
           const code = e instanceof z.ZodError ? "ARGUMENTOS" : e instanceof ErrorApi ? `HTTP_${e.status}` : "NO_COMPLETADO";
-          return { isError: true, content: [{ type: "text" as const, text: `${code}: no se pudo completar. Revisa los parámetros, la sesión o la Mesa. No se reintentó.` }] };
+          return { isError: true, content: [{ type: "text" as const, text: `${code}: no se pudo completar. Revisa los parámetros, la sesión o la página del evento en Fr8Bid. No se reintentó.` }] };
         }
       });
     }
