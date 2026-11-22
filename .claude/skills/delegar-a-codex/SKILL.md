@@ -14,7 +14,7 @@ Fuente: `.claude/skills/delegar-a-codex/SKILL.md`; la copia de `.agents/skills/`
 
 ## Requisitos
 
-`npm i -g @openai/codex` y `codex login` en el equipo. Sin Codex, `verificar` sigue funcionando; `revisar` y `delegar` avisan y salen.
+`npm i -g @openai/codex` y `codex login` en el equipo. El arnés usa el modelo `gpt-6.1-terra` (cámbialo con `--modelo <m>` o la variable `CODEX_MODELO`); no toma el modelo por omisión de la configuración personal de Codex, porque `codex exec` con cuenta de ChatGPT rechaza algunos que la app de escritorio sí acepta. Sin Codex, `verificar` sigue funcionando; `revisar` y `delegar` avisan y salen.
 
 ## Recetas
 

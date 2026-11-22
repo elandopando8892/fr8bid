@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // Arnés Claude Code + Codex. Uso (desde el checkout donde trabaja Claude):
 //   node scripts/agentes/codex.mjs verificar [--nombre <slug> --revision <id> [--acepto-sensibles]]
-//   node scripts/agentes/codex.mjs revisar   [--nombre <slug> | --base <rama>] [--enfoque "<texto>"]
+//   node scripts/agentes/codex.mjs revisar   [--nombre <slug> | --base <rama>] [--enfoque "<texto>"] [--modelo <m>]
 //   node scripts/agentes/codex.mjs delegar   --nombre <slug> --tarea "<texto>" [--modelo <m>]
 //   node scripts/agentes/codex.mjs integrar  --nombre <slug> [--acepto-sensibles]
 //   node scripts/agentes/codex.mjs estado    [--nombre <slug>]
 // Reglas y definición de terminado: AGENTS.md, sección «Arnés Claude + Codex».
 // Estado local en .agentes/ del checkout principal (ignorado por git). CODEX_BIN cambia el ejecutable de Codex.
+// Modelo de Codex: --modelo, si no CODEX_MODELO, si no gpt-6.1-terra. No se usa el modelo por omisión de
+// ~/.codex/config.toml porque `codex exec` con cuenta de ChatGPT rechaza algunos que la app de escritorio sí acepta.
 
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -128,9 +130,12 @@ function exigirCodex() {
   }
 }
 
+const MODELO_POR_OMISION = "gpt-6.1-terra";
+
 function codexExec({ cwd, prompt, sandbox, salida, modelo }) {
   exigirCodex();
-  if (modelo !== undefined && !/^[\w.:-]+$/.test(String(modelo))) throw new Error(`Modelo inválido: ${modelo}`);
+  modelo = modelo || process.env.CODEX_MODELO || MODELO_POR_OMISION;
+  if (!/^[\w.:-]+$/.test(String(modelo))) throw new Error(`Modelo inválido: ${modelo}`);
   const args = [
     "exec",
     "--cd", cwd,
@@ -139,7 +144,7 @@ function codexExec({ cwd, prompt, sandbox, salida, modelo }) {
     "-c", "sandbox_workspace_write.network_access=false",
     "--output-last-message", salida
   ];
-  if (modelo) args.push("--model", String(modelo));
+  args.push("--model", String(modelo));
   args.push("-");
   const r = correr(CODEX, args, { cwd, input: prompt, conShell: true });
   return { codigo: r.codigo, texto: existsSync(salida) ? readFileSync(salida, "utf8") : "" };
