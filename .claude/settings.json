@@ -1,1 +1,53 @@
-{ "permissions": { "allow": ["mcp__Vercel__create_deployment"] } }
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(npm run typecheck)",
+      "Bash(npm test)",
+      "Bash(npm run test:bidware)",
+      "Bash(npx vite build)",
+      "Bash(npm run agentes:verificar*)",
+      "Bash(npm run agentes:revisar*)",
+      "Bash(node scripts/agentes/codex.mjs verificar*)",
+      "Bash(node scripts/agentes/codex.mjs revisar*)",
+      "Bash(node scripts/agentes/codex.mjs estado*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)"
+    ],
+    "ask": [
+      "Bash(npm run agentes:delegar*)",
+      "Bash(npm run agentes:integrar*)",
+      "Bash(node scripts/agentes/codex.mjs delegar*)",
+      "Bash(node scripts/agentes/codex.mjs integrar*)",
+      "Bash(git push*)",
+      "mcp__github__create_pull_request",
+      "mcp__Supabase__execute_sql"
+    ],
+    "deny": [
+      "mcp__Vercel__create_deployment",
+      "Bash(git push origin main*)",
+      "Bash(git push * main)",
+      "Bash(git push --force*)",
+      "Bash(git merge codex/*)",
+      "Bash(vercel *)",
+      "Bash(npx vercel*)",
+      "Bash(supabase *)",
+      "Bash(npx supabase*)",
+      "Bash(codex *--dangerously-bypass-approvals-and-sandbox*)",
+      "Bash(gh pr merge*)",
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "Read(./.env.production*)",
+      "Read(./.env.*.local)",
+      "mcp__github__merge_pull_request",
+      "mcp__Supabase__apply_migration",
+      "mcp__Supabase__deploy_edge_function",
+      "mcp__Supabase__create_edge_function_secret",
+      "mcp__Gmail__send_message",
+      "mcp__Resend__send-email",
+      "mcp__Resend__send-batch-emails",
+      "mcp__Resend__send-broadcast"
+    ]
+  }
+}

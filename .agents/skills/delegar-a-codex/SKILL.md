@@ -5,7 +5,7 @@ description: Delegar a Codex una tarea acotada de fr8bid, pedirle una revisión 
 
 # Delegar a Codex (arnés Claude Code + Codex)
 
-Copia canónica: `.agents/skills/delegar-a-codex/SKILL.md`. La de `.claude/skills/` debe ser idéntica (lo comprueba `test/agentes.test.ts`). Reglas y definición de terminado: `AGENTS.md`, sección «Arnés Claude + Codex».
+Fuente: `.claude/skills/delegar-a-codex/SKILL.md`; la copia de `.agents/skills/` debe ser idéntica (lo comprueba `test/agentes.test.ts`, igual que con todos los skills). Reglas y definición de terminado: `AGENTS.md`, sección «Arnés Claude + Codex».
 
 ## Roles
 
@@ -55,7 +55,8 @@ Las pruebas locales heredan una lista acotada de variables y se ejecutan con los
 
 ## Qué se delega y qué no
 
-- Sí: pruebas, arneses, scripts, skills, refactors mecánicos con pruebas que los cubran, segunda opinión sobre un diff.
+- Sí: pruebas, arneses, scripts, skills, código del MCP de Fr8Bid (`src/mcp/`, `api/mcp*.ts`, acciones del MCP en `src/servidor/proxy.ts`), refactors mecánicos con pruebas que los cubran, segunda opinión sobre un diff.
+- Todo PR que toque el MCP lleva el veredicto de `agentes:revisar -- --base main` y la salida de `agentes:verificar` (regla 9 de `AGENTS.md`). Si lo escribió Codex, Claude además lee el diff y deja su revisión en el PR.
 - No: nada de la lista de límites de `AGENTS.md` (desplegar, adjudicar, enviar, rateware-prod, secretos). Tampoco decisiones de producto: esas son de Jose.
 - Una tarea = un resultado comprobable. Escribe en `--tarea` qué archivo, qué comportamiento y qué prueba demuestra que quedó.
 
