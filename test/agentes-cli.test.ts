@@ -219,7 +219,8 @@ if (process.argv[2] === 'exec') {
       [['--modelo', 'gpt 6;calc'], {}],
       [['--modelo', ''], { CODEX_MODELO: 'modelo-entorno' }],
       [['--modelo'], {}],
-      [[], { CODEX_MODELO: 'a|b' }]
+      [[], { CODEX_MODELO: 'a|b' }],
+      [[], { CODEX_MODELO: '--help' }]
     ];
     for (const [extra, env] of casos) {
       const r = run(['revisar', '--base', 'HEAD', ...extra], env);
@@ -233,7 +234,7 @@ if (process.argv[2] === 'exec') {
   it('delegar valida el modelo antes de crear el worktree, la rama o el registro, y el nombre queda libre', () => {
     const { dir, git, run } = repoConCodexSimulado();
     const delegar = ['delegar', '--nombre', 'prueba', '--tarea', 'Fixture'];
-    for (const [extra, env] of [[[], { CODEX_MODELO: 'malo & calc' }], [['--modelo', '$(x)'], {}]] as Array<[string[], Record<string, string>]>) {
+    for (const [extra, env] of [[[], { CODEX_MODELO: 'malo & calc' }], [['--modelo', '$(x)'], {}], [[], { CODEX_MODELO: '--help' }], [[], { CODEX_MODELO: '-c' }]] as Array<[string[], Record<string, string>]>) {
       const r = run([...delegar, ...extra], env);
       expect(r.status, r.texto).not.toBe(0);
       expect(r.texto).toMatch(/Modelo inválido/);

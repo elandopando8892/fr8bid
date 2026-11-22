@@ -129,13 +129,14 @@ export const MODELO_POR_OMISION = "gpt-6.1-terra";
 
 /**
  * Modelo de Codex: `--modelo` gana a `CODEX_MODELO`, y este al valor por omisión. Un `--modelo` presente pero
- * vacío o sin valor se rechaza (no se cambia en silencio por otro). Solo letras, números, punto, dos puntos y guiones.
+ * vacío o sin valor se rechaza (no se cambia en silencio por otro). Solo letras, números, punto, dos puntos y guiones,
+ * y empieza con letra o número para que nunca parezca una opción de `codex exec`.
  */
 export function modeloCodex(opcion, entorno = {}) {
   const pedido = opcion !== undefined && opcion !== null;
   if (pedido && (typeof opcion !== "string" || !opcion)) throw new Error("Modelo inválido: --modelo necesita un valor.");
   const modelo = String(pedido ? opcion : entorno.CODEX_MODELO || MODELO_POR_OMISION);
-  if (!/^[\w.:-]+$/.test(modelo)) throw new Error(`Modelo inválido: ${modelo}`);
+  if (!/^[A-Za-z0-9][\w.:-]*$/.test(modelo)) throw new Error(`Modelo inválido: ${modelo}`);
   return modelo;
 }
 

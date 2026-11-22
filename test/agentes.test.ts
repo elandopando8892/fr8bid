@@ -177,7 +177,7 @@ describe("modelo de Codex en el arnés", () => {
   });
 
   it("rechaza modelos con espacios o metacaracteres, vengan de la opción o del entorno", () => {
-    for (const malo of ["gpt 6", "gpt&calc", "gpt;rm", "$(x)", "a|b", "a\"b", "a`b", "../x"]) {
+    for (const malo of ["gpt 6", "gpt&calc", "gpt;rm", "$(x)", "a|b", "a\"b", "a`b", "../x", "-c", "--help", "-", ".x", ":x"]) {
       expect(() => modeloCodex(malo, {})).toThrow(/Modelo inválido/);
       expect(() => modeloCodex(undefined, { CODEX_MODELO: malo })).toThrow(/Modelo inválido/);
     }
