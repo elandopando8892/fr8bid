@@ -28,7 +28,9 @@ import {
   ramaPermitidaParaIntegrar,
   rutasSecretos,
   rutasSensibles,
-  validarNombre
+  validarNombre,
+  argumentosCodexExec,
+  modeloCodex
 } from "./nucleo.mjs";
 
 const WIN = process.platform === "win32";
@@ -130,22 +132,9 @@ function exigirCodex() {
   }
 }
 
-const MODELO_POR_OMISION = "gpt-6.1-terra";
-
 function codexExec({ cwd, prompt, sandbox, salida, modelo }) {
+  const args = argumentosCodexExec({ cwd, sandbox, salida, modelo: modeloCodex(modelo, process.env) });
   exigirCodex();
-  modelo = modelo || process.env.CODEX_MODELO || MODELO_POR_OMISION;
-  if (!/^[\w.:-]+$/.test(String(modelo))) throw new Error(`Modelo inválido: ${modelo}`);
-  const args = [
-    "exec",
-    "--cd", cwd,
-    "--sandbox", sandbox,
-    "-c", "approval_policy=never",
-    "-c", "sandbox_workspace_write.network_access=false",
-    "--output-last-message", salida
-  ];
-  args.push("--model", String(modelo));
-  args.push("-");
   const r = correr(CODEX, args, { cwd, input: prompt, conShell: true });
   return { codigo: r.codigo, texto: existsSync(salida) ? readFileSync(salida, "utf8") : "" };
 }

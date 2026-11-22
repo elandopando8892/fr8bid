@@ -125,6 +125,29 @@ export function entornoVerificacion(entorno) {
  * Rechaza metacaracteres de cmd.exe y entrecomilla los que llevan espacios. Los textos libres
  * (la tarea, el diff) nunca van como argumento: van por stdin o por archivo.
  */
+export const MODELO_POR_OMISION = "gpt-6.1-terra";
+
+/** Modelo de Codex: `--modelo` gana a `CODEX_MODELO`, y este al valor por omisión. Solo letras, números, punto, dos puntos y guiones. */
+export function modeloCodex(opcion, entorno = {}) {
+  const modelo = String(opcion || entorno.CODEX_MODELO || MODELO_POR_OMISION);
+  if (!/^[\w.:-]+$/.test(modelo)) throw new Error(`Modelo inválido: ${modelo}`);
+  return modelo;
+}
+
+/** Argumentos de `codex exec` para revisar y delegar; el prompt entra por stdin (`-`). */
+export function argumentosCodexExec({ cwd, sandbox, salida, modelo }) {
+  return [
+    "exec",
+    "--cd", cwd,
+    "--sandbox", sandbox,
+    "-c", "approval_policy=never",
+    "-c", "sandbox_workspace_write.network_access=false",
+    "--output-last-message", salida,
+    "--model", modelo,
+    "-"
+  ];
+}
+
 export function argShell(arg, win) {
   const a = String(arg);
   if (!win) return a;
