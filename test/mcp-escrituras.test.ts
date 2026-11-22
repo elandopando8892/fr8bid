@@ -595,9 +595,9 @@ describe("MCP de escrituras: vista previa y confirmación firmada", () => {
       } finally { await servidor.close(); }
     };
     const lista = async (rol: Rol) => ({ tools: (await rpc(rol, "tools/list")).result.tools as any[], call: (method: string, params?: object) => rpc(rol, method, params) });
-    expect((await lista("viewer")).tools).toHaveLength(13);
+    expect((await lista("viewer")).tools).toHaveLength(14);
     const { tools, call } = await lista("operator");
-    expect(tools).toHaveLength(23);
+    expect(tools).toHaveLength(24);
     expect(tools.find(t => t.name === "confirmar_creacion_evento").annotations).toMatchObject({ destructiveHint: true, readOnlyHint: false });
     expect(tools.find(t => t.name === "confirmar").annotations).toMatchObject({ destructiveHint: true, readOnlyHint: false });
     expect(tools.filter(t => t.name.startsWith("preparar_")).every(t => t.annotations.readOnlyHint && !t.annotations.destructiveHint)).toBe(true);

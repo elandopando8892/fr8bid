@@ -5,7 +5,10 @@ import { transporteApi } from "../src/mcp/transporte";
 
 describe("contrato HTTP MCP", () => {
   async function rpc(method: string, params?: object) {
-    const servidor = crearServidor(async () => ({ status: 200, headers: {}, body: { rows: [] } }), "viewer");
+    const servidor = crearServidor(async (_servicio, body) => ({
+      status:200, headers:{}, body:body.action === "list_carrier_tariff_candidates"
+        ? {rows:[],has_more:false,next_cursor:null} : {rows:[]},
+    }), "viewer");
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await servidor.connect(transport);
     try {
@@ -13,12 +16,17 @@ describe("contrato HTTP MCP", () => {
       return { status: r.status, body: await r.json() };
     } finally { await servidor.close(); }
   }
-  it("negocia y publica únicamente trece herramientas de lectura", async () => {
+  it("negocia y publica únicamente las herramientas de lectura", async () => {
     const init = await rpc("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "test", version: "1" } });
     expect(init.status).toBe(200);
     expect(init.body.result.serverInfo.name).toBe("fr8bid-mcp-server");
     const lista = await rpc("tools/list");
-    expect(lista.body.result.tools).toHaveLength(13);
+    expect(lista.body.result.tools).toHaveLength(14);
+    expect(lista.body.result.tools.find((t: {name:string}) => t.name === "consultar_tarifario").annotations.readOnlyHint).toBe(true);
+    const tarifas = await rpc("tools/call", {name:"consultar_tarifario", arguments:{
+      origen:{ciudad:"Nuevo Laredo",estado:"Tamaulipas",pais:"MX"}, destino:"Monterrey, NL, MX", equipo:"Reefer",
+    }});
+    expect(tarifas.body.result.structuredContent).toMatchObject({tarifas:[],completa:true,solo_lectura:true});
     expect(lista.body.result.tools.every((t: any) => t.annotations.readOnlyHint)).toBe(true);
     const r = await rpc("tools/call", { name: "eventos", arguments: {} });
     expect(r.body.result.structuredContent.eventos).toEqual([]);
