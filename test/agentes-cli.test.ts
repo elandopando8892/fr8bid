@@ -156,3 +156,96 @@ it('bloquea un .env.local sin seguimiento al revisar el árbol actual', () => {
   expect(result.stderr + result.stdout).not.toContain('SYNTHETIC_SECRET_44');
   expect(readdirSync(record).some(name => name.endsWith('.revision.md.invocado'))).toBe(false);
 }, 45_000);
+
+describe('modelo de Codex en los comandos reales', () => {
+  function repoConCodexSimulado() {
+    const dir = mkdtempSync(join(tmpdir(), 'fr8bid-modelo-'));
+    const fuera = mkdtempSync(join(tmpdir(), 'fr8bid-modelo-args-'));
+    onTestFinished(() => { for (const d of [dir, fuera]) rmSync(d, { recursive: true, force: true, maxRetries: 5 }); });
+    const captura = join(fuera, 'args.json');
+    const win = process.platform === 'win32';
+    const git = (args: string[]) => {
+      const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+      expect(result.status, result.stderr).toBe(0);
+      return result.stdout.trim();
+    };
+    mkdirSync(join(dir, 'scripts/agentes'), { recursive: true });
+    for (const file of ['codex.mjs', 'nucleo.mjs']) cpSync(resolve('scripts/agentes', file), join(dir, 'scripts/agentes', file));
+    writeFileSync(join(dir, '.gitignore'), '.agentes\n');
+    // Codex simulado: guarda los argumentos de `exec` fuera del repo y no lanza ninguna inferencia.
+    writeFileSync(join(dir, 'fake.mjs'), `import {writeFileSync} from 'node:fs';
+if (process.argv[2] === 'exec') {
+  for await (const chunk of process.stdin) { /* consume prompt */ }
+  writeFileSync(process.env.FR8BID_CAPTURA_CODEX, JSON.stringify(process.argv.slice(2)));
+  if (process.argv.includes('workspace-write')) writeFileSync('delegado.txt', 'delegado');
+  writeFileSync(process.argv[process.argv.indexOf('--output-last-message') + 1], 'VEREDICTO: APROBADO');
+}`);
+    writeFileSync(join(dir, win ? 'fake.cmd' : 'fake'), win ? '@echo off\r\nnode "%~dp0fake.mjs" %*\r\n' : '#!/bin/sh\nexec node "$(dirname "$0")/fake.mjs" "$@"\n', { mode: 0o755 });
+    git(['init', '--quiet', '-b', 'claude/fixture']);
+    git(['config', 'user.name', 'Synthetic']);
+    git(['config', 'user.email', 'synthetic@example.invalid']);
+    git(['config', 'core.hooksPath', '/dev/null']);
+    git(['add', '.']);
+    git(['commit', '--quiet', '-m', 'base']);
+    const entorno = Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== 'CODEX_MODELO'));
+    const run = (args: string[], extra: Record<string, string> = {}) => {
+      rmSync(captura, { force: true });
+      const result = spawnSync(process.execPath, [join(dir, 'scripts/agentes/codex.mjs'), ...args], {
+        cwd: dir, encoding: 'utf8', timeout: 20_000,
+        env: { ...entorno, CODEX_BIN: join(dir, win ? 'fake.cmd' : 'fake'), FR8BID_CAPTURA_CODEX: captura, ...extra }
+      });
+      const argsCodex = existsSync(captura) ? JSON.parse(readFileSync(captura, 'utf8')) as string[] : null;
+      return { status: result.status, texto: `${result.stderr ?? ''}${result.stdout ?? ''}`, modelo: argsCodex ? argsCodex[argsCodex.indexOf('--model') + 1] : null, argsCodex };
+    };
+    return { dir, git, run };
+  }
+
+  it('revisar pasa a Codex el modelo: --modelo gana a CODEX_MODELO, y este al valor por omisión', () => {
+    const { dir, run } = repoConCodexSimulado();
+    writeFileSync(join(dir, 'cambio.txt'), 'cambio');
+    const revisar = ['revisar', '--base', 'HEAD'];
+    expect(run(revisar).modelo).toBe('gpt-6.1-terra');
+    expect(run(revisar, { CODEX_MODELO: 'modelo-entorno' }).modelo).toBe('modelo-entorno');
+    const conOpcion = run([...revisar, '--modelo', 'modelo-opcion'], { CODEX_MODELO: 'modelo-entorno' });
+    expect(conOpcion.status, conOpcion.texto).toBe(0);
+    expect(conOpcion.modelo).toBe('modelo-opcion');
+    expect(conOpcion.argsCodex).toContain('read-only');
+  }, 60_000);
+
+  it('revisar rechaza un modelo inválido o vacío sin llegar a ejecutar Codex', () => {
+    const { dir, run } = repoConCodexSimulado();
+    writeFileSync(join(dir, 'cambio.txt'), 'cambio');
+    const casos: Array<[string[], Record<string, string>]> = [
+      [['--modelo', 'gpt 6;calc'], {}],
+      [['--modelo', ''], { CODEX_MODELO: 'modelo-entorno' }],
+      [['--modelo'], {}],
+      [[], { CODEX_MODELO: 'a|b' }],
+      [[], { CODEX_MODELO: '--help' }]
+    ];
+    for (const [extra, env] of casos) {
+      const r = run(['revisar', '--base', 'HEAD', ...extra], env);
+      expect(r.status, r.texto).not.toBe(0);
+      expect(r.texto).toMatch(/Modelo inválido/);
+      expect(r.argsCodex).toBeNull();
+    }
+    expect(existsSync(join(dir, '.agentes/registro'))).toBe(false);
+  }, 60_000);
+
+  it('delegar valida el modelo antes de crear el worktree, la rama o el registro, y el nombre queda libre', () => {
+    const { dir, git, run } = repoConCodexSimulado();
+    const delegar = ['delegar', '--nombre', 'prueba', '--tarea', 'Fixture'];
+    for (const [extra, env] of [[[], { CODEX_MODELO: 'malo & calc' }], [['--modelo', '$(x)'], {}], [[], { CODEX_MODELO: '--help' }], [[], { CODEX_MODELO: '-c' }]] as Array<[string[], Record<string, string>]>) {
+      const r = run([...delegar, ...extra], env);
+      expect(r.status, r.texto).not.toBe(0);
+      expect(r.texto).toMatch(/Modelo inválido/);
+      expect(r.argsCodex).toBeNull();
+      expect(existsSync(join(dir, '.agentes'))).toBe(false);
+      expect(git(['branch', '--list', 'codex/prueba'])).toBe('');
+    }
+    const ok = run([...delegar, '--modelo', 'modelo-opcion'], { CODEX_MODELO: 'modelo-entorno' });
+    expect(ok.status, ok.texto).toBe(0);
+    expect(ok.modelo).toBe('modelo-opcion');
+    expect(ok.argsCodex).toContain('workspace-write');
+    expect(git(['branch', '--list', 'codex/prueba'])).toContain('codex/prueba');
+  }, 60_000);
+});

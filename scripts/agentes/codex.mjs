@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // Arnés Claude Code + Codex. Uso (desde el checkout donde trabaja Claude):
 //   node scripts/agentes/codex.mjs verificar [--nombre <slug> --revision <id> [--acepto-sensibles]]
-//   node scripts/agentes/codex.mjs revisar   [--nombre <slug> | --base <rama>] [--enfoque "<texto>"]
+//   node scripts/agentes/codex.mjs revisar   [--nombre <slug> | --base <rama>] [--enfoque "<texto>"] [--modelo <m>]
 //   node scripts/agentes/codex.mjs delegar   --nombre <slug> --tarea "<texto>" [--modelo <m>]
 //   node scripts/agentes/codex.mjs integrar  --nombre <slug> [--acepto-sensibles]
 //   node scripts/agentes/codex.mjs estado    [--nombre <slug>]
 // Reglas y definición de terminado: AGENTS.md, sección «Arnés Claude + Codex».
 // Estado local en .agentes/ del checkout principal (ignorado por git). CODEX_BIN cambia el ejecutable de Codex.
+// Modelo de Codex: --modelo, si no CODEX_MODELO, si no gpt-6.1-terra. No se usa el modelo por omisión de
+// ~/.codex/config.toml porque `codex exec` con cuenta de ChatGPT rechaza algunos que la app de escritorio sí acepta.
 
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -26,7 +28,9 @@ import {
   ramaPermitidaParaIntegrar,
   rutasSecretos,
   rutasSensibles,
-  validarNombre
+  validarNombre,
+  argumentosCodexExec,
+  modeloCodex
 } from "./nucleo.mjs";
 
 const WIN = process.platform === "win32";
@@ -129,18 +133,9 @@ function exigirCodex() {
 }
 
 function codexExec({ cwd, prompt, sandbox, salida, modelo }) {
+  // `modelo` llega ya resuelto y validado por el comando (modeloCodex), antes de crear worktrees o registros.
+  const args = argumentosCodexExec({ cwd, sandbox, salida, modelo });
   exigirCodex();
-  if (modelo !== undefined && !/^[\w.:-]+$/.test(String(modelo))) throw new Error(`Modelo inválido: ${modelo}`);
-  const args = [
-    "exec",
-    "--cd", cwd,
-    "--sandbox", sandbox,
-    "-c", "approval_policy=never",
-    "-c", "sandbox_workspace_write.network_access=false",
-    "--output-last-message", salida
-  ];
-  if (modelo) args.push("--model", String(modelo));
-  args.push("-");
   const r = correr(CODEX, args, { cwd, input: prompt, conShell: true });
   return { codigo: r.codigo, texto: existsSync(salida) ? readFileSync(salida, "utf8") : "" };
 }
@@ -224,6 +219,7 @@ function diffDelArbol(dir, base) {
 }
 
 function cmdRevisar(o) {
+  const modelo = modeloCodex(o.modelo, process.env);
   const nombre = o.nombre ? validarNombre(o.nombre) : ACTUAL;
   let dir = ORIGEN;
   let base = typeof o.base === "string" ? o.base : "main";
@@ -254,7 +250,7 @@ function cmdRevisar(o) {
   mkdirSync(REGISTRO, { recursive: true });
   rmSync(salida, { force: true });
   const prompt = construirPromptRevision({ base, diff, enfoque: typeof o.enfoque === "string" ? o.enfoque : undefined });
-  const { codigo, texto } = codexExec({ cwd: ORIGEN, prompt, sandbox: "read-only", salida, modelo: o.modelo });
+  const { codigo, texto } = codexExec({ cwd: ORIGEN, prompt, sandbox: "read-only", salida, modelo });
   if (codigo !== 0) { console.error(`Codex terminó con código ${codigo}.`); return 1; }
 
   const f1 = foto(dir);
@@ -271,6 +267,7 @@ function cmdRevisar(o) {
 function cmdDelegar(o) {
   const nombre = validarNombre(o.nombre);
   if (typeof o.tarea !== "string") throw new Error('Falta --tarea "<qué debe hacer Codex>".');
+  const modelo = modeloCodex(o.modelo, process.env);
   const rama = ramaDeTrabajo(nombre);
   const dir = carpetaTrabajo(nombre);
   if (existsSync(dir)) throw new Error(`Ya existe ${dir}. Integra o borra ese trabajo antes (git worktree remove).`);
@@ -284,7 +281,7 @@ function cmdDelegar(o) {
 
   const prompt = construirPromptDelegacion({ tarea: o.tarea, rama, base: `${baseRama} @ ${baseSha.slice(0, 8)}` });
   const salida = archivoRegistro(nombre, "respuesta.md");
-  const { codigo } = codexExec({ cwd: dir, prompt, sandbox: "workspace-write", salida, modelo: o.modelo });
+  const { codigo } = codexExec({ cwd: dir, prompt, sandbox: "workspace-write", salida, modelo });
   if (codigo !== 0) {
     console.error(`Codex terminó con código ${codigo}: el cierre es incierto. No se hace commit ni se verifica; mira ${dir} y ${salida}, y borra el trabajo (git worktree remove --force) o reintenta.`);
     return 1;

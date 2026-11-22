@@ -6,6 +6,9 @@ import {
   entornoVerificacion,
   codigoRevision,
   argShell,
+  argumentosCodexExec,
+  modeloCodex,
+  MODELO_POR_OMISION,
   construirPromptDelegacion,
   construirPromptRevision,
   leerVeredicto,
@@ -157,5 +160,38 @@ describe("arnés Claude + Codex", () => {
     const r = construirPromptRevision({ base: "main", diff: "+linea" });
     expect(r).toContain("VEREDICTO: BLOQUEA | CON_CAMBIOS | APROBADO");
     expect(r.endsWith("+linea")).toBe(true);
+  });
+});
+
+describe("modelo de Codex en el arnés", () => {
+  it("--modelo gana a CODEX_MODELO, y este al valor por omisión", () => {
+    expect(modeloCodex("gpt-a", { CODEX_MODELO: "gpt-b" })).toBe("gpt-a");
+    expect(modeloCodex(undefined, { CODEX_MODELO: "gpt-b" })).toBe("gpt-b");
+    expect(modeloCodex(undefined, { CODEX_MODELO: "" })).toBe(MODELO_POR_OMISION);
+    expect(modeloCodex(undefined)).toBe("gpt-6.1-terra");
+  });
+
+  it("un --modelo vacío o sin valor se rechaza en vez de cambiarse por otro", () => {
+    expect(() => modeloCodex("", { CODEX_MODELO: "gpt-b" })).toThrow(/Modelo inválido/);
+    expect(() => modeloCodex(true, {})).toThrow(/Modelo inválido/);
+  });
+
+  it("rechaza modelos con espacios o metacaracteres, vengan de la opción o del entorno", () => {
+    for (const malo of ["gpt 6", "gpt&calc", "gpt;rm", "$(x)", "a|b", "a\"b", "a`b", "../x", "-c", "--help", "-", ".x", ":x"]) {
+      expect(() => modeloCodex(malo, {})).toThrow(/Modelo inválido/);
+      expect(() => modeloCodex(undefined, { CODEX_MODELO: malo })).toThrow(/Modelo inválido/);
+    }
+  });
+
+  it("los argumentos de codex exec llevan el modelo, van sin red ni aprobaciones y el prompt entra por stdin", () => {
+    for (const sandbox of ["read-only", "workspace-write"]) {
+      const args = argumentosCodexExec({ cwd: "/repo", sandbox, salida: "/tmp/s.md", modelo: modeloCodex(undefined, {}) });
+      expect(args[0]).toBe("exec");
+      expect(args[args.indexOf("--model") + 1]).toBe("gpt-6.1-terra");
+      expect(args[args.indexOf("--sandbox") + 1]).toBe(sandbox);
+      expect(args).toContain("approval_policy=never");
+      expect(args).toContain("sandbox_workspace_write.network_access=false");
+      expect(args.at(-1)).toBe("-");
+    }
   });
 });
