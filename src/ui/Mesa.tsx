@@ -38,6 +38,7 @@ import type { Aviso, Detalle, EntregaLocal, Participacion, Recibo, Ruta } from "
 import { EditorCondiciones, ListaCondiciones, MatrizCondiciones } from "./condiciones";
 import { aCarga, Confirmar, Desactualizado, dinero, EstadoVista, fecha, Liga, plural, Prueba, type Carga } from "./comun";
 import { useSesion } from "./sesion";
+import { ReportarFr8Desk } from "./fr8desk";
 import { pluralize } from "../bidware/i18n/language";
 import { folioCorto, nombreEvento, shipperAparte } from "./eventosVista";
 import { LecturaIA } from "./LecturaIA";
@@ -234,6 +235,7 @@ export function Mesa({ id }: { id: string }) {
           {actual === "aviso" && <PanelAviso {...p} />}
           {s.modo === "rateware" && actual === "evento" && ctx.rol === "admin" && <AccionesEvento d={d} accion={accion} />}
           {s.modo === "rateware" && <MasDelEvento id={id} borrador={d.evento.estado === "borrador"} />}
+          <ReportarFr8Desk eventoId={id} asuntoInicial={`${d.evento.folio} · ${d.evento.nombre}`} />
         </div>
       </div>
     </section>

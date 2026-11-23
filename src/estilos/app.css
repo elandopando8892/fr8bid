@@ -490,3 +490,12 @@ tr.mejor > td { background: #f6fbf7; }
 
 /* Indicadores de Hoy (5-nov, decisión de Jose): lo que el Panel mostraba y espera al equipo. */
 .chip-liga.acento { border-color: var(--orange); font-weight: 600; }
+
+/* Reportar a Fr8Desk (Mesa) */
+.fr8desk { margin-top: 18px; }
+.fr8desk-cabeza { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.fr8desk-cabeza h2 { margin: 0; }
+.fr8desk-casos { list-style: none; margin: 10px 0 0; padding: 0; }
+.fr8desk-casos li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 0; border-top: 1px solid var(--line); min-width: 0; }
+.fr8desk-asunto { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+.fr8desk .campo textarea { resize: vertical; }
