@@ -83,9 +83,11 @@ export function RfxDetailPage() {
     String(i.invitation_status ?? "").toLowerCase();
 
   /** Con invitaciones enviadas u ofertas, el evento ya no se borra: se archiva. */
-  const hasActivity = lanes.some((lane) =>
-    (lane.invitations ?? []).some((i) => i.bid_rate != null || !["drafted", ""].includes(statusOf(i))),
-  );
+  const activityIn = (ls: LaneWithInvitations[]) =>
+    ls.some((lane) =>
+      (lane.invitations ?? []).some((i) => i.bid_rate != null || !["drafted", ""].includes(statusOf(i))),
+    );
+  const hasActivity = activityIn(lanes);
 
   /** Carriers added from Carrier Fit wait as "drafted" until someone authorizes them. */
   const drafts = useMemo(
@@ -281,6 +283,15 @@ export function RfxDetailPage() {
     setBusy(true);
     setNotice(null);
     try {
+      // Otra sesión pudo invitar o recibir una oferta con el diálogo abierto:
+      // se relee el evento y, si ya tiene actividad, no se borra.
+      const fresh = await fetchRfxDetail(id);
+      if (activityIn((fresh?.lanes ?? []) as LaneWithInvitations[])) {
+        setNotice("El evento ya tiene invitaciones u ofertas: archívalo en lugar de borrarlo.");
+        setBusy(false);
+        reload();
+        return;
+      }
       await deleteRfxEvent(id);
       navigate("/rfx", { replace: true });
     } catch (err) {
