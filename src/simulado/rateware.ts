@@ -302,8 +302,16 @@ export class RatewareSimulado {
           meta_template_name: "rateware_rfx_reminder_es", whatsapp_meta: { meta_template_name: "rateware_rfx_reminder_es", meta_template_language: "es_MX", meta_template_category: "UTILITY", meta_template_status: this.plantillaRecordatorio } });
         return ok({ rows });
       }
-      case "list_outreach_campaigns":
-        return ok({ rows: this.campanas.filter((c) => c.owner_email === u.ownerEmail && c.status !== "archived").map((c) => ({ ...c })) });
+      case "list_outreach_campaigns": {
+        const propias = this.campanas.filter((c) => c.owner_email === u.ownerEmail && c.status !== "archived");
+        // Como rateware-api: con rfx_event_id, lectura completa y acotada al evento.
+        if (Object.prototype.hasOwnProperty.call(body, "rfx_event_id")) {
+          const ev = this.evento(u, body.rfx_event_id);
+          const rows = propias.filter((c) => c.rfx_event_id === ev.id).map((c) => ({ ...c, organization_id: "org-simulada" }));
+          return ok({ rows, total: rows.length, complete: true, has_more: false, campaign_read_version: 1, rfx_event_id: ev.id, organization_id: "org-simulada" });
+        }
+        return ok({ rows: propias.map((c) => ({ ...c })) });
+      }
       case "create_outreach_campaign": {
         const c: Fila = body.campaign && typeof body.campaign === "object" ? body.campaign : {};
         if (!c.name) throw new Falla(400, "Campaign name is required.", "NAME_REQUIRED");

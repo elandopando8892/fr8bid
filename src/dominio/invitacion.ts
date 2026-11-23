@@ -38,13 +38,22 @@ export function elegirPlantilla(rows: Record<string, any>[], preferidas: readonl
 }
 
 // Plantillas de las campañas de un evento: primero la campaña de Fr8Bid, luego
-// las demás del evento, de la más reciente a la más vieja.
-export function plantillasDelEvento(campanas: Record<string, any>[], eventoId: string): string[] {
-  const propia = campanaDelEvento(campanas, eventoId);
-  const otras = campanas
-    .filter((c) => c.rfx_event_id === eventoId && c !== propia && c.status !== "archived")
+// las demás del evento, de la más reciente a la más vieja. `delEvento` sale de
+// la lectura completa acotada al evento (el catálogo global corta en 100 filas).
+export function plantillasDelEvento(delEvento: Record<string, any>[], eventoId: string, propia?: Record<string, any> | null): string[] {
+  const otras = delEvento
+    .filter((c) => c.rfx_event_id === eventoId && c.status !== "archived" && c.id !== propia?.id)
     .sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
   return [...(propia ? [propia] : []), ...otras].map((c) => String(c.template_id ?? "")).filter(Boolean);
+}
+
+// La lectura acotada al evento solo sirve si Rateware la da por completa.
+export function campanasDelEventoCompletas(r: Record<string, any> | null | undefined, eventoId: string): Record<string, any>[] | null {
+  const rows = r?.rows;
+  if (!r || r.complete !== true || r.has_more === true || r.rfx_event_id !== eventoId || !Array.isArray(rows)) return null;
+  if (typeof r.total === "number" && r.total !== rows.length) return null;
+  if (rows.some((c: any) => !c || c.rfx_event_id !== eventoId)) return null;
+  return rows;
 }
 
 export function campanaFr8bid(eventoId: string, folio: string, plantillaId: string, base?: Record<string, any> | null) {
