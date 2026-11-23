@@ -14,6 +14,7 @@ import { UUID_RATEWARE } from "../dominio/operacion.js";
 import { paginaTarifario } from "../mcp/tarifario.js";
 import { claveCampana, esPlantillaInvitacion } from "../dominio/invitacion.js";
 import { esProtegido } from "../dominio/protegidos.js";
+import { bloqueoDesierta, bloqueoReabrirRuta } from "../dominio/acciones-mesa.js";
 import { candadosAdjudicacion, hoyMexico, puedeAdjudicar } from "../dominio/recorrido.js";
 import { revisionesVigentes } from "../dominio/revision.js";
 import { MAX_REGISTROS } from "../dominio/contactos.js";
@@ -111,7 +112,9 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
     // borra en un solo paso, rateware #224) y rechazar una oferta no adjudicada.
     "archive_rfx_event",
     "delete_rfx_event",
-    "reject_rfx_bid"
+    "reject_rfx_bid",
+    // «Cerrar sin adjudicar» y rutas desiertas desde la página del evento (bloque C).
+    "set_rfx_lane_no_award"
   ]),
   "rfx-bid-api": new Set(["submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
@@ -307,6 +310,11 @@ export async function manejar(
     if (bloqueo) return bloqueo;
   }
 
+  if (action === "set_rfx_lane_no_award") {
+    const bloqueo = await guardaDesierta(body!, autorizacion, op);
+    if (bloqueo) return bloqueo;
+  }
+
   if (action === "create_outreach_campaign") {
     const bloqueo = await guardaCampana(body!, autorizacion, op);
     if (bloqueo) return bloqueo;
@@ -414,6 +422,30 @@ async function guardaRechazo(body: Record<string, unknown>, autorizacion: string
   if (!fila) return error(404, "NOT_FOUND", "La participación no pertenece a este evento.");
   if (fila.bid_rate === null || fila.bid_rate === undefined) return error(409, "SIN_OFERTA", "Esta participación no tiene oferta.");
   if (["primary", "backup"].includes(String(fila.award_role || "").toLowerCase())) return error(409, "ADJUDICADA", "Una oferta adjudicada no se rechaza: primero quita la decisión.");
+  return null;
+}
+
+// Ruta desierta o reabierta: rutas de este evento, confirmación explícita, motivo al
+// declarar, y las mismas reglas que la página del evento (evento cerrado a ofertas,
+// ruta sin primario ni respaldo). Rateware no rechaza un evento ya adjudicado: aquí sí.
+async function guardaDesierta(body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
+  if (!UUID.test(String(body.rfx_event_id || ""))) return error(400, "FALTA_EVENTO", "Indica el evento.");
+  const ids = Array.isArray(body.lane_ids) ? body.lane_ids.map(String) : [];
+  if (!ids.length || ids.length > 500 || ids.some((x) => !UUID.test(x)) || new Set(ids).size !== ids.length) return error(400, "FALTA_RUTA", "Indica entre 1 y 500 rutas válidas.");
+  if (body.confirmed !== true || body.confirmation_action !== "set_rfx_lane_no_award") return error(400, "SIN_CONFIRMAR", "Esta acción requiere confirmación explícita.");
+  const declarar = body.no_award !== false;
+  if (declarar && !String(body.reason || "").trim()) return error(400, "FALTA_MOTIVO", "Declarar una ruta desierta necesita el motivo.");
+  const lectura = await leerDetalle(body.rfx_event_id, autorizacion, op);
+  if (lectura === "sin_respuesta") return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se escribió nada.");
+  if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
+  if (["closed", "archived", "awarded"].includes(String(lectura.body?.event?.status || "").toLowerCase())) return error(409, "EVENTO_NO_PERMITE", "El evento ya está cerrado; sus rutas ya no cambian.");
+  const d = detalle(lectura.body, [], null, { hoy: op.hoy?.() ?? hoyMexico() });
+  for (const id of ids) {
+    const ruta = d.rutas.find((r) => r.id === id);
+    if (!ruta) return error(404, "NOT_FOUND", "Alguna ruta no pertenece a este evento.");
+    const motivo = declarar ? bloqueoDesierta(d, ruta) : bloqueoReabrirRuta(d, ruta);
+    if (motivo) return error(409, "NO_PERMITIDO", motivo);
+  }
   return null;
 }
 
