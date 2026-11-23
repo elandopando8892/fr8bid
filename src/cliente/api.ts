@@ -12,7 +12,7 @@ import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier
 import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit.js";
 import type { EntradaCatalogo } from "../dominio/condiciones-r1.js";
 import { MAX_PAGINAS, POR_PAGINA, claveSegmento, consultaSegmento, leerHistorialSegmento, segmentoDeRuta, type HistorialSegmento, type Segmento } from "../dominio/segmento.js";
-import { campanaDelEvento, campanaFr8bid, elegirPlantilla } from "../dominio/invitacion.js";
+import { campanaDelEvento, campanasDelEventoCompletas, campanaFr8bid, elegirPlantilla, plantillasDelEvento } from "../dominio/invitacion.js";
 import { operacionEntrega } from "../dominio/operacion.js";
 import { notasConCierre } from "../dominio/cierre.js";
 import { env } from "../bidware/config/env.js";
@@ -358,15 +358,28 @@ export class MesaApi {
   // comprobar). Rateware reporta los omitidos en skipped_rows. Usa la campaña
   // de Fr8Bid del evento (la crea la primera vez) con la plantilla en español.
   async prepararInvitaciones(eventId: string, revisados: string[], folio = eventId) {
-    const [campanas, plantillas] = await Promise.all([this.rw({ action: "list_outreach_campaigns" }), this.rw({ action: "list_outreach_templates" })]);
-    const plantilla = elegirPlantilla(plantillas.rows || []);
-    if (!plantilla) throw new ErrorApi(409, "SIN_PLANTILLA", "No encontré en Rateware la plantilla «RFx carrier invitation - Spanish». No se preparó nada.");
+    const [campanas, delEvento, plantillas] = await Promise.all([
+      this.rw({ action: "list_outreach_campaigns" }),
+      this.rw({ action: "list_outreach_campaigns", rfx_event_id: eventId }),
+      this.rw({ action: "list_outreach_templates" })
+    ]);
     const filas: Record<string, any>[] = campanas.rows || [];
+    const completas = campanasDelEventoCompletas(delEvento, eventId);
+    if (!completas) throw new ErrorApi(503, "CAMPANAS_INCOMPLETAS", "No se pudieron leer completas las campañas del evento. No se preparó nada.");
+    // La campaña propia se identifica solo por idempotency_key. Si no está entre las
+    // 100 más recientes del catálogo global, se crea: Rateware no duplica y, si ya
+    // existía, devuelve la verdadera. La plantilla se elige con esa campaña real.
     let campana = campanaDelEvento(filas, eventId);
     if (!campana) {
+      const tentativa = elegirPlantilla(plantillas.rows || [], plantillasDelEvento(completas, eventId));
+      if (!tentativa) throw new ErrorApi(409, "SIN_PLANTILLA", "No encontré en Rateware la plantilla «RFx carrier invitation - Spanish». No se preparó nada.");
       const base = filas.find((c) => c.rfx_event_id === eventId && c.sender_email) ?? filas.find((c) => c.channel === "email" && c.sender_email) ?? null;
-      campana = (await this.rw({ action: "create_outreach_campaign", event_id: eventId, campaign: campanaFr8bid(eventId, folio, String(plantilla.id), base) })).row;
+      campana = (await this.rw({ action: "create_outreach_campaign", event_id: eventId, campaign: campanaFr8bid(eventId, folio, String(tentativa.id), base) })).row;
+      if (!campana?.id) throw new ErrorApi(502, "SIN_CAMPANA", "Rateware no devolvió la campaña del evento. No se preparó nada.");
     }
+    const propia = completas.find((c) => c.id === campana!.id) ?? campana;
+    const plantilla = elegirPlantilla(plantillas.rows || [], plantillasDelEvento(completas, eventId, propia));
+    if (!plantilla) throw new ErrorApi(409, "SIN_PLANTILLA", "No encontré en Rateware la plantilla «RFx carrier invitation - Spanish». No se preparó nada.");
     return this.rw({
       action: "generate_outreach_drafts",
       event_id: eventId,

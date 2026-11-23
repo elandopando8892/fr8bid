@@ -107,7 +107,7 @@ export class RatewareSimulado {
   campanas: Fila[] = [];
   plantillas: Fila[] = [
     { id: "tpl00000-0000-4000-8000-000000000001", owner_email: null, name: "SPRINT 15 · RFx carrier invitation (PRUEBA)", channel: "email", is_default: true, active: true },
-    { id: "tpl00000-0000-4000-8000-000000000002", owner_email: null, name: "RFx carrier invitation - Spanish", channel: "email", is_default: false, active: true }
+    { id: "tpl00000-0000-4000-8000-000000000002", owner_email: null, name: "RFx carrier invitation - Spanish", channel: "multi", is_default: false, active: true }
   ];
   // Lo que list_rfx_carrier_replies (R2) encontraría en Gmail y en el chat.
   respuestasCarrier: Fila[] = [];
@@ -305,8 +305,20 @@ export class RatewareSimulado {
           meta_template_name: "rateware_rfx_reminder_es", whatsapp_meta: { meta_template_name: "rateware_rfx_reminder_es", meta_template_language: "es_MX", meta_template_category: "UTILITY", meta_template_status: this.plantillaRecordatorio } });
         return ok({ rows });
       }
-      case "list_outreach_campaigns":
-        return ok({ rows: this.campanas.filter((c) => c.owner_email === u.ownerEmail && c.status !== "archived").map((c) => ({ ...c })) });
+      case "list_outreach_campaigns": {
+        const propias = this.campanas.filter((c) => c.owner_email === u.ownerEmail && c.status !== "archived");
+        // Como rateware-api: con rfx_event_id, lectura completa y acotada al evento.
+        if (Object.prototype.hasOwnProperty.call(body, "rfx_event_id")) {
+          const ev = this.evento(u, body.rfx_event_id);
+          // Mismas columnas que rateware-api: sin idempotency_key ni remitente.
+          const rows = propias
+            .filter((c) => c.rfx_event_id === ev.id)
+            .map((c) => ({ id: c.id, organization_id: "org-simulada", owner_email: c.owner_email, rfx_event_id: c.rfx_event_id, template_id: c.template_id, name: c.name, status: c.status, audience_policy: c.audience_policy, created_at: c.created_at, updated_at: c.updated_at }));
+          return ok({ rows, total: rows.length, complete: true, has_more: false, campaign_read_version: 1, rfx_event_id: ev.id, organization_id: "org-simulada" });
+        }
+        // Como rateware-api: el catálogo global trae solo las 100 más recientes.
+        return ok({ rows: [...propias].reverse().slice(0, 100).map((c) => ({ ...c })) });
+      }
       case "create_outreach_campaign": {
         const c: Fila = body.campaign && typeof body.campaign === "object" ? body.campaign : {};
         if (!c.name) throw new Falla(400, "Campaign name is required.", "NAME_REQUIRED");
