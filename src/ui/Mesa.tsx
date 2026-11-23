@@ -2133,6 +2133,8 @@ function PanelAviso({ d, ctx, accion }: Props) {
   const r = recorrido(d, ctx);
   const prims = d.rutas.map(primario).filter(Boolean) as Participacion[];
   const faltan = prims.filter((p) => !avisoDe(d, p.id, "adjudicacion"));
+  // Todas las rutas desiertas: no hay ganador, pero quienes ofertaron reciben su aviso de no adjudicación.
+  const preparar = faltan.length > 0 || (prims.length === 0 && !d.avisos.some((a) => a.tipo === "adjudicacion"));
   const principales = [...new Map(prims.map((p) => {
     const a = avisoDe(d, p.id, "adjudicacion");
     return [a?.id ?? p.id, { p, a }] as const;
@@ -2145,7 +2147,7 @@ function PanelAviso({ d, ctx, accion }: Props) {
     <div className="tarjeta">
       <h2 className="fila-icono"><I.Megafono size={17} />Aviso de adjudicación</h2>
       {!r.entregaConfirmada && <p className="tenue fila-icono"><I.Candado size={15} />Requiere el recibo de Rateware (I8). El carrier no se entera de algo que Rateware no tiene.</p>}
-      {r.entregaConfirmada && faltan.length > 0 && ctx.rol === "admin" && (
+      {r.entregaConfirmada && preparar && ctx.rol === "admin" && (
         <Confirmar
           etiqueta="Preparar los avisos"
           icono={<I.Sobre size={15} />}

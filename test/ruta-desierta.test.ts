@@ -54,8 +54,13 @@ describe("proxy: set_rfx_lane_no_award", () => {
   };
 
   it("declara desierta una ruta sin decidir de un evento cerrado a ofertas", async () => {
-    expect(await pasa(crudo("open", [lane(L1), lane(L2)]))).toMatchObject({ status: 200, escribio: true });
-    expect(await pasa(crudo("open", [lane(L1), lane(L2)]), cuerpo({ lane_ids: [L1, L2] }))).toMatchObject({ status: 200, escribio: true });
+    const conOferta = lane(L2, {}, [{ id: "lv2", vendor_id: "v", bid_rate: 1000, invitation_status: "bid_submitted" }]);
+    expect(await pasa(crudo("open", [lane(L1), conOferta]))).toMatchObject({ status: 200, escribio: true });
+    expect(await pasa(crudo("open", [lane(L1), conOferta]), cuerpo({ lane_ids: [L1, L2] }))).toMatchObject({ status: 200, escribio: true });
+  });
+
+  it("no declara desiertas las rutas de un evento sin ninguna oferta (se archiva)", async () => {
+    expect(await pasa(crudo("open", [lane(L1), lane(L2)]))).toMatchObject({ code: "NO_PERMITIDO", escribio: false });
   });
 
   it("no escribe sin confirmación, sin motivo, con rutas ajenas o inválidas", async () => {
@@ -92,5 +97,27 @@ describe("entrega con todas las rutas desiertas", () => {
     expect(entregaConfirmada(ev("adjudicado", r(1, [], "x"), r(2, [p()])), sin)).toBe(false);
     expect(entregaConfirmada(ev("adjudicado", r(1, [p({ rol: "primario", entregadaEn: "2026-11-23" })])), sin)).toBe(true);
     expect(entregaConfirmada(ev("adjudicado", r(1, [p({ rol: "primario", entregadaEn: null })])), sin)).toBe(false);
+  });
+});
+
+describe("todas las rutas desiertas tras la entrega", () => {
+  it("no se declara desierta una ruta de un evento sin ninguna oferta", () => {
+    const sinOfertas = d("cerrado", r(1, [p({ versiones: [] })]), r(2, []));
+    expect(bloqueoDesierta(sinOfertas, sinOfertas.rutas[0])).toMatch(/archiva el evento/);
+    const conUna = d("cerrado", r(1, [p({ versiones: [] })]), r(2, [p()]));
+    expect(bloqueoDesierta(conUna, conUna.rutas[0])).toBeNull();
+  });
+
+  it("el aviso pide avisar a quienes ofertaron y Loads no queda esperando", async () => {
+    const { recorrido } = await import("../src/dominio/recorrido");
+    const ctx = { rol: "admin", hoy: "2026-11-23", entrega: { estado: "sin_preparar", operationId: null, error: null } } as any;
+    const ev = (avisos: unknown[]) =>
+      ({ evento: { id: "e", estado: "adjudicado", shipper: "S", plazo: null, cierre: null }, rutas: [r(1, [p({ carrierId: "c1", rubros: {} })], "x")], recibo: null, avisos }) as any;
+    const paso = (x: any, clave: string) => recorrido(x, ctx).pasos.find((s) => s.clave === clave)!;
+    expect(paso(ev([]), "aviso")).toMatchObject({ estado: "actual" });
+    expect(paso(ev([]), "aviso").detalle).toMatch(/Sin ganadores/);
+    expect(paso(ev([]), "loads")).toMatchObject({ estado: "hecho" });
+    expect(paso(ev([{ tipo: "adjudicacion", estado: "aceptado" }]), "aviso")).toMatchObject({ estado: "hecho" });
+    expect(paso(ev([{ tipo: "adjudicacion", estado: "borrador" }]), "aviso")).toMatchObject({ estado: "actual" });
   });
 });
