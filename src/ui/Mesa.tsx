@@ -1,4 +1,4 @@
-import { createContext, useContext, Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, lazy, useContext, Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ErrorApi, type AvanceEnvio } from "../cliente/api";
 import { proyeccionLoads } from "../dominio/loads";
@@ -42,6 +42,10 @@ import { ReportarFr8Desk } from "./fr8desk";
 import { pluralize } from "../bidware/i18n/language";
 import { folioCorto, nombreEvento, shipperAparte } from "./eventosVista";
 import { LecturaIA } from "./LecturaIA";
+import { Bw } from "./bidware";
+
+// Corregir una ruta y ver la preselección de carriers: módulos de Bidware, cargados al usarse.
+const Preseleccion = lazy(() => import("../bidware/features/rfx-admin/CarrierPreselection").then((m) => ({ default: m.CarrierPreselection })));
 
 // Fecha corta sin hora, para columnas angostas.
 const dia = (iso: string | null | undefined) =>
@@ -233,7 +237,7 @@ export function Mesa({ id }: { id: string }) {
           {verInvitacion && <MasCarriers {...p} />}
           {actual === "entrega" && <PanelEntrega {...p} />}
           {actual === "aviso" && <PanelAviso {...p} />}
-          {s.modo === "rateware" && actual === "evento" && ctx.rol === "admin" && <AccionesEvento d={d} accion={accion} />}
+          {s.modo === "rateware" && (actual === "evento" || d.evento.estado === "archivado") && ctx.rol === "admin" && <AccionesEvento d={d} accion={accion} />}
           {s.modo === "rateware" && <MasDelEvento id={id} borrador={d.evento.estado === "borrador"} />}
           <ReportarFr8Desk eventoId={id} asuntoInicial={`${d.evento.folio} · ${d.evento.nombre}`} />
         </div>
@@ -243,8 +247,8 @@ export function Mesa({ id }: { id: string }) {
   );
 }
 
-// Archivar y borrar viven en la página del evento (antes solo en «Detalle
-// completo»). Archivar lo saca de las listas activas y no cierra ni avisa nada.
+// Archivar, restaurar y borrar viven en la página del evento (antes solo en la
+// pantalla heredada «Detalle completo», ya retirada). Archivar lo saca de las listas activas y no cierra ni avisa nada.
 // Borrar es definitivo y solo para un borrador sin actividad; Rateware lo vuelve
 // a revisar y lo borra en un solo paso.
 function AccionesEvento({ d, accion }: Pick<Props, "d" | "accion">) {
@@ -254,6 +258,21 @@ function AccionesEvento({ d, accion }: Pick<Props, "d" | "accion">) {
   // comprueban con el estado «adjudicado».
   const archivado = d.evento.estado === "archivado" || d.evento.estado === "adjudicado";
   const borrable = d.evento.estado === "borrador" && sinActividad(d);
+  if (d.evento.estado === "archivado") {
+    return (
+      <div className="linea-accion">
+        <span className="linea-icono"><I.Bandeja size={16} /></span>
+        <p className="tenue">Este evento está archivado y fuera de las listas activas.</p>
+        <Confirmar
+          etiqueta="Restaurar a borrador"
+          clase="btn-secundario"
+          icono={<I.Bandeja size={15} />}
+          advertencia={<>«{nombreEvento(d.evento)}» vuelve a las listas como borrador, con sus rutas y ofertas como estaban. No lo publica ni avisa a nadie. {ADVERTENCIA_REAL(s, d)}</>}
+          onConfirmar={() => accion(() => s.api.restaurar(d.evento.id), "Evento restaurado a borrador.")}
+        />
+      </div>
+    );
+  }
   if (archivado && !borrable) return null;
   return (
     <div className="linea-accion">
@@ -287,7 +306,7 @@ function MasDelEvento({ id, borrador }: { id: string; borrador: boolean }) {
     { a: `/rfx/${id}/review`, t: "Revisión de contactos", icono: I.Lista },
     { a: `/rfx/${id}/message`, t: "Mensaje a carriers", icono: I.Sobre },
     { a: `/rfx/${id}/delivery`, t: "Cola de envío", icono: I.Bandeja },
-    { a: `/rfx/${id}/detalle`, t: "Detalle completo", icono: I.Libro }
+    { a: `/rfx/${id}/chat`, t: "Chat con carriers", icono: I.Sobre }
   ];
   return (
     <nav className="mas-del-evento" aria-label="Más del evento">
@@ -374,9 +393,12 @@ function PanelEvento({ d, ctx, accion }: Props) {
   const editable = ctx.rol !== "viewer" && ["borrador", "abierto"].includes(d.evento.estado);
   // Una fila por ruta; las condiciones se abren debajo de su fila.
   const [abierta, setAbierta] = useState<string | null>(null);
+  const [editando, setEditando] = useState<Ruta | null>(null);
   return (
     <div className="tarjeta">
       <h2>Necesidad y evento</h2>
+      {d.paqueteMaestro != null && <Bw><Preseleccion eventId={d.evento.id} master={d.paqueteMaestro} /></Bw>}
+      {editando?.cruda && <EditorRuta key={editando.id} eventoId={d.evento.id} ruta={editando} accion={accion} onCerrar={() => setEditando(null)} />}
       {d.evento.cierre && <p className="tenue">Cerrado a ofertas el {fecha(d.evento.cierre.el)} (plazo original {fecha(d.evento.cierre.plazoOriginal)}).</p>}
       <div className="tabla-envoltura">
         <table className="tabla tabla-rutas">
@@ -396,6 +418,9 @@ function PanelEvento({ d, ctx, accion }: Props) {
                     <td>
                       <span className="fila-icono">
                         {r.condiciones.length ? <span className="pill info">{plural(r.condiciones.length, "condición", "condiciones")}</span> : <span className="tenue">sin condiciones</span>}
+                        {editable && r.cruda && (
+                          <button className="btn-chico" onClick={() => setEditando(r)}>Corregir ruta</button>
+                        )}
                         {(editable || r.condiciones.length > 0) && (
                           <button className="btn-chico" onClick={() => setAbierta(ver ? null : r.id)} aria-expanded={ver}>
                             {ver ? "Cerrar" : editable ? (r.condiciones.length ? "Editar" : "Elegir") : "Ver"}
@@ -417,6 +442,72 @@ function PanelEvento({ d, ctx, accion }: Props) {
             })}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+const CAMPOS_EDITABLES_RUTA: { clave: string; texto: string; numerico?: boolean; ancho?: boolean }[] = [
+  { clave: "origin", texto: "Origen" },
+  { clave: "origin_city", texto: "Ciudad de origen" },
+  { clave: "origin_state", texto: "Estado de origen" },
+  { clave: "origin_country", texto: "País de origen" },
+  { clave: "destination", texto: "Destino" },
+  { clave: "destination_city", texto: "Ciudad de destino" },
+  { clave: "destination_state", texto: "Estado de destino" },
+  { clave: "destination_country", texto: "País de destino" },
+  { clave: "operation", texto: "Operación" },
+  { clave: "service", texto: "Servicio" },
+  { clave: "equipment", texto: "Equipo" },
+  { clave: "trailer", texto: "Caja" },
+  { clave: "weekly_volume", texto: "Cruces por semana", numerico: true },
+  { clave: "annual_volume", texto: "Volumen anual", numerico: true },
+  { clave: "target_rate", texto: "Objetivo de compra", numerico: true },
+  { clave: "currency", texto: "Moneda" },
+  { clave: "carrier_requirements", texto: "Requisitos del carrier", ancho: true },
+  { clave: "notes", texto: "Notas", ancho: true }
+];
+
+// Corregir una ruta: solo viajan los campos que cambiaron.
+function EditorRuta({ eventoId, ruta, accion, onCerrar }: { eventoId: string; ruta: Ruta; accion: Props["accion"]; onCerrar: () => void }) {
+  const s = useSesion();
+  const cruda = ruta.cruda ?? {};
+  const inicial = useMemo(() => Object.fromEntries(CAMPOS_EDITABLES_RUTA.map((c) => [c.clave, cruda[c.clave] == null ? "" : String(cruda[c.clave])])), [ruta]);
+  const [valores, setValores] = useState<Record<string, string>>(inicial);
+  const cambiados = CAMPOS_EDITABLES_RUTA.filter((c) => valores[c.clave].trim() !== inicial[c.clave].trim());
+  const numeroMalo = cambiados.find((c) => {
+    const v = valores[c.clave].trim();
+    return c.numerico && v !== "" && !(Number.isFinite(Number(v.replace(/,/g, ""))) && Number(v.replace(/,/g, "")) >= 0);
+  });
+  const puede = cambiados.length > 0 && valores.origin.trim() !== "" && valores.destination.trim() !== "" && !numeroMalo;
+  const guardar = () => {
+    const patch: Record<string, unknown> = {};
+    for (const c of cambiados) {
+      const v = valores[c.clave].trim();
+      patch[c.clave] = c.numerico ? (v ? Number(v.replace(/,/g, "")) : null) : v || null;
+    }
+    onCerrar();
+    return accion(() => s.api.corregirRuta(eventoId, ruta.id, patch), "Ruta corregida.");
+  };
+  return (
+    <div className="tarjeta" role="group" aria-label="Corregir ruta">
+      <h3>Corregir ruta {ruta.numero}</h3>
+      <div className="rejilla-campos">
+        {CAMPOS_EDITABLES_RUTA.map((c) => (
+          <label key={c.clave} className="campo" style={c.ancho ? { gridColumn: "1 / -1" } : undefined}>
+            <span>{c.texto}</span>
+            {c.ancho ? (
+              <textarea rows={2} value={valores[c.clave]} onChange={(e) => setValores((v) => ({ ...v, [c.clave]: e.target.value }))} />
+            ) : (
+              <input value={valores[c.clave]} inputMode={c.numerico ? "decimal" : undefined} onChange={(e) => setValores((v) => ({ ...v, [c.clave]: e.target.value }))} />
+            )}
+          </label>
+        ))}
+      </div>
+      {numeroMalo && <p className="error">«{numeroMalo.texto}» debe ser un número, cero o mayor.</p>}
+      <div className="fila-icono">
+        <button className="btn-chico" onClick={onCerrar}>Cancelar</button>
+        <button className="btn-primario" disabled={!puede} onClick={guardar}>{cambiados.length ? `Guardar ${plural(cambiados.length, "cambio", "cambios")}` : "Sin cambios"}</button>
       </div>
     </div>
   );
@@ -1760,7 +1851,7 @@ function PreguntaCarrier({ d, ruta, p, onCerrar }: { d: Detalle; ruta: Ruta; p: 
   );
 }
 
-// Rechazar una oferta (antes solo en «Detalle completo»): Rateware la quita y
+// Rechazar una oferta (antes solo en la pantalla heredada «Detalle completo», ya retirada): Rateware la quita y
 // deja al carrier como «declinó». El motivo se queda con el equipo; el carrier
 // no lo ve. Una oferta adjudicada no se rechaza: primero se quita la decisión.
 const MOTIVOS_DESIERTA = ["Ofertas por arriba del objetivo", "Sin ofertas suficientes", "El shipper canceló la ruta"];

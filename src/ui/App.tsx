@@ -69,7 +69,8 @@ function Rutas() {
         <Route path="/rfx/new" element={modulo(<P.NuevoEvento />)} />
         <Route path="/rfx/new/:id" element={modulo(<P.NuevoEvento />)} />
         <Route path="/rfx/:id" element={<AMesa />} />
-        <Route path="/rfx/:id/detalle" element={modulo(<P.DetalleEvento />)} />
+        {/* «Detalle completo» se retiró (decisión de Jose, 23-nov): la página del evento hace todo lo que hacía. */}
+        <Route path="/rfx/:id/detalle" element={<AMesa />} />
         <Route path="/rfx/:id/message" element={modulo(<P.Mensaje />)} />
         <Route path="/rfx/:id/delivery" element={modulo(<P.Cola />)} />
         <Route path="/rfx/:id/review" element={modulo(<P.RevisionContactos />)} />

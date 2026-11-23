@@ -56,6 +56,7 @@ const WRITE_ACTIONS = new Set([
   "update_rfx_bid",
   "generate_outreach_drafts",
   "save_rfx_lane_conditions",
+  "update_rfx_lane",
   "draft_bid_room_carrier_message",
   "create_outreach_campaign",
   "record_rfx_invitation_wave_review",
@@ -693,7 +694,7 @@ export class RatewareSimulado {
             if (!roles.includes("admin")) throw new Falla(403, "Cerrar es del Administrador.", "TEAM_ROLE_REQUIRED");
             return this.closeout(u, { event_id: event.id });
           }
-          const permitidos: Record<string, string[]> = { draft: ["open"], open: ["draft"] };
+          const permitidos: Record<string, string[]> = { draft: ["open"], open: ["draft"], archived: ["draft"] };
           if (!(permitidos[event.status] || []).includes(destino)) throw new Falla(409, `Transición no permitida: ${event.status} → ${destino}`, "INVALID_TRANSITION");
           const antes = event.status;
           event.status = destino;
@@ -868,6 +869,14 @@ export class RatewareSimulado {
         }
         if (rows.length) this.bitacorar(u.email, declarar ? "rfx.lane.no_award" : "rfx.lane.no_award.clear", "rfx_events", event.id, null, null, { lane_ids: rows.map((l) => l.id) });
         return ok({ no_award: declarar, updated: rows.length, unchanged: lanes.length - rows.length, rows });
+      }
+      case "update_rfx_lane": {
+        const lane = this.lanes.find((l) => l.id === body.id);
+        if (!lane) throw new Falla(404, "Lane not found.", "NOT_FOUND");
+        const patch = body.patch && typeof body.patch === "object" ? body.patch : {};
+        Object.assign(lane, patch);
+        this.bitacorar(u.email, "rfx.lane.update", "rfx_lanes", lane.id, null, null, { fields: Object.keys(patch) });
+        return ok({ row: lane });
       }
       case "closeout_awarded_rfx_to_rateware":
         return this.closeout(u, body);
