@@ -37,7 +37,7 @@ describe("proxy: archivar, borrar y rechazar desde la página del evento", () =>
       return { status: r.status, code: r.body?.code, escribio: env.includes("reject_rfx_bid") };
     };
     expect(await pasa(detalle("open", lv({})))).toMatchObject({ status: 200, escribio: true });
-    expect(await pasa(detalle("closed", lv({})))).toMatchObject({ status: 200, escribio: true });
+    expect(await pasa(detalle("closed", lv({})))).toMatchObject({ status: 409, escribio: false });
     expect(await pasa(detalle("awarded", lv({})))).toMatchObject({ status: 409, escribio: false });
     expect(await pasa(detalle("open", lv({ award_role: "primary" })))).toMatchObject({ code: "ADJUDICADA", escribio: false });
     expect(await pasa(detalle("open", lv({ bid_rate: null })))).toMatchObject({ code: "SIN_OFERTA", escribio: false });

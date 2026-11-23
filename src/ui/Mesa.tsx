@@ -247,7 +247,9 @@ export function Mesa({ id }: { id: string }) {
 function AccionesEvento({ d, accion }: Pick<Props, "d" | "accion">) {
   const s = useSesion();
   const navegar = useNavigate();
-  const archivado = d.evento.estado === "archivado";
+  // Un evento adjudicado no se archiva desde aquí: su entrega y sus avisos se
+  // comprueban con el estado «adjudicado».
+  const archivado = d.evento.estado === "archivado" || d.evento.estado === "adjudicado";
   const borrable = d.evento.estado === "borrador" && sinActividad(d);
   if (archivado && !borrable) return null;
   return (
@@ -1433,7 +1435,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
             {!abierto && !prim && !sel && filas.length > 0 && (
               <p className={puedeElegir ? "tenue ayuda" : "tenue"}>{puedeElegir ? "Elige la oferta a adjudicar como primario: sus candados y el motivo aparecen abajo." : ctx.rol !== "admin" && d.rutas.length === 1 ? "Solo el Administrador adjudica." : ""}</p>
             )}
-            {declinaron.length > 0 && <p className="tenue">Declinaron: {declinaron.join(", ")}.</p>}
+            {declinaron.length > 0 && <p className="tenue">Declinaron o se rechazó su oferta: {declinaron.join(", ")}.</p>}
             <MatrizCondiciones ruta={ruta} carriers={filas} />
             {historial && ruta.participaciones.some((x) => x.id === historial) && <Historial p={ruta.participaciones.find((x) => x.id === historial)!} d={d} ctx={ctx} accion={accion} />}
             {preguntaA && ruta.participaciones.some((x) => x.id === preguntaA) && (
