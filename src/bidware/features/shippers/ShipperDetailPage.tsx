@@ -126,6 +126,19 @@ export function ShipperDetailPage() {
     rutas: detail.data.lanes.length,
   };
 
+  // Las secciones sin registros no estorban: se ocultan y se abren desde «+ Agregar…»
+  // (la que está abierta se queda a la vista).
+  const total: Partial<Record<Tab, number>> = {
+    oportunidades: detail.data.opportunities.length,
+    acciones: detail.data.actions.length,
+    rfis: detail.data.rfis.length,
+    sitios: detail.data.locations.length,
+    rutas: detail.data.lanes.length,
+  };
+  const isEmptyTab = (key: Tab) => key in total && !total[key] && key !== tab;
+  const visibleTabs = TABS.filter(([key]) => !isEmptyTab(key));
+  const emptyTabs = TABS.filter(([key]) => isEmptyTab(key));
+
   async function run(label: string, task: () => Promise<string | void>) {
     setBusy(label);
     setError(null);
@@ -262,7 +275,7 @@ export function ShipperDetailPage() {
           )}
 
           <div className="tabs" role="tablist" aria-label="Secciones del shipper">
-            {TABS.map(([key, label]) => (
+            {visibleTabs.map(([key, label]) => (
               <button
                 key={key}
                 role="tab"
@@ -274,6 +287,18 @@ export function ShipperDetailPage() {
                 {counts[key] ? ` · ${counts[key]}` : ""}
               </button>
             ))}
+            {emptyTabs.length > 0 && (
+              <select
+                aria-label="Agregar en una sección vacía"
+                value=""
+                onChange={(e) => e.target.value && setParams({ tab: e.target.value }, { replace: true })}
+              >
+                <option value="">+ Agregar…</option>
+                {emptyTabs.map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           {tab === "resumen" && (

@@ -159,3 +159,34 @@ export function sinProtegidos(x: any): any {
 export function esRespuestaProtegida(x: any): boolean {
   return Boolean(x && typeof x === "object" && (esProtegido(x.event?.id) || esProtegido(x.row?.id) || esProtegido(x.row?.rfx_event_id)));
 }
+
+// Tablero público (public_bid_room_board, sin sesión): quien lo abre no ve el nombre del
+// shipper ni de sus bodegas (decisión de Jose, 23-nov). Solo corredor (ciudad y estado),
+// equipo, volumen y fecha; el evento se identifica por su folio. Fuera: shipper, nombre del
+// evento, domicilios y bodegas, notas y reglas del negocio.
+const EVENTO_PUBLICO = ["id", "rfx_id", "event_type", "status", "due_date", "operation_start_date", "updated_at"];
+const RUTA_PUBLICA = [
+  "id", "lane_number", "origin_city", "origin_state", "origin_market", "origin_region",
+  "destination_city", "destination_state", "destination_market", "destination_region",
+  "equipment", "trailer", "config", "operation", "service", "weekly_volume", "currency", "no_award"
+];
+
+const pick = (o: any, claves: string[]) => Object.fromEntries(claves.filter((k) => o && k in o).map((k) => [k, o[k]]));
+const corredorPublico = (ciudad: unknown, estado: unknown, mercado: unknown) =>
+  [ciudad, estado].map((x) => String(x ?? "").trim()).filter(Boolean).join(", ") || String(mercado ?? "").trim() || "—";
+
+export function tableroPublico(datos: any): any {
+  if (!datos || !Array.isArray(datos.rows)) return datos;
+  return {
+    ...datos,
+    rows: datos.rows.map((r: any) => {
+      const lane: any = pick(r?.lane, RUTA_PUBLICA);
+      lane.origin = corredorPublico(lane.origin_city, lane.origin_state, lane.origin_market);
+      lane.destination = corredorPublico(lane.destination_city, lane.destination_state, lane.destination_market);
+      const evento: any = pick(r?.event, EVENTO_PUBLICO);
+      evento.name = String(evento.rfx_id || "Evento");
+      const { event: _e, lane: _l, ...resto } = r ?? {};
+      return { ...resto, event: evento, lane, route_label: `${lane.origin} -> ${lane.destination}` };
+    })
+  };
+}

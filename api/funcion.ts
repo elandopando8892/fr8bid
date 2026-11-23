@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { modoEscrituras } from "../src/servidor/proxy.js";
-import { esRespuestaProtegida, revisar, sinProtegidos } from "../src/servidor/paso.js";
+import { esRespuestaProtegida, revisar, sinProtegidos, tableroPublico } from "../src/servidor/paso.js";
 
 // POST /api/funcion?fn=<función> → Edge Function de rateware-prod para los
 // módulos traídos de Bidware. Las reglas están en src/servidor/paso.ts.
@@ -43,7 +43,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(r.status).send(texto);
   }
   if (esRespuestaProtegida(datos)) return res.status(404).json({ error: "No encontrado.", code: "NOT_FOUND" });
-  return res.status(r.status).json(sinProtegidos(datos));
+  const salida = sinProtegidos(datos);
+  return res.status(r.status).json(fn === "rfx-bid-api" && json?.action === "public_bid_room_board" ? tableroPublico(salida) : salida);
 }
 
 async function crudo(req: VercelRequest): Promise<Buffer> {
