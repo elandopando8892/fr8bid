@@ -1,0 +1,76 @@
+// Lo que la página del evento muestra arriba de las ofertas (recorrido del
+// 22-nov): una fila por ruta y los avisos que hay que ver antes de adjudicar.
+import { conOferta, primario, versionVigente } from "./recorrido";
+import { nombreModelo } from "./modelo";
+import type { Detalle, Participacion, Ruta } from "./tipos";
+
+export interface FilaResumen {
+  ruta: Ruta;
+  ofertas: number;
+  masBaja: { p: Participacion; allIn: number; moneda: string; sinVigencia: boolean } | null;
+  // Porcentaje contra el objetivo de la ruta (positivo: por arriba).
+  contraObjetivo: number | null;
+  primario: string | null;
+}
+
+// Contra el objetivo, redondeado como en la tabla de ofertas.
+export const contraObjetivo = (allIn: number, objetivo: number | null) =>
+  objetivo ? Math.round(((allIn - objetivo) / objetivo) * 100) : null;
+
+// «Mejor» en verde solo si está en el objetivo o por debajo; sin objetivo, también.
+export const dentroDeObjetivo = (allIn: number, objetivo: number | null) => {
+  const c = contraObjetivo(allIn, objetivo);
+  return c === null || c <= 0;
+};
+
+export function resumenPorRuta(d: Detalle): FilaResumen[] {
+  return d.rutas.map((ruta) => {
+    const filas = [...conOferta(ruta)].sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
+    const p = filas[0];
+    const v = p ? versionVigente(p)! : null;
+    return {
+      ruta,
+      ofertas: filas.length,
+      masBaja: p && v ? { p, allIn: v.tarifaAllIn, moneda: v.moneda, sinVigencia: !v.vigenteHasta } : null,
+      contraObjetivo: v ? contraObjetivo(v.tarifaAllIn, ruta.objetivo) : null,
+      primario: primario(ruta)?.carrier ?? null
+    };
+  });
+}
+
+// Un carrier que cotiza con modelos comerciales distintos en el mismo evento
+// (p. ej. Brokerage en unas rutas y Cost plus en otras): el precio de venta al
+// shipper cambia según la ruta y conviene confirmarlo antes de adjudicar.
+export interface ModeloMixto {
+  carrier: string;
+  modelos: { modelo: string; rutas: number[] }[];
+}
+
+export function modelosMixtos(d: Detalle): ModeloMixto[] {
+  const porCarrier = new Map<string, { carrier: string; modelos: Map<string, number[]> }>();
+  for (const ruta of d.rutas)
+    for (const p of conOferta(ruta)) {
+      const v = versionVigente(p)!;
+      const x = porCarrier.get(p.carrierId) ?? { carrier: p.carrier, modelos: new Map<string, number[]>() };
+      const modelo = String(v.modeloComercial);
+      x.modelos.set(modelo, [...(x.modelos.get(modelo) ?? []), ruta.numero]);
+      porCarrier.set(p.carrierId, x);
+    }
+  return [...porCarrier.values()]
+    .filter((x) => x.modelos.size > 1)
+    .map((x) => ({ carrier: x.carrier, modelos: [...x.modelos].map(([modelo, rutas]) => ({ modelo: nombreModelo(modelo), rutas: rutas.sort((a, b) => a - b) })) }))
+    .sort((a, b) => a.carrier.localeCompare(b.carrier));
+}
+
+// «1–6» o «7, 8»: rutas consecutivas como rango.
+export function rangoRutas(nums: number[]): string {
+  const xs = [...new Set(nums)].sort((a, b) => a - b);
+  const partes: string[] = [];
+  for (let i = 0; i < xs.length; ) {
+    let j = i;
+    while (j + 1 < xs.length && xs[j + 1] === xs[j] + 1) j++;
+    partes.push(j - i >= 2 ? `${xs[i]}–${xs[j]}` : xs.slice(i, j + 1).join(", "));
+    i = j + 1;
+  }
+  return partes.join(", ");
+}
