@@ -25,9 +25,20 @@ describe("proxy: archivar, borrar y rechazar desde la página del evento", () =>
       expect((await manejar("rateware-api", { action, id: EV }, "Bearer x", op(null, env))).status).toBe(400);
       expect((await manejar("rateware-api", { action, id: "no", confirmed: true, confirmation_action: action }, "Bearer x", op(null, env))).status).toBe(400);
       expect(env).toEqual([]);
-      expect((await manejar("rateware-api", { action, id: EV, confirmed: true, confirmation_action: action }, "Bearer x", op(null, env))).status).toBe(200);
-      expect(env).toEqual([action]);
+      expect((await manejar("rateware-api", { action, id: [EV], confirmed: true, confirmation_action: action }, "Bearer x", op(null, env))).status).toBe(400);
+      expect(env).toEqual([]);
+      const det = { event: { id: EV, status: "draft" }, lanes: [] };
+      expect((await manejar("rateware-api", { action, id: EV, confirmed: true, confirmation_action: action }, "Bearer x", op(det, env))).status).toBe(200);
+      expect(env).toEqual(action === "archive_rfx_event" ? ["list_rfx_detail", action] : [action]);
     }
+  });
+
+  it("un evento adjudicado no se archiva", async () => {
+    const env: string[] = [];
+    const det = { event: { id: EV, status: "awarded" }, lanes: [] };
+    const r = await manejar("rateware-api", { action: "archive_rfx_event", id: EV, confirmed: true, confirmation_action: "archive_rfx_event" }, "Bearer x", op(det, env));
+    expect(r.body?.code).toBe("EVENTO_ADJUDICADO");
+    expect(env).toEqual(["list_rfx_detail"]);
   });
 
   it("rechazar solo una oferta de este evento, con motivo, sin adjudicar y con el evento abierto o cerrado", async () => {
