@@ -8,7 +8,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { useAuth } from "@/auth/AuthContext";
 import { isConfigured } from "@/config/env";
 import { getAccessToken } from "@/lib/auth";
-import { MesaApi, apolloHttp, revisorHttp, transporteHttp, transporteSimulado } from "../cliente/api";
+import { MesaApi, apolloHttp, fr8deskHttp, fr8deskSimulado, revisorHttp, transporteHttp, transporteSimulado } from "../cliente/api";
 import type { Rol } from "../dominio/tipos";
 import type { RatewareSimulado } from "../simulado/rateware";
 
@@ -43,9 +43,11 @@ export const USUARIOS_SIMULADOS: { clave: string; nombre: string; rol: Rol }[] =
 ];
 
 let simGlobal: Promise<RatewareSimulado> | null = null;
+let deskGlobal: Promise<{ fetch: typeof fetch }> | null = null;
 
 export function ProveedorSesion({ children }: { children: ReactNode }) {
   const [sim, setSim] = useState<RatewareSimulado | null>(null);
+  const [desk, setDesk] = useState<{ fetch: typeof fetch } | null>(null);
   const [usuarioSimulado, setUsuarioSimulado] = useState("admin");
   const auth = useAuth();
   const [listo, setListo] = useState(false);
@@ -54,16 +56,21 @@ export function ProveedorSesion({ children }: { children: ReactNode }) {
     if (MODO !== "simulado") return;
     // Import dinámico: el simulado no viaja en el modo rateware.
     simGlobal ??= import("../simulado/semilla").then((m) => m.sembrarDemoAmplia()).then((d) => d.sim);
-    simGlobal.then((s) => {
+    deskGlobal ??= import("../simulado/fr8desk").then((m) => new m.Fr8DeskSimulado());
+    Promise.all([simGlobal, deskGlobal]).then(([s, d]) => {
+      setDesk(d);
       setSim(s);
       setListo(true);
     });
   }, []);
 
   const api = useMemo(() => {
-    if (MODO === "simulado") return new MesaApi(sim ? transporteSimulado(sim, () => usuarioSimulado) : async () => ({ status: 503, body: { error: "Cargando", code: "CARGANDO" }, headers: {} }));
-    return new MesaApi(transporteHttp(getAccessToken), undefined, revisorHttp(getAccessToken), apolloHttp(getAccessToken));
-  }, [sim, usuarioSimulado]);
+    if (MODO === "simulado") {
+      if (!sim || !desk) return new MesaApi(async () => ({ status: 503, body: { error: "Cargando", code: "CARGANDO" }, headers: {} }));
+      return new MesaApi(transporteSimulado(sim, () => usuarioSimulado), undefined, undefined, undefined, fr8deskSimulado(sim, () => usuarioSimulado, desk));
+    }
+    return new MesaApi(transporteHttp(getAccessToken), undefined, revisorHttp(getAccessToken), apolloHttp(getAccessToken), fr8deskHttp(getAccessToken));
+  }, [sim, desk, usuarioSimulado]);
 
   const u = USUARIOS_SIMULADOS.find((x) => x.clave === usuarioSimulado)!;
   const valor: Sesion = {

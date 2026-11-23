@@ -17,6 +17,7 @@ import { ESPERA_ENTRE_TANDAS_MS, esCuota, leerResultado, operacionTanda, planear
 import type { Aviso, Detalle, EntregaLocal, Recibo, ResumenEvento } from "../dominio/tipos";
 import { manejar, type Respuesta, type Servicio } from "../servidor/proxy";
 import type { RatewareSimulado } from "../simulado/rateware";
+import { manejarFr8Desk, type CasoFr8Desk, type Impacto } from "../servidor/fr8desk";
 import * as mapear from "./mapear";
 
 export type Transporte = (servicio: Servicio, body: Record<string, unknown>) => Promise<Respuesta>;
@@ -126,6 +127,44 @@ export const apolloSimulado: ConsultaApollo = async () => ({
   body: { error: "Apollo no está disponible en el modo simulado.", code: "APOLLO_NO_CONFIGURADO" }
 });
 
+// Fr8Desk (GET/POST /api/fr8desk/casos): casos ligados al evento y «Reportar a
+// Fr8Desk». En el simulado pasa por el mismo manejador del servidor con un
+// Fr8Desk en memoria.
+export type ConsultaFr8Desk = (metodo: "GET" | "POST", eventoId: string, body?: Record<string, unknown>) => Promise<{ status: number; body: any }>;
+
+export function fr8deskHttp(token: () => Promise<string | null>): ConsultaFr8Desk {
+  return async (metodo, eventoId, body) => {
+    const t = await token();
+    const auth: Record<string, string> = t ? { authorization: `Bearer ${t}` } : {};
+    try {
+      const r =
+        metodo === "GET"
+          ? await fetch(`/api/fr8desk/casos?rfx_event_id=${encodeURIComponent(eventoId)}`, { headers: auth })
+          : await fetch("/api/fr8desk/casos", { method: "POST", headers: { "content-type": "application/json", ...auth }, body: JSON.stringify({ ...body, rfx_event_id: eventoId }) });
+      return { status: r.status, body: await r.json().catch(() => ({ error: "Respuesta no válida", code: "RESPUESTA_INVALIDA" })) };
+    } catch {
+      return { status: 504, body: { error: "Sin conexión con Fr8Bid. Puedes reintentar: no se duplica el caso.", code: "SIN_RESPUESTA", incierta: true } };
+    }
+  };
+}
+
+export function fr8deskSimulado(sim: RatewareSimulado, usuario: () => string | null, desk: { fetch: typeof fetch }): ConsultaFr8Desk {
+  return (metodo, eventoId, body) => {
+    const clave = usuario();
+    return manejarFr8Desk(metodo, { rfx_event_id: eventoId }, { ...body, rfx_event_id: eventoId }, clave ? `Bearer sim:${clave}` : null, {
+      config: { token: "fd_simulado", equipo: "sistemas" },
+      rateware: (s, b, auth) => sim.llamar(s, b, auth),
+      fetch: desk.fetch,
+      timeoutMs: 2000
+    });
+  };
+}
+
+export const fr8deskNoDisponible: ConsultaFr8Desk = async () => ({
+  status: 503,
+  body: { error: "Integración con Fr8Desk no configurada.", code: "FR8DESK_NO_CONFIGURADO" }
+});
+
 export interface RevisionTelefonos {
   telefonos: Map<string, Telefono>;
   ia: "sin_dudosos" | "ok" | "no_configurada" | "fallo";
@@ -133,7 +172,23 @@ export interface RevisionTelefonos {
 }
 
 export class MesaApi {
-  constructor(private t: Transporte, private hoy: () => string = () => hoyMexico(), private revisor: RevisorTelefonos = revisorSimulado, private apollo: ConsultaApollo = apolloSimulado) {}
+  constructor(private t: Transporte, private hoy: () => string = () => hoyMexico(), private revisor: RevisorTelefonos = revisorSimulado, private apollo: ConsultaApollo = apolloSimulado, private fr8desk: ConsultaFr8Desk = fr8deskNoDisponible) {}
+
+  private async pedirFr8Desk(metodo: "GET" | "POST", eventoId: string, body?: Record<string, unknown>) {
+    const r = await this.fr8desk(metodo, eventoId, body);
+    if (r.status < 200 || r.status >= 300) throw new ErrorApi(r.status, String(r.body?.code || r.status), String(r.body?.error || "Fr8Desk no respondió"), Boolean(r.body?.incierta));
+    return r.body;
+  }
+
+  async casosFr8Desk(eventoId: string): Promise<CasoFr8Desk[]> {
+    return (await this.pedirFr8Desk("GET", eventoId)).casos || [];
+  }
+
+  // requestId: el mismo en cada reintento del mismo formulario (no duplica).
+  async reportarFr8Desk(eventoId: string, caso: { requestId: string; asunto: string; descripcion: string; impacto: Impacto }): Promise<{ folio: string; url: string; repetido: boolean }> {
+    const b = await this.pedirFr8Desk("POST", eventoId, { request_id: caso.requestId, asunto: caso.asunto, descripcion: caso.descripcion, impacto: caso.impacto });
+    return { folio: b.folio, url: b.url, repetido: Boolean(b.repetido) };
+  }
 
   private async pedirApollo(body: Record<string, unknown>) {
     const r = await this.apollo(body);

@@ -33,3 +33,24 @@ npm run dev
 `npm run dev` abre el modo simulado: nada sale del navegador. El selector «Ver como» cambia entre Administrador, Operador, Consulta y otra organización. Los módulos de Bidware no tienen datos en el simulado: avisan y muestran su pantalla vacía.
 
 El modo `rateware` (`VITE_FR8BID_MODO=rateware`, ver `.env.example`) apunta a rateware-prod. No está desplegado ni probado contra producción; cada escritura real necesita la aprobación del propietario por acción.
+
+## Reportar a Fr8Desk
+
+La Mesa muestra «Casos en Fr8Desk»: el botón «Reportar a Fr8Desk» abre un caso en Fr8Desk ligado al evento y debajo se listan los casos del evento. Contrato: servicio común `/v1` de Fr8Desk (`docs/servicio-comun-v1.md` y `GET /v1/openapi.json` en el repo `fr8desk`).
+
+- Rutas (servidor, `api/fr8desk/casos.ts` + `src/servidor/fr8desk.ts`): `GET /api/fr8desk/casos?rfx_event_id=<uuid>` y `POST /api/fr8desk/casos` con `{rfx_event_id, request_id, asunto, descripcion, impacto}`. El navegador nunca ve la credencial de Fr8Desk.
+- Antes de llamar a Fr8Desk se comprueba que la persona ve el evento (la misma lectura `list_rfx_detail` de la Mesa con su token); si no, 404. A Fr8Desk va el token de sesión de la persona en `x-fr8desk-actor`.
+- A Fr8Desk solo viaja lo que escribe la persona (asunto, descripción, impacto) y `{tipo: "rfx_evento", ref: <uuid del evento>}`. El detalle del RFx se queda en Fr8Bid.
+- `request_id` nace al abrir el formulario y se reúsa en cada reintento: Fr8Desk no duplica el caso.
+- Impacto: `detiene`, `retrasa`, `molesta` o `consulta`.
+- En el modo simulado responde un Fr8Desk en memoria (`src/simulado/fr8desk.ts`); nada sale a la red.
+
+Variables del servidor (Vercel), sin valores en el repositorio:
+
+| Variable | Qué es |
+| --- | --- |
+| `FR8DESK_URL` | Base de Fr8Desk (API `/v1` y ligas `/#/t/<folio>`). Si falta, `https://fr8desk-sandy.vercel.app`. |
+| `FR8DESK_TOKEN` | Credencial de app `fd_…` de Fr8Bid con alcances `casos:crear` y `casos:leer`. |
+| `FR8DESK_EQUIPO` | Slug del equipo de servicio de Fr8Desk que recibe los casos (por ejemplo `sistemas`). |
+
+Si falta `FR8DESK_TOKEN` o `FR8DESK_EQUIPO`, las rutas responden 503 «Integración con Fr8Desk no configurada» y la Mesa sigue funcionando.
