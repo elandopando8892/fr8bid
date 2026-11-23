@@ -22,6 +22,8 @@ import { MyRanking } from "./MyRanking";
 import { useAsync } from "@/components/useAsync";
 import { Spinner, ErrorBanner, Empty, InfoBanner, Pill, dateShort } from "@/components/ui";
 import { BotonAyudas } from "../../../ui/BotonAyudas";
+import { setLang, useLang, type Lang } from "@/i18n/language";
+import { q } from "@/i18n/bid-room-quote";
 
 /**
  * Carrier private Bid Room (wireframes 11, 24 and 27). The token is the
@@ -36,12 +38,7 @@ import { BotonAyudas } from "../../../ui/BotonAyudas";
  * Four tabs mirror how a carrier moves: understand the business, price the
  * lanes, see where it stands, talk to MARKSMAN.
  */
-const PHASES: { key: PrivateWorkspace; label: string }[] = [
-  { key: "master", label: "El negocio" },
-  { key: "bids", label: "Cotizar rutas" },
-  { key: "award", label: "Mi ranking" },
-  { key: "chat", label: "Mensajes" },
-];
+const PHASES: PrivateWorkspace[] = ["master", "bids", "award", "chat"];
 
 /** What the carrier never sees of the others, per the event's mode (wireframe 27). */
 const BAND: Record<string, { tag: string; text: string }> = {
@@ -61,24 +58,32 @@ const BAND: Record<string, { tag: string; text: string }> = {
 
 /** "cierra en 8 días": days_remaining counts the deadline's own day, so today is 1. */
 function deadlineText(due: DueState): string {
-  if (!due.due_date || due.status === "no_deadline") return "sin fecha de cierre";
-  if (due.status === "closed") return `cerró el ${dateShort(due.due_date)}`;
+  if (!due.due_date || due.status === "no_deadline") return q("due.none");
+  if (due.status === "closed") return q("due.closed", dateShort(due.due_date));
   const days = Number(due.days_remaining) - 1;
-  if (!Number.isFinite(days)) return `cierra el ${dateShort(due.due_date)}`;
-  if (days <= 0) return "cierra hoy a las 23:59";
-  if (days === 1) return "cierra mañana";
-  return `cierra en ${days} días`;
+  if (!Number.isFinite(days)) return q("due.on", dateShort(due.due_date));
+  if (days <= 0) return q("due.today");
+  if (days === 1) return q("due.tomorrow");
+  return q("due.days", days);
 }
 
 /** La barra de marca: el carrier llega desde un correo y ve primero quién lo invita. */
 function MarcaCarrier() {
+  const lang = useLang();
   return (
     <div className="croom-bar">
       <span className="croom-logo">
         MARKS<b>MAN</b>
       </span>
-      <span className="croom-bar-note">Acceso privado de carrier</span>
-      <BotonAyudas className="boton-ayudas-publica" />
+      <span className="croom-bar-note">{q("bar.note")}</span>
+      <BotonAyudas en={lang === "en"} className="boton-ayudas-publica" />
+      <div className="profile-lang sr-lang" role="group" aria-label={q("bar.language")}>
+        {(["es", "en"] as Lang[]).map((l) => (
+          <button key={l} type="button" className={lang === l ? "active" : ""} aria-pressed={lang === l} onClick={() => setLang(l)}>
+            {l.toUpperCase()}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -91,6 +96,7 @@ export function BidRoomPage() {
 }
 
 function BidRoomContent({ token }: { token: string }) {
+  useLang();
   const { data, loading, error, reload } = useAsync(() => getInvitation(token), [token]);
   const [phase, setPhase] = useState<PrivateWorkspace>("bids");
   const [pickedId, setPickedId] = useState<string | null>(null);
@@ -132,7 +138,7 @@ function BidRoomContent({ token }: { token: string }) {
   if (loading && !data) {
     return (
       <div className="center-screen">
-        <Spinner label="Abriendo tu Bid Room…" />
+        <Spinner label={q("page.opening")} />
       </div>
     );
   }
@@ -142,12 +148,12 @@ function BidRoomContent({ token }: { token: string }) {
       <div className="croom">
         <MarcaCarrier />
         <header className="croom-head closed">
-          <h1>No pudimos abrir tu Bid Room</h1>
+          <h1>{q("page.failed")}</h1>
         </header>
         <main className="croom-page">
-          <ErrorBanner message={error || "El enlace no es válido."} />
+          <ErrorBanner message={error || q("page.invalidLink")} />
           <p className="croom-side-text" style={{ marginTop: 12 }}>
-            Si el enlace viene de un correo anterior, pide uno nuevo al equipo de MARKSMAN.
+            {q("page.oldLink")}
           </p>
         </main>
       </div>
@@ -182,7 +188,7 @@ function BidRoomContent({ token }: { token: string }) {
     <div className="croom">
       <MarcaCarrier />
       <header className="croom-head">
-        <h1>{event.name || "Bid Room privado"}</h1>
+        <h1>{event.name || q("page.private")}</h1>
         {/* Una línea, sin chips (decisión de Jose, 6-nov). */}
         <div className="croom-meta">
           <span>
@@ -190,20 +196,20 @@ function BidRoomContent({ token }: { token: string }) {
               .filter(Boolean)
               .join(" · ")}
             {" · "}
-            {lanes.length} ruta{lanes.length === 1 ? "" : "s"} ·{" "}
+            {lanes.length} {lanes.length === 1 ? q("page.laneOne") : q("page.laneMany")} ·{" "}
             <span className={due.status === "closing" ? "croom-closing" : undefined}>{deadline}</span>
-            {event.operation_start_date ? ` · arranca el ${dateShort(event.operation_start_date)}` : ""}
+            {event.operation_start_date ? ` · ${q("page.starts", dateShort(event.operation_start_date))}` : ""}
           </span>
         </div>
         <nav className="croom-tabs">
           {PHASES.map((p) => (
             <button
-              key={p.key}
+              key={p}
               type="button"
-              className={phase === p.key ? "active" : undefined}
-              onClick={() => setPhase(p.key)}
+              className={phase === p ? "active" : undefined}
+              onClick={() => setPhase(p)}
             >
-              {p.label}
+              {q(`tab.${p}`)}
             </button>
           ))}
         </nav>
@@ -219,9 +225,9 @@ function BidRoomContent({ token }: { token: string }) {
       <main className="croom-page">
         {error && <ErrorBanner message={error} />}
         {linkLane.no_award === true && (
-          <InfoBanner title="La ruta de esta liga se cerró sin adjudicar.">
-            {linkRoute ? `${linkRoute} ya no recibe ofertas. ` : "Ya no recibe ofertas. "}
-            {lanes.length ? "Las demás rutas de tu invitación siguen abiertas." : ""}
+          <InfoBanner title={q("page.noAwardTitle")}>
+            {linkRoute ? q("page.noAwardRoute", linkRoute) : q("page.noAwardNoRoute")}
+            {lanes.length ? q("page.noAwardOthers") : ""}
           </InfoBanner>
         )}
 
@@ -261,8 +267,8 @@ function BidRoomContent({ token }: { token: string }) {
             />
           ) : (
             <Empty
-              title="Sin rutas en tu invitación"
-              hint="Si crees que falta una ruta, pide acceso en El negocio o escribe al equipo en Mensajes."
+              title={q("page.emptyTitle")}
+              hint={q("page.emptyHint")}
             />
           ))}
 

@@ -12,7 +12,20 @@ let teamBoard = false;
 // Public portals keep their own language controls and storage keys.
 const publicPage = () => typeof location !== "undefined" && /^\/(?:bid\/|rfi\/|board(?:\/|$)|(?:rfx-bid|customer-rfi|carrier-profile|shipper-profile|bid-room-board)\.html)/.test(location.pathname);
 const boardPage = () => typeof location !== "undefined" && /^\/(?:board(?:\/|$)|bid-room-board\.html)/.test(location.pathname);
-export const getLang = (): Lang => publicPage() && !(teamBoard && boardPage()) ? "es" : lang;
+// El Bid Room del carrier (/bid/:token y rfx-bid.html) tiene su propio idioma y
+// su propia llave: no mezcla la preferencia del equipo. Por omisión es español
+// hasta que todas sus pantallas estén traducidas.
+export const BID_ROOM_LANGUAGE_KEY = "bidware.bidroom.lang";
+const bidRoomPage = () => typeof location !== "undefined" && /^\/(?:bid\/|rfx-bid\.html)/.test(location.pathname);
+function initialBidRoomLang(): Lang {
+  try { return localStorage.getItem(BID_ROOM_LANGUAGE_KEY) === "en" ? "en" : "es"; }
+  catch { return "es"; }
+}
+let bidRoomLang: Lang | null = null;
+export const getLang = (): Lang => {
+  if (bidRoomPage()) return (bidRoomLang ??= initialBidRoomLang());
+  return publicPage() && !(teamBoard && boardPage()) ? "es" : lang;
+};
 export const locale = (spanishLocale = "es-MX") => getLang() === "en" ? "en-US" : spanishLocale;
 /** The authenticated team uses its preference on the board; anonymous visitors keep ES. */
 export function useTeamBoardLanguage(authenticated: boolean) {
@@ -26,6 +39,12 @@ export function useTeamBoardLanguage(authenticated: boolean) {
   }, [authenticated]);
 }
 export function setLang(next: Lang) {
+  if (bidRoomPage()) {
+    bidRoomLang = next;
+    try { localStorage.setItem(BID_ROOM_LANGUAGE_KEY, next); } catch { /* Storage may be blocked. */ }
+    listeners.forEach((notify) => notify());
+    return;
+  }
   lang = next;
   try { localStorage.setItem(LANGUAGE_KEY, next); } catch { /* Storage may be blocked. */ }
   listeners.forEach((notify) => notify());

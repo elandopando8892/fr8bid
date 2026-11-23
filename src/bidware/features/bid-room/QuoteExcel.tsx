@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ErrorBanner } from "@/components/ui";
+import { useLang } from "@/i18n/language";
+import { q } from "@/i18n/bid-room-quote";
 import { confirmAsync } from "@/components/confirm";
-import { billingNotice, eventLanes, getInvitation, modelSpec, isLockedBrokerage, offerPayload, submitBid, type BookLane } from "./bidroom.service";
+import { billingNotice, eventLanes, getInvitation, modelCopy, isLockedBrokerage, offerPayload, submitBid, type BookLane } from "./bidroom.service";
 import { buildBidTemplate, currentOfferForSend, displayOfferValue, OFFER_COLUMNS, parseBidTemplate, type ImportedOffer } from "./bid-template";
 
 export function QuoteExcel({ token, eventId, onBusy, onSettled, progress }: {
@@ -12,6 +14,7 @@ export function QuoteExcel({ token, eventId, onBusy, onSettled, progress }: {
   onBusy: (busy: boolean) => void;
   onSettled: () => void;
 }) {
+  useLang();
   const [plan, setPlan] = useState<ImportedOffer[]>([]);
   const [busy, setBusy] = useState(false);
   const [consumed, setConsumed] = useState(false);
@@ -45,26 +48,26 @@ export function QuoteExcel({ token, eventId, onBusy, onSettled, progress }: {
     try {
       const lanes = await currentLanes();
       if (!active.current) return;
-      if (!lanes.length || lanes.length > 1000) throw new Error("No hay rutas disponibles o se exceden 1,000 rutas en este archivo.");
+      if (!lanes.length || lanes.length > 1000) throw new Error(q("xl.noLanes"));
       const book = await buildBidTemplate(lanes);
       const XLSX = await import("xlsx");
       if (active.current) XLSX.writeFile(book, "ofertas-rfx.xlsx");
     } catch (e) {
-      if (active.current) setError(e instanceof Error ? e.message : "No se pudo descargar la plantilla.");
+      if (active.current) setError(e instanceof Error ? e.message : q("xl.downloadFailed"));
     } finally { finish(); }
   }
   async function upload(file: File) {
     if (!start()) return;
     setPlan([]); setStatus(""); setDone([]);
     try {
-      if (!/\.xlsx$/i.test(file.name)) throw new Error("Usa la plantilla .xlsx descargada desde este Bid Room.");
-      if (file.size > 5 * 1024 * 1024) throw new Error("El archivo supera 5 MiB.");
+      if (!/\.xlsx$/i.test(file.name)) throw new Error(q("xl.useTemplate"));
+      if (file.size > 5 * 1024 * 1024) throw new Error(q("xl.tooBig"));
       const data = await file.arrayBuffer();
       const lanes = await currentLanes();
       const offers = await parseBidTemplate(data, lanes);
       if (active.current) setPlan(offers);
     } catch (e) {
-      if (active.current) setError(e instanceof Error ? e.message : "No se pudo leer el archivo.");
+      if (active.current) setError(e instanceof Error ? e.message : q("xl.readFailed"));
     } finally { finish(); }
   }
   async function send() {
@@ -73,7 +76,7 @@ export function QuoteExcel({ token, eventId, onBusy, onSettled, progress }: {
     let sent = 0;
     try {
       if (plan.some(offer => billingNotice(offer.form))) {
-        const accepted = await confirmAsync("Para las rutas con Costo + margen o Carrier comparte facturación, el porcentaje acordado se facturará 5 días hábiles después de la confirmación de pago del embarcador.\n\nLos porcentajes aplicables están detallados por ruta en la revisión. ¿Confirmas el envío?", { ok: "Confirmar y enviar ofertas", cancel: "Volver a revisar" });
+        const accepted = await confirmAsync(q("billing.excelNotice"), { ok: q("xl.confirmOk"), cancel: q("form.backToReview") });
         if (!accepted || !active.current) return;
       }
       used.current = true;
@@ -86,7 +89,7 @@ export function QuoteExcel({ token, eventId, onBusy, onSettled, progress }: {
         if (sent) lanes = await currentLanes();
         if (!active.current) return;
         const lane = currentOfferForSend(offer, lanes);
-        setStatus(`Enviando ruta ${lane.lane_number ?? offer.row} (${sent + 1} de ${plan.length})…`);
+        setStatus(q("xl.sendingLane", lane.lane_number ?? offer.row, sent + 1, plan.length));
         attempting = offer;
         const response = await submitBid(lane.invitation_token!, offerPayload(offer.form, lane));
         const row = response.row as Record<string, unknown> | undefined;
@@ -94,48 +97,48 @@ export function QuoteExcel({ token, eventId, onBusy, onSettled, progress }: {
         // v336 does not select rfx_lane_id; reject a contradictory lane if a later API includes it.
         if (!row || row.id !== lane.invitation_id ||
             (row.rfx_lane_id !== undefined && row.rfx_lane_id !== lane.rfx_lane_id)) {
-          throw new Error("El servidor no confirmó la ruta esperada.");
+          throw new Error(q("xl.notConfirmed"));
         }
         sent++;
         attempting = undefined;
         if (!active.current) return;
         setDone(ids => [...ids, lane.rfx_lane_id]);
       }
-      if (active.current) setStatus(`${sent} ofertas confirmadas. Recarga para verlas en el formulario.`);
+      if (active.current) setStatus(q("xl.confirmedAll", sent));
     } catch (e) {
       if (active.current) {
-        const uncertain = attempting ? ` La ruta ${attempting.lane.lane_number ?? attempting.row} quedó sin confirmación; podría haberse guardado. Compruébala al recargar.` : "";
-        setStatus(`${sent} de ${plan.length} ofertas confirmadas. Secuencia detenida.`);
-        setError(`${e instanceof Error ? e.message : "No se pudo completar el envío."}${uncertain} No se reintentará automáticamente.`);
+        const uncertain = attempting ? q("xl.uncertain", attempting.lane.lane_number ?? attempting.row) : "";
+        setStatus(q("xl.stopped", sent, plan.length));
+        setError(`${e instanceof Error ? e.message : q("xl.sendFailed")}${uncertain}${q("xl.noRetry")}`);
       }
     } finally { if (used.current) onSettled(); finish(); }
   }
 
-  return <section className="croom-note croom-progress" aria-label="Cotizar con Excel" style={{ display: "block" }}>
+  return <section className="croom-note croom-progress" aria-label={q("xl.aria")} style={{ display: "block" }}>
     <div className="croom-progress-row">
       <div className="croom-progress-text">{progress}</div>
       <span className="croom-progress-actions">
-      <span className="croom-progress-excel">Excel:</span>
-      <button type="button" className="sm" disabled={busy || consumed} onClick={download} title="Descarga tus rutas en una plantilla para cotizarlas en Excel">Descargar plantilla</button>
-      <button type="button" className="sm" disabled={busy || consumed} onClick={() => input.current?.click()} title="Sube la plantilla llena; revisas las ofertas antes de enviarlas">Importar</button>
+      <span className="croom-progress-excel">{q("xl.label")}</span>
+      <button type="button" className="sm" disabled={busy || consumed} onClick={download} title={q("xl.downloadTitle")}>{q("xl.download")}</button>
+      <button type="button" className="sm" disabled={busy || consumed} onClick={() => input.current?.click()} title={q("xl.importTitle")}>{q("xl.import")}</button>
       </span>
-      <input ref={input} type="file" accept=".xlsx" aria-label="Archivo de ofertas Excel" hidden disabled={busy || consumed}
+      <input ref={input} type="file" accept=".xlsx" aria-label={q("xl.fileAria")} hidden disabled={busy || consumed}
         onChange={e => { const file = e.target.files?.[0]; e.target.value = ""; if (file) void upload(file); }} />
     </div>
-    {busy && <p role="status">{status || "Preparando archivo…"}</p>}
+    {busy && <p role="status">{status || q("xl.preparing")}</p>}
     {error && <ErrorBanner message={error} />}
-    {plan.length > 0 && <div aria-label="Revisión de ofertas Excel" role="region">
-      <h4>{plan.length} ofertas para revisar</h4>
-      <p>Se sustituirán los datos de estas rutas. «Sin dato» borra el valor anterior. Los avisos de información faltante no bloquean el envío.</p>
+    {plan.length > 0 && <div aria-label={q("xl.reviewAria")} role="region">
+      <h4>{q("xl.reviewTitle", plan.length)}</h4>
+      <p>{q("xl.reviewNote")}</p>
       {plan.map(offer => {
-        const model = modelSpec(offer.form.commercial_model);
+        const model = modelCopy(offer.form.commercial_model);
         return <article key={offer.lane.rfx_lane_id} style={{ borderTop: "1px solid var(--border, #ddd)", padding: "12px 0" }}>
-          <b>Ruta {offer.lane.lane_number ?? offer.row}: {offer.lane.origin} → {offer.lane.destination}</b>
+          <b>{q("xl.lane", offer.lane.lane_number ?? offer.row, String(offer.lane.origin ?? ""), String(offer.lane.destination ?? ""))}</b>
           <p>{offer.form.bid_rate} {offer.form.currency} · {model.label}{!isLockedBrokerage(offer.lane) && <> · {displayOfferValue("pct", offer.form)}</>}</p>
-          <p>{isLockedBrokerage(offer.lane) ? "Captura tu tarifa de venta a XBF. Modelo fijo en esta etapa." : `${model.enter} ${model.effect}`}</p>
+          <p>{isLockedBrokerage(offer.lane) ? q("xl.lockedModel") : `${model.enter} ${model.effect}`}</p>
           {billingNotice(offer.form) && <p><strong>{billingNotice(offer.form)}</strong></p>}
-          {done.includes(offer.lane.rfx_lane_id) && <strong>Envío confirmado</strong>}
-          <details><summary>Revisar todos los datos de la ruta {offer.lane.lane_number ?? offer.row}</summary>
+          {done.includes(offer.lane.rfx_lane_id) && <strong>{q("xl.sentOk")}</strong>}
+          <details><summary>{q("xl.reviewAll", offer.lane.lane_number ?? offer.row)}</summary>
             <dl>{OFFER_COLUMNS.filter(([key]) => !isLockedBrokerage(offer.lane) || key !== "pct").map(([key, label]) => <div key={key} style={{ margin: "6px 0", overflowWrap: "anywhere" }}>
               <dt><b>{label}</b></dt><dd style={{ margin: 0 }}>{displayOfferValue(key, offer.form)}</dd>
             </div>)}</dl>
@@ -143,13 +146,13 @@ export function QuoteExcel({ token, eventId, onBusy, onSettled, progress }: {
           {offer.warnings.length > 0 && <ul>{offer.warnings.map(w => <li key={w}>{w}</li>)}</ul>}
         </article>;
       })}
-      <p>El envío avanza ruta por ruta. Mantén esta página abierta; salir detiene las siguientes rutas, pero una petición iniciada puede completarse.</p>
+      <p>{q("xl.sequence")}</p>
       {!consumed && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button type="button" className="primary" disabled={busy} onClick={send}>Confirmar y enviar {plan.length} ofertas</button>
-        <button type="button" disabled={busy} onClick={() => setPlan([])}>Descartar revisión</button>
+        <button type="button" className="primary" disabled={busy} onClick={send}>{q("xl.sendAll", plan.length)}</button>
+        <button type="button" disabled={busy} onClick={() => setPlan([])}>{q("xl.discard")}</button>
       </div>}
     </div>}
     {!busy && status && <p role="status">{status}</p>}
-    {consumed && !busy && <button type="button" onClick={() => window.location.reload()}>Recargar y comprobar ofertas</button>}
+    {consumed && !busy && <button type="button" onClick={() => window.location.reload()}>{q("xl.reload")}</button>}
   </section>;
 }

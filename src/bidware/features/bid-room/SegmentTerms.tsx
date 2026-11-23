@@ -14,9 +14,10 @@ import {
   type RubricKey,
 } from "./bidroom.service";
 import { ErrorBanner, Pill } from "@/components/ui";
+import { useLang } from "@/i18n/language";
+import { q } from "@/i18n/bid-room-quote";
 
 type SaveState = "saving" | "saved" | "error";
-const SAVE_LABEL: Record<SaveState, string> = { saving: "Guardando…", saved: "Autoguardado", error: "No se guardó" };
 
 /**
  * The business terms of each segment and what the carrier says about each
@@ -34,6 +35,7 @@ export function SegmentTerms({
   answers: Map<string, Answer>;
   onAnswer: (key: string, answer: Answer) => void;
 }) {
+  useLang();
   const segments = useMemo(() => segmentsOf(lanes), [lanes]);
   const [state, setState] = useState<Record<string, SaveState>>({});
   const [error, setError] = useState<string | null>(null);
@@ -82,28 +84,28 @@ export function SegmentTerms({
 
   return (
     <>
-      {error && <ErrorBanner message={`No se guardó tu respuesta: ${error}`} />}
+      {error && <ErrorBanner message={q("seg.errorBanner", error)} />}
       {segments.map((segment) => {
         const progress = segmentProgress(segment.key, answers);
         const closed = segment.lanes.every(windowClosed);
-        const rubros = RUBRICS.map((r) => ({ ...r, text: rubricText(segment.lanes[0], r.key) }));
+        const rubros = RUBRICS.map((r) => ({ ...r, label: q(`rubric.${r.key}`), text: rubricText(segment.lanes[0], r.key) }));
         const written = rubros.filter((r) => r.text);
         const blank = rubros.filter((r) => !r.text);
         const blankOpen = blank.filter((r) => answerOf(segment.key, r.key).answer === "pending");
         return (
           <section key={segment.key} className="croom-card">
             <header className="croom-card-head">
-              <b className="grow">Términos del segmento · {segment.name}</b>
+              <b className="grow">{q("seg.title", segment.name)}</b>
               {state[segment.key] && (
-                <span className={`croom-save ${state[segment.key]}`}>{SAVE_LABEL[state[segment.key]]}</span>
+                <span className={`croom-save ${state[segment.key]}`}>{q(`seg.${state[segment.key]}`)}</span>
               )}
               <Pill tone={progress.done === progress.total ? "green" : "amber"}>
-                {progress.done} DE {progress.total} RUBROS
+                {q("seg.progress", progress.done, progress.total)}
               </Pill>
             </header>
             <p className="croom-card-note ayuda">
-              {segment.lanes.length > 1 ? `Aplica a tus ${segment.lanes.length} rutas de este segmento. ` : ""}
-              Decir «con excepción» o «no puedo» no te saca del bid: nos dice dónde negociar.
+              {segment.lanes.length > 1 ? q("seg.appliesAll", segment.lanes.length) : ""}
+              {q("seg.note")}
             </p>
 
             {written.map((rubric) => {
@@ -122,7 +124,7 @@ export function SegmentTerms({
                         aria-pressed={current.answer === a.key}
                         onClick={() => choose(segment, rubric.key, a.key)}
                       >
-                        {a.label}
+                        {q(`answer.${a.key}`)}
                       </button>
                     ))}
                   </div>
@@ -131,7 +133,7 @@ export function SegmentTerms({
                       rows={2}
                       disabled={closed}
                       value={current.comment}
-                      placeholder={current.answer === "exception" ? "¿Cuál es la excepción?" : "¿Qué te lo impide?"}
+                      placeholder={current.answer === "exception" ? q("seg.exceptionPlaceholder") : q("seg.disagreePlaceholder")}
                       onChange={(e) => put(segment.key, rubric.key, { ...current, comment: e.target.value })}
                       onBlur={() =>
                         save(segment, [{ rubric_key: rubric.key, answer: current.answer, comment: current.comment }])
@@ -145,7 +147,7 @@ export function SegmentTerms({
             {blank.length > 0 && (
               <div className="croom-rubro blank">
                 <span>
-                  Sin requisitos declarados: {blank.map((r) => r.label).join(", ")}.
+                  {q("seg.noRequirements", blank.map((r) => r.label).join(", "))}
                 </span>
                 {blankOpen.length > 0 ? (
                   <button
@@ -157,11 +159,11 @@ export function SegmentTerms({
                       save(segment, rows);
                     }}
                   >
-                    Marcar como no aplica
+                    {q("seg.markNa")}
                   </button>
                 ) : (
                   <Pill>
-                    {blank.every((r) => answerOf(segment.key, r.key).answer === "not_applicable") ? "NO APLICAN" : "RESPONDIDOS"}
+                    {blank.every((r) => answerOf(segment.key, r.key).answer === "not_applicable") ? q("seg.allNa") : q("seg.answered")}
                   </Pill>
                 )}
               </div>
