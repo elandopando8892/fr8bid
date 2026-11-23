@@ -47,20 +47,6 @@ export function plantillasDelEvento(delEvento: Record<string, any>[], eventoId: 
   return [...(propia ? [propia] : []), ...otras].map((c) => String(c.template_id ?? "")).filter(Boolean);
 }
 
-// La lectura acotada al evento no trae idempotency_key: la campaña de Fr8Bid se
-// reconoce por su nombre y su audiencia (campanaFr8bid). Solo se usa para
-// preferir su plantilla o para comprobar su id; crearla sigue siendo idempotente
-// en Rateware por idempotency_key.
-const NOMBRE_FR8BID = "Fr8Bid · invitación ";
-export function campanaFr8bidEnEvento(delEvento: Record<string, any>[], eventoId: string): Record<string, any> | null {
-  // Si más de una cumple, no se adivina: ninguna se acepta (el proxy rechaza y
-  // la creación por idempotency_key devuelve la verdadera).
-  const candidatas = delEvento.filter(
-    (c) => c.rfx_event_id === eventoId && c.status !== "archived" && String(c.name || "").startsWith(NOMBRE_FR8BID) && c.audience_policy?.mode === "all_eligible"
-  );
-  return candidatas.length === 1 ? candidatas[0] : null;
-}
-
 // La lectura acotada al evento solo sirve si Rateware la da por completa.
 export function campanasDelEventoCompletas(r: Record<string, any> | null | undefined, eventoId: string): Record<string, any>[] | null {
   const rows = r?.rows;
@@ -74,7 +60,7 @@ export function campanaFr8bid(eventoId: string, folio: string, plantillaId: stri
   return {
     rfx_event_id: eventoId,
     template_id: plantillaId,
-    name: `${NOMBRE_FR8BID}${folio}`,
+    name: `Fr8Bid · invitación ${folio}`,
     channel: "email",
     idempotency_key: claveCampana(eventoId),
     sender_email: base?.sender_email || REMITENTE,

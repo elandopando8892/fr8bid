@@ -60,35 +60,23 @@ describe("campaña de Fr8Bid fuera del catálogo global (más de 100 campañas)"
   const EV = "e1";
   const completa = (rows: Record<string, unknown>[]) => ({ rows, total: rows.length, complete: true, campaign_read_version: 1, rfx_event_id: EV, organization_id: "o" });
   const propia = { id: "c-fr8", rfx_event_id: EV, name: "Fr8Bid · invitación RFX-1", audience_policy: { mode: "all_eligible" }, template_id: "t-propia", created_at: "2026-11-01" };
-  const otra = { id: "c-otra", rfx_event_id: EV, name: "Lanzamiento", audience_policy: { mode: "all_eligible" }, template_id: "t-otra", created_at: "2026-11-20" };
+  const impostora = { id: "c-otra", rfx_event_id: EV, name: "Fr8Bid · invitación RFX-1", audience_policy: { mode: "all_eligible" }, template_id: "t-otra", created_at: "2026-11-20" };
 
-  it("se reconoce en la lectura completa del evento por nombre y audiencia", async () => {
-    const { campanaFr8bidEnEvento } = await import("../src/dominio/invitacion");
-    expect(campanaFr8bidEnEvento([otra, propia], EV)?.id).toBe("c-fr8");
-    expect(campanaFr8bidEnEvento([otra, { ...propia, audience_policy: { mode: "explicit" } }], EV)).toBeNull();
-    expect(campanaFr8bidEnEvento([{ ...propia, status: "archived" }], EV)).toBeNull();
-  });
-
-  it("el proxy acepta la campaña propia que solo aparece en la lectura del evento, y nada más", async () => {
+  it("el proxy no adivina por nombre: una campaña que no se puede comprobar no prepara nada", async () => {
     const { manejar } = await import("../src/servidor/proxy");
+    const enviados: string[] = [];
     const enviar = async (_s: string, b: Record<string, unknown>) => {
+      enviados.push(String(b.action));
       if (b.action === "list_rfx_detail") return { status: 200, body: { event: { id: EV, status: "open", due_date: "2099-01-01" }, lanes: [{ id: "l1", invitations: [{ id: "lv1", vendor_id: "v1", invitation_status: "drafted", vendors: { vendor_name: "Gena" } }] }] }, headers: {} };
       if (b.action === "list_outreach_templates") return { status: 200, body: { rows: [{ id: "t-es", name: "RFx carrier invitation - Spanish", channel: "multi" }] }, headers: {} };
-      if (b.action === "list_outreach_campaigns") return { status: 200, body: b.rfx_event_id ? completa([otra, propia]) : { rows: [] }, headers: {} };
+      if (b.action === "list_outreach_campaigns") return { status: 200, body: b.rfx_event_id ? completa([impostora, propia]) : { rows: [] }, headers: {} };
       if (b.action === "list_rfx_invitation_wave_reviews") return { status: 200, body: { rows: [{ vendor_id: "v1", reviewed: true, reviewed_at: "2026-10-24T00:00:00Z" }] }, headers: {} };
       return { status: 200, body: { ok: true }, headers: {} };
     };
     const op = { enviar, permitirEscrituras: true, real: true, hoy: () => "2026-10-24" } as any;
     const preparar = (campaign_id: string) => manejar("rateware-api", { action: "generate_outreach_drafts", event_id: EV, channel: "email", reviewed_vendor_ids: ["v1"], campaign_id, template_id: "t-es" }, "Bearer x", op);
-    expect((await preparar("c-fr8")).status).toBe(200);
-    expect((await preparar("c-otra")).body.code).toBe("CAMPANA_FR8BID");
-  });
-});
-
-describe("campaña de Fr8Bid ambigua en la lectura del evento", () => {
-  it("si dos campañas cumplen nombre y audiencia, no se acepta ninguna", async () => {
-    const { campanaFr8bidEnEvento } = await import("../src/dominio/invitacion");
-    const c = (id: string) => ({ id, rfx_event_id: "e1", name: "Fr8Bid · invitación X", audience_policy: { mode: "all_eligible" } });
-    expect(campanaFr8bidEnEvento([c("a"), c("b")], "e1")).toBeNull();
+    expect((await preparar("c-fr8")).body.code).toBe("CAMPANA_NO_VERIFICADA");
+    expect((await preparar("c-otra")).body.code).toBe("CAMPANA_NO_VERIFICADA");
+    expect(enviados).not.toContain("generate_outreach_drafts");
   });
 });

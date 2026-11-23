@@ -792,17 +792,17 @@ describe("invitar desde la Mesa", () => {
     await op.prepararInvitaciones(id, [carriers.A.id]);
     expect(s.campanas).toHaveLength(1);
     // Con más de 100 campañas más recientes, la propia sale del catálogo global:
-    // se reconoce en la lectura completa del evento y no se duplica.
+    // crearla otra vez no la duplica, y como el servidor no puede comprobarla por
+    // idempotency_key, no se adivina por nombre ni se prepara nada.
     const propia = s.campanas[0];
-    for (let i = 0; i < 120; i++) s.campanas.push({ id: `cmp-otra-${i}`, owner_email: propia.owner_email, status: "draft", channel: "email", name: `Otra ${i}`, audience_policy: { mode: "all_eligible" } });
+    for (let i = 0; i < 120; i++) s.campanas.push({ id: `cmp-otra-${i}`, owner_email: propia.owner_email, status: "draft", channel: "email", name: `Fr8Bid · invitación ${i}`, audience_policy: { mode: "all_eligible" } });
     s.revisar(id, carriers.B.id);
-    const r3 = await op.prepararInvitaciones(id, [carriers.B.id]);
-    expect(r3.generated).toBeGreaterThanOrEqual(1);
+    await expect(op.prepararInvitaciones(id, [carriers.B.id])).rejects.toMatchObject({ code: "CAMPANA_NO_VERIFICADA" });
     expect(s.campanas.filter((c) => c.idempotency_key === `fr8bid-invitacion-${id}`)).toHaveLength(1);
 
     d = await adm.detalle(id);
     const r2 = await adm.enviarAvisos(id, d.avisos);
-    expect(r2.sent).toBe(3); // Gena, A y B
+    expect(r2.sent).toBe(2); // Gena y A
   });
 
   it("contra Rateware real: sin campaña de Fr8Bid, con otra plantilla o con evento cerrado no se escribe", async () => {
