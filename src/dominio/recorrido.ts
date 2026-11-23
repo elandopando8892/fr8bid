@@ -195,10 +195,12 @@ export function propuestaPrimarios(detalle: Detalle, ctx: Contexto): PropuestaPr
   return detalle.rutas
     .filter((ruta) => !rutaDecidida(ruta))
     .map((ruta): PropuestaPrimario => {
-      const filas = conOferta(ruta)
-        .filter((p) => !p.rol)
-        .sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
-      if (!filas.length) return { ruta, p: null, motivo: "sin ofertas" };
+      const libres = conOferta(ruta).filter((p) => !p.rol);
+      if (!libres.length) return { ruta, p: null, motivo: "sin ofertas" };
+      // Importes en monedas distintas no se ordenan entre sí: esa ruta se
+      // adjudica a mano.
+      if (libres.some((p) => versionVigente(p)!.moneda !== ruta.moneda)) return { ruta, p: null, motivo: "hay ofertas en otra moneda que la ruta: revisión a mano" };
+      const filas = libres.sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
       const mejor = filas[0];
       if (puedeAdjudicar(candadosAdjudicacion(detalle, ruta, mejor, ctx, "primario"), false)) return { ruta, p: mejor };
       return { ruta, p: null, motivo: `la más barata (${mejor.carrier}) necesita revisión a mano` };
@@ -268,13 +270,18 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
   const porInvitar = detalle.revisiones ? carriers(aptas) : carriers(preseleccionadas);
   const invitadas = carriers(todas.filter((p) => p.estado !== "preseleccionada"));
   const invitacionHecha = invitadas > 0 && porInvitar === 0 && evento.estado !== "borrador";
+  const sinRevisar = detalle.revisiones ? carriers(omitidas.map((o) => o.p)) : 0;
   const sinRevision = detalle.revisiones && omitidas.length ? ` · ${carriers(omitidas.map((o) => o.p))} sin revisión (no se invitan)` : "";
   pasos.push(
     paso(
       "invitacion",
       4,
       !todas.length ? "pendiente" : invitacionHecha ? "hecho" : "actual",
-      (invitacionHecha ? `${cuenta(invitadas, "invitación aceptada", "invitaciones aceptadas")}` : `${porInvitar} por aprobar y enviar`) + sinRevision,
+      invitacionHecha
+        ? `${cuenta(invitadas, "invitación aceptada", "invitaciones aceptadas")}` + sinRevision
+        : porInvitar === 0 && sinRevisar > 0
+          ? `${cuenta(sinRevisar, "carrier")} sin revisión: revisa sus contactos para invitarlos`
+          : `${porInvitar} por aprobar y enviar` + sinRevision,
       "Administrador"
     )
   );
@@ -335,6 +342,9 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
 
   const actual = pasos.find((p) => p.estado === "actual") ?? null;
   const siguiente = siguientePaso(actual, ctx.rol);
+  // Nada por enviar y carriers sin revisión: lo que sigue es revisarlos, no
+  // «Enviar las invitaciones» (recorrido 22-nov, Spot Palos Garza).
+  if (actual?.clave === "invitacion" && porInvitar === 0 && sinRevisar > 0) siguiente.accion = `Revisar ${cuenta(sinRevisar, "contacto")}`;
   return { pasos, actual, siguiente, entregaConfirmada: confirmada };
 }
 

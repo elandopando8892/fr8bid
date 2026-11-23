@@ -647,6 +647,15 @@ async function eventoConTres() {
 }
 
 describe("solo carriers revisados", () => {
+  it("sin nadie revisado, lo que sigue es revisar contactos, no enviar", async () => {
+    const { adm, eventId: id } = await eventoConTres();
+    const d = await adm.detalle(id);
+    const r = recorrido(d, ctx());
+    expect(r.actual?.clave).toBe("invitacion");
+    expect(r.siguiente.accion).toBe("Revisar 3 contactos");
+    expect(r.actual?.detalle).toBe("3 carriers sin revisión: revisa sus contactos para invitarlos");
+  });
+
   it("prepara solo para revisados, dice a quién omite y por qué", async () => {
     const { s, carriers, op, adm, eventId: id } = await eventoConTres();
     s.revisar(id, carriers.A.id);
@@ -1207,6 +1216,18 @@ describe("adjudicar en lote", () => {
     // B sigue siendo la más barata en la ruta 2: no se salta a A en silencio.
     expect(propuesta[1].p).toBeNull();
     expect(propuesta[1].motivo).toContain("Carrier Prueba B");
+  });
+
+  it("deja a mano la ruta con ofertas en otra moneda en vez de comparar importes de monedas distintas", async () => {
+    await admin.cerrarAOfertas(eventId);
+    const d = await admin.detalle(eventId, null);
+    const r1 = structuredClone(d.rutas[0]);
+    const a = r1.participaciones.find((p) => p.id === ids.A)!;
+    versionVigente(a)!.moneda = r1.moneda === "MXN" ? "USD" : "MXN";
+    versionVigente(a)!.tarifaAllIn = 1;
+    const propuesta = propuestaPrimarios({ ...d, rutas: [r1] }, ctx());
+    expect(propuesta[0].p).toBeNull();
+    expect(propuesta[0].motivo).toContain("otra moneda");
   });
 
   it("no propone nada a quien no es Administrador", async () => {
