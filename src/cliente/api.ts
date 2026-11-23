@@ -12,7 +12,7 @@ import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier
 import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit.js";
 import type { EntradaCatalogo } from "../dominio/condiciones-r1.js";
 import { MAX_PAGINAS, POR_PAGINA, claveSegmento, consultaSegmento, leerHistorialSegmento, segmentoDeRuta, type HistorialSegmento, type Segmento } from "../dominio/segmento.js";
-import { campanaDelEvento, campanaFr8bid, elegirPlantilla } from "../dominio/invitacion.js";
+import { campanaDelEvento, campanaFr8bid, elegirPlantilla, plantillasDelEvento } from "../dominio/invitacion.js";
 import { operacionEntrega } from "../dominio/operacion.js";
 import { notasConCierre } from "../dominio/cierre.js";
 import { env } from "../bidware/config/env.js";
@@ -359,9 +359,9 @@ export class MesaApi {
   // de Fr8Bid del evento (la crea la primera vez) con la plantilla en español.
   async prepararInvitaciones(eventId: string, revisados: string[], folio = eventId) {
     const [campanas, plantillas] = await Promise.all([this.rw({ action: "list_outreach_campaigns" }), this.rw({ action: "list_outreach_templates" })]);
-    const plantilla = elegirPlantilla(plantillas.rows || []);
-    if (!plantilla) throw new ErrorApi(409, "SIN_PLANTILLA", "No encontré en Rateware la plantilla «RFx carrier invitation - Spanish». No se preparó nada.");
     const filas: Record<string, any>[] = campanas.rows || [];
+    const plantilla = elegirPlantilla(plantillas.rows || [], plantillasDelEvento(filas, eventId));
+    if (!plantilla) throw new ErrorApi(409, "SIN_PLANTILLA", "No encontré en Rateware la plantilla «RFx carrier invitation - Spanish». No se preparó nada.");
     let campana = campanaDelEvento(filas, eventId);
     if (!campana) {
       const base = filas.find((c) => c.rfx_event_id === eventId && c.sender_email) ?? filas.find((c) => c.channel === "email" && c.sender_email) ?? null;

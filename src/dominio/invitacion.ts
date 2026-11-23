@@ -8,11 +8,15 @@ export const REMITENTE = "sales@heymarksman.com";
 
 export const claveCampana = (eventoId: string) => `fr8bid-invitacion-${eventoId}`;
 
+// Rateware guarda las plantillas de invitación con canal «multi» (correo y
+// WhatsApp en la misma plantilla); también sirven para el correo.
+const CANALES_CORREO = new Set(["email", "multi"]);
+
 export function esPlantillaInvitacion(t: Record<string, any> | null | undefined): boolean {
   if (!t || t.active === false) return false;
   const nombre = String(t.name || "");
   return (
-    String(t.channel || "email").toLowerCase() === "email" &&
+    CANALES_CORREO.has(String(t.channel || "email").toLowerCase()) &&
     /rfx/i.test(nombre) &&
     /invitation|invitaci[oó]n/i.test(nombre) &&
     /spanish|español|espanol/i.test(nombre) &&
@@ -20,8 +24,27 @@ export function esPlantillaInvitacion(t: Record<string, any> | null | undefined)
   );
 }
 
-export function elegirPlantilla(rows: Record<string, any>[]): Record<string, any> | null {
-  return rows.find(esPlantillaInvitacion) ?? null;
+// Puede haber más de una plantilla en español (la global y la propia de la
+// cuenta, con HTML distinto). Gana la que ya usa una campaña de este evento, para
+// que las invitaciones nuevas salgan igual que las anteriores; si no hay, la
+// primera en el orden de Rateware (primero las propias, luego la predeterminada).
+export function elegirPlantilla(rows: Record<string, any>[], preferidas: readonly unknown[] = []): Record<string, any> | null {
+  const validas = rows.filter(esPlantillaInvitacion);
+  for (const id of preferidas) {
+    const t = id ? validas.find((x) => String(x.id) === String(id)) : undefined;
+    if (t) return t;
+  }
+  return validas[0] ?? null;
+}
+
+// Plantillas de las campañas de un evento: primero la campaña de Fr8Bid, luego
+// las demás del evento, de la más reciente a la más vieja.
+export function plantillasDelEvento(campanas: Record<string, any>[], eventoId: string): string[] {
+  const propia = campanaDelEvento(campanas, eventoId);
+  const otras = campanas
+    .filter((c) => c.rfx_event_id === eventoId && c !== propia && c.status !== "archived")
+    .sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
+  return [...(propia ? [propia] : []), ...otras].map((c) => String(c.template_id ?? "")).filter(Boolean);
 }
 
 export function campanaFr8bid(eventoId: string, folio: string, plantillaId: string, base?: Record<string, any> | null) {

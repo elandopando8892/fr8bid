@@ -104,7 +104,7 @@ export class RatewareSimulado {
   campanas: Fila[] = [];
   plantillas: Fila[] = [
     { id: "tpl00000-0000-4000-8000-000000000001", owner_email: null, name: "SPRINT 15 · RFx carrier invitation (PRUEBA)", channel: "email", is_default: true, active: true },
-    { id: "tpl00000-0000-4000-8000-000000000002", owner_email: null, name: "RFx carrier invitation - Spanish", channel: "email", is_default: false, active: true }
+    { id: "tpl00000-0000-4000-8000-000000000002", owner_email: null, name: "RFx carrier invitation - Spanish", channel: "multi", is_default: false, active: true }
   ];
   // Lo que list_rfx_carrier_replies (R2) encontraría en Gmail y en el chat.
   respuestasCarrier: Fila[] = [];
