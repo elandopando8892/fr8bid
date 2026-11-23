@@ -12,7 +12,7 @@
 import { detalle } from "../cliente/mapear.js";
 import { UUID_RATEWARE } from "../dominio/operacion.js";
 import { paginaTarifario } from "../mcp/tarifario.js";
-import { campanasDelEventoCompletas, claveCampana, esPlantillaInvitacion } from "../dominio/invitacion.js";
+import { claveCampana, esPlantillaInvitacion } from "../dominio/invitacion.js";
 import { esProtegido } from "../dominio/protegidos.js";
 import { candadosAdjudicacion, hoyMexico, puedeAdjudicar } from "../dominio/recorrido.js";
 import { revisionesVigentes } from "../dominio/revision.js";
