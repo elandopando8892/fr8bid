@@ -22,7 +22,11 @@ function Indicadores() {
   const tarifasPendientes = useAsync(listPendingRates, []);
   const proyectos = useAsync(listShipperProjects, []);
   const solicitudes = proyectos.data?.filter((p) => awaitsTeam(p) && !pareceDePrueba(p.title, p.customer_name)).length ?? 0;
-  const tarifas = tarifasPendientes.data?.rows.filter((r) => !looksLikeTest(r) && !blockersOf(r).length).length ?? 0;
+  // La lista llega hasta 1,000 filas: si hay más, no se sabe cuántas son
+  // atendibles y el aviso vuelve a contar todas las que esperan revisión.
+  const lectura = tarifasPendientes.data;
+  const incompleta = !!lectura && lectura.total > lectura.rows.length;
+  const tarifas = !lectura ? 0 : incompleta ? lectura.total : lectura.rows.filter((r) => !looksLikeTest(r) && !blockersOf(r).length).length;
   if (!solicitudes && !tarifas) return null;
   return (
     <div className="atajos-chips indicadores">
@@ -30,7 +34,7 @@ function Indicadores() {
         <Liga a="/intake" className="chip-liga acento"><I.Bandeja size={15} />{plural(solicitudes, "solicitud nueva", "solicitudes nuevas")}</Liga>
       )}
       {tarifas > 0 && (
-        <Liga a="/tarifas" className="chip-liga acento"><I.Etiqueta size={15} />{plural(tarifas, "tarifa lista", "tarifas listas")} para aprobar</Liga>
+        <Liga a="/tarifas" className="chip-liga acento"><I.Etiqueta size={15} />{incompleta ? `${plural(tarifas, "tarifa")} por revisar` : `${plural(tarifas, "tarifa lista", "tarifas listas")} para aprobar`}</Liga>
       )}
     </div>
   );

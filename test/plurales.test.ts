@@ -20,3 +20,13 @@ describe("pluralize: sin «(s)» en pantalla", () => {
     expect(pluralize("archivado(s)")).toBe("archivado(s)");
   });
 });
+
+import { translator } from "../src/bidware/i18n/language";
+
+describe("translator: pluraliza la plantilla, no los datos", () => {
+  const tr = translator({ a: { es: "{0} tarifa(s) de {1}", en: "{0} rate(s) of {1}" } });
+  it("concuerda con el valor y deja intacto el nombre", () => {
+    expect(tr("a", 1, "Carrier 1 ruta(s)")).toBe("1 tarifa de Carrier 1 ruta(s)");
+    expect(tr("a", 7, "X")).toBe("7 tarifas de X");
+  });
+});
