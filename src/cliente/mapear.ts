@@ -170,6 +170,7 @@ function participacion(lv: Fila, confirmaciones: Fila[]): Participacion {
     rubros,
     condiciones,
     versiones,
+    actualizadaEn: lv.updated_at ? String(lv.updated_at) : null,
     rol,
     motivo: lv.award_reason || null,
     adjudicada,

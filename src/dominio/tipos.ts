@@ -72,6 +72,8 @@ export interface Participacion {
   condiciones: Record<string, RespuestaCondicion>; // por clave del catálogo
   // Historial completo si la fuente lo da; con Rateware real hoy solo llega la vigente.
   versiones: OfertaVersion[];
+  // rfx_lane_vendors.updated_at: la versión de la fila que se mostró (rechazar solo esa).
+  actualizadaEn?: string | null;
   rol: "primario" | "respaldo" | null;
   motivo: string | null;
   // Versión que el Administrador adjudicó (número y huella en el momento de decidir).

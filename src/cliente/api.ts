@@ -408,8 +408,18 @@ export class MesaApi {
   }
   // Rateware quita la oferta y deja la participación como «declinó» (rateware
   // #164: el motivo no lo ve el carrier). Una adjudicada no se rechaza.
-  rechazarOferta(eventId: string, participacionId: string, motivo: string) {
-    return this.rw({ action: "reject_rfx_bid", event_id: eventId, id: participacionId, reason: motivo, confirmed: true, confirmation_action: "reject_rfx_bid" });
+  // expected_updated_at: solo se rechaza la versión que vio el Administrador; si el
+  // carrier la cambió, Rateware responde 409 y no rechaza nada.
+  rechazarOferta(eventId: string, participacionId: string, motivo: string, version?: string | null) {
+    return this.rw({
+      action: "reject_rfx_bid",
+      event_id: eventId,
+      id: participacionId,
+      reason: motivo,
+      ...(version ? { expected_updated_at: version } : {}),
+      confirmed: true,
+      confirmation_action: "reject_rfx_bid"
+    });
   }
   publicar(eventId: string) {
     return this.rw({ action: "update_rfx_event", event_id: eventId, patch: { status: "open" } });

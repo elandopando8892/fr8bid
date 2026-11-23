@@ -65,3 +65,17 @@ describe("oferta rechazada", () => {
     expect(d.rutas[0].participaciones[0].versiones).toEqual([]);
   });
 });
+
+describe("proxy: rechazar solo la versión que se vio", () => {
+  const pasa = async (det: unknown, body: Record<string, unknown>) => {
+    const env: string[] = [];
+    const r = await manejar("rateware-api", body, "Bearer x", op(det, env));
+    return { status: r.status, code: r.body?.code, escribio: env.includes("reject_rfx_bid") };
+  };
+  const vista = "2026-11-23T10:00:00.000Z";
+  it("rechaza si la versión coincide y no escribe si cambió o viene vacía", async () => {
+    expect(await pasa(detalle("open", lv({ updated_at: "2026-11-23T10:00:00+00:00" })), rechazo({ expected_updated_at: vista }))).toMatchObject({ status: 200, escribio: true });
+    expect(await pasa(detalle("open", lv({ updated_at: "2026-11-23T10:05:00Z" })), rechazo({ expected_updated_at: vista }))).toMatchObject({ code: "OFERTA_CAMBIO", escribio: false });
+    expect(await pasa(detalle("open", lv({ updated_at: vista })), rechazo({ expected_updated_at: "" }))).toMatchObject({ code: "OFERTA_CAMBIO", escribio: false });
+  });
+});
