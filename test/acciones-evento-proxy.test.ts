@@ -96,5 +96,6 @@ describe("proxy: restaurar un evento archivado a borrador", () => {
     expect(await pasa({ event: { id: EV, status: "archived" }, lanes: [] }, restaurar({ patch: { status: "draft", due_date: "2026-12-01" } }))).toMatchObject({ code: "SOLO_ESTADO", escribio: false });
     expect(await pasa({ event: { id: EV, status: "archived" }, lanes: [] }, restaurar({ event_id: [EV] }))).toMatchObject({ code: "FALTA_EVENTO", escribio: false });
     expect(await pasa({ event: { id: EV, status: "archived" }, lanes: [] }, restaurar({ event_id: "no" }))).toMatchObject({ code: "FALTA_EVENTO", escribio: false });
+    expect(await pasa({ event: { id: EV, status: "archived" }, lanes: [] }, restaurar({ id: "11111111-1111-4111-8111-111111111111" }))).toMatchObject({ code: "IDENTIFICADOR_EXTRA", escribio: false });
   });
 });
