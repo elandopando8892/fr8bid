@@ -417,7 +417,9 @@ async function guardaRechazo(body: Record<string, unknown>, autorizacion: string
   if (lectura === "sin_respuesta") return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se escribió nada.");
   if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
   const estado = String(lectura.body?.event?.status || "").toLowerCase();
-  if (!["open", "live", "published", "closed"].includes(estado)) return error(409, "EVENTO_NO_PERMITE", "Solo se rechazan ofertas en un evento abierto o cerrado a ofertas.");
+  // «Cerrado a ofertas» es un evento abierto con el plazo vencido; «closed» en
+  // Rateware ya es un evento cerrado y sus ofertas no se tocan.
+  if (!["open", "live", "published"].includes(estado)) return error(409, "EVENTO_NO_PERMITE", "Solo se rechazan ofertas en un evento abierto o cerrado a ofertas.");
   const fila = ((lectura.body?.lanes || []) as any[]).flatMap((l) => l.invitations || []).find((v: any) => v.id === body.id);
   if (!fila) return error(404, "NOT_FOUND", "La participación no pertenece a este evento.");
   if (fila.bid_rate === null || fila.bid_rate === undefined) return error(409, "SIN_OFERTA", "Esta participación no tiene oferta.");

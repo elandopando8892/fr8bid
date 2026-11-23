@@ -41,7 +41,10 @@ const ADMIN_ACTIONS = new Set([
   "set_rfx_lane_no_award",
   "closeout_awarded_rfx_to_rateware",
   "generate_rfx_award_notices",
-  "send_outreach_messages"
+  "send_outreach_messages",
+  "reject_rfx_bid",
+  "archive_rfx_event",
+  "delete_rfx_event"
 ]);
 const WRITE_ACTIONS = new Set([
   ...ADMIN_ACTIONS,
@@ -795,6 +798,28 @@ export class RatewareSimulado {
         lv.awarded_at = null;
         this.bitacorar(u.email, "rfx.award.clear", "rfx_lane_vendors", lv.id, antes, null);
         return ok({ row: this.invitacionCruda(lv), before: { award_role: antes } });
+      }
+      case "archive_rfx_event": {
+        const event = this.evento(u, body.id);
+        if (event.status !== "archived") {
+          const antes = event.status;
+          event.status = "archived";
+          this.bitacorar(u.email, "rfx.event.archive", "rfx_events", event.id, antes, "archived", {});
+        }
+        return ok({ row: { ...event } });
+      }
+      case "delete_rfx_event": {
+        // Como delete_rfx_event_if_idle (rateware #224): solo un borrador sin actividad.
+        const event = this.evento(u, body.id);
+        if (event.status !== "draft") throw new Falla(409, "Solo se borra un evento en borrador.", "RFX_DELETE_NOT_DRAFT");
+        const filas = this.laneVendors.filter((lv) => lv.rfx_event_id === event.id);
+        if (filas.some((lv) => !["shortlisted", "drafted"].includes(String(lv.invitation_status)) || lv.bid_rate != null || lv.award_role))
+          throw new Falla(409, "El evento ya tiene actividad.", "RFX_DELETE_HAS_ACTIVITY");
+        this.laneVendors = this.laneVendors.filter((lv) => lv.rfx_event_id !== event.id);
+        this.lanes = this.lanes.filter((l) => l.rfx_event_id !== event.id);
+        this.events = this.events.filter((e) => e.id !== event.id);
+        this.bitacorar(u.email, "rfx.event.delete", "rfx_events", event.id, "draft", null, {});
+        return ok({ deleted: true, id: event.id });
       }
       case "reject_rfx_bid": {
         // Como rateware-api: una adjudicada no se rechaza; la oferta se borra y
