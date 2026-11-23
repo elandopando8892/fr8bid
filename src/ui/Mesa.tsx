@@ -1291,7 +1291,11 @@ function PanelComparar({ d, ctx, accion }: Props) {
   const [elegido, setElegido] = useState<string | null>(() => {
     const r = d.rutas.length === 1 ? d.rutas[0] : null;
     if (!r || d.evento.estado !== "cerrado" || ctx.rol !== "admin" || primario(r)) return null;
-    const mejor = [...conOferta(r)].filter((x) => !x.rol).sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn)[0];
+    // Con ofertas en otra moneda no se preselecciona ninguna: no se comparan
+    // importes de monedas distintas.
+    const libres = conOferta(r).filter((x) => !x.rol);
+    if (libres.some((x) => versionVigente(x)!.moneda !== r.moneda)) return null;
+    const mejor = [...libres].sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn)[0];
     return mejor?.id ?? null;
   });
   const [historial, setHistorial] = useState<string | null>(null);
@@ -1429,7 +1433,7 @@ function ResumenOfertas({ d, ctx }: { d: Detalle; ctx: Contexto }) {
   // moneda la ruta va a mano por eso, no por la vigencia.
   const sinVigencia = filas.filter((x) => x.masBaja?.sinVigencia && !x.primario && !x.otraMoneda);
   const conOtraMoneda = filas.filter((x) => x.otraMoneda > 0 && !x.primario);
-  const vencidas = filas.filter((x) => x.masBaja?.vencida && !x.primario && !x.otraMoneda);
+  const vencidas = filas.filter((x) => x.masBaja?.vencida && !x.primario);
   const porArriba = filas.filter((x) => x.porArriba);
   const varias = d.rutas.length > 1;
   return (
