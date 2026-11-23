@@ -218,8 +218,17 @@ function MessageContent() {
         { ok: tr("text152") },
       );
       if (!ok || !isCurrent()) return;
-      // El plazo pudo vencer con la página abierta o mientras se confirmaba.
-      if (isEventClosed(event)) {
+      // El plazo pudo vencer, u otra sesión cerrar el evento, con la página
+      // abierta o mientras se confirmaba: se relee el estado antes de preparar.
+      let fresh;
+      try {
+        fresh = (await fetchRfxDetail(id)).event;
+      } catch {
+        setNotice("No se pudo confirmar el estado del evento: vuelve a intentar.");
+        return;
+      }
+      if (!isCurrent()) return;
+      if (isEventClosed(fresh)) {
         setNotice("El evento ya cerró a ofertas: no se generan invitaciones.");
         return;
       }

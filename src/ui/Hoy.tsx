@@ -4,29 +4,31 @@ import { hoyMexico } from "../dominio/recorrido";
 import type { ResumenEvento } from "../dominio/tipos";
 import { Desactualizado, EstadoVista, fecha, ir, Liga, plural, Prueba } from "./comun";
 import { useEventosCompartidos } from "./Eventos";
-import { cuantasRutas, folioCorto, grupoDe, nombreEvento, pareceDePrueba, porUrgencia, resumenRutas, shipperAparte, siguiente } from "./eventosVista";
+import { cuantasRutas, folioCorto, grupoDe, nombreEvento, porUrgencia, resumenRutas, shipperAparte, siguiente } from "./eventosVista";
 import * as I from "./Iconos";
 import { useSesion } from "./sesion";
 import { useAsync } from "../bidware/components/useAsync";
 import { awaitsTeam, listShipperProjects } from "../bidware/features/shipper-intake/intake.service";
 import { listPendingRates } from "../bidware/features/rate-review/rateReview.service";
-import { blockersOf, looksLikeTest } from "../bidware/features/rate-review/readiness";
+import { looksLikeTest } from "../bidware/features/rate-review/readiness";
 
 /**
  * Lo que el Panel mostraba y Hoy no tenía (decisión de Jose, 5-nov): solo lo que
- * espera al equipo, y solo si hay algo. Cuenta solo lo que se puede atender hoy:
- * sin filas de prueba ni tarifas detenidas (sin adjudicar, sin datos o de un
- * evento que ya no está).
+ * espera al equipo, y solo si hay algo. Las tarifas que parecen de prueba no
+ * cuentan; las detenidas sí, porque también hay que revisarlas.
  */
 function Indicadores() {
   const tarifasPendientes = useAsync(listPendingRates, []);
   const proyectos = useAsync(listShipperProjects, []);
-  const solicitudes = proyectos.data?.filter((p) => awaitsTeam(p) && !pareceDePrueba(p.title, p.customer_name)).length ?? 0;
+  // Sin marca explícita de prueba en las solicitudes, no se oculta ninguna por su nombre.
+  const solicitudes = proyectos.data?.filter(awaitsTeam).length ?? 0;
   // La lista llega hasta 1,000 filas: si hay más, no se sabe cuántas son
   // atendibles y el aviso vuelve a contar todas las que esperan revisión.
   const lectura = tarifasPendientes.data;
   const incompleta = !!lectura && lectura.total > lectura.rows.length;
-  const tarifas = !lectura ? 0 : incompleta ? lectura.total : lectura.rows.filter((r) => !looksLikeTest(r) && !blockersOf(r).length).length;
+  // «Por revisar», no «listas»: si se aprueban lo decide la pantalla de
+  // tarifas (catálogo y valores normalizados), no este aviso.
+  const tarifas = !lectura ? 0 : incompleta ? lectura.total : lectura.rows.filter((r) => !looksLikeTest(r)).length;
   if (!solicitudes && !tarifas) return null;
   return (
     <div className="atajos-chips indicadores">
@@ -34,7 +36,7 @@ function Indicadores() {
         <Liga a="/intake" className="chip-liga acento"><I.Bandeja size={15} />{plural(solicitudes, "solicitud nueva", "solicitudes nuevas")}</Liga>
       )}
       {tarifas > 0 && (
-        <Liga a="/tarifas" className="chip-liga acento"><I.Etiqueta size={15} />{incompleta ? `${plural(tarifas, "tarifa")} por revisar` : `${plural(tarifas, "tarifa lista", "tarifas listas")} para aprobar`}</Liga>
+        <Liga a="/tarifas" className="chip-liga acento"><I.Etiqueta size={15} />{plural(tarifas, "tarifa")} por revisar</Liga>
       )}
     </div>
   );
