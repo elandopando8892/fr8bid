@@ -27,7 +27,7 @@ import { bloqueoRespondio, bloqueoRevision, candidatasCaptura, marcablesRespondi
 import { eventoSinAvisos } from "../dominio/protegidos.js";
 import { candidatosRecordatorio, claveIntento, esperaRespuesta, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
-import { dentroDeObjetivo, modelosMixtos, rangoRutas, resumenPorRuta } from "../dominio/resumenOfertas";
+import { dentroDeObjetivo, masBajaComparable, modelosMixtos, ofertasOrdenadas, rangoRutas, resumenPorRuta } from "../dominio/resumenOfertas";
 import type { CarrierFit } from "../dominio/carrierFit";
 import type { Telefono } from "../dominio/telefonos";
 import { ContactosDeMesa, contextoDeContactos } from "./ContactosDeMesa";
@@ -1323,7 +1323,8 @@ function PanelComparar({ d, ctx, accion }: Props) {
       {hayOfertas && <ResumenOfertas d={d} ctx={ctx} />}
       {d.evento.estado === "cerrado" && ctx.rol === "admin" && <AdjudicarEnLote d={d} ctx={ctx} accion={accion} />}
       {d.rutas.map((ruta) => {
-        const filas = [...conOferta(ruta)].sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
+        const filas = ofertasOrdenadas(ruta);
+        const laMejor = masBajaComparable(ruta);
         const sel = ruta.participaciones.find((x) => x.id === elegido) ?? null;
         const prim = primario(ruta);
         const respaldos = ruta.participaciones.filter((x) => x.rol === "respaldo");
@@ -1362,7 +1363,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
                         key={p.id}
                         p={p}
                         ruta={ruta}
-                        mejor={filas.length > 1 && p.id === filas[0].id}
+                        mejor={p.id === laMejor?.id}
                         totalRubros={totalRubros}
                         conCapacidad={conCapacidad}
                         conTransito={conTransito}

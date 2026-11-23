@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dentroDeObjetivo, modelosMixtos, rangoRutas, resumenPorRuta } from "../src/dominio/resumenOfertas";
+import { dentroDeObjetivo, masBajaComparable, modelosMixtos, ofertasOrdenadas, rangoRutas, resumenPorRuta } from "../src/dominio/resumenOfertas";
 import type { Detalle, OfertaVersion, Participacion, Ruta } from "../src/dominio/tipos";
 
 const version = (allIn: number, modelo = "cost_plus", vigencia: string | null = "2026-12-11"): OfertaVersion => ({
@@ -64,5 +64,16 @@ describe("resumen de ofertas arriba de las rutas", () => {
     expect(r.masBaja?.p.carrier).toBe("US");
     expect(r.porArriba).toBe(true);
     expect(r.contraObjetivo).toBe(1);
+  });
+
+  it("la tabla de la ruta no ordena entre monedas: la mejor es la más baja en la moneda de la ruta", () => {
+    const mxn = { ...version(900), moneda: "MXN" };
+    const r = ruta(1, 1000, [oferta("mx", mxn), oferta("us2", version(1200)), oferta("us", version(1010))]);
+    expect(ofertasOrdenadas(r).map((p) => p.carrier)).toEqual(["US", "US2", "MX"]);
+    expect(masBajaComparable(r)?.carrier).toBe("US");
+    // Solo ofertas en otra moneda: ninguna es «mejor».
+    expect(masBajaComparable(ruta(2, 1000, [oferta("mx", mxn), oferta("mx2", { ...version(800), moneda: "MXN" })]))).toBeNull();
+    // Una sola oferta: no hay con qué compararla.
+    expect(masBajaComparable(ruta(3, 1000, [oferta("us", version(1010))]))).toBeNull();
   });
 });

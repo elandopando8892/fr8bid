@@ -28,6 +28,21 @@ export const dentroDeObjetivo = (allIn: number, objetivo: number | null, moneda?
   return !objetivo || allIn <= objetivo;
 };
 
+// Ofertas de una ruta para la tabla: primero las de la moneda de la ruta, de
+// la más baja a la más alta; después las de otra moneda, agrupadas por moneda.
+// Importes de monedas distintas nunca se ordenan entre sí.
+export function ofertasOrdenadas(ruta: Ruta): Participacion[] {
+  const v = (p: Participacion) => versionVigente(p)!;
+  const grupo = (p: Participacion) => (v(p).moneda === ruta.moneda ? "" : v(p).moneda);
+  return [...conOferta(ruta)].sort((a, b) => grupo(a).localeCompare(grupo(b)) || v(a).tarifaAllIn - v(b).tarifaAllIn);
+}
+
+// La «mejor» de la tabla: la más baja en la moneda de la ruta, si hay con qué compararla.
+export function masBajaComparable(ruta: Ruta): Participacion | null {
+  const mismas = ofertasOrdenadas(ruta).filter((p) => versionVigente(p)!.moneda === ruta.moneda);
+  return conOferta(ruta).length > 1 && mismas.length ? mismas[0] : null;
+}
+
 export function resumenPorRuta(d: Detalle): FilaResumen[] {
   return d.rutas.map((ruta) => {
     const todas = conOferta(ruta);
