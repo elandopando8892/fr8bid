@@ -288,8 +288,16 @@ export function RfxDetailPage() {
       const fresh = await fetchRfxDetail(id);
       // Cada ruta debe traer su lista de invitaciones: una lectura parcial no
       // acredita que el evento siga sin actividad.
+      // Además, solo se borra un borrador: publicado ya pudo recibir ofertas
+      // aunque la lectura llegue vacía o truncada.
       const complete = !!fresh?.event && Array.isArray(fresh.lanes) &&
         (fresh.lanes as LaneWithInvitations[]).every((lane) => Array.isArray(lane.invitations));
+      if (complete && String(fresh.event?.status ?? "").toLowerCase() !== "draft") {
+        setNotice("Solo se borra un evento en borrador: archívalo en lugar de borrarlo.");
+        setBusy(false);
+        reload();
+        return;
+      }
       if (!complete) {
         setNotice("No se pudo confirmar que el evento siga sin actividad: vuelve a cargar antes de borrarlo.");
         setBusy(false);
@@ -388,7 +396,7 @@ export function RfxDetailPage() {
               >
                 {archived ? tr("text722") : tr("text723")}
               </button>
-              {!hasActivity && (
+              {!hasActivity && String(event.status ?? "").toLowerCase() === "draft" && (
                 <button
                   className="link"
                   disabled={busy || !can("admin")}
