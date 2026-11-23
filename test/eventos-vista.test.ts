@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ResumenEvento } from "../src/dominio/tipos";
-import { folioCorto, grupoDe, nombreEvento, pareceDePrueba, porUrgencia, resumenRutas, shipperAparte } from "../src/ui/eventosVista";
+import { folioCorto, grupoDe, nombreEvento, porUrgencia, resumenRutas, shipperAparte } from "../src/ui/eventosVista";
 import { dinero } from "../src/ui/comun";
 
 const ev = (x: Partial<ResumenEvento>): ResumenEvento => ({ id: "e", folio: "RFx-1", nombre: "Evento", shipper: "Owens Illinois", estado: "abierto", plazo: "2026-11-10", prueba: false, rutas: [], ofertas: 0, participaciones: 0, ...x });
@@ -40,10 +40,6 @@ describe("un mismo nombre y folio legible (recorrido 22-nov)", () => {
     expect(shipperAparte(base)).toBe("Owen Illinois");
     expect(shipperAparte({ ...base, shipper: "—" })).toBeNull();
     expect(shipperAparte({ ...base, nombre: "PRIMA Manufacturing | Flatbed", shipper: "prima manufacturing" })).toBeNull();
-  });
-  it("reconoce filas de ensayo", () => {
-    expect(pareceDePrueba("PILOTO BIDWARE GMAIL — SIN VALIDEZ COMERCIAL")).toBe(true);
-    expect(pareceDePrueba("Tradeco", null)).toBe(false);
   });
 });
 

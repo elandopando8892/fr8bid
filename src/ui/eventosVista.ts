@@ -88,10 +88,6 @@ export function shipperAparte(e: Pick<ResumenEvento, "nombre" | "shipper" | "fol
   return nombreEvento(e).toLowerCase().includes(s.toLowerCase()) ? null : s;
 }
 
-// Filas de ensayo que no son trabajo real (pilotos de Bidware, «ZZ PRUEBA»…).
-export const pareceDePrueba = (...textos: (string | null | undefined)[]) =>
-  /PRUEBA|PILOTO BIDWARE|SIN VALIDEZ COMERCIAL|\bdummy\b|\bcanary\b|\bsmoke\b/i.test(textos.filter(Boolean).join(" · "));
-
 export function cuantasRutas(e: ResumenEvento): number {
   return e.rutas.length || e.numRutas || 0;
 }
