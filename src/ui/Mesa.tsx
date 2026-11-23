@@ -305,7 +305,8 @@ function MasDelEvento({ id, borrador }: { id: string; borrador: boolean }) {
     ...(borrador ? [{ a: `/rfx/new/${id}`, t: "Editar el borrador", icono: I.Lapiz }] : []),
     { a: `/rfx/${id}/review`, t: "Revisión de contactos", icono: I.Lista },
     { a: `/rfx/${id}/message`, t: "Mensaje a carriers", icono: I.Sobre },
-    { a: `/rfx/${id}/delivery`, t: "Cola de envío", icono: I.Bandeja }
+    { a: `/rfx/${id}/delivery`, t: "Cola de envío", icono: I.Bandeja },
+    { a: `/rfx/${id}/chat`, t: "Chat con carriers", icono: I.Sobre }
   ];
   return (
     <nav className="mas-del-evento" aria-label="Más del evento">
@@ -448,10 +449,19 @@ function PanelEvento({ d, ctx, accion }: Props) {
 
 const CAMPOS_EDITABLES_RUTA: { clave: string; texto: string; numerico?: boolean; ancho?: boolean }[] = [
   { clave: "origin", texto: "Origen" },
+  { clave: "origin_city", texto: "Ciudad de origen" },
+  { clave: "origin_state", texto: "Estado de origen" },
+  { clave: "origin_country", texto: "País de origen" },
   { clave: "destination", texto: "Destino" },
+  { clave: "destination_city", texto: "Ciudad de destino" },
+  { clave: "destination_state", texto: "Estado de destino" },
+  { clave: "destination_country", texto: "País de destino" },
+  { clave: "operation", texto: "Operación" },
+  { clave: "service", texto: "Servicio" },
   { clave: "equipment", texto: "Equipo" },
   { clave: "trailer", texto: "Caja" },
   { clave: "weekly_volume", texto: "Cruces por semana", numerico: true },
+  { clave: "annual_volume", texto: "Volumen anual", numerico: true },
   { clave: "target_rate", texto: "Objetivo de compra", numerico: true },
   { clave: "currency", texto: "Moneda" },
   { clave: "carrier_requirements", texto: "Requisitos del carrier", ancho: true },
