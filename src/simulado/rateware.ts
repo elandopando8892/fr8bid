@@ -845,6 +845,26 @@ export class RatewareSimulado {
         this.bitacorar(u.email, "rfx.bid.reject", "rfx_lane_vendors", lv.id, antes, null, { reason: String(body.reason || "") });
         return ok({ row: this.invitacionCruda(lv) });
       }
+      case "set_rfx_lane_no_award": {
+        // Como rateware-api: rechaza eventos cerrados y rutas con primario o respaldo.
+        const event = this.evento(u, body.rfx_event_id || body.event_id);
+        if (["closed", "archived"].includes(String(event.status))) throw new Falla(409, "El evento ya está cerrado; sus lanes ya no cambian.", "RFX_CLOSED");
+        const ids: string[] = Array.isArray(body.lane_ids) ? body.lane_ids.map(String) : [];
+        const lanes = this.lanes.filter((l) => l.rfx_event_id === event.id && ids.includes(l.id));
+        if (!ids.length || lanes.length !== ids.length) throw new Falla(404, "Algún lane no pertenece a este evento.", "NOT_FOUND");
+        const declarar = body.no_award !== false;
+        if (declarar && lanes.some((l) => this.laneVendors.some((lv) => lv.rfx_lane_id === l.id && lv.award_role)))
+          throw new Falla(409, "Quita primero el primario y los respaldos para declararlo desierto.", "lane_has_award");
+        const momento = this.ahora();
+        const rows = lanes.filter((l) => Boolean(l.no_award_at) !== declarar);
+        for (const l of rows) {
+          l.no_award_at = declarar ? momento : null;
+          l.no_award_reason = declarar ? String(body.reason || "").trim() || "Ruta desierta" : null;
+          l.no_award_by = declarar ? u.email : null;
+        }
+        if (rows.length) this.bitacorar(u.email, declarar ? "rfx.lane.no_award" : "rfx.lane.no_award.clear", "rfx_events", event.id, null, null, { lane_ids: rows.map((l) => l.id) });
+        return ok({ no_award: declarar, updated: rows.length, unchanged: lanes.length - rows.length, rows });
+      }
       case "closeout_awarded_rfx_to_rateware":
         return this.closeout(u, body);
       default:
@@ -869,6 +889,7 @@ export class RatewareSimulado {
     const filas = this.laneVendors.filter((lv) => lv.rfx_event_id === event.id);
     const hoy = this.hoy();
     // requireCompleteRfxAwardDecisions / requireEligibleRfxCloseout / requireHandoffParity
+    if (!filas.some((lv) => lv.bid_rate !== null && lv.bid_rate !== undefined)) throw new Falla(409, "At least one carrier bid is required before Rateware closeout.", "RFX_NO_BIDS");
     for (const lane of lanes) {
       if (lane.no_award_reason) continue;
       const prim = filas.find((lv) => lv.rfx_lane_id === lane.id && lv.award_role === "primary" && lv.bid_rate !== null);

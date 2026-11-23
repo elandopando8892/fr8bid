@@ -95,7 +95,10 @@ export function entregaConfirmada(detalle: Detalle, entrega: EntregaLocal): bool
   // Tras recargar, la prueba del recibo es el propio Rateware: el evento queda
   // adjudicado y cada primario con rateware_closeout_at.
   const primarios = detalle.rutas.map(primario).filter(Boolean) as Participacion[];
-  return detalle.evento.estado === "adjudicado" && primarios.length > 0 && primarios.every((p) => p.entregadaEn);
+  // Con todas las rutas desiertas no hay primarios: basta el evento adjudicado
+  // (solo la entrega lo deja así) con cada ruta decidida.
+  if (detalle.evento.estado !== "adjudicado" || !detalle.rutas.length || !detalle.rutas.every(rutaDecidida)) return false;
+  return primarios.every((p) => p.entregadaEn);
 }
 
 // Hay una versión posterior a la adjudicada (I2): la adjudicación no la sigue.
@@ -329,14 +332,24 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
       "Administrador"
     )
   );
-  const avisoHecho = primarios.length > 0 && avisosAceptados === primarios.length;
-  pasos.push(
-    paso("aviso", 10, avisoHecho ? "hecho" : confirmada && primarios.length ? "actual" : "bloqueado", avisoHecho ? "Aviso aceptado por Gmail" : confirmada ? "Aprobar y enviar el texto" : "Requiere recibo", "Administrador")
-  );
-  const loadsHecho = primarios.length > 0 && visiblesLoads === primarios.length;
-  pasos.push(
-    paso("loads", 11, loadsHecho && confirmada ? "hecho" : confirmada ? "actual" : "bloqueado", loadsHecho && confirmada ? "Inferido del recibo de Rateware" : confirmada ? "Esperando a Loads" : "Requiere recibo", "Sistema")
-  );
+  // Todas las rutas desiertas: no hay ganador que avisar ni carga que publicar en
+  // Loads; solo se avisa a quienes ofertaron que no hubo adjudicación.
+  const sinGanadores = confirmada && primarios.length === 0;
+  if (sinGanadores) {
+    const avisos = detalle.avisos.filter((a) => a.tipo === "adjudicacion");
+    const enviados = avisos.length > 0 && avisos.every((a) => a.estado === "aceptado");
+    pasos.push(paso("aviso", 10, enviados ? "hecho" : "actual", enviados ? "Sin ganadores · avisos aceptados por Gmail" : "Sin ganadores · avisar a quienes ofertaron", "Administrador"));
+    pasos.push(paso("loads", 11, "hecho", "Sin rutas adjudicadas: nada que publicar", "Sistema"));
+  } else {
+    const avisoHecho = primarios.length > 0 && avisosAceptados === primarios.length;
+    pasos.push(
+      paso("aviso", 10, avisoHecho ? "hecho" : confirmada && primarios.length ? "actual" : "bloqueado", avisoHecho ? "Aviso aceptado por Gmail" : confirmada ? "Aprobar y enviar el texto" : "Requiere recibo", "Administrador")
+    );
+    const loadsHecho = primarios.length > 0 && visiblesLoads === primarios.length;
+    pasos.push(
+      paso("loads", 11, loadsHecho && confirmada ? "hecho" : confirmada ? "actual" : "bloqueado", loadsHecho && confirmada ? "Inferido del recibo de Rateware" : confirmada ? "Esperando a Loads" : "Requiere recibo", "Sistema")
+    );
+  }
 
   if (evento.estado === "archivado") for (const p of pasos) if (p.estado !== "hecho") p.estado = "pendiente";
 

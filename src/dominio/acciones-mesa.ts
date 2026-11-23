@@ -112,3 +112,41 @@ export function bloqueoPlazo(d: Detalle, nueva: string, hoy: string): string | n
 export function sinActividad(d: Pick<Detalle, "rutas">): boolean {
   return d.rutas.every((r) => r.participaciones.every((p) => p.estado === "preseleccionada" && !p.versiones.length && !p.rol));
 }
+
+// «Desierta»: la ruta se cierra sin adjudicar (set_rfx_lane_no_award). Solo con
+// el evento cerrado a ofertas, como adjudicar; la ruta no debe tener primario ni
+// respaldo (Rateware lo exige: lane_has_award) y no debe estar ya desierta.
+// Rateware no entrega un evento sin ninguna oferta: declarar desiertas sus rutas lo dejaría atorado.
+const SIN_OFERTAS = "Sin ninguna oferta no hay nada que entregar a Rateware: archiva el evento.";
+const conOfertas = (d: Pick<Detalle, "rutas">) => d.rutas.some((r) => r.participaciones.some((p) => p.versiones.length));
+
+export function bloqueoDesierta(d: Detalle, ruta: Ruta): string | null {
+  if (bloqueoEvento(d)) return bloqueoEvento(d);
+  if (d.evento.estado !== "cerrado") return "Solo con el evento cerrado a ofertas.";
+  if (ruta.desiertaMotivo) return `La ruta ${ruta.numero} ya está desierta.`;
+  if (ruta.participaciones.some((p) => p.rol)) return `La ruta ${ruta.numero} tiene primario o respaldo: quítalos antes de declararla desierta.`;
+  if (!conOfertas(d)) return SIN_OFERTAS;
+  return null;
+}
+
+// Reabrir una ruta desierta para adjudicarla: mismo momento (evento cerrado a ofertas).
+export function bloqueoReabrirRuta(d: Detalle, ruta: Ruta): string | null {
+  if (bloqueoEvento(d)) return bloqueoEvento(d);
+  if (d.evento.estado !== "cerrado") return "Solo con el evento cerrado a ofertas.";
+  if (!ruta.desiertaMotivo) return `La ruta ${ruta.numero} no está desierta.`;
+  return null;
+}
+
+// Rutas que faltan por decidir: sin primario ni respaldo y sin declararse desiertas.
+export const rutasSinDecidir = (d: Pick<Detalle, "rutas">): Ruta[] => d.rutas.filter((r) => !r.desiertaMotivo && !r.participaciones.some((p) => p.rol));
+
+// «Cerrar sin adjudicar»: declara desiertas las rutas que faltan por decidir;
+// después se entrega a Rateware como siempre, y eso cierra el evento. Rateware
+// no entrega un evento sin ninguna oferta: ese se archiva.
+export function bloqueoCerrarSinAdjudicar(d: Detalle): string | null {
+  if (bloqueoEvento(d)) return bloqueoEvento(d);
+  if (d.evento.estado !== "cerrado") return "Solo con el evento cerrado a ofertas.";
+  if (!rutasSinDecidir(d).length) return "Todas las rutas ya están decididas.";
+  if (!conOfertas(d)) return SIN_OFERTAS;
+  return null;
+}

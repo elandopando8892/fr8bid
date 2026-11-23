@@ -23,7 +23,7 @@ import {
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
 import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
 import { cambiosComerciales, describirModelo, modeloCorto, tarifaVenta } from "../dominio/modelo";
-import { bloqueoReRevision, bloqueoRespondio, bloqueoRevision, candidatasCaptura, marcablesRespondio, sinActividad } from "../dominio/acciones-mesa";
+import { bloqueoCerrarSinAdjudicar, bloqueoDesierta, bloqueoReabrirRuta, bloqueoReRevision, bloqueoRespondio, bloqueoRevision, candidatasCaptura, marcablesRespondio, rutasSinDecidir, sinActividad } from "../dominio/acciones-mesa";
 import { eventoSinAvisos } from "../dominio/protegidos.js";
 import { candidatosRecordatorio, claveIntento, esperaRespuesta, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
@@ -1373,6 +1373,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
       <LecturaIA d={d} accion={accion} advertenciaReal={ADVERTENCIA_REAL(s, d)} />
       {hayOfertas && <ResumenOfertas d={d} ctx={ctx} />}
       {d.evento.estado === "cerrado" && ctx.rol === "admin" && <AdjudicarEnLote d={d} ctx={ctx} accion={accion} />}
+      {d.evento.estado === "cerrado" && ctx.rol === "admin" && <CerrarSinAdjudicar d={d} accion={accion} />}
       {d.rutas.map((ruta) => {
         const filas = ofertasOrdenadas(ruta);
         const laMejor = masBajaComparable(ruta);
@@ -1462,6 +1463,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
                 )}
               </div>
             )}
+            {ctx.rol === "admin" && d.evento.estado === "cerrado" && <RutaDesierta d={d} ruta={ruta} accion={accion} />}
             {!prim && <CapturaEquipo d={d} ruta={ruta} accion={accion} />}
             <LigasSimuladas d={d} ruta={ruta} />
           </div>
@@ -1759,6 +1761,83 @@ function PreguntaCarrier({ d, ruta, p, onCerrar }: { d: Detalle; ruta: Ruta; p: 
 // Rechazar una oferta (antes solo en «Detalle completo»): Rateware la quita y
 // deja al carrier como «declinó». El motivo se queda con el equipo; el carrier
 // no lo ve. Una oferta adjudicada no se rechaza: primero se quita la decisión.
+const MOTIVOS_DESIERTA = ["Ofertas por arriba del objetivo", "Sin ofertas suficientes", "El shipper canceló la ruta"];
+
+// «Cerrar sin adjudicar»: declara desiertas todas las rutas que faltan por
+// decidir. El evento se cierra después, al entregar a Rateware (sin tarifas).
+function CerrarSinAdjudicar({ d, accion }: { d: Detalle; accion: Props["accion"] }) {
+  const s = useSesion();
+  const m = useMotivo();
+  const [abierta, setAbierta] = useState(false);
+  const bloqueo = bloqueoCerrarSinAdjudicar(d);
+  const rutas = rutasSinDecidir(d);
+  if (bloqueo === "Todas las rutas ya están decididas.") return null;
+  return (
+    <div className="tarjeta">
+      <div className="fila">
+        <h2>Cerrar sin adjudicar</h2>
+        {!bloqueo && <button className="btn-texto" onClick={() => setAbierta(!abierta)}>{abierta ? "Ocultar" : `Declarar desiertas ${plural(rutas.length, "ruta")}`}</button>}
+      </div>
+      {bloqueo ? (
+        <p className="tenue">{bloqueo}</p>
+      ) : (
+        abierta && (
+          <>
+            <p className="tenue">Se declaran desiertas las rutas sin primario ni respaldo: {rangoRutas(rutas.map((r) => r.numero))}. Después, «Entrega a Rateware» cierra el evento sin tarifas para esas rutas.</p>
+            <Motivo opciones={MOTIVOS_DESIERTA} m={m} etiqueta="Motivo (solo lo ve el equipo)" />
+            <Confirmar
+              etiqueta={`Declarar desiertas ${plural(rutas.length, "ruta")}`}
+              clase="btn-secundario"
+              deshabilitado={!m.motivo}
+              advertencia={<>Nadie gana {rutas.length === 1 ? "esa ruta" : "esas rutas"}. No se avisa a ningún carrier: los avisos se generan después, en su paso. Se puede reabrir una ruta mientras no entregues a Rateware. Motivo: «{m.motivo}». {ADVERTENCIA_REAL(s, d)}</>}
+              onConfirmar={() => accion(() => s.api.declararDesiertas(d.evento.id, rutas.map((r) => r.id), m.motivo), `${plural(rutas.length, "ruta desierta", "rutas desiertas")}. Sigue en «Entrega a Rateware» para cerrar el evento.`)}
+            />
+          </>
+        )
+      )}
+    </div>
+  );
+}
+
+// Una ruta: declararla desierta (sin primario ni respaldo) o reabrirla.
+function RutaDesierta({ d, ruta, accion }: { d: Detalle; ruta: Ruta; accion: Props["accion"] }) {
+  const s = useSesion();
+  const m = useMotivo();
+  const [abierta, setAbierta] = useState(false);
+  if (ruta.desiertaMotivo) {
+    if (bloqueoReabrirRuta(d, ruta)) return null;
+    return (
+      <div className="aviso-caja">
+        <p>Ruta desierta · {ruta.desiertaMotivo}</p>
+        <Confirmar
+          etiqueta="Reabrir ruta"
+          clase="btn-secundario"
+          advertencia={<>La ruta {ruta.numero} vuelve a quedar por decidir y se puede adjudicar. {ADVERTENCIA_REAL(s, d)}</>}
+          onConfirmar={() => accion(() => s.api.reabrirRuta(d.evento.id, ruta.id), `Ruta ${ruta.numero} reabierta.`)}
+        />
+      </div>
+    );
+  }
+  if (bloqueoDesierta(d, ruta)) return null;
+  return (
+    <div>
+      <button className="btn-texto" onClick={() => setAbierta(!abierta)}>{abierta ? "Ocultar" : "Declarar desierta"}</button>
+      {abierta && (
+        <div className="aviso-caja">
+          <Motivo opciones={MOTIVOS_DESIERTA} m={m} etiqueta="Motivo (solo lo ve el equipo)" />
+          <Confirmar
+            etiqueta="Declarar desierta"
+            clase="btn-secundario"
+            deshabilitado={!m.motivo}
+            advertencia={<>Nadie gana la ruta {ruta.numero}. No se avisa a ningún carrier. Se puede reabrir mientras no entregues a Rateware. Motivo: «{m.motivo}». {ADVERTENCIA_REAL(s, d)}</>}
+            onConfirmar={() => accion(() => s.api.declararDesiertas(d.evento.id, [ruta.id], m.motivo), `Ruta ${ruta.numero} desierta.`)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 const MOTIVOS_RECHAZO = ["Tarifa fuera de mercado", "No cumple condiciones", "Oferta duplicada o por error"];
 
 function RechazarOferta({ p, d, accion }: { p: Participacion; d: Detalle; accion: Props["accion"] }) {
@@ -2055,6 +2134,8 @@ function PanelAviso({ d, ctx, accion }: Props) {
   const r = recorrido(d, ctx);
   const prims = d.rutas.map(primario).filter(Boolean) as Participacion[];
   const faltan = prims.filter((p) => !avisoDe(d, p.id, "adjudicacion"));
+  // Todas las rutas desiertas: no hay ganador, pero quienes ofertaron reciben su aviso de no adjudicación.
+  const preparar = faltan.length > 0 || (prims.length === 0 && !d.avisos.some((a) => a.tipo === "adjudicacion"));
   const principales = [...new Map(prims.map((p) => {
     const a = avisoDe(d, p.id, "adjudicacion");
     return [a?.id ?? p.id, { p, a }] as const;
@@ -2067,7 +2148,7 @@ function PanelAviso({ d, ctx, accion }: Props) {
     <div className="tarjeta">
       <h2 className="fila-icono"><I.Megafono size={17} />Aviso de adjudicación</h2>
       {!r.entregaConfirmada && <p className="tenue fila-icono"><I.Candado size={15} />Primero hay que entregar a Rateware y tener su recibo. El carrier no se entera de algo que Rateware no tiene.</p>}
-      {r.entregaConfirmada && faltan.length > 0 && ctx.rol === "admin" && (
+      {r.entregaConfirmada && preparar && ctx.rol === "admin" && (
         <Confirmar
           etiqueta="Preparar los avisos"
           icono={<I.Sobre size={15} />}

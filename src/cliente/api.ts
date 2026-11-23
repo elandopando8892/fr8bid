@@ -509,6 +509,15 @@ export class MesaApi {
     });
   }
 
+  // Ruta desierta: se cierra sin adjudicar. El motivo queda interno (nunca llega a los carriers).
+  declararDesiertas(eventId: string, rutaIds: string[], motivo: string) {
+    return this.rw({ action: "set_rfx_lane_no_award", rfx_event_id: eventId, lane_ids: rutaIds, no_award: true, reason: motivo.trim(), confirmed: true, confirmation_action: "set_rfx_lane_no_award" });
+  }
+
+  reabrirRuta(eventId: string, rutaId: string) {
+    return this.rw({ action: "set_rfx_lane_no_award", rfx_event_id: eventId, lane_ids: [rutaId], no_award: false, confirmed: true, confirmation_action: "set_rfx_lane_no_award" });
+  }
+
   quitarAdjudicacion(participacionId: string) {
     return this.rw({ action: "clear_rfx_award", rfx_lane_vendor_id: participacionId });
   }
