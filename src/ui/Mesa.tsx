@@ -1425,7 +1425,7 @@ function ResumenOfertas({ d, ctx }: { d: Detalle; ctx: Contexto }) {
   const filas = resumenPorRuta(d);
   const mixtos = modelosMixtos(d);
   const sinVigencia = filas.filter((x) => x.masBaja?.sinVigencia && !x.primario);
-  const porArriba = filas.filter((x) => x.contraObjetivo !== null && x.contraObjetivo > 0);
+  const porArriba = filas.filter((x) => x.porArriba);
   const varias = d.rutas.length > 1;
   return (
     <div className="tarjeta">
@@ -1447,12 +1447,12 @@ function ResumenOfertas({ d, ctx }: { d: Detalle; ctx: Contexto }) {
               {filas.map((x) => (
                 <tr key={x.ruta.id}>
                   <td data-etiqueta="Ruta"><a href={`#ruta-${x.ruta.numero}`} onClick={(e) => { e.preventDefault(); document.getElementById(`ruta-${x.ruta.numero}`)?.scrollIntoView({ block: "start", behavior: "smooth" }); }}>{x.ruta.numero} · {x.ruta.origen} → {x.ruta.destino}</a></td>
-                  <td data-etiqueta="Ofertas">{x.ofertas || <span className="tenue">0</span>}</td>
+                  <td data-etiqueta="Ofertas">{x.ofertas || <span className="tenue">0</span>}{x.otraMoneda > 0 && <span className="tenue" title="No se comparan contra las demás ni contra el objetivo"> · {x.otraMoneda} en otra moneda</span>}</td>
                   <td data-etiqueta="Más baja">
                     {x.masBaja ? <><b>{x.masBaja.p.carrier}</b> · <span className="mono">{dinero(x.masBaja.allIn, x.masBaja.moneda)}</span>{x.masBaja.sinVigencia && <span className="alerta"> · sin vigencia</span>}</> : "—"}
                   </td>
-                  <td data-etiqueta="Contra objetivo" className={x.contraObjetivo !== null && x.contraObjetivo > 0 ? "alerta" : ""}>
-                    {x.contraObjetivo === null ? "—" : `${x.contraObjetivo > 0 ? "+" : x.contraObjetivo < 0 ? "−" : "±"}${Math.abs(x.contraObjetivo)} %`}
+                  <td data-etiqueta="Contra objetivo" className={x.porArriba ? "alerta" : ""}>
+                    {x.contraObjetivo === null ? "—" : `${x.porArriba ? "+" : x.contraObjetivo < 0 ? "−" : "±"}${Math.abs(x.contraObjetivo)} %`}
                   </td>
                   <td data-etiqueta="Primario">{x.primario ?? <span className="tenue">—</span>}</td>
                 </tr>
@@ -1608,9 +1608,10 @@ function FilaOferta({ p, ruta, mejor = false, totalRubros, conCapacidad = true, 
   const anterior = p.versiones.find((x) => x.numero === v.numero - 1);
   const venta = tarifaVenta(v);
   // Contra el objetivo de la ruta: lo que orienta de un vistazo.
-  const contraObjetivo = ruta.objetivo ? Math.round(((v.tarifaAllIn - ruta.objetivo) / ruta.objetivo) * 100) : null;
+  // Solo en la moneda de la ruta; el signo y el color salen del importe sin redondear.
+  const contraObjetivo = ruta.objetivo && v.moneda === ruta.moneda ? Math.round(((v.tarifaAllIn - ruta.objetivo) / ruta.objetivo) * 100) : null;
   // «Mejor» en verde solo si está en el objetivo; por arriba es solo la más baja.
-  const enObjetivo = dentroDeObjetivo(v.tarifaAllIn, ruta.objetivo);
+  const enObjetivo = dentroDeObjetivo(v.tarifaAllIn, ruta.objetivo, v.moneda, ruta.moneda);
   return (
     <tr className={`${elegido ? "elegida" : ""} ${mejor && enObjetivo ? "mejor" : ""}`} onClick={elegible ? onElegir : undefined} style={elegible ? { cursor: "pointer" } : undefined}>
       {columnaElegir && <td>{elegible && <input type="radio" name={`oferta-${ruta.id}`} aria-label={`Elegir ${p.carrier}`} checked={elegido} onChange={onElegir} />}</td>}
@@ -1628,7 +1629,7 @@ function FilaOferta({ p, ruta, mejor = false, totalRubros, conCapacidad = true, 
       </td>
       <td data-etiqueta="All-in">
         <span className="cifra">{dinero(v.tarifaAllIn, v.moneda)}</span>
-        {contraObjetivo !== null && <span className={`delta ${contraObjetivo <= 0 ? "bajo" : "sobre"}`} title="Contra el objetivo de la ruta">{contraObjetivo > 0 ? "+" : contraObjetivo < 0 ? "−" : "±"}{Math.abs(contraObjetivo)} %</span>}
+        {contraObjetivo !== null && <span className={`delta ${enObjetivo ? "bajo" : "sobre"}`} title="Contra el objetivo de la ruta">{!enObjetivo ? "+" : contraObjetivo < 0 ? "−" : "±"}{Math.abs(contraObjetivo)} %</span>}
         <div className="tenue" title={describirModelo(v)}>{modeloCorto(v)}</div>
       </td>
       <td data-etiqueta="Venta">

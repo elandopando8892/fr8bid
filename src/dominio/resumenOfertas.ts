@@ -7,9 +7,12 @@ import type { Detalle, Participacion, Ruta } from "./tipos";
 export interface FilaResumen {
   ruta: Ruta;
   ofertas: number;
+  // Ofertas en otra moneda que la ruta: no se comparan contra las demás ni contra el objetivo.
+  otraMoneda: number;
   masBaja: { p: Participacion; allIn: number; moneda: string; sinVigencia: boolean } | null;
-  // Porcentaje contra el objetivo de la ruta (positivo: por arriba).
+  // Porcentaje contra el objetivo de la ruta, redondeado para mostrar.
   contraObjetivo: number | null;
+  porArriba: boolean;
   primario: string | null;
 }
 
@@ -17,22 +20,30 @@ export interface FilaResumen {
 export const contraObjetivo = (allIn: number, objetivo: number | null) =>
   objetivo ? Math.round(((allIn - objetivo) / objetivo) * 100) : null;
 
-// «Mejor» en verde solo si está en el objetivo o por debajo; sin objetivo, también.
-export const dentroDeObjetivo = (allIn: number, objetivo: number | null) => {
-  const c = contraObjetivo(allIn, objetivo);
-  return c === null || c <= 0;
+// «Mejor» en verde solo si está en el objetivo o por debajo (sin redondear:
+// 4,010 contra 4,000 ya está por arriba); sin objetivo, también. Una oferta en
+// otra moneda que la ruta no se compara: nunca cuenta como dentro.
+export const dentroDeObjetivo = (allIn: number, objetivo: number | null, moneda?: string, monedaRuta?: string) => {
+  if (moneda && monedaRuta && moneda !== monedaRuta) return false;
+  return !objetivo || allIn <= objetivo;
 };
 
 export function resumenPorRuta(d: Detalle): FilaResumen[] {
   return d.rutas.map((ruta) => {
-    const filas = [...conOferta(ruta)].sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
+    const todas = conOferta(ruta);
+    // Solo se comparan importes en la moneda de la ruta.
+    const filas = todas.filter((x) => versionVigente(x)!.moneda === ruta.moneda).sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
     const p = filas[0];
     const v = p ? versionVigente(p)! : null;
+    const c = v ? contraObjetivo(v.tarifaAllIn, ruta.objetivo) : null;
     return {
       ruta,
-      ofertas: filas.length,
+      ofertas: todas.length,
+      otraMoneda: todas.length - filas.length,
       masBaja: p && v ? { p, allIn: v.tarifaAllIn, moneda: v.moneda, sinVigencia: !v.vigenteHasta } : null,
-      contraObjetivo: v ? contraObjetivo(v.tarifaAllIn, ruta.objetivo) : null,
+      contraObjetivo: c,
+      // Sin redondear: 4,010 contra 4,000 está por arriba aunque muestre «+0 %».
+      porArriba: !!(v && ruta.objetivo && v.tarifaAllIn > ruta.objetivo),
       primario: primario(ruta)?.carrier ?? null
     };
   });

@@ -49,5 +49,20 @@ describe("resumen de ofertas arriba de las rutas", () => {
     expect(dentroDeObjetivo(4000, 4000)).toBe(true);
     expect(dentroDeObjetivo(4365, 4000)).toBe(false);
     expect(dentroDeObjetivo(4365, null)).toBe(true);
+    // Sin redondear: 4,010 contra 4,000 ya está por arriba.
+    expect(dentroDeObjetivo(4010, 4000)).toBe(false);
+    // Otra moneda que la ruta: no se compara.
+    expect(dentroDeObjetivo(3000, 4000, "MXN", "USD")).toBe(false);
+  });
+
+  it("solo compara importes en la moneda de la ruta", () => {
+    const mxn = { ...version(15000), moneda: "MXN" };
+    const d = detalle([ruta(1, 1000, [oferta("mx", mxn), oferta("us", version(1010))])]);
+    const [r] = resumenPorRuta(d);
+    expect(r.ofertas).toBe(2);
+    expect(r.otraMoneda).toBe(1);
+    expect(r.masBaja?.p.carrier).toBe("US");
+    expect(r.porArriba).toBe(true);
+    expect(r.contraObjetivo).toBe(1);
   });
 });
