@@ -52,6 +52,14 @@ const CHANNEL_LABEL: Record<DraftChannel, string> = {
   get whatsapp_group() { return tr("text146"); },
 };
 
+/** Un evento cerrado a ofertas (plazo vencido, cerrado o archivado) ya no invita. Se evalúa con la hora actual. */
+function isEventClosed(event: { status?: unknown; due_date?: unknown } | null | undefined, now = Date.now()): boolean {
+  if (!event) return false;
+  const status = String(event.status ?? "").toLowerCase();
+  const due = event.due_date ? Date.parse(`${String(event.due_date).slice(0, 10)}T23:59:59-06:00`) : NaN;
+  return ["closed", "awarded", "archived", "cancelled"].includes(status) || (Number.isFinite(due) && due < now);
+}
+
 /** A Meta status as a pill: only APPROVED lets WhatsApp go out automatically. */
 function metaPill(status?: string | null) {
   const s = String(status ?? "").toUpperCase();
@@ -210,6 +218,11 @@ function MessageContent() {
         { ok: tr("text152") },
       );
       if (!ok || !isCurrent()) return;
+      // El plazo pudo vencer con la página abierta o mientras se confirmaba.
+      if (isEventClosed(event)) {
+        setNotice("El evento ya cerró a ofertas: no se generan invitaciones.");
+        return;
+      }
       started = true;
       setNotice(null);
       setPreparedTemplateName(template.name);
@@ -319,11 +332,7 @@ function MessageContent() {
 
   const loading = detail.loading || templates.loading || campaigns.loading || reviews.loading || segments.loading;
   const cta = tr("text161", audience.length ? tr("text162", audience.length, audience.length === 1 ? "" : "s") : "");
-  // Un evento cerrado a ofertas (plazo vencido, cerrado o archivado) ya no invita.
-  const eventStatus = String(event?.status ?? "").toLowerCase();
-  const eventDue = event?.due_date ? Date.parse(`${String(event.due_date).slice(0, 10)}T23:59:59-06:00`) : NaN;
-  const eventClosed = Boolean(event) && (["closed", "awarded", "archived", "cancelled"].includes(eventStatus)
-    || (Number.isFinite(eventDue) && eventDue < Date.now()));
+  const eventClosed = isEventClosed(event);
   const canGenerate = Boolean(template && channels.size && audience.length && !loading && !eventClosed
     && !detail.error && !campaigns.error && !reviews.error && !segments.error && !draftAudience.unresolved
     && !dirty && canWork && busy === null && preparation?.phase !== "stopped");

@@ -62,9 +62,16 @@ export function pluralize(text: string): string {
 
 export function translator<T extends Copy>(copy: T) {
   return (key: keyof T, ...values: unknown[]) => {
-    const text = copy[key]?.[getLang()] ?? String(key);
-    return pluralize(text.replace(/\{(\d+)\}/g, (token, index: string) =>
-      Number(index) < values.length ? String(values[Number(index)] ?? "") : token));
+    const value = (index: string) => String(values[Number(index)] ?? "");
+    // Solo el texto de la plantilla se pluraliza: «{0} tarifa(s)» concuerda con
+    // el valor, y los valores interpolados (nombres, datos) quedan intactos.
+    const text = pluralize(copy[key]?.[getLang()] ?? String(key)).replace(
+      /\{(\d+)\}((?:\s+[^\s(){}]+\((?:s|es)\))*)/g,
+      (token, index: string, words: string) => {
+        if (Number(index) >= values.length) return token;
+        return words ? pluralize(`${value(index)}${words}`) : value(index);
+      });
+    return text;
   };
 }
 
