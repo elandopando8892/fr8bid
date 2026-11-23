@@ -1374,7 +1374,8 @@ function PanelComparar({ d, ctx, accion }: Props) {
       {d.rutas.map((ruta) => {
         const filas = ofertasOrdenadas(ruta);
         const laMejor = masBajaComparable(ruta);
-        const sel = ruta.participaciones.find((x) => x.id === elegido) ?? null;
+        // Una oferta rechazada deja de tener versión: ya no se puede elegir.
+        const sel = ruta.participaciones.find((x) => x.id === elegido && x.versiones.length > 0) ?? null;
         const prim = primario(ruta);
         const respaldos = ruta.participaciones.filter((x) => x.rol === "respaldo");
         // Sin primario se elige primario; con primario y antes de entregar, respaldo.
