@@ -81,3 +81,16 @@ describe("proxy: set_rfx_lane_no_award", () => {
     expect(await pasa(crudo("open", [lane(L1)]), cuerpo({ no_award: false, reason: undefined }))).toMatchObject({ code: "NO_PERMITIDO", escribio: false });
   });
 });
+
+describe("entrega con todas las rutas desiertas", () => {
+  it("tras recargar, el evento adjudicado con todas las rutas desiertas cuenta como entregado", async () => {
+    const { entregaConfirmada } = await import("../src/dominio/recorrido");
+    const sin = { estado: "sin_preparar", operationId: null, error: null } as any;
+    const ev = (estado: string, ...rutas: unknown[]) => ({ evento: { id: "e", estado }, rutas, recibo: null }) as any;
+    expect(entregaConfirmada(ev("adjudicado", r(1, [], "x"), r(2, [], "y")), sin)).toBe(true);
+    expect(entregaConfirmada(ev("cerrado", r(1, [], "x")), sin)).toBe(false);
+    expect(entregaConfirmada(ev("adjudicado", r(1, [], "x"), r(2, [p()])), sin)).toBe(false);
+    expect(entregaConfirmada(ev("adjudicado", r(1, [p({ rol: "primario", entregadaEn: "2026-11-23" })])), sin)).toBe(true);
+    expect(entregaConfirmada(ev("adjudicado", r(1, [p({ rol: "primario", entregadaEn: null })])), sin)).toBe(false);
+  });
+});

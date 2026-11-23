@@ -95,7 +95,10 @@ export function entregaConfirmada(detalle: Detalle, entrega: EntregaLocal): bool
   // Tras recargar, la prueba del recibo es el propio Rateware: el evento queda
   // adjudicado y cada primario con rateware_closeout_at.
   const primarios = detalle.rutas.map(primario).filter(Boolean) as Participacion[];
-  return detalle.evento.estado === "adjudicado" && primarios.length > 0 && primarios.every((p) => p.entregadaEn);
+  // Con todas las rutas desiertas no hay primarios: basta el evento adjudicado
+  // (solo la entrega lo deja así) con cada ruta decidida.
+  if (detalle.evento.estado !== "adjudicado" || !detalle.rutas.length || !detalle.rutas.every(rutaDecidida)) return false;
+  return primarios.every((p) => p.entregadaEn);
 }
 
 // Hay una versión posterior a la adjudicada (I2): la adjudicación no la sigue.
