@@ -41,7 +41,7 @@ try{
   await page.setViewportSize({width,height:1000});await page.goto(origin);await page.getByRole('button',{name:/Carriers e invitación/}).click();
   const panel=page.getByRole('region',{name:'Contactos de empresas',exact:true});await panel.waitFor();
   const show=page.getByRole('button',{name:'Ver y marcar «Revisado»',exact:true});if(await show.count())await show.click();
-  const open=page.getByRole('button',{name:'Resolver contacto en esta Mesa',exact:true}).first();await open.focus();await page.keyboard.press('Enter');
+  const open=page.getByRole('button',{name:'Resolver contacto aquí',exact:true}).first();await open.focus();await page.keyboard.press('Enter');
   const name=await panel.locator('h3').innerText();const first=new URL(page.url()).searchParams.get('contacto');
   assert.ok(first,'Mesa entry stores company in navigation');checks++;
   await panel.getByRole('button',{name:'Siguiente empresa →',exact:true}).click();

@@ -28,6 +28,7 @@ import { BatchFlowPanel } from "./BatchFlowPanel";
 import { prepareDraftChannels, type DraftPreparation } from "./draft-preparation";
 import { DraftPreparationResult } from "./DraftPreparationResult";
 import { draftPreparationText } from "@/i18n/draft-preparation";
+import { isEventClosed, isEventConfirmedOpen } from "./event-open";
 
 /**
  * The variables worth inserting, as rateware's renderer fills them per carrier
@@ -51,6 +52,8 @@ const CHANNEL_LABEL: Record<DraftChannel, string> = {
   whatsapp: "WhatsApp",
   get whatsapp_group() { return tr("text146"); },
 };
+
+/** Un evento cerrado a ofertas (plazo vencido, cerrado o archivado) ya no invita. Se evalúa con la hora actual. */
 
 /** A Meta status as a pill: only APPROVED lets WhatsApp go out automatically. */
 function metaPill(status?: string | null) {
@@ -210,6 +213,21 @@ function MessageContent() {
         { ok: tr("text152") },
       );
       if (!ok || !isCurrent()) return;
+      // El plazo pudo vencer, u otra sesión cerrar el evento, con la página
+      // abierta o mientras se confirmaba: se relee el estado antes de preparar.
+      let fresh;
+      try {
+        fresh = (await fetchRfxDetail(id)).event;
+      } catch {
+        setNotice("No se pudo confirmar el estado del evento: vuelve a intentar.");
+        return;
+      }
+      if (!isCurrent()) return;
+      // Sin evento en la respuesta no se puede confirmar que siga abierto.
+      if (!isEventConfirmedOpen(fresh)) {
+        setNotice(isEventClosed(fresh) ? "El evento ya cerró a ofertas: no se generan invitaciones." : "No se pudo confirmar que el evento siga abierto: vuelve a cargar la página.");
+        return;
+      }
       started = true;
       setNotice(null);
       setPreparedTemplateName(template.name);
@@ -319,10 +337,11 @@ function MessageContent() {
 
   const loading = detail.loading || templates.loading || campaigns.loading || reviews.loading || segments.loading;
   const cta = tr("text161", audience.length ? tr("text162", audience.length, audience.length === 1 ? "" : "s") : "");
-  const canGenerate = Boolean(template && channels.size && audience.length && !loading
+  const eventClosed = isEventClosed(event);
+  const canGenerate = Boolean(template && channels.size && audience.length && !loading && !eventClosed
     && !detail.error && !campaigns.error && !reviews.error && !segments.error && !draftAudience.unresolved
     && !dirty && canWork && busy === null && preparation?.phase !== "stopped");
-  const generateTitle = preparation?.phase === "stopped" ? draftPreparationText("stopped") : !canWork
+  const generateTitle = eventClosed ? "El evento ya cerró a ofertas: no se generan invitaciones." : preparation?.phase === "stopped" ? draftPreparationText("stopped") : !canWork
     ? NEED_REASON.operate
     : dirty
       ? tr("text163")

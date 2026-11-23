@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { pluralize } from "@/i18n/language";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { useAsync } from "@/components/useAsync";
@@ -87,7 +88,7 @@ export function PipelineView() {
                           <div className="cell-sub">Sin contacto</div>
                         )}
                         <div className="cell-sub">
-                          {row.open_opportunity_count ?? 0} oportunidad(es) · {row.active_rfi_count ?? 0} RFI(s) · {row.open_action_count ?? 0} acción(es)
+                          {pluralize(`${row.open_opportunity_count ?? 0} oportunidad(es) · ${row.active_rfi_count ?? 0} RFI(s) · ${row.open_action_count ?? 0} acción(es)`)}
                         </div>
                         {row.pipeline_currency === "mixed" ? (
                           <div className="cell-sub">Valor abierto en varias monedas</div>

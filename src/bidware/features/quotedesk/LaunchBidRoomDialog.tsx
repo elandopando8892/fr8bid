@@ -1,4 +1,5 @@
 import { tr } from "@/i18n/quotedesk";
+import { pluralize } from "@/i18n/language";
 import { useLang } from "@/i18n/language";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -123,7 +124,7 @@ export function LaunchBidRoomDialog({
     return (
       <Dialog title={tr("text115")} onClose={onClose} footer={<button onClick={onClose}>{tr("text116")}</button>}>
         <p>
-          {tr("text117")}{lanes.length} {tr("text118")}</p>
+          {tr("text117")}{pluralize(`${lanes.length} ${tr("text118")}`)}</p>
         <Link to={`/rfx/${eventId}`} className="btn primary">
           {tr("text119")}</Link>
       </Dialog>
@@ -146,7 +147,7 @@ export function LaunchBidRoomDialog({
     >
       <div style={{ display: "grid", gap: 12 }}>
         <p className="qd-muted" style={{ margin: 0 }}>
-          {tr("text124")}{lanes.length} {tr("text125")}{quote.folio}{tr("text126")}</p>
+          {tr("text124")}{pluralize(`${lanes.length} ${tr("text125")}`)}{quote.folio}{tr("text126")}</p>
         <div className="qd-segmented">
           {KINDS.map((k) => (
             <button key={k.key} className={kind === k.key ? "active" : undefined} disabled={Boolean(eventId)} onClick={() => setKind(k.key)}>

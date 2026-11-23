@@ -1,4 +1,5 @@
 import { words, tr } from "@/i18n/rate-review";
+import { pluralize } from "@/i18n/language";
 import { useLang, getLang } from "@/i18n/language";
 import { useEffect, useMemo, useState } from "react";
 import { confirmAsync } from "@/components/confirm";
@@ -298,7 +299,7 @@ function RateReviewContent() {
                       {group.title} {group.test && <Pill tone="amber">{tr("text054")}</Pill>}
                     </div>
                     <div className="cell-sub">
-                      {group.sub} · {group.rows.length}{tr("text055")}{group.rows.filter(approvable).length}{tr("text043")}</div>
+                      {group.sub} · {pluralize(`${group.rows.length}${tr("text055")}`)}{group.rows.filter(approvable).length}{tr("text043")}</div>
                   </div>
                 </div>
                 <div className="rr-table-wrap">
@@ -422,7 +423,7 @@ function RateReviewContent() {
       {chosen.length > 0 && (
         <div className="rr-bar">
           <span>
-            {chosen.length}{tr("text071")}{chosen.filter(approvable).length}{tr("text043")}{!canApprove && <span className="cell-sub">{tr("text072")}</span>}
+            {pluralize(`${chosen.length}${tr("text071")}`)}{chosen.filter(approvable).length}{tr("text043")}{!canApprove && <span className="cell-sub">{tr("text072")}</span>}
           </span>
           <span className="spacer" />
           <button onClick={() => setSelected(new Set())} disabled={Boolean(busy)}>

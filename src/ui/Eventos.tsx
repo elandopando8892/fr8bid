@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import type { ResumenEvento } from "../dominio/tipos";
 import { hoyMexico } from "../dominio/recorrido";
 import { aCarga, Desactualizado, EstadoVista, fecha, ir, Liga, plural, Prueba, type Carga } from "./comun";
-import { cuantasRutas, ESTADO_EVENTO, grupoDe, nombreEvento, porUrgencia, resumenRutas, siguiente, type Grupo } from "./eventosVista";
+import { cuantasRutas, ESTADO_EVENTO, folioCorto, grupoDe, nombreEvento, porUrgencia, resumenRutas, shipperAparte, siguiente, type Grupo } from "./eventosVista";
 import * as I from "./Iconos";
 import { useSesion } from "./sesion";
 
@@ -59,13 +59,14 @@ export function Eventos() {
   const eventos = carga.tipo === "ok" ? carga.datos : [];
   const esAdmin = rol === "admin";
   const hoy = hoyMexico();
-  // Abre en «Te toca» cuando hay algo que decidir; si no, en «Todos».
+  // Abre en «Te toca» cuando hay algo que decidir; si no, en los eventos
+  // abiertos (esperando carriers), y solo sin ninguno en «Todos».
   const [elegida, setFiltro] = useState<Grupo | null>(null);
   const [busca, setBusca] = useState("");
   const grupo = (e: ResumenEvento) => grupoDe(e, hoy, esAdmin);
   const cuenta = (g: Grupo) => eventos.filter((e) => grupo(e) === g).length;
   const teToca = cuenta("te_toca");
-  const filtro: Grupo = elegida ?? (esAdmin && teToca > 0 ? "te_toca" : "todos");
+  const filtro: Grupo = elegida ?? (esAdmin && teToca > 0 ? "te_toca" : cuenta("carriers") > 0 ? "carriers" : "todos");
   const q = busca.trim().toLowerCase();
   const visibles = eventos
     .filter((e) => filtro === "todos" || grupo(e) === filtro)
@@ -133,14 +134,14 @@ export function Eventos() {
                 <div className="fila-evento-principal">
                   <Liga a={`/eventos/${e.id}`}><b>{nombreEvento(e)}</b></Liga>
                   <div className="tenue">
-                    {[e.shipper !== "—" && !nombreEvento(e).includes(e.shipper) ? e.shipper : null, rutas || null, n > 1 || (!rutas && n) ? plural(n, "ruta") : null].filter(Boolean).join(" · ")}
+                    {[shipperAparte(e), rutas || null, n > 1 || (!rutas && n) ? plural(n, "ruta") : null].filter(Boolean).join(" · ")}
                     {e.prueba && <> <Prueba /></>}
                   </div>
-                  <div className="folio mono" title={e.folio}>{e.folio}</div>
+                  <div className="folio mono" title={e.folio}>{folioCorto(e.folio)}</div>
                 </div>
                 <div className="fila-evento-dato" data-etiqueta="Estado"><span className={`pill ${est.tono}`}>{est.texto}</span></div>
                 <div className="fila-evento-dato" data-etiqueta="Ofertas">
-                  <b>{e.ofertas}</b> <span className="tenue">de {e.participaciones}</span>
+                  <span title={`${e.ofertas} ofertas de ${e.participaciones} invitaciones por ruta (carrier × ruta)`}><b>{e.ofertas}</b> <span className="tenue">{e.ofertas === 1 ? "oferta" : "ofertas"}</span></span>
                 </div>
                 <div className="fila-evento-dato" data-etiqueta="Plazo">{fecha(e.plazo)}</div>
                 <div className="fila-evento-siguiente">

@@ -1,4 +1,5 @@
 import { tr } from "@/i18n/rfx-admin";
+import { pluralize } from "@/i18n/language";
 import { useLang, getLang } from "@/i18n/language";
 import { confirmAsync } from "@/components/confirm";
 import { useMemo, useState } from "react";
@@ -197,7 +198,7 @@ export function AwardNoticesPage() {
                 {tr("text035")}</p>
               {result && (
                 <p className="an-result">
-                  {result.created ?? 0} {tr("text036")}{result.refreshed ?? 0} {tr("text037")}{result.preserved ? tr("text038", result.preserved) : ""}
+                  {pluralize(`${result.created ?? 0} ${tr("text036")}`)}{result.refreshed ?? 0} {tr("text037")}{result.preserved ? tr("text038", result.preserved) : ""}
                   {result.skipped?.length
                     ? tr("text039", result.skipped.length)
                     : ""}

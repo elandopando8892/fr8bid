@@ -145,7 +145,7 @@ function EmpresaPanel({ empresa, cliente, onVinculado, simulado, onCorreo }: { e
       </div>}
       {op?.state === "completed" && !op.linked && <p className="estado">{op.code === "CURRENT_CONTACT_PRESERVED" ? "Se conservó el contacto válido que ya tenía la empresa." : "Apollo no devolvió un correo utilizable para esta persona."}</p>}
       {op && op.state !== "draft" && <p className="tenue">{op.code === "KNOWN_CONTACT_PRESERVED" ? "Se encontró un contacto válido antes de solicitar créditos. Se conservó y no se pidió enriquecimiento." : op.credits_confirmed === null ? "Consumo pendiente de confirmar en Apollo." : `${op.credits_confirmed} créditos confirmados.`} <span className="contactos-operacion">Operación {op.id}</span></p>}
-      {correo && <p className="nota">El vínculo no envía invitaciones. Continúa con la revisión de la Mesa.</p>}
+      {correo && <p className="nota">El vínculo no envía invitaciones. Continúa con la revisión en la página del evento.</p>}
     </>}
   </div>;
 }

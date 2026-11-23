@@ -82,6 +82,15 @@ export function RfxDetailPage() {
   const statusOf = (i: Record<string, unknown>) =>
     String(i.invitation_status ?? "").toLowerCase();
 
+  /** Con invitaciones enviadas u ofertas, el evento ya no se borra: se archiva. */
+  const activityIn = (ls: LaneWithInvitations[]) =>
+    ls.some((lane) =>
+      // Solo una invitación explícitamente «drafted» y sin tarifa cuenta como
+      // sin actividad; un estado ausente no lo acredita.
+      (lane.invitations ?? []).some((i) => i.bid_rate != null || statusOf(i) !== "drafted"),
+    );
+  const hasActivity = activityIn(lanes);
+
   /** Carriers added from Carrier Fit wait as "drafted" until someone authorizes them. */
   const drafts = useMemo(
     () =>
@@ -276,6 +285,32 @@ export function RfxDetailPage() {
     setBusy(true);
     setNotice(null);
     try {
+      // Otra sesión pudo invitar o recibir una oferta con el diálogo abierto:
+      // se relee el evento y, si ya tiene actividad, no se borra.
+      const fresh = await fetchRfxDetail(id);
+      // Cada ruta debe traer su lista de invitaciones: una lectura parcial no
+      // acredita que el evento siga sin actividad.
+      // Además, solo se borra un borrador: publicado ya pudo recibir ofertas
+      // aunque la lectura llegue vacía o truncada.
+      const complete = !!fresh?.event && Array.isArray(fresh.lanes) &&
+        (fresh.lanes as LaneWithInvitations[]).every((lane) => Array.isArray(lane.invitations));
+      if (complete && String(fresh.event?.status ?? "").toLowerCase() !== "draft") {
+        setNotice("Solo se borra un evento en borrador: archívalo en lugar de borrarlo.");
+        setBusy(false);
+        reload();
+        return;
+      }
+      if (!complete) {
+        setNotice("No se pudo confirmar que el evento siga sin actividad: vuelve a cargar antes de borrarlo.");
+        setBusy(false);
+        return;
+      }
+      if (activityIn(fresh.lanes as LaneWithInvitations[])) {
+        setNotice("El evento ya tiene invitaciones u ofertas: archívalo en lugar de borrarlo.");
+        setBusy(false);
+        reload();
+        return;
+      }
       await deleteRfxEvent(id);
       navigate("/rfx", { replace: true });
     } catch (err) {
@@ -363,13 +398,15 @@ export function RfxDetailPage() {
               >
                 {archived ? tr("text722") : tr("text723")}
               </button>
-              <button
-                className="link"
-                disabled={busy || !can("admin")}
-                title={can("admin") ? undefined : NEED_REASON.admin}
-                onClick={removeEvent}
-              >
-                {tr("text724")}</button>
+              {!hasActivity && String(event.status ?? "").toLowerCase() === "draft" && (
+                <button
+                  className="link"
+                  disabled={busy || !can("admin")}
+                  title={can("admin") ? undefined : NEED_REASON.admin}
+                  onClick={removeEvent}
+                >
+                  {tr("text724")}</button>
+              )}
               <OriginPill origin={origin.data?.origins[id] ?? null} folio={origin.data?.folios[id]} />
               {biddingExpired
                 ? <Pill tone="green">{tr("text773")}</Pill>

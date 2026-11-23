@@ -1,4 +1,5 @@
 import type { Lang, LaneProblem } from "./request.model";
+import { pluralize } from "@/i18n/language";
 import type { RubricCategory } from "./rubric";
 
 /**
@@ -61,7 +62,7 @@ export const COPY = {
     import: "Importar Excel",
     importing: "Importando…",
     imported: (n: number, sheet: string | null) =>
-      `Importamos ${n} ruta(s)${sheet ? ` de la hoja «${sheet}»` : ""}. Revisa las marcadas.`,
+      `Importamos ${pluralize(`${n} ruta(s)`)}${sheet ? ` de la hoja «${sheet}»` : ""}. Revisa las marcadas.`,
     importEmpty: "No encontramos rutas en el archivo. Usa la plantilla Excel.",
     templateMark: "Obligatorio",
     edit: "Editar",
@@ -168,7 +169,7 @@ export const COPY = {
     footnote: "Tu solicitud queda como borrador para revisión. No se comparte con carriers hasta que nuestro equipo la autorice.",
     confirmOk: "Enviar",
     confirmCancel: "Seguir editando",
-    confirm: (lanes: number) => `Vas a enviar tu solicitud con ${lanes} ruta(s). Después ya no podrás cambiarla desde esta liga. ¿Enviar?`,
+    confirm: (lanes: number) => pluralize(`Vas a enviar tu solicitud con ${lanes} ruta(s). Después ya no podrás cambiarla desde esta liga. ¿Enviar?`),
     fixLanes: "Completa lo que falta en las rutas marcadas.",
     noLanes: "Agrega al menos una ruta.",
     thanksTitle: "Recibimos tu solicitud",
@@ -234,7 +235,7 @@ export const COPY = {
     template: "Excel template",
     import: "Import Excel",
     importing: "Importing…",
-    imported: (n: number, sheet: string | null) => `Imported ${n} lane(s)${sheet ? ` from the "${sheet}" sheet` : ""}. Check the flagged ones.`,
+    imported: (n: number, sheet: string | null) => `Imported ${pluralize(`${n} lane(s)`)}${sheet ? ` from the "${sheet}" sheet` : ""}. Check the flagged ones.`,
     importEmpty: "No lanes found in the file. Use the Excel template.",
     templateMark: "Required",
     edit: "Edit",
@@ -338,7 +339,7 @@ export const COPY = {
     footnote: "Your request stays as a draft for review. It isn't shared with carriers until our team authorizes it.",
     confirmOk: "Send",
     confirmCancel: "Keep editing",
-    confirm: (lanes: number) => `You're sending your request with ${lanes} lane(s). After that it can't be changed from this link. Send?`,
+    confirm: (lanes: number) => pluralize(`You're sending your request with ${lanes} lane(s). After that it can't be changed from this link. Send?`),
     fixLanes: "Fill in what's missing on the flagged lanes.",
     noLanes: "Add at least one lane.",
     thanksTitle: "We got your request",
