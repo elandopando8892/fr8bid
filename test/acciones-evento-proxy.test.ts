@@ -46,3 +46,11 @@ describe("proxy: archivar, borrar y rechazar desde la página del evento", () =>
     expect(await pasa(detalle("open", lv({})), rechazo({ confirmed: false }))).toMatchObject({ code: "SIN_CONFIRMAR", escribio: false });
   });
 });
+
+describe("oferta rechazada", () => {
+  it("sin tarifa vigente no quedan versiones aunque el simulado guarde el historial", async () => {
+    const { detalle } = await import("../src/cliente/mapear");
+    const d = detalle({ event: { id: EV, status: "open", due_date: "2099-01-01" }, lanes: [{ id: "l1", lane_number: 1, invitations: [{ id: "lv-1", vendor_id: "v", invitation_status: "declined", bid_rate: null, bid_revisions: [{ revision: 1, bid_rate: 900, currency: "USD", created_at: "2026-11-01T00:00:00Z" }], vendors: { vendor_name: "X" } }] }] } as any);
+    expect(d.rutas[0].participaciones[0].versiones).toEqual([]);
+  });
+});
