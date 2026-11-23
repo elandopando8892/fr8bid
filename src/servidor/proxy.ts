@@ -67,7 +67,7 @@ export interface Respuesta {
 export type Enviar = (servicio: Servicio, body: Record<string, unknown>, autorizacion: string | null) => Promise<Respuesta>;
 
 export const LECTURAS: Record<Servicio, Set<string>> = {
-  "rateware-api": new Set(["list_carrier_tariff_candidates", "preview_rfx_event_creation", "list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware", "list_rfx_carrier_replies", "get_rfx_carrier_reply", "list_rfx_reply_readings", "list_outreach_campaigns", "list_outreach_templates", "list_vendors", "list_contact_history", "list_carrier_list_templates", "get_carrier_list_template"]),
+  "rateware-api": new Set(["list_carrier_tariff_candidates", "preview_rfx_event_creation", "preview_rfx_event_reopen", "list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware", "list_rfx_carrier_replies", "get_rfx_carrier_reply", "list_rfx_reply_readings", "list_outreach_campaigns", "list_outreach_templates", "list_vendors", "list_contact_history", "list_carrier_list_templates", "get_carrier_list_template"]),
   "rfx-bid-api": new Set(["get_invitation"])
 };
 
@@ -98,6 +98,7 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
     "capture_rfx_bid_if_empty",
     "mark_rfx_replied_if_empty",
     "extend_rfx_due_date_if_unchanged",
+    "reopen_rfx_event_if_unchanged",
     // MCP: intento/recordatorio por WhatsApp con plantilla de Meta (rateware PR #215). Rateware
     // revalida número, «no contactar», permiso y plantilla APROBADA contra Meta, y no repite
     // el mismo recordatorio; desde el MCP solo lo confirma el propietario.
@@ -266,6 +267,13 @@ export async function manejar(
     if (!body?.event_id) return error(400, "FALTA_EVENTO", "Extender el plazo necesita event_id.");
     if (!patch || Object.keys(patch).join(",") !== "due_date" || !("expected_due_date" in body!))
       return error(400, "SOLO_PLAZO", "Solo se extiende el plazo y con el plazo leído (expected_due_date).");
+  }
+
+  if (action === "reopen_rfx_event_if_unchanged" &&
+      (Object.keys(body ?? {}).sort().join(",") !== "action,approval_text,event_id,expected_version,new_due_date,operation_id,reason" ||
+        !UUID_RATEWARE.test(String(body?.event_id || "")) || !UUID_RATEWARE.test(String(body?.operation_id || "")) ||
+        !/^[a-f0-9]{64}$/.test(String(body?.expected_version || "")))) {
+    return error(400, "SOLO_REAPERTURA", "La reapertura requiere el evento, plazo, motivo, versión leída y operación aprobada.");
   }
 
   if (action === "update_carrier_list_template") {

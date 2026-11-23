@@ -75,6 +75,7 @@ export function crearServidor(t: Transporte, rol: Rol, ahora?: () => Date, escri
       });
     }
     for (const [nombre, h] of Object.entries(herramientasEscritura)) {
+      if (nombre === "preparar_reapertura_evento" && rol !== "admin") continue;
       const confirmar = nombre === "confirmar" || nombre === "confirmar_creacion_evento";
       servidor.registerTool(nombre, {
         description: h.descripcion,

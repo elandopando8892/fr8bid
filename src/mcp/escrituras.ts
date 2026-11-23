@@ -71,6 +71,8 @@ export const herramientasEscritura = {
     schema: z.object({ event_id: id, fase: z.enum(["borradores", "envio"]) }).strict() },
   preparar_cambio_evento: { rol: "admin" as Rol, descripcion: `Administrador: SOLO extiende el plazo (fecha nueva posterior a la actual y a hoy) de un evento abierto o en borrador. No cierra, no publica, no cambia estado. Si otro movió el plazo entre la vista previa y la confirmación, Rateware no lo aplica. ${vista}`,
     schema: z.object({ event_id: id, nueva_fecha: fecha }).strict() },
+  preparar_reapertura_evento: { rol: "admin" as Rol, descripcion: `Administrador: prepara la reapertura de un RFx cerrado a ofertas con un plazo futuro. Conserva rutas, ofertas y participaciones. Si hay adjudicaciones o procesos posteriores, informa el bloqueo. ${vista}`,
+    schema: z.object({ event_id: id, nueva_fecha: fecha, motivo: z.string().trim().min(1).max(500) }).strict() },
   preparar_whatsapp_intento: { rol: "operator" as Rol, descripcion: `Intento por WhatsApp con la plantilla de Meta aprobada (${PLANTILLA_RECORDATORIO.nombre}) a un carrier al que ya le toca (4º intento de la cadencia). Muestra destinatario enmascarado, plantilla y variables; Rateware pone la liga privada del Bid Room. Al confirmar SE ENVÍA 1 WhatsApp; solo lo confirma el propietario. Si no está listo (número dudoso, no contactar, sin permiso o plantilla no aprobada) no prepara nada: usa el respaldo manual de whatsapp_pendientes. ventana 48h/24h (respondió sin tarifa) llega con fr8bid#72. ${vista}`,
     schema: z.object({ event_id: id, carrier_id: id, ventana: z.enum(["intento_4", "48h", "24h"]).default("intento_4") }).strict() },
   confirmar: { rol: "operator" as Rol, descripcion: "Ejecuta una vista previa ya mostrada. confirmacion_id = el de preparar_*; frase_ok = el texto literal con el que el usuario dijo «sí» (vacío = rechazo). Vence a los 15 min, vuelve a comprobar el evento y no reintenta. Adjudicar, entregar a Rateware y avisos de adjudicación no están aquí: se hacen en la página del evento en Fr8Bid.",
@@ -81,7 +83,8 @@ export type NombreEscritura = keyof typeof herramientasEscritura;
 // Rol mínimo por acción firmada (se comprueba al preparar Y al confirmar).
 const ROL_ACCION: Record<string, Rol> = {
   intentos: "operator", ya_respondio: "operator", captura: "operator", revision: "admin",
-  invitacion_borradores: "operator", invitacion_envio: "admin", cambio_evento: "admin", whatsapp_intento: "operator"
+  invitacion_borradores: "operator", invitacion_envio: "admin", cambio_evento: "admin",
+  reapertura_evento: "admin", whatsapp_intento: "operator"
 };
 const RANGO: Record<Rol, number> = { viewer: 0, operator: 1, admin: 2 };
 const permite = (rol: Rol, minimo: Rol) => RANGO[rol] >= RANGO[minimo];
@@ -274,9 +277,33 @@ interface Plan {
   foto: unknown;
   vista: Record<string, unknown>;
   evento: Record<string, unknown>;
+  bloqueos?: string[];
   // Acciones partibles: participaciones agrupadas por carrier; una parte nunca separa a un carrier.
   grupos?: { carrier: string; ids: string[] }[];
 }
+
+const contextoReapertura = z.object({
+  can_reopen: z.boolean(), blocking: z.array(z.string()),
+  snapshot: z.object({
+    event_id: id, folio: z.string(), name: z.string(),
+    status: z.enum(["draft", "open", "closed", "awarded", "archived"]), due_date: fecha.nullable(),
+    version: z.string().regex(/^[a-f0-9]{64}$/), lanes: z.number().int().nonnegative(),
+    participations: z.number().int().nonnegative(), bids: z.number().int().nonnegative(),
+    awards: z.number().int().nonnegative(), award_history: z.boolean(), notices: z.boolean(),
+    handoff: z.boolean(), operations: z.boolean(), void_lanes: z.number().int().nonnegative(),
+  }),
+});
+
+const estadoReapertura = { draft: "borrador", open: "abierto", closed: "cerrado", awarded: "adjudicado", archived: "archivado" };
+const bloqueoReapertura: Record<string, string> = {
+  EVENTO_NO_REABRIBLE: "Solo se reabren eventos cerrados a ofertas. Revisa el estado en Fr8Bid.",
+  PLAZO_INVALIDO: "El nuevo plazo debe ser posterior al plazo guardado y a hoy en Ciudad de México.",
+  CON_ADJUDICACIONES: "El administrador debe conciliar las adjudicaciones antes de decidir si procede una reapertura.",
+  CON_AVISOS_ADJUDICACION: "El administrador debe revisar los avisos de adjudicación ya generados.",
+  CON_ENTREGA_RATEWARE: "El administrador debe conciliar la entrega a Rateware y su recibo.",
+  CON_PROCESOS_OPERATIVOS: "El administrador debe revisar los procesos operativos vinculados.",
+  CON_RUTAS_RESUELTAS: "El administrador debe revisar las rutas declaradas desiertas.",
+};
 
 export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
   const ahora = ctx.ahora ?? (() => new Date());
@@ -469,6 +496,32 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
         vista: { plazo_actual: actual, plazo_nuevo: a.nueva_fecha, efecto: "Solo mueve el plazo hacia adelante, y solo si nadie lo cambió desde esta vista previa. No cierra, no publica, no cambia estado ni avisa a carriers." } };
     },
 
+    async reapertura_evento(a: { event_id: string; nueva_fecha: string; motivo: string }) {
+      const r = await seguro("rateware-api", { action: "preview_rfx_event_reopen", event_id: a.event_id, new_due_date: a.nueva_fecha });
+      if (accionNoDesplegada(r.status, r.body)) throw new Rechazo("ACCION_NO_DESPLEGADA", "Rateware aún no ofrece la vista previa de reapertura.", 503);
+      if (r.status !== 200) throw new Rechazo(String(r.body?.code || "REAPERTURA_NO_DISPONIBLE"), "No se pudo verificar si el evento puede reabrirse.", r.status);
+      const datos = contextoReapertura.safeParse(r.body);
+      if (!datos.success || datos.data.snapshot.event_id.toLowerCase() !== a.event_id.toLowerCase() ||
+          datos.data.can_reopen !== (datos.data.blocking.length === 0)) {
+        throw new Rechazo("REAPERTURA_NO_DISPONIBLE", "Rateware devolvió una vista previa incompleta.", 503);
+      }
+      const { snapshot: e, blocking } = datos.data;
+      const estado = e.status === "open" && e.due_date && e.due_date < hoy() ? "cerrado" : estadoReapertura[e.status];
+      return { act: "reapertura_evento", ev: e.event_id,
+        evento: { id: e.event_id, folio: e.folio, nombre: e.name, estado, plazo: e.due_date },
+        arg: { ...a, event_id: e.event_id }, foto: { version: e.version }, bloqueos: blocking,
+        cuerpos: [{ action: "reopen_rfx_event_if_unchanged", event_id: e.event_id,
+          new_due_date: a.nueva_fecha, reason: a.motivo, expected_version: e.version }],
+        vista: { estado_actual: estado, estado_rateware: e.status, estado_propuesto: "abierto",
+          plazo_actual: e.due_date, plazo_nuevo: a.nueva_fecha, zona_horaria: "America/Mexico_City",
+          motivo: a.motivo, rutas: e.lanes, participaciones: e.participations, ofertas: e.bids,
+          adjudicaciones: e.awards, historial_adjudicacion: e.award_history, avisos_adjudicacion: e.notices,
+          entrega_rateware: e.handoff, procesos_operativos: e.operations, rutas_desiertas: e.void_lanes,
+          usuario_responsable: ctx.email || ctx.userId,
+          efecto: "Reabre la recepción de ofertas hasta el nuevo plazo. Conserva rutas, ofertas y participaciones. Las invitaciones y los avisos se autorizan por separado.",
+        } };
+    },
+
     async revision(a: { event_id: string; carrier_id: string }) {
       const d = await leer(a.event_id);
       const x = todas(d).find(x => x.p.carrierId === a.carrier_id);
@@ -608,6 +661,9 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
     const limite = Math.min(ctx.limiteToken ?? LIMITE_TOKEN, LIMITE_TOKEN);
     const firmarPlan = (p: Plan) => firmar({ sub: ctx.userId, client_id: ctx.clientId, act, ev: p.ev, arg: p.arg, cuerpos: p.cuerpos, fijo: p.fijo, pre: huella(p.foto) }, secreto, ahora());
     const plan = await planes[act](a);
+    if (plan.bloqueos?.length) return { estado: "bloqueada", escrito: false, accion: act,
+      evento: plan.evento, vista_previa: plan.vista, blocking: plan.bloqueos, mesa_url: ligaMesa(plan.ev),
+      instruccion: plan.bloqueos.map(code => bloqueoReapertura[code] ?? "Pide revisión administrativa en Fr8Bid.").join(" ") };
     const firma = await firmarPlan(plan);
     if (firma.token.length <= limite)
       return { estado: "vista_previa", escrito: false, accion: act, evento: plan.evento, vista_previa: plan.vista, confirmacion_id: firma.token, vence_en: firma.vence, mesa_url: ligaMesa(plan.ev),
@@ -669,6 +725,42 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
         throw new Rechazo("SOLO_PROPIETARIO", "Solo el propietario puede confirmar esto. El propietario debe preparar y confirmar su propia vista previa.", 403);
       if (huellaCuerpos(c.cuerpos, c.fijo) !== c.h) throw new Rechazo("ALTERADA", "La confirmación no coincide con su vista previa.", 400);
       if (esProtegido(c.ev) || c.cuerpos.some(b => !ESCRITURAS_MCP.has(String(b.action)) || ![b.event_id, b.rfx_event_id].includes(c.ev))) throw new Rechazo("ALTERADA", "La confirmación no coincide con su vista previa.", 400);
+      if (c.act === "reapertura_evento") {
+        // La relectura de versión y dependencias se hace con el candado del evento
+        // en Rateware. La misma operación devuelve el recibo sin volver a aplicarla.
+        const body = c.cuerpos[0];
+        if (c.cuerpos.length !== 1 || body.action !== "reopen_rfx_event_if_unchanged" || !id.safeParse(c.jti).success) {
+          throw new Rechazo("ALTERADA", "La confirmación no coincide con su vista previa.", 400);
+        }
+        const base = { accion: c.act, event_id: c.ev, operation_id: c.jti, mesa_url: ligaMesa(c.ev), reintentar: false };
+        let r;
+        try { r = await seguro("rateware-api", { ...body, operation_id: c.jti, approval_text: frase }); }
+        catch { r = { status: 504, body: {} }; }
+        const recibo = r.body?.receipt;
+        if (r.status === 200 && recibo?.operation_id === c.jti && recibo.event_id === c.ev &&
+            recibo.actor_id === ctx.userId && recibo.status === "open" && recibo.due_date === body.new_due_date &&
+            typeof recibo.committed_at === "string" && Number.isFinite(Date.parse(recibo.committed_at))) {
+          let verificada = false;
+          try {
+            // list_rfx_detail can repair legacy invitation coverage on read.
+            // Use the strictly read-only snapshot to reconcile this operation.
+            const result = await crudo({ action: "preview_rfx_event_reopen", event_id: c.ev, new_due_date: body.new_due_date });
+            const s = contextoReapertura.safeParse(result);
+            verificada = s.success && s.data.snapshot.event_id === c.ev &&
+              s.data.snapshot.status === "open" && s.data.snapshot.due_date === body.new_due_date;
+          } catch { /* El recibo queda disponible para conciliación. */ }
+          log.resultado = "aplicada";
+          return { ...base, estado: "aplicada", recibo, lectura_verificada: verificada,
+            instruccion: verificada ? "Rateware confirmó el recibo y el nuevo estado abierto."
+              : "Rateware registró el recibo. Revisa el estado actual en Fr8Bid antes de continuar." };
+        }
+        const codigo = accionNoDesplegada(r.status, r.body) ? "ACCION_NO_DESPLEGADA" : String(r.body?.code || "REAPERTURA_NO_CONFIRMADA");
+        const estado = r.status < 400 || r.status >= 500 || r.body?.incierta ? "incierta" : "rechazada";
+        log.resultado = estado;
+        return { ...base, estado, codigo,
+          instruccion: estado === "incierta" ? "Consulta el evento y su recibo antes de cualquier nueva acción."
+            : bloqueoReapertura[codigo] ?? "Revisa el estado actual en la página del evento en Fr8Bid." };
+      }
       // Relectura: si el evento ya no está como en la vista previa (o ya se aplicó), no se escribe.
       let plan: Plan;
       try { plan = await planes[c.act](c.arg); }
