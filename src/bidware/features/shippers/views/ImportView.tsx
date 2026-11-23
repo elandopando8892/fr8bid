@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { pluralize } from "@/i18n/language";
 import { useAuth } from "@/auth/AuthContext";
 import { confirmAsync } from "@/components/confirm";
 import { Empty, ErrorBanner, InfoBanner, Kpis, Pill } from "@/components/ui";
@@ -41,8 +42,8 @@ export function ImportView() {
   async function run() {
     if (!parsed || !ready.length) return;
     const what = parsed.relational
-      ? `${parsed.accounts.length} cuenta(s), ${parsed.contacts.length} contacto(s) y ${parsed.opportunities.length} oportunidad(es) de «${source}»`
-      : `${ready.length} shipper(s)`;
+      ? pluralize(`${parsed.accounts.length} cuenta(s), ${parsed.contacts.length} contacto(s) y ${parsed.opportunities.length} oportunidad(es) de «${source}»`)
+      : pluralize(`${ready.length} shipper(s)`);
     if (!(await confirmAsync(`Se importarán ${what}. Los que ya existan (mismo dominio o misma clave externa) se actualizan con los campos que traigan valor.\n\n¿Continuar?`))) return;
     setBusy(true);
     setError(null);
@@ -65,7 +66,7 @@ export function ImportView() {
     }
   }
 
-  const count = (pair?: { inserted: number; updated: number }) => (pair ? `${pair.inserted} nuevo(s), ${pair.updated} actualizado(s)` : "");
+  const count = (pair?: { inserted: number; updated: number }) => (pair ? pluralize(`${pair.inserted} nuevo(s), ${pair.updated} actualizado(s)`) : "");
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -89,8 +90,8 @@ export function ImportView() {
         <InfoBanner title="Importación terminada.">
           {parsed?.relational
             ? `Cuentas: ${count(result.accounts)}. Contactos: ${count(result.contacts)}. Oportunidades: ${count(result.opportunities)}.`
-            : `${result.inserted ?? 0} nuevo(s), ${result.updated ?? 0} actualizado(s).`}{" "}
-          {result.skipped ? `${result.skipped} fila(s) omitida(s).` : ""}
+            : pluralize(`${result.inserted ?? 0} nuevo(s), ${result.updated ?? 0} actualizado(s).`)}{" "}
+          {result.skipped ? pluralize(`${result.skipped} fila(s) omitida(s).`) : ""}
         </InfoBanner>
       )}
       {result?.skipped_rows?.length ? (
@@ -125,7 +126,7 @@ export function ImportView() {
             )}
             <div className="spacer" />
             <button className="primary" disabled={!canWork || busy || !ready.length} onClick={run}>
-              {busy ? "Importando…" : parsed.relational ? "Importar el libro" : `Importar ${ready.length} fila(s) listas`}
+              {busy ? "Importando…" : parsed.relational ? "Importar el libro" : pluralize(`Importar ${ready.length} fila(s) listas`)}
             </button>
           </div>
           {!parsed.preview.length ? (

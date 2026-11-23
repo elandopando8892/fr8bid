@@ -80,7 +80,7 @@ export function bloqueoBorradoresInvitacion(d: Detalle): string | null {
 
 export function bloqueoEnvioInvitacion(d: Detalle): string | null {
   if (bloqueoEvento(d)) return bloqueoEvento(d);
-  if (d.evento.estado !== "abierto") return "El evento no está abierto a ofertas; primero se publica en la Mesa.";
+  if (d.evento.estado !== "abierto") return "El evento no está abierto a ofertas; primero se publica desde la página del evento.";
   if (!d.revisiones) return "No se pudo consultar la revisión; no se envía nada.";
   return null;
 }

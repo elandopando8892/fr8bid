@@ -1,4 +1,5 @@
 import { env } from "@/config/env";
+import { pluralize } from "@/i18n/language";
 import { tr } from "@/i18n/shipper-intake-options";
 import { tr as intakeTr } from "@/i18n/shipper-intake";
 import { callRatewareApi, callQuotedeskApi } from "@/lib/api-client";
@@ -150,7 +151,7 @@ export async function launchShipperProject(projectId: string): Promise<string> {
   const issues = snapshot.validation_issues?.length ?? 0;
   if (issues) {
     throw new IncompleteRfiError(
-      `El shipper dejó ${issues} ruta(s) incompleta(s) (origen, destino, equipo o volumen). Pídele que las complete en su liga.`,
+      pluralize(`El shipper dejó ${issues} ruta(s) incompleta(s) (origen, destino, equipo o volumen). Pídele que las complete en su liga.`),
     );
   }
   const pack = await callRatewareApi<{ row: { id: string } }>("create_rfx_package", {

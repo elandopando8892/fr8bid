@@ -82,6 +82,11 @@ export function RfxDetailPage() {
   const statusOf = (i: Record<string, unknown>) =>
     String(i.invitation_status ?? "").toLowerCase();
 
+  /** Con invitaciones enviadas u ofertas, el evento ya no se borra: se archiva. */
+  const hasActivity = lanes.some((lane) =>
+    (lane.invitations ?? []).some((i) => i.bid_rate != null || !["drafted", ""].includes(statusOf(i))),
+  );
+
   /** Carriers added from Carrier Fit wait as "drafted" until someone authorizes them. */
   const drafts = useMemo(
     () =>
@@ -363,13 +368,15 @@ export function RfxDetailPage() {
               >
                 {archived ? tr("text722") : tr("text723")}
               </button>
-              <button
-                className="link"
-                disabled={busy || !can("admin")}
-                title={can("admin") ? undefined : NEED_REASON.admin}
-                onClick={removeEvent}
-              >
-                {tr("text724")}</button>
+              {!hasActivity && (
+                <button
+                  className="link"
+                  disabled={busy || !can("admin")}
+                  title={can("admin") ? undefined : NEED_REASON.admin}
+                  onClick={removeEvent}
+                >
+                  {tr("text724")}</button>
+              )}
               <OriginPill origin={origin.data?.origins[id] ?? null} folio={origin.data?.folios[id]} />
               {biddingExpired
                 ? <Pill tone="green">{tr("text773")}</Pill>

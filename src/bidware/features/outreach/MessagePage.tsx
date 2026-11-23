@@ -319,10 +319,15 @@ function MessageContent() {
 
   const loading = detail.loading || templates.loading || campaigns.loading || reviews.loading || segments.loading;
   const cta = tr("text161", audience.length ? tr("text162", audience.length, audience.length === 1 ? "" : "s") : "");
-  const canGenerate = Boolean(template && channels.size && audience.length && !loading
+  // Un evento cerrado a ofertas (plazo vencido, cerrado o archivado) ya no invita.
+  const eventStatus = String(event?.status ?? "").toLowerCase();
+  const eventDue = event?.due_date ? Date.parse(`${String(event.due_date).slice(0, 10)}T23:59:59-06:00`) : NaN;
+  const eventClosed = Boolean(event) && (["closed", "awarded", "archived", "cancelled"].includes(eventStatus)
+    || (Number.isFinite(eventDue) && eventDue < Date.now()));
+  const canGenerate = Boolean(template && channels.size && audience.length && !loading && !eventClosed
     && !detail.error && !campaigns.error && !reviews.error && !segments.error && !draftAudience.unresolved
     && !dirty && canWork && busy === null && preparation?.phase !== "stopped");
-  const generateTitle = preparation?.phase === "stopped" ? draftPreparationText("stopped") : !canWork
+  const generateTitle = eventClosed ? "El evento ya cerró a ofertas: no se generan invitaciones." : preparation?.phase === "stopped" ? draftPreparationText("stopped") : !canWork
     ? NEED_REASON.operate
     : dirty
       ? tr("text163")

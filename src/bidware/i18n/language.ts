@@ -44,11 +44,27 @@ export const useLang = () => useSyncExternalStore(subscribe, getLang, () => "es"
 
 export type Copy = Record<string, { es: string; en: string }>;
 /** Parameters are interpolated after choosing copy; user data is never translated. */
+const SIN_ACENTO: Record<string, string> = { á: "a", é: "e", í: "i", ó: "o", ú: "u" };
+const plural = (word: string, suffix: string) =>
+  suffix === "es" ? `${word.replace(/([áéíóú])([nsl])$/, (_m, v: string, c: string) => SIN_ACENTO[v] + c)}es` : `${word}s`;
+
+/**
+ * «1 tarifa(s)» → «1 tarifa»; «7 tarifa(s)» → «7 tarifas»; «2 acción(es)» →
+ * «2 acciones». Every «palabra(s)» right after a number agrees with it, so
+ * «1 correo(s) rebotado(s)» reads «1 correo rebotado».
+ */
+export function pluralize(text: string): string {
+  return text.replace(/(\d[\d.,]*)((?:\s+[^\s(){}]+\((?:s|es)\))+)/g, (_m, n: string, words: string) => {
+    const one = Number(n.replace(/[.,]/g, "")) === 1;
+    return n + words.replace(/([^\s(){}]+)\((s|es)\)/g, (_w, word: string, suffix: string) => (one ? word : plural(word, suffix)));
+  });
+}
+
 export function translator<T extends Copy>(copy: T) {
   return (key: keyof T, ...values: unknown[]) => {
     const text = copy[key]?.[getLang()] ?? String(key);
-    return text.replace(/\{(\d+)\}/g, (token, index: string) =>
-      Number(index) < values.length ? String(values[Number(index)] ?? "") : token);
+    return pluralize(text.replace(/\{(\d+)\}/g, (token, index: string) =>
+      Number(index) < values.length ? String(values[Number(index)] ?? "") : token));
   };
 }
 

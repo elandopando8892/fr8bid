@@ -4,27 +4,33 @@ import { hoyMexico } from "../dominio/recorrido";
 import type { ResumenEvento } from "../dominio/tipos";
 import { Desactualizado, EstadoVista, fecha, ir, Liga, plural, Prueba } from "./comun";
 import { useEventosCompartidos } from "./Eventos";
-import { cuantasRutas, grupoDe, nombreEvento, porUrgencia, resumenRutas, siguiente } from "./eventosVista";
+import { cuantasRutas, folioCorto, grupoDe, nombreEvento, pareceDePrueba, porUrgencia, resumenRutas, shipperAparte, siguiente } from "./eventosVista";
 import * as I from "./Iconos";
 import { useSesion } from "./sesion";
 import { useAsync } from "../bidware/components/useAsync";
 import { awaitsTeam, listShipperProjects } from "../bidware/features/shipper-intake/intake.service";
-import { dashboardSummary } from "../bidware/pages/dashboard.service";
+import { listPendingRates } from "../bidware/features/rate-review/rateReview.service";
+import { blockersOf, looksLikeTest } from "../bidware/features/rate-review/readiness";
 
-/** Lo que el Panel mostraba y Hoy no tenía (decisión de Jose, 5-nov): solo lo que espera al equipo, y solo si hay algo. */
+/**
+ * Lo que el Panel mostraba y Hoy no tenía (decisión de Jose, 5-nov): solo lo que
+ * espera al equipo, y solo si hay algo. Cuenta solo lo que se puede atender hoy:
+ * sin filas de prueba ni tarifas detenidas (sin adjudicar, sin datos o de un
+ * evento que ya no está).
+ */
 function Indicadores() {
-  const resumen = useAsync(dashboardSummary, []);
+  const tarifasPendientes = useAsync(listPendingRates, []);
   const proyectos = useAsync(listShipperProjects, []);
-  const solicitudes = proyectos.data?.filter(awaitsTeam).length ?? 0;
-  const tarifas = resumen.data?.pending_review ?? 0;
+  const solicitudes = proyectos.data?.filter((p) => awaitsTeam(p) && !pareceDePrueba(p.title, p.customer_name)).length ?? 0;
+  const tarifas = tarifasPendientes.data?.rows.filter((r) => !looksLikeTest(r) && !blockersOf(r).length).length ?? 0;
   if (!solicitudes && !tarifas) return null;
   return (
     <div className="atajos-chips indicadores">
       {solicitudes > 0 && (
-        <Liga a="/intake" className="chip-liga acento"><I.Bandeja size={15} />{plural(solicitudes, "solicitud", "solicitudes")} nuevas</Liga>
+        <Liga a="/intake" className="chip-liga acento"><I.Bandeja size={15} />{plural(solicitudes, "solicitud nueva", "solicitudes nuevas")}</Liga>
       )}
       {tarifas > 0 && (
-        <Liga a="/tarifas" className="chip-liga acento"><I.Etiqueta size={15} />{plural(tarifas, "tarifa")} por revisar</Liga>
+        <Liga a="/tarifas" className="chip-liga acento"><I.Etiqueta size={15} />{plural(tarifas, "tarifa lista", "tarifas listas")} para aprobar</Liga>
       )}
     </div>
   );
@@ -47,7 +53,7 @@ const detalleRutas = (e: ResumenEvento) => {
 function porQue(e: ResumenEvento): string {
   const s = siguiente(e).accion;
   if (s === "Adjudicar y entregar") return `Cerrado a ofertas con ${plural(e.ofertas, "oferta")}. Elige primario y respaldo por ruta y entrégalo a Rateware.`;
-  if (s === "Cerrar a ofertas") return `Ya respondieron todos (${e.ofertas} de ${e.participaciones}). Puedes cerrar antes del plazo.`;
+  if (s === "Cerrar a ofertas") return `Ya llegaron todas las ofertas (${e.ofertas} de ${e.participaciones} invitaciones por ruta). Puedes cerrar antes del plazo.`;
   if (s === "Avisar a los carriers") return "Entregado a Rateware. Falta aprobar los avisos a los carriers.";
   if (s === "Publicar e invitar") return `Sigue en borrador${e.plazo ? `; el plazo es el ${fecha(e.plazo)}` : ""}. Los carriers no pueden ofertar hasta publicarlo.`;
   return "";
@@ -83,7 +89,7 @@ export function Hoy() {
             <div className="tarjeta siguiente-paso">
               <h2 className="fila-icono"><I.Martillo size={20} />{nombreEvento(primero)}</h2>
               <p className="tenue">
-                {[primero.shipper !== "—" && !nombreEvento(primero).includes(primero.shipper) ? primero.shipper : null, detalleRutas(primero) || null, `folio ${primero.folio}`].filter(Boolean).join(" · ")}
+                {[shipperAparte(primero), detalleRutas(primero) || null, `folio ${folioCorto(primero.folio)}`].filter(Boolean).join(" · ")}
                 {primero.prueba && <> <Prueba /></>}
               </p>
               <p>{porQue(primero)}</p>
@@ -114,7 +120,7 @@ export function Hoy() {
                 <Liga key={e.id} a={`/eventos/${e.id}`} className="pendiente">
                   <span className="crece">
                     <b>{nombreEvento(e)}</b>
-                    <span className="tenue"> · {detalleRutas(e) || e.folio}{e.plazo ? ` · plazo ${fecha(e.plazo)}` : ""}</span>
+                    <span className="tenue"> · {detalleRutas(e) || folioCorto(e.folio)}{e.plazo ? ` · plazo ${fecha(e.plazo)}` : ""}</span>
                   </span>
                   <span className="pendiente-cta">{siguiente(e).accion} <I.Flecha size={14} /></span>
                 </Liga>
@@ -135,9 +141,9 @@ export function Hoy() {
                 <Liga key={e.id} a={`/eventos/${e.id}`} className="pendiente">
                   <span className="crece">
                     <b>{nombreEvento(e)}</b>
-                    <span className="tenue"> · {detalleRutas(e) || e.folio}</span>
+                    <span className="tenue"> · {detalleRutas(e) || folioCorto(e.folio)}</span>
                   </span>
-                  <span className="mono tenue pendiente-dato">{e.ofertas}/{e.participaciones} ofertas · plazo {fecha(e.plazo)}</span>
+                  <span className="mono tenue pendiente-dato">{plural(e.ofertas, "oferta")} · plazo {fecha(e.plazo)}</span>
                 </Liga>
               ))}
           </div>
@@ -145,7 +151,8 @@ export function Hoy() {
 
           {modo === "rateware" && <Indicadores />}
           <div className="atajos-chips">
-            {puedeCrear && (
+            {/* Sin nada pendiente, la tarjeta ya trae «Nuevo evento»: no se repite. */}
+            {puedeCrear && primero && (
               <Liga a="/rfx/new" className="chip-liga">
                 <I.Mas size={15} />Nuevo evento
               </Liga>
@@ -160,7 +167,7 @@ export function Hoy() {
           {(viejos > 0 || pruebas > 0) && (
             <p className="nota">
               <Liga a="/eventos" title="No cuentan como pendientes">
-                {[viejos ? `${plural(viejos, "borrador")} vencido${viejos === 1 ? "" : "s"}` : null, pruebas ? `${plural(pruebas, "evento")} de prueba` : null].filter(Boolean).join(" · ")}
+                {[viejos ? plural(viejos, "borrador vencido", "borradores vencidos") : null, pruebas ? `${plural(pruebas, "evento")} de prueba` : null].filter(Boolean).join(" · ")}
               </Liga>
             </p>
           )}

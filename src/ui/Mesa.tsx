@@ -37,6 +37,8 @@ import type { Aviso, Detalle, EntregaLocal, Participacion, Recibo, Ruta } from "
 import { EditorCondiciones, ListaCondiciones, MatrizCondiciones } from "./condiciones";
 import { aCarga, Confirmar, Desactualizado, dinero, EstadoVista, fecha, Liga, plural, Prueba, type Carga } from "./comun";
 import { useSesion } from "./sesion";
+import { pluralize } from "../bidware/i18n/language";
+import { folioCorto, nombreEvento, shipperAparte } from "./eventosVista";
 import { LecturaIA } from "./LecturaIA";
 
 // Fecha corta sin hora, para columnas angostas.
@@ -164,13 +166,13 @@ export function Mesa({ id }: { id: string }) {
       <header className="cabecera">
         <div>
           <p className="miga">
-            <Liga a="/eventos">Eventos</Liga> / <span className="mono">{d.evento.folio}</span>
+            <Liga a="/eventos">Eventos</Liga> / <span className="mono" title={d.evento.folio}>{folioCorto(d.evento.folio)}</span>
           </p>
-          {/* Con varias rutas, el título es el shipper; las rutas van en chips. */}
-          <h1>{d.rutas.length === 1 ? `${d.rutas[0].origen} → ${d.rutas[0].destino}` : d.rutas.length > 1 ? `${d.evento.shipper} · ${plural(d.rutas.length, "ruta")}` : d.evento.nombre}</h1>
+          {/* El mismo nombre que en Hoy y en Eventos; el shipper va aparte. */}
+          <h1>{nombreEvento(d.evento)}</h1>
           {/* Una sola línea: el shipper solo cuando el título no lo dice ya. */}
           <p className="tenue">
-            {[[...new Set(d.rutas.map((x) => x.equipo))].join(", "), plural(d.rutas.length, "ruta"), d.rutas.length === 1 ? d.evento.shipper : null, `plazo ${fecha(d.evento.cierre?.plazoOriginal ?? d.evento.plazo)}`].filter(Boolean).join(" · ")}
+            {[shipperAparte(d.evento), [...new Set(d.rutas.map((x) => x.equipo))].join(", ") || null, plural(d.rutas.length, "ruta"), `plazo ${fecha(d.evento.cierre?.plazoOriginal ?? d.evento.plazo)}`].filter(Boolean).join(" · ")}
           </p>
         </div>
         <div className="etiquetas">
@@ -551,8 +553,7 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
       )}
       {avance && (
         <p className={avance.detenido ? "estado estado-error" : "tenue"}>
-          Tanda {avance.hechas} de {avance.tandas}: {avance.enviados} aceptada(s) por Gmail{avance.enCola ? `, ${avance.enCola} en cola` : ""}
-          {avance.inciertos ? `, ${avance.inciertos} incierta(s)` : ""}. {avance.detenido ?? ""}
+          {pluralize(`Tanda ${avance.hechas} de ${avance.tandas}: ${avance.enviados} aceptada(s) por Gmail${avance.enCola ? `, ${avance.enCola} en cola` : ""}${avance.inciertos ? `, ${avance.inciertos} incierta(s)` : ""}.`)} {avance.detenido ?? ""}
         </p>
       )}
       {audiencia.aptas.length > 0 && ctx.rol === "admin" && (
@@ -765,7 +766,7 @@ function PanelCarrierFit({ d, ctx, accion, incrustado }: Props & { incrustado?: 
 // All contact recovery opens the same company queue in this Mesa.
 function ContactosSugeridos({ vendorId }: { vendorId: string }) {
   const abrir = useContext(FocoContactos);
-  return <button className="btn-texto" onClick={() => abrir(vendorId)}>Resolver contacto en esta Mesa</button>;
+  return <button className="btn-texto" onClick={() => abrir(vendorId)}>Resolver contacto aquí</button>;
 }
 
 // Historial del segmento: evidencia de tarifa, sin reemplazar la revisión.
@@ -845,7 +846,7 @@ function PanelHistorialSegmento({ d, ctx, accion, incrustado }: Props & { incrus
                   <ul>
                     {g.descartados.map((x) => (
                       <li key={x.clave}>
-                        <b>{x.nombre}</b> ({x.tarifas} tarifa(s)): {x.nota?.texto}
+                        <b>{x.nombre}</b> ({plural(x.tarifas, "tarifa")}): {x.nota?.texto}
                       </li>
                     ))}
                   </ul>
@@ -900,7 +901,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
             ? "La IA todavía no está configurada (falta ANTHROPIC_API_KEY en Vercel): estos números siguen por confirmar."
             : r.ia === "fallo"
               ? "La IA no respondió: estos números siguen por confirmar."
-              : `La IA revisó ${r.revisadosPorIa} número(s)${siguen ? `; ${siguen} sigue(n) por confirmar` : ""}.`;
+              : `La IA revisó ${plural(r.revisadosPorIa, "número")}${siguen ? `; ${siguen} ${siguen === 1 ? "sigue" : "siguen"} por confirmar` : ""}.`;
         setRevision({ tipo: "hecho", texto });
       },
       (e) => setRevision({ tipo: "error", texto: e instanceof Error ? e.message : "Error desconocido" })
@@ -937,7 +938,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
           </p>
           {tocan.length > 0 && (
             <p>
-              <span className="pill alerta">Ya toca</span> {[...new Set(tocan.map((x) => (x!.antesDelCierre ? `recordatorio ${x!.antesDelCierre} h antes del cierre` : `${x!.intento}º intento por ${x!.canal === "whatsapp" ? "WhatsApp" : "correo"}`)))].join(", ")} a {tocan.length} carrier(s).
+              <span className="pill alerta">Ya toca</span> {[...new Set(tocan.map((x) => (x!.antesDelCierre ? `recordatorio ${x!.antesDelCierre} h antes del cierre` : `${x!.intento}º intento por ${x!.canal === "whatsapp" ? "WhatsApp" : "correo"}`)))].join(", ")} a {plural(tocan.length, "carrier")}.
               {tocan.some((x) => x!.canal === "correo") ? "Fr8Bid no envía solo: el correo se prepara y se aprueba aquí abajo." : "Fr8Bid no envía solo."}
             </p>
           )}
@@ -973,7 +974,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
               <Confirmar
                 etiqueta={`Preparar ${plural(porPreparar.length, "intento", "intentos")}`}
                 clase="btn-secundario"
-                advertencia={`Rateware deja ${porPreparar.length} borrador(es) en la Cola, uno por carrier sin oferta. No se envía nada: el envío lo apruebas aquí mismo.`}
+                advertencia={`Rateware deja ${plural(porPreparar.length, "borrador", "borradores")} en la Cola, uno por carrier sin oferta. No se envía nada: el envío lo apruebas aquí mismo.`}
                 onConfirmar={() =>
                   accion(async () => {
                     let listos = 0;
@@ -1136,8 +1137,7 @@ function IntentosPorEnviar({ d, ctx, accion }: { d: Detalle; ctx: Contexto; acci
         ))}
       {avance && (
         <p className={avance.detenido ? "estado estado-error" : "tenue"}>
-          Tanda {avance.hechas} de {avance.tandas}: {avance.enviados} aceptado(s) por Gmail{avance.enCola ? `, ${avance.enCola} en cola` : ""}
-          {avance.inciertos ? `, ${avance.inciertos} incierto(s)` : ""}. {avance.detenido ?? ""}
+          {pluralize(`Tanda ${avance.hechas} de ${avance.tandas}: ${avance.enviados} aceptado(s) por Gmail${avance.enCola ? `, ${avance.enCola} en cola` : ""}${avance.inciertos ? `, ${avance.inciertos} incierto(s)` : ""}.`)} {avance.detenido ?? ""}
         </p>
       )}
       {porEnviar.length > 0 && ctx.rol === "admin" && (
@@ -1951,7 +1951,7 @@ function AprobarTodos({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion: P
       <p className="fila-icono"><I.Sobre size={16} /><span><b>{plural(listos.length, "aviso listo", "avisos listos")}</b> <span className="tenue">· revisa los textos abajo antes de aprobar</span></span></p>
       {avance && (
         <p className={avance.detenido ? "estado estado-error" : "tenue"}>
-          Tanda {avance.hechas} de {avance.tandas}: {avance.enviados} aceptado(s) por Gmail{avance.enCola ? `, ${avance.enCola} en cola` : ""}. {avance.detenido ?? ""}
+          {pluralize(`Tanda ${avance.hechas} de ${avance.tandas}: ${avance.enviados} aceptado(s) por Gmail${avance.enCola ? `, ${avance.enCola} en cola` : ""}.`)} {avance.detenido ?? ""}
         </p>
       )}
       <Confirmar

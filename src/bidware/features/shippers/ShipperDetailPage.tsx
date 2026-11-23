@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { pluralize } from "@/i18n/language";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { confirmAsync } from "@/components/confirm";
@@ -287,7 +288,7 @@ export function ShipperDetailPage() {
                 </button>
               )}
               <button className="primary" disabled={!canSave} title={canWork ? undefined : NEED_REASON.operate} onClick={save}>
-                {busy === "save" ? "Guardando…" : changed.length ? `Guardar ${changed.length} cambio(s)` : "Guardar"}
+                {busy === "save" ? "Guardando…" : changed.length ? pluralize(`Guardar ${changed.length} cambio(s)`) : "Guardar"}
               </button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 10 }}>
@@ -449,7 +450,7 @@ export function ShipperDetailPage() {
                   <div key={ratebook.id} className="row" style={{ gap: 6, padding: "3px 0" }}>
                     <span>{ratebook.name || ratebook.id}</span>
                     <div className="spacer" />
-                    <span className="cell-sub">{ratebook.lane_count ? `${ratebook.lane_count} ruta(s)` : ""}</span>
+                    <span className="cell-sub">{ratebook.lane_count ? pluralize(`${ratebook.lane_count} ruta(s)`) : ""}</span>
                   </div>
                 ))}
                 {!detail.data.ratebooks.length && <div className="cell-sub">Sin Ratebooks.</div>}
