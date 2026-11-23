@@ -1424,7 +1424,10 @@ function PanelComparar({ d, ctx, accion }: Props) {
 function ResumenOfertas({ d, ctx }: { d: Detalle; ctx: Contexto }) {
   const filas = resumenPorRuta(d);
   const mixtos = modelosMixtos(d);
-  const sinVigencia = filas.filter((x) => x.masBaja?.sinVigencia && !x.primario);
+  // Mismo criterio que el lote (propuestaPrimarios): con ofertas en otra
+  // moneda la ruta va a mano por eso, no por la vigencia.
+  const sinVigencia = filas.filter((x) => x.masBaja?.sinVigencia && !x.primario && !x.otraMoneda);
+  const conOtraMoneda = filas.filter((x) => x.otraMoneda > 0 && !x.primario);
   const porArriba = filas.filter((x) => x.porArriba);
   const varias = d.rutas.length > 1;
   return (
@@ -1461,7 +1464,7 @@ function ResumenOfertas({ d, ctx }: { d: Detalle; ctx: Contexto }) {
           </table>
         </div>
       )}
-      {(mixtos.length > 0 || sinVigencia.length > 0 || porArriba.length > 0) && (
+      {(mixtos.length > 0 || sinVigencia.length > 0 || conOtraMoneda.length > 0 || porArriba.length > 0) && (
         <div className="aviso-caja">
           {mixtos.map((m) => (
             <p key={m.carrier}>
@@ -1471,6 +1474,11 @@ function ResumenOfertas({ d, ctx }: { d: Detalle; ctx: Contexto }) {
           {sinVigencia.length > 0 && (
             <p>
               La más baja no trae vigencia en {sinVigencia.length === 1 ? "la ruta" : "las rutas"} {rangoRutas(sinVigencia.map((x) => x.ruta.numero))}: {sinVigencia.length === 1 ? "queda" : "quedan"} fuera de la adjudicación en lote y se adjudica{sinVigencia.length === 1 ? "" : "n"} a mano, confirmando la vigencia.
+            </p>
+          )}
+          {conOtraMoneda.length > 0 && (
+            <p>
+              {conOtraMoneda.length === 1 ? "La ruta" : "Las rutas"} {rangoRutas(conOtraMoneda.map((x) => x.ruta.numero))} {conOtraMoneda.length === 1 ? "tiene" : "tienen"} ofertas en otra moneda: {conOtraMoneda.length === 1 ? "queda" : "quedan"} fuera de la adjudicación en lote y se adjudica{conOtraMoneda.length === 1 ? "" : "n"} a mano.
             </p>
           )}
           {porArriba.length > 0 && (

@@ -1218,6 +1218,18 @@ describe("adjudicar en lote", () => {
     expect(propuesta[1].motivo).toContain("Carrier Prueba B");
   });
 
+  it("deja a mano la ruta con ofertas en otra moneda en vez de comparar importes de monedas distintas", async () => {
+    await admin.cerrarAOfertas(eventId);
+    const d = await admin.detalle(eventId, null);
+    const r1 = structuredClone(d.rutas[0]);
+    const a = r1.participaciones.find((p) => p.id === ids.A)!;
+    versionVigente(a)!.moneda = r1.moneda === "MXN" ? "USD" : "MXN";
+    versionVigente(a)!.tarifaAllIn = 1;
+    const propuesta = propuestaPrimarios({ ...d, rutas: [r1] }, ctx());
+    expect(propuesta[0].p).toBeNull();
+    expect(propuesta[0].motivo).toContain("otra moneda");
+  });
+
   it("no propone nada a quien no es Administrador", async () => {
     await admin.cerrarAOfertas(eventId);
     const d = await admin.detalle(eventId, null);

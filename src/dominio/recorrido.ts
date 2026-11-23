@@ -195,10 +195,12 @@ export function propuestaPrimarios(detalle: Detalle, ctx: Contexto): PropuestaPr
   return detalle.rutas
     .filter((ruta) => !rutaDecidida(ruta))
     .map((ruta): PropuestaPrimario => {
-      const filas = conOferta(ruta)
-        .filter((p) => !p.rol)
-        .sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
-      if (!filas.length) return { ruta, p: null, motivo: "sin ofertas" };
+      const libres = conOferta(ruta).filter((p) => !p.rol);
+      if (!libres.length) return { ruta, p: null, motivo: "sin ofertas" };
+      // Importes en monedas distintas no se ordenan entre sí: esa ruta se
+      // adjudica a mano.
+      if (libres.some((p) => versionVigente(p)!.moneda !== ruta.moneda)) return { ruta, p: null, motivo: "hay ofertas en otra moneda que la ruta: revisión a mano" };
+      const filas = libres.sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
       const mejor = filas[0];
       if (puedeAdjudicar(candadosAdjudicacion(detalle, ruta, mejor, ctx, "primario"), false)) return { ruta, p: mejor };
       return { ruta, p: null, motivo: `la más barata (${mejor.carrier}) necesita revisión a mano` };
