@@ -839,9 +839,13 @@ export class RatewareSimulado {
         const lv = this.laneVendor(u, body.id || body.rfx_lane_vendor_id);
         if (["primary", "backup"].includes(String(lv.award_role || ""))) throw new Falla(400, "Awarded and backup bids cannot be rejected. Clear the award decision first.", "AWARDED");
         if (lv.invitation_status === "declined" && lv.bid_rate == null) return ok({ row: this.invitacionCruda(lv), idempotent: true });
+        // rateware #225: solo la versión que vio el operador.
+        if ("expected_updated_at" in body && Date.parse(String(body.expected_updated_at || "")) !== Date.parse(this.versionLaneVendor(lv)))
+          throw new Falla(409, "The bid changed since it was shown. Nothing was rejected; review it again.", "409");
         const antes = lv.bid_rate;
         lv.invitation_status = "declined";
         lv.bid_rate = null;
+        lv.updated_at = this.ahora();
         this.bitacorar(u.email, "rfx.bid.reject", "rfx_lane_vendors", lv.id, antes, null, { reason: String(body.reason || "") });
         return ok({ row: this.invitacionCruda(lv) });
       }
@@ -1079,10 +1083,17 @@ export class RatewareSimulado {
     this.bitacorar(actor, "rfx.bid.submit", "rfx_lane_vendors", lv.id, antes, "quoted", { revision: revision.revision, bid_rate: lv.bid_rate });
   }
 
+  // Versión de la fila: la última escritura conocida o la última oferta (cada oferta nueva la cambia).
+  private versionLaneVendor(lv: Fila): string {
+    const ultima = (this.revisiones.get(lv.id) || []).at(-1);
+    return String(lv.updated_at || ultima?.created_at || "2026-01-01T00:00:00.000Z");
+  }
+
   private invitacionCruda(lv: Fila): Fila {
     const vendor = this.vendors.find((v) => v.id === lv.vendor_id);
     return {
       ...lv,
+      updated_at: this.versionLaneVendor(lv),
       vendors: vendor ? { id: vendor.id, vendor_name: vendor.vendor_name, primary_email: vendor.primary_email, status: vendor.status } : null,
       // Solo simulado: Rateware real no devuelve el historial de versiones.
       bid_revisions: (this.revisiones.get(lv.id) || []).map((r) => ({ ...r }))

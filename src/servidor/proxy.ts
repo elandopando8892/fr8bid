@@ -433,13 +433,12 @@ async function guardaRechazo(body: Record<string, unknown>, autorizacion: string
   if (!fila) return error(404, "NOT_FOUND", "La participación no pertenece a este evento.");
   if (fila.bid_rate === null || fila.bid_rate === undefined) return error(409, "SIN_OFERTA", "Esta participación no tiene oferta.");
   if (["primary", "backup"].includes(String(fila.award_role || "").toLowerCase())) return error(409, "ADJUDICADA", "Una oferta adjudicada no se rechaza: primero quita la decisión.");
-  // Con la versión que se mostró, la lectura fresca debe coincidir (Rateware lo
-  // vuelve a comprobar al escribir).
-  if ("expected_updated_at" in body) {
-    const vista = Date.parse(String(body.expected_updated_at || ""));
-    if (!Number.isFinite(vista) || (fila.updated_at && Date.parse(String(fila.updated_at)) !== vista))
-      return error(409, "OFERTA_CAMBIO", "La oferta cambió desde que la viste. No se rechazó nada; revísala otra vez.");
-  }
+  // Solo la versión que se mostró: la petición la trae y la lectura fresca debe
+  // tener la misma (rateware #225 lo vuelve a comprobar al escribir).
+  const vista = Date.parse(String(body.expected_updated_at || ""));
+  const actual = Date.parse(String(fila.updated_at || ""));
+  if (!Number.isFinite(vista) || !Number.isFinite(actual) || actual !== vista)
+    return error(409, "OFERTA_CAMBIO", "La oferta cambió desde que la viste o no se pudo comprobar su versión. No se rechazó nada; revísala otra vez.");
   return null;
 }
 

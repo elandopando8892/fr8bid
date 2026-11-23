@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { manejar } from "../src/servidor/proxy";
 
 const EV = "11111111-1111-4111-8111-111111111111";
-const lv = (x: Record<string, unknown>) => ({ id: "lv-1", bid_rate: 1000, award_role: null, ...x });
+const lv = (x: Record<string, unknown>) => ({ id: "lv-1", bid_rate: 1000, award_role: null, updated_at: "2026-11-23T09:00:00.000Z", ...x });
 const detalle = (status: string, inv: Record<string, unknown>) => ({ event: { id: EV, status }, lanes: [{ id: "l1", invitations: [inv] }] });
 
 function op(det: unknown, enviados: string[]) {
@@ -16,7 +16,7 @@ function op(det: unknown, enviados: string[]) {
   } as any;
 }
 
-const rechazo = (x: Record<string, unknown> = {}) => ({ action: "reject_rfx_bid", event_id: EV, id: "lv-1", reason: "Tarifa fuera de mercado", confirmed: true, confirmation_action: "reject_rfx_bid", ...x });
+const rechazo = (x: Record<string, unknown> = {}) => ({ action: "reject_rfx_bid", event_id: EV, id: "lv-1", reason: "Tarifa fuera de mercado", expected_updated_at: "2026-11-23T09:00:00.000Z", confirmed: true, confirmation_action: "reject_rfx_bid", ...x });
 
 describe("proxy: archivar, borrar y rechazar desde la página del evento", () => {
   it("archivar y borrar exigen el evento y la confirmación", async () => {
@@ -77,5 +77,7 @@ describe("proxy: rechazar solo la versión que se vio", () => {
     expect(await pasa(detalle("open", lv({ updated_at: "2026-11-23T10:00:00+00:00" })), rechazo({ expected_updated_at: vista }))).toMatchObject({ status: 200, escribio: true });
     expect(await pasa(detalle("open", lv({ updated_at: "2026-11-23T10:05:00Z" })), rechazo({ expected_updated_at: vista }))).toMatchObject({ code: "OFERTA_CAMBIO", escribio: false });
     expect(await pasa(detalle("open", lv({ updated_at: vista })), rechazo({ expected_updated_at: "" }))).toMatchObject({ code: "OFERTA_CAMBIO", escribio: false });
+    expect(await pasa(detalle("open", lv({ updated_at: vista })), rechazo({ expected_updated_at: undefined }))).toMatchObject({ code: "OFERTA_CAMBIO", escribio: false });
+    expect(await pasa(detalle("open", lv({ updated_at: undefined })), rechazo({ expected_updated_at: vista }))).toMatchObject({ code: "OFERTA_CAMBIO", escribio: false });
   });
 });
