@@ -12,7 +12,7 @@ import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier
 import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit.js";
 import type { EntradaCatalogo } from "../dominio/condiciones-r1.js";
 import { MAX_PAGINAS, POR_PAGINA, claveSegmento, consultaSegmento, leerHistorialSegmento, segmentoDeRuta, type HistorialSegmento, type Segmento } from "../dominio/segmento.js";
-import { campanaDelEvento, campanasDelEventoCompletas, campanaFr8bid, elegirPlantilla, plantillasDelEvento } from "../dominio/invitacion.js";
+import { campanaDelEvento, campanasDelEventoCompletas, campanaFr8bidEnEvento, campanaFr8bid, elegirPlantilla, plantillasDelEvento } from "../dominio/invitacion.js";
 import { operacionEntrega } from "../dominio/operacion.js";
 import { notasConCierre } from "../dominio/cierre.js";
 import { env } from "../bidware/config/env.js";
@@ -366,8 +366,12 @@ export class MesaApi {
     const filas: Record<string, any>[] = campanas.rows || [];
     const completas = campanasDelEventoCompletas(delEvento, eventId);
     if (!completas) throw new ErrorApi(503, "CAMPANAS_INCOMPLETAS", "No se pudieron leer completas las campañas del evento. No se preparó nada.");
+    // El catálogo global trae solo las 100 más recientes: si la campaña propia no
+    // aparece ahí, se reconoce en la lectura completa del evento. Crearla otra vez
+    // no duplica: Rateware la reutiliza por idempotency_key.
     let campana = campanaDelEvento(filas, eventId);
-    const plantilla = elegirPlantilla(plantillas.rows || [], plantillasDelEvento(completas, eventId, campana));
+    const propia = campana ? completas.find((c) => c.id === campana!.id) ?? campana : campanaFr8bidEnEvento(completas, eventId);
+    const plantilla = elegirPlantilla(plantillas.rows || [], plantillasDelEvento(completas, eventId, propia));
     if (!plantilla) throw new ErrorApi(409, "SIN_PLANTILLA", "No encontré en Rateware la plantilla «RFx carrier invitation - Spanish». No se preparó nada.");
     if (!campana) {
       const base = filas.find((c) => c.rfx_event_id === eventId && c.sender_email) ?? filas.find((c) => c.channel === "email" && c.sender_email) ?? null;
