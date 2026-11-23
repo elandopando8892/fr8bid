@@ -1853,7 +1853,7 @@ function RechazarOferta({ p, d, accion }: { p: Participacion; d: Detalle; accion
         clase="btn-secundario"
         deshabilitado={!m.motivo}
         advertencia={<>Rateware quita la oferta de {p.carrier} en esta ruta y lo deja como «declinó». No se avisa al carrier y no se puede deshacer desde aquí. Motivo: «{m.motivo}». {ADVERTENCIA_REAL(s, d)}</>}
-        onConfirmar={() => accion(() => s.api.rechazarOferta(d.evento.id, p.id, m.motivo), `Oferta de ${p.carrier} rechazada.`)}
+        onConfirmar={() => accion(() => s.api.rechazarOferta(d.evento.id, p.id, m.motivo, p.actualizadaEn), `Oferta de ${p.carrier} rechazada.`)}
       />
     </div>
   );

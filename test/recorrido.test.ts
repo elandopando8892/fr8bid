@@ -1244,3 +1244,19 @@ describe("adjudicar en lote", () => {
     expect(propuestaPrimarios(d, ctx("operator")).every((x) => x.p === null)).toBe(true);
   });
 });
+
+describe("rechazar oferta con la versión vista (rateware #225)", () => {
+  beforeEach(preparar);
+  it("si el carrier cambió la oferta, no se rechaza; con la versión nueva, sí", async () => {
+    let d = await admin.detalle(eventId);
+    const vista = part(d, ids.A).actualizadaEn;
+    expect(vista).toBeTruthy();
+    await admin.enviarOferta(sim.tokenDe(ids.A), { bid_rate: 1650 });
+    await expect(admin.rechazarOferta(eventId, ids.A, "Fuera de mercado", vista)).rejects.toMatchObject({ status: 409 });
+    d = await admin.detalle(eventId);
+    expect(part(d, ids.A).versiones.length).toBeGreaterThan(0);
+    await admin.rechazarOferta(eventId, ids.A, "Fuera de mercado", part(d, ids.A).actualizadaEn);
+    d = await admin.detalle(eventId);
+    expect(part(d, ids.A).versiones).toHaveLength(0);
+  });
+});

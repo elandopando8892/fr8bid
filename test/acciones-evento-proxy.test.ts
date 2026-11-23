@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { manejar } from "../src/servidor/proxy";
 
 const EV = "11111111-1111-4111-8111-111111111111";
-const lv = (x: Record<string, unknown>) => ({ id: "lv-1", bid_rate: 1000, award_role: null, ...x });
+const lv = (x: Record<string, unknown>) => ({ id: "lv-1", bid_rate: 1000, award_role: null, updated_at: "2026-11-23T09:00:00.000Z", ...x });
 const detalle = (status: string, inv: Record<string, unknown>) => ({ event: { id: EV, status }, lanes: [{ id: "l1", invitations: [inv] }] });
 
 function op(det: unknown, enviados: string[]) {
@@ -16,7 +16,7 @@ function op(det: unknown, enviados: string[]) {
   } as any;
 }
 
-const rechazo = (x: Record<string, unknown> = {}) => ({ action: "reject_rfx_bid", event_id: EV, id: "lv-1", reason: "Tarifa fuera de mercado", confirmed: true, confirmation_action: "reject_rfx_bid", ...x });
+const rechazo = (x: Record<string, unknown> = {}) => ({ action: "reject_rfx_bid", event_id: EV, id: "lv-1", reason: "Tarifa fuera de mercado", expected_updated_at: "2026-11-23T09:00:00.000Z", confirmed: true, confirmation_action: "reject_rfx_bid", ...x });
 
 describe("proxy: archivar, borrar y rechazar desde la página del evento", () => {
   it("archivar y borrar exigen el evento y la confirmación", async () => {
@@ -63,5 +63,21 @@ describe("oferta rechazada", () => {
     const { detalle } = await import("../src/cliente/mapear");
     const d = detalle({ event: { id: EV, status: "open", due_date: "2099-01-01" }, lanes: [{ id: "l1", lane_number: 1, invitations: [{ id: "lv-1", vendor_id: "v", invitation_status: "declined", bid_rate: null, bid_revisions: [{ revision: 1, bid_rate: 900, currency: "USD", created_at: "2026-11-01T00:00:00Z" }], vendors: { vendor_name: "X" } }] }] } as any);
     expect(d.rutas[0].participaciones[0].versiones).toEqual([]);
+  });
+});
+
+describe("proxy: rechazar solo la versión que se vio", () => {
+  const pasa = async (det: unknown, body: Record<string, unknown>) => {
+    const env: string[] = [];
+    const r = await manejar("rateware-api", body, "Bearer x", op(det, env));
+    return { status: r.status, code: r.body?.code, escribio: env.includes("reject_rfx_bid") };
+  };
+  const vista = "2026-11-23T10:00:00.000Z";
+  it("rechaza si la versión coincide y no escribe si cambió o viene vacía", async () => {
+    expect(await pasa(detalle("open", lv({ updated_at: "2026-11-23T10:00:00+00:00" })), rechazo({ expected_updated_at: vista }))).toMatchObject({ status: 200, escribio: true });
+    expect(await pasa(detalle("open", lv({ updated_at: "2026-11-23T10:05:00Z" })), rechazo({ expected_updated_at: vista }))).toMatchObject({ code: "OFERTA_CAMBIO", escribio: false });
+    expect(await pasa(detalle("open", lv({ updated_at: vista })), rechazo({ expected_updated_at: "" }))).toMatchObject({ code: "OFERTA_CAMBIO", escribio: false });
+    expect(await pasa(detalle("open", lv({ updated_at: vista })), rechazo({ expected_updated_at: undefined }))).toMatchObject({ code: "OFERTA_CAMBIO", escribio: false });
+    expect(await pasa(detalle("open", lv({ updated_at: undefined })), rechazo({ expected_updated_at: vista }))).toMatchObject({ code: "OFERTA_CAMBIO", escribio: false });
   });
 });
