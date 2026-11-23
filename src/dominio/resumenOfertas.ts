@@ -9,7 +9,7 @@ export interface FilaResumen {
   ofertas: number;
   // Ofertas en otra moneda que la ruta: no se comparan contra las demás ni contra el objetivo.
   otraMoneda: number;
-  masBaja: { p: Participacion; allIn: number; moneda: string; sinVigencia: boolean } | null;
+  masBaja: { p: Participacion; allIn: number; moneda: string; sinVigencia: boolean; vencida: boolean } | null;
   // Porcentaje contra el objetivo de la ruta, redondeado para mostrar.
   contraObjetivo: number | null;
   porArriba: boolean;
@@ -44,7 +44,8 @@ export function masBajaComparable(ruta: Ruta): Participacion | null {
   return mismas.length > 1 ? mismas[0] : null;
 }
 
-export function resumenPorRuta(d: Detalle): FilaResumen[] {
+// `hoy` (AAAA-MM-DD, America/Mexico_City) es el mismo que usa el candado I3.
+export function resumenPorRuta(d: Detalle, hoy?: string): FilaResumen[] {
   return d.rutas.map((ruta) => {
     const todas = conOferta(ruta);
     // Solo se comparan importes en la moneda de la ruta.
@@ -56,7 +57,7 @@ export function resumenPorRuta(d: Detalle): FilaResumen[] {
       ruta,
       ofertas: todas.length,
       otraMoneda: todas.length - filas.length,
-      masBaja: p && v ? { p, allIn: v.tarifaAllIn, moneda: v.moneda, sinVigencia: !v.vigenteHasta } : null,
+      masBaja: p && v ? { p, allIn: v.tarifaAllIn, moneda: v.moneda, sinVigencia: !v.vigenteHasta, vencida: !!(hoy && v.vigenteHasta && v.vigenteHasta < hoy) } : null,
       contraObjetivo: c,
       // Sin redondear: 4,010 contra 4,000 está por arriba aunque muestre «+0 %».
       porArriba: !!(v && ruta.objetivo && v.tarifaAllIn > ruta.objetivo),

@@ -1423,12 +1423,13 @@ function PanelComparar({ d, ctx, accion }: Props) {
 // Arriba de las rutas: una fila por ruta (salta a su tarjeta), el Excel del
 // evento completo y lo que hay que ver antes de adjudicar, una sola vez.
 function ResumenOfertas({ d, ctx }: { d: Detalle; ctx: Contexto }) {
-  const filas = resumenPorRuta(d);
+  const filas = resumenPorRuta(d, ctx.hoy);
   const mixtos = modelosMixtos(d);
   // Mismo criterio que el lote (propuestaPrimarios): con ofertas en otra
   // moneda la ruta va a mano por eso, no por la vigencia.
   const sinVigencia = filas.filter((x) => x.masBaja?.sinVigencia && !x.primario && !x.otraMoneda);
   const conOtraMoneda = filas.filter((x) => x.otraMoneda > 0 && !x.primario);
+  const vencidas = filas.filter((x) => x.masBaja?.vencida && !x.primario && !x.otraMoneda);
   const porArriba = filas.filter((x) => x.porArriba);
   const varias = d.rutas.length > 1;
   return (
@@ -1453,7 +1454,7 @@ function ResumenOfertas({ d, ctx }: { d: Detalle; ctx: Contexto }) {
                   <td data-etiqueta="Ruta"><a href={`#ruta-${x.ruta.numero}`} onClick={(e) => { e.preventDefault(); document.getElementById(`ruta-${x.ruta.numero}`)?.scrollIntoView({ block: "start", behavior: "smooth" }); }}>{x.ruta.numero} · {x.ruta.origen} → {x.ruta.destino}</a></td>
                   <td data-etiqueta="Ofertas">{x.ofertas || <span className="tenue">0</span>}{x.otraMoneda > 0 && <span className="tenue" title="No se comparan contra las demás ni contra el objetivo"> · {x.otraMoneda} en otra moneda</span>}</td>
                   <td data-etiqueta="Más baja">
-                    {x.masBaja ? <><b>{x.masBaja.p.carrier}</b> · <span className="mono">{dinero(x.masBaja.allIn, x.masBaja.moneda)}</span>{x.masBaja.sinVigencia && <span className="alerta"> · sin vigencia</span>}</> : "—"}
+                    {x.masBaja ? <><b>{x.masBaja.p.carrier}</b> · <span className="mono">{dinero(x.masBaja.allIn, x.masBaja.moneda)}</span>{x.masBaja.sinVigencia && <span className="alerta"> · sin vigencia</span>}{x.masBaja.vencida && <span className="alerta"> · vencida</span>}</> : "—"}
                   </td>
                   <td data-etiqueta="Contra objetivo" className={x.porArriba ? "alerta" : ""}>
                     {x.contraObjetivo === null ? "—" : `${x.porArriba ? "+" : x.contraObjetivo < 0 ? "−" : "±"}${Math.abs(x.contraObjetivo)} %`}
@@ -1465,7 +1466,7 @@ function ResumenOfertas({ d, ctx }: { d: Detalle; ctx: Contexto }) {
           </table>
         </div>
       )}
-      {(mixtos.length > 0 || sinVigencia.length > 0 || conOtraMoneda.length > 0 || porArriba.length > 0) && (
+      {(mixtos.length > 0 || sinVigencia.length > 0 || vencidas.length > 0 || conOtraMoneda.length > 0 || porArriba.length > 0) && (
         <div className="aviso-caja">
           {mixtos.map((m) => (
             <p key={m.carrier}>
@@ -1475,6 +1476,11 @@ function ResumenOfertas({ d, ctx }: { d: Detalle; ctx: Contexto }) {
           {sinVigencia.length > 0 && (
             <p>
               La más baja no trae vigencia en {sinVigencia.length === 1 ? "la ruta" : "las rutas"} {rangoRutas(sinVigencia.map((x) => x.ruta.numero))}: {sinVigencia.length === 1 ? "queda" : "quedan"} fuera de la adjudicación en lote y se adjudica{sinVigencia.length === 1 ? "" : "n"} a mano, confirmando la vigencia.
+            </p>
+          )}
+          {vencidas.length > 0 && (
+            <p>
+              La más baja ya venció en {vencidas.length === 1 ? "la ruta" : "las rutas"} {rangoRutas(vencidas.map((x) => x.ruta.numero))}: no se puede adjudicar; pide al carrier que renueve la vigencia o elige otra oferta.
             </p>
           )}
           {conOtraMoneda.length > 0 && (

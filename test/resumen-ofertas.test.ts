@@ -55,6 +55,12 @@ describe("resumen de ofertas arriba de las rutas", () => {
     expect(dentroDeObjetivo(3000, 4000, "MXN", "USD")).toBe(false);
   });
 
+  it("marca la más baja vencida con la misma fecha que el candado", () => {
+    const d = detalle([ruta(1, 4000, [oferta("mj", version(3900, "cost_plus", "2026-11-10"))])]);
+    expect(resumenPorRuta(d, "2026-11-22")[0].masBaja?.vencida).toBe(true);
+    expect(resumenPorRuta(d, "2026-11-05")[0].masBaja?.vencida).toBe(false);
+  });
+
   it("solo compara importes en la moneda de la ruta", () => {
     const mxn = { ...version(15000), moneda: "MXN" };
     const d = detalle([ruta(1, 1000, [oferta("mx", mxn), oferta("us", version(1010))])]);
