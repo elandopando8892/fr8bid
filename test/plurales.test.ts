@@ -30,3 +30,26 @@ describe("translator: pluraliza la plantilla, no los datos", () => {
     expect(tr("a", 7, "X")).toBe("7 tarifas de X");
   });
 });
+
+describe("estado del evento antes de preparar invitaciones", async () => {
+  const { isEventClosed, isEventConfirmedOpen } = await import("../src/bidware/features/outreach/event-open");
+  const ahora = Date.parse("2026-11-20T12:00:00Z");
+  it("solo confirma abierto con un estado conocido y un plazo legible y futuro", () => {
+    expect(isEventConfirmedOpen({ status: "open", due_date: "2026-11-21" }, ahora)).toBe(true);
+    expect(isEventConfirmedOpen({ status: "open" }, ahora)).toBe(true);
+    expect(isEventConfirmedOpen({ status: "open", due_date: "2026-11-19" }, ahora)).toBe(false);
+    expect(isEventConfirmedOpen({ status: "open", due_date: "no es fecha" }, ahora)).toBe(false);
+    expect(isEventConfirmedOpen({ due_date: "2026-11-21" }, ahora)).toBe(false);
+    expect(isEventConfirmedOpen({ status: "rarito" }, ahora)).toBe(false);
+    expect(isEventConfirmedOpen(null, ahora)).toBe(false);
+    expect(isEventClosed({ status: "closed" }, ahora)).toBe(true);
+  });
+});
+
+describe("los datos interpolados no se pluralizan", async () => {
+  const { COPY } = await import("../src/bidware/features/shipper-request/request.copy");
+  it("el nombre de la hoja queda igual", () => {
+    const es = (COPY as unknown as { es: { imported: (n: number, s: string | null) => string } }).es;
+    expect(es.imported(1, "1 ruta(s)")).toBe("Importamos 1 ruta de la hoja «1 ruta(s)». Revisa las marcadas.");
+  });
+});

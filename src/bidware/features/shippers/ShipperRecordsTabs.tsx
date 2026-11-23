@@ -272,7 +272,7 @@ export function ActionsTab({ shipperId, rows, onChanged }: TabProps) {
                 onClick={() =>
                   run(async () => {
                     const { created, skipped } = await applyPlaybook(shipperId, playbook.key);
-                    return pluralize(`${playbook.label}: ${created} acción(es) nueva(s)${skipped ? `; ${skipped} ya estaban abiertas` : ""}.`);
+                    return `${playbook.label}: ${pluralize(`${created} acción(es) nueva(s)`)}${skipped ? `; ${skipped} ya estaban abiertas` : ""}.`;
                   })
                 }
               >

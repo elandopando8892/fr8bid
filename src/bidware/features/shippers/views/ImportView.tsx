@@ -42,7 +42,7 @@ export function ImportView() {
   async function run() {
     if (!parsed || !ready.length) return;
     const what = parsed.relational
-      ? pluralize(`${parsed.accounts.length} cuenta(s), ${parsed.contacts.length} contacto(s) y ${parsed.opportunities.length} oportunidad(es) de «${source}»`)
+      ? `${pluralize(`${parsed.accounts.length} cuenta(s), ${parsed.contacts.length} contacto(s) y ${parsed.opportunities.length} oportunidad(es)`)} de «${source}»`
       : pluralize(`${ready.length} shipper(s)`);
     if (!(await confirmAsync(`Se importarán ${what}. Los que ya existan (mismo dominio o misma clave externa) se actualizan con los campos que traigan valor.\n\n¿Continuar?`))) return;
     setBusy(true);

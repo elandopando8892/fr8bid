@@ -28,6 +28,7 @@ import { BatchFlowPanel } from "./BatchFlowPanel";
 import { prepareDraftChannels, type DraftPreparation } from "./draft-preparation";
 import { DraftPreparationResult } from "./DraftPreparationResult";
 import { draftPreparationText } from "@/i18n/draft-preparation";
+import { isEventClosed, isEventConfirmedOpen } from "./event-open";
 
 /**
  * The variables worth inserting, as rateware's renderer fills them per carrier
@@ -53,12 +54,6 @@ const CHANNEL_LABEL: Record<DraftChannel, string> = {
 };
 
 /** Un evento cerrado a ofertas (plazo vencido, cerrado o archivado) ya no invita. Se evalúa con la hora actual. */
-function isEventClosed(event: { status?: unknown; due_date?: unknown } | null | undefined, now = Date.now()): boolean {
-  if (!event) return false;
-  const status = String(event.status ?? "").toLowerCase();
-  const due = event.due_date ? Date.parse(`${String(event.due_date).slice(0, 10)}T23:59:59-06:00`) : NaN;
-  return ["closed", "awarded", "archived", "cancelled"].includes(status) || (Number.isFinite(due) && due < now);
-}
 
 /** A Meta status as a pill: only APPROVED lets WhatsApp go out automatically. */
 function metaPill(status?: string | null) {
@@ -229,8 +224,8 @@ function MessageContent() {
       }
       if (!isCurrent()) return;
       // Sin evento en la respuesta no se puede confirmar que siga abierto.
-      if (!fresh || isEventClosed(fresh)) {
-        setNotice("El evento ya cerró a ofertas: no se generan invitaciones.");
+      if (!isEventConfirmedOpen(fresh)) {
+        setNotice(isEventClosed(fresh) ? "El evento ya cerró a ofertas: no se generan invitaciones." : "No se pudo confirmar que el evento siga abierto: vuelve a cargar la página.");
         return;
       }
       started = true;
