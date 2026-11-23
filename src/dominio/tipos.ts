@@ -109,6 +109,8 @@ export interface Ruta {
   segmento?: SegmentoRuta;
   condiciones: CondicionRuta[];
   participaciones: Participacion[];
+  // Fila de la ruta tal como la entrega Rateware (sin invitaciones), para corregirla.
+  cruda?: Record<string, unknown>;
 }
 
 export type TipoAviso = "invitacion" | "adjudicacion";
@@ -187,6 +189,8 @@ export interface Detalle {
   rutas: Ruta[];
   avisos: Aviso[];
   recibo: Recibo | null;
+  // rfx_master_package del evento (preselección de carriers, solo lectura).
+  paqueteMaestro?: unknown;
   // Marca «Revisado» vigente por carrier (vendor_id). null: no se pudo
   // consultar, y entonces no se invita a nadie.
   revisiones?: Record<string, MarcaRevision> | null;

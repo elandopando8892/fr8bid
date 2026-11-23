@@ -83,7 +83,7 @@ describe("proxy: rechazar solo la versión que se vio", () => {
 });
 
 describe("proxy: restaurar un evento archivado a borrador", () => {
-  const restaurar = (x: Record<string, unknown> = {}) => ({ action: "update_rfx_event", event_id: EV, patch: { status: "draft" }, ...x });
+  const restaurar = (x: Record<string, unknown> = {}) => ({ action: "update_rfx_event", event_id: EV, patch: { status: "draft" }, expected_status: "archived", ...x });
   const pasa = async (det: unknown, body: Record<string, unknown>) => {
     const env: string[] = [];
     const r = await manejar("rateware-api", body, "Bearer x", op(det, env));
@@ -97,5 +97,6 @@ describe("proxy: restaurar un evento archivado a borrador", () => {
     expect(await pasa({ event: { id: EV, status: "archived" }, lanes: [] }, restaurar({ event_id: [EV] }))).toMatchObject({ code: "FALTA_EVENTO", escribio: false });
     expect(await pasa({ event: { id: EV, status: "archived" }, lanes: [] }, restaurar({ event_id: "no" }))).toMatchObject({ code: "FALTA_EVENTO", escribio: false });
     expect(await pasa({ event: { id: EV, status: "archived" }, lanes: [] }, restaurar({ id: "11111111-1111-4111-8111-111111111111" }))).toMatchObject({ code: "IDENTIFICADOR_EXTRA", escribio: false });
+    expect(await pasa({ event: { id: EV, status: "archived" }, lanes: [] }, restaurar({ expected_status: "open" }))).toMatchObject({ code: "FALTA_ESTADO_ESPERADO", escribio: false });
   });
 });

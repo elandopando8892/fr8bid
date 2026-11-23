@@ -1,4 +1,4 @@
-import { createContext, useContext, Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, lazy, useContext, Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ErrorApi, type AvanceEnvio } from "../cliente/api";
 import { proyeccionLoads } from "../dominio/loads";
@@ -42,6 +42,11 @@ import { ReportarFr8Desk } from "./fr8desk";
 import { pluralize } from "../bidware/i18n/language";
 import { folioCorto, nombreEvento, shipperAparte } from "./eventosVista";
 import { LecturaIA } from "./LecturaIA";
+import { Bw } from "./bidware";
+
+// Corregir una ruta y ver la preselección de carriers: módulos de Bidware, cargados al usarse.
+const EditarRuta = lazy(() => import("../bidware/features/rfx-admin/OperateDialogs").then((m) => ({ default: m.LaneEditDialog })));
+const Preseleccion = lazy(() => import("../bidware/features/rfx-admin/CarrierPreselection").then((m) => ({ default: m.CarrierPreselection })));
 
 // Fecha corta sin hora, para columnas angostas.
 const dia = (iso: string | null | undefined) =>
@@ -388,9 +393,23 @@ function PanelEvento({ d, ctx, accion }: Props) {
   const editable = ctx.rol !== "viewer" && ["borrador", "abierto"].includes(d.evento.estado);
   // Una fila por ruta; las condiciones se abren debajo de su fila.
   const [abierta, setAbierta] = useState<string | null>(null);
+  const [editando, setEditando] = useState<Ruta | null>(null);
   return (
     <div className="tarjeta">
       <h2>Necesidad y evento</h2>
+      {d.paqueteMaestro != null && <Bw><Preseleccion eventId={d.evento.id} master={d.paqueteMaestro} /></Bw>}
+      {editando?.cruda && (
+        <Bw>
+          <EditarRuta
+            lane={{ ...editando.cruda, invitations: [] } as any}
+            onClose={() => setEditando(null)}
+            onSaved={(mensaje) => {
+              setEditando(null);
+              void accion(async () => undefined, mensaje);
+            }}
+          />
+        </Bw>
+      )}
       {d.evento.cierre && <p className="tenue">Cerrado a ofertas el {fecha(d.evento.cierre.el)} (plazo original {fecha(d.evento.cierre.plazoOriginal)}).</p>}
       <div className="tabla-envoltura">
         <table className="tabla tabla-rutas">
@@ -410,6 +429,9 @@ function PanelEvento({ d, ctx, accion }: Props) {
                     <td>
                       <span className="fila-icono">
                         {r.condiciones.length ? <span className="pill info">{plural(r.condiciones.length, "condición", "condiciones")}</span> : <span className="tenue">sin condiciones</span>}
+                        {editable && r.cruda && (
+                          <button className="btn-chico" onClick={() => setEditando(r)}>Corregir ruta</button>
+                        )}
                         {(editable || r.condiciones.length > 0) && (
                           <button className="btn-chico" onClick={() => setAbierta(ver ? null : r.id)} aria-expanded={ver}>
                             {ver ? "Cerrar" : editable ? (r.condiciones.length ? "Editar" : "Elegir") : "Ver"}

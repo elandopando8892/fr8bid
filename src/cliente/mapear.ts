@@ -217,7 +217,8 @@ function ruta(l: Fila, confirmaciones: Fila[], condiciones: Fila[] = []): Ruta {
       estadoDestino: l.destination_state ? String(l.destination_state) : null
     },
     condiciones: condiciones.filter((c) => c.rfx_lane_id === l.id).map(condicion),
-    participaciones: (l.invitations || []).map((lv: Fila) => participacion(lv, confirmaciones))
+    participaciones: (l.invitations || []).map((lv: Fila) => participacion(lv, confirmaciones)),
+    cruda: Object.fromEntries(Object.entries(l).filter(([k]) => k !== "invitations"))
   };
 }
 
@@ -302,6 +303,7 @@ export function detalle(
     rutas: (crudo.lanes || []).map((l: Fila) => ruta(l, extra.rubros || [], extra.condiciones || [])).sort((a: Ruta, b: Ruta) => a.numero - b.numero),
     avisos: mensajes.filter((m) => !m.channel || m.channel === "email" || m.channel === "gmail").map((m) => aviso(m, abiertos)),
     recibo: reciboCrudo ? recibo(reciboCrudo) : null,
+    paqueteMaestro: e.rfx_master_package ?? null,
     revisiones: extra.revisiones ? revisionesVigentes(extra.revisiones) : null,
     ...(extra.respuestas === undefined ? {} : { respuestas: extra.respuestas === null ? null : respuestas(extra.respuestas) })
   };

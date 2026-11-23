@@ -453,7 +453,9 @@ async function guardaRestaurar(body: Record<string, unknown>, patch: Record<stri
   if (typeof id !== "string" || !UUID.test(id)) return error(400, "FALTA_EVENTO", "Indica el evento.");
   if (Object.keys(patch).join(",") !== "status") return error(400, "SOLO_ESTADO", "Restaurar un evento solo cambia su estado a borrador.");
   // Rateware da prioridad a «id» sobre «event_id»: un id extra o distinto cambiaría otro evento.
-  if (Object.keys(body).some((k) => !["action", "event_id", "patch"].includes(k))) return error(400, "IDENTIFICADOR_EXTRA", "Restaurar solo lleva event_id y el cambio de estado.");
+  if (Object.keys(body).some((k) => !["action", "event_id", "patch", "expected_status"].includes(k))) return error(400, "IDENTIFICADOR_EXTRA", "Restaurar solo lleva event_id y el cambio de estado.");
+  // Rateware escribe solo si el evento sigue archivado (condicional atómico).
+  if (body.expected_status !== "archived") return error(400, "FALTA_ESTADO_ESPERADO", "Restaurar necesita expected_status «archived».");
   const lectura = await leerDetalle(id, autorizacion, op);
   if (lectura === "sin_respuesta") return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se restauró.");
   if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
