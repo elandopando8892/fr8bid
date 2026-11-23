@@ -141,7 +141,8 @@ export function Mesa({ id }: { id: string }) {
       const r = await f();
       if (ok) setAvisoMsg({ tipo: "ok", texto: typeof ok === "function" ? ok(r) : ok });
     } catch (e) {
-      const extra = e instanceof ErrorApi && e.code === "ESCRITURA_NO_AUTORIZADA" ? " (FR8BID_ESCRITURAS_REALES no está activo)" : e instanceof ErrorApi && e.code === "SOLO_BORRADORES" ? " (FR8BID_ESCRITURAS_REALES=borradores)" : "";
+      // Sin nombres de variables ni claves internas en pantalla.
+      const extra = e instanceof ErrorApi && e.code === "ESCRITURA_NO_AUTORIZADA" ? " Fr8Bid no tiene activadas las escrituras en Rateware." : e instanceof ErrorApi && e.code === "SOLO_BORRADORES" ? " Por ahora Fr8Bid solo puede dejar borradores en Rateware." : "";
       setAvisoMsg({ tipo: "error", texto: (e instanceof Error ? e.message : String(e)) + extra });
     }
     await leer();
@@ -1899,7 +1900,7 @@ function PanelEntrega({ d, ctx, accion, entrega, setEntrega, recibo, setRecibo }
                 advertencia={
                   <>
                     {respaldoPendiente && <b>Abriste el respaldo de {respaldoPendiente.carrier} y no lo adjudicaste: si entregas ahora, va sin ese respaldo y ya no se puede agregar. </b>}
-                    Rateware guarda {plural(prims.length, "tarifa")} en Revisión (pending_review) y devuelve el recibo. {ADVERTENCIA_REAL(s, d)}
+                    Rateware guarda {plural(prims.length, "tarifa")} en Revisión de tarifas y devuelve el recibo. {ADVERTENCIA_REAL(s, d)}
                   </>
                 }
                 onConfirmar={() => {
@@ -1994,7 +1995,7 @@ function PanelAviso({ d, ctx, accion }: Props) {
   return (
     <div className="tarjeta">
       <h2 className="fila-icono"><I.Megafono size={17} />Aviso de adjudicación</h2>
-      {!r.entregaConfirmada && <p className="tenue fila-icono"><I.Candado size={15} />Requiere el recibo de Rateware (I8). El carrier no se entera de algo que Rateware no tiene.</p>}
+      {!r.entregaConfirmada && <p className="tenue fila-icono"><I.Candado size={15} />Primero hay que entregar a Rateware y tener su recibo. El carrier no se entera de algo que Rateware no tiene.</p>}
       {r.entregaConfirmada && faltan.length > 0 && ctx.rol === "admin" && (
         <Confirmar
           etiqueta="Preparar los avisos"

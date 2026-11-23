@@ -592,8 +592,11 @@ async function guardaCampanaDeEnvio(body: Record<string, unknown>, autorizacion:
   }
   if (campanas.status !== 200) return { ...campanas, body: sinSecretos(campanas.body) };
   const c = ((campanas.body?.rows || []) as any[]).find((x) => x.id === body.campaign_id);
-  if (!c || c.rfx_event_id !== body.event_id || c.idempotency_key !== claveCampana(String(body.event_id)))
+  if (c && (c.rfx_event_id !== body.event_id || c.idempotency_key !== claveCampana(String(body.event_id))))
     return error(409, "CAMPANA_FR8BID", "La campaña no es la de Fr8Bid para este evento. No se preparó nada.");
+  // El catálogo global trae solo las 100 más recientes y la lectura del evento no
+  // trae idempotency_key: si la campaña no aparece, no se adivina por nombre.
+  if (!c) return error(409, "CAMPANA_NO_VERIFICADA", "No pude comprobar que la campaña sea la de Fr8Bid para este evento. No se preparó nada.");
   const plantillas = await leerPlantillas(autorizacion, op);
   if (!plantillas) return error(503, "PLANTILLAS_NO_DISPONIBLES", "No se pudieron leer las plantillas. No se preparó nada.");
   if (!esPlantillaInvitacion(plantillas.find((t) => t.id === body.template_id))) return error(409, "PLANTILLA", "La invitación sale solo con la plantilla en español.");
