@@ -53,11 +53,12 @@ export function plantillasDelEvento(delEvento: Record<string, any>[], eventoId: 
 // en Rateware por idempotency_key.
 const NOMBRE_FR8BID = "Fr8Bid · invitación ";
 export function campanaFr8bidEnEvento(delEvento: Record<string, any>[], eventoId: string): Record<string, any> | null {
-  return (
-    delEvento.find(
-      (c) => c.rfx_event_id === eventoId && c.status !== "archived" && String(c.name || "").startsWith(NOMBRE_FR8BID) && c.audience_policy?.mode === "all_eligible"
-    ) ?? null
+  // Si más de una cumple, no se adivina: ninguna se acepta (el proxy rechaza y
+  // la creación por idempotency_key devuelve la verdadera).
+  const candidatas = delEvento.filter(
+    (c) => c.rfx_event_id === eventoId && c.status !== "archived" && String(c.name || "").startsWith(NOMBRE_FR8BID) && c.audience_policy?.mode === "all_eligible"
   );
+  return candidatas.length === 1 ? candidatas[0] : null;
 }
 
 // La lectura acotada al evento solo sirve si Rateware la da por completa.

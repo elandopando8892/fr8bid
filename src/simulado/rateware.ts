@@ -307,10 +307,14 @@ export class RatewareSimulado {
         // Como rateware-api: con rfx_event_id, lectura completa y acotada al evento.
         if (Object.prototype.hasOwnProperty.call(body, "rfx_event_id")) {
           const ev = this.evento(u, body.rfx_event_id);
-          const rows = propias.filter((c) => c.rfx_event_id === ev.id).map((c) => ({ ...c, organization_id: "org-simulada" }));
+          // Mismas columnas que rateware-api: sin idempotency_key ni remitente.
+          const rows = propias
+            .filter((c) => c.rfx_event_id === ev.id)
+            .map((c) => ({ id: c.id, organization_id: "org-simulada", owner_email: c.owner_email, rfx_event_id: c.rfx_event_id, template_id: c.template_id, name: c.name, status: c.status, audience_policy: c.audience_policy, created_at: c.created_at, updated_at: c.updated_at }));
           return ok({ rows, total: rows.length, complete: true, has_more: false, campaign_read_version: 1, rfx_event_id: ev.id, organization_id: "org-simulada" });
         }
-        return ok({ rows: propias.map((c) => ({ ...c })) });
+        // Como rateware-api: el catálogo global trae solo las 100 más recientes.
+        return ok({ rows: [...propias].reverse().slice(0, 100).map((c) => ({ ...c })) });
       }
       case "create_outreach_campaign": {
         const c: Fila = body.campaign && typeof body.campaign === "object" ? body.campaign : {};

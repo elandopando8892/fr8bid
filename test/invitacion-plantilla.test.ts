@@ -84,3 +84,11 @@ describe("campaña de Fr8Bid fuera del catálogo global (más de 100 campañas)"
     expect((await preparar("c-otra")).body.code).toBe("CAMPANA_FR8BID");
   });
 });
+
+describe("campaña de Fr8Bid ambigua en la lectura del evento", () => {
+  it("si dos campañas cumplen nombre y audiencia, no se acepta ninguna", async () => {
+    const { campanaFr8bidEnEvento } = await import("../src/dominio/invitacion");
+    const c = (id: string) => ({ id, rfx_event_id: "e1", name: "Fr8Bid · invitación X", audience_policy: { mode: "all_eligible" } });
+    expect(campanaFr8bidEnEvento([c("a"), c("b")], "e1")).toBeNull();
+  });
+});
