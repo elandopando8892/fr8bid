@@ -125,4 +125,13 @@ describe("proxy: corregir una ruta desde la página del evento", () => {
     expect(await pasa(det("open"), corregir({ id: [LANE] }))).toMatchObject({ code: "FALTA_RUTA", escribio: false });
     expect(await pasa(det("open"), corregir({ event_id: [EV] }))).toMatchObject({ code: "FALTA_EVENTO", escribio: false });
   });
+  it("rechaza valores inválidos y una lista de invitaciones que no se pudo leer", async () => {
+    expect(await pasa(det("open"), corregir({ patch: { target_rate: -5 } }))).toMatchObject({ code: "VALOR_INVALIDO", escribio: false });
+    expect(await pasa(det("open"), corregir({ patch: { weekly_volume: "diez" } }))).toMatchObject({ code: "VALOR_INVALIDO", escribio: false });
+    expect(await pasa(det("open"), corregir({ patch: { notes: { x: 1 } } }))).toMatchObject({ code: "VALOR_INVALIDO", escribio: false });
+    expect(await pasa(det("open"), corregir({ patch: { origin: "  " } }))).toMatchObject({ code: "VALOR_INVALIDO", escribio: false });
+    expect(await pasa(det("open", { invitations: undefined }), corregir())).toMatchObject({ status: 504, escribio: false });
+    expect(await pasa(det("open", { invitations: "x" }), corregir())).toMatchObject({ status: 504, escribio: false });
+    expect(await pasa(det("open"), corregir({ patch: { target_rate: null } }))).toMatchObject({ status: 200, escribio: true });
+  });
 });

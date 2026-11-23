@@ -474,6 +474,14 @@ async function guardaRuta(body: Record<string, unknown>, autorizacion: string | 
   const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch) ? (body.patch as Record<string, unknown>) : null;
   const claves = patch ? Object.keys(patch) : [];
   if (!patch || !claves.length || claves.some((k) => !CAMPOS_RUTA.has(k))) return error(400, "CAMPOS_NO_PERMITIDOS", "Solo se corrigen datos de la ruta (origen, destino, caja, volumen, objetivo, notas).");
+  // Valores: números finitos y no negativos (o null) en los numéricos; texto (o null) en el resto.
+  const NUMERICOS = new Set(["weekly_volume", "annual_volume", "target_rate"]);
+  for (const [k, v] of Object.entries(patch)) {
+    const bien = NUMERICOS.has(k) ? v === null || (typeof v === "number" && Number.isFinite(v) && v >= 0) : v === null || (typeof v === "string" && v.length <= 2000);
+    if (!bien) return error(400, "VALOR_INVALIDO", `El valor de «${k}» no es válido.`);
+  }
+  if ((patch.origin !== undefined && !String(patch.origin ?? "").trim()) || (patch.destination !== undefined && !String(patch.destination ?? "").trim()))
+    return error(400, "VALOR_INVALIDO", "Origen y destino no pueden quedar vacíos.");
   const lectura = await leerDetalle(evento, autorizacion, op);
   if (lectura === "sin_respuesta") return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se corrigió nada.");
   if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
@@ -482,7 +490,9 @@ async function guardaRuta(body: Record<string, unknown>, autorizacion: string | 
   const fila = lanes.find((l) => l?.id === ruta);
   if (!fila) return error(404, "NOT_FOUND", "La ruta no pertenece a este evento.");
   if (fila.no_award_at) return error(409, "RUTA_DESIERTA", "La ruta está declarada desierta; reábrela antes de corregirla.");
-  const adjudicada = (Array.isArray(fila.invitations) ? fila.invitations : []).some((v: any) => v?.award_role);
+  // Sin la lista de invitaciones no se puede comprobar que la ruta no esté adjudicada.
+  if (!Array.isArray(fila.invitations)) return error(504, "SIN_RESPUESTA", "No se pudo comprobar la ruta. No se corrigió nada.");
+  const adjudicada = fila.invitations.some((v: any) => v?.award_role);
   if (adjudicada) return error(409, "RUTA_ADJUDICADA", "La ruta ya tiene primario o respaldo; quita la adjudicación antes de corregirla.");
   return null;
 }

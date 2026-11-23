@@ -397,7 +397,7 @@ function PanelEvento({ d, ctx, accion }: Props) {
     <div className="tarjeta">
       <h2>Necesidad y evento</h2>
       {d.paqueteMaestro != null && <Bw><Preseleccion eventId={d.evento.id} master={d.paqueteMaestro} /></Bw>}
-      {editando?.cruda && <EditorRuta eventoId={d.evento.id} ruta={editando} accion={accion} onCerrar={() => setEditando(null)} />}
+      {editando?.cruda && <EditorRuta key={editando.id} eventoId={d.evento.id} ruta={editando} accion={accion} onCerrar={() => setEditando(null)} />}
       {d.evento.cierre && <p className="tenue">Cerrado a ofertas el {fecha(d.evento.cierre.el)} (plazo original {fecha(d.evento.cierre.plazoOriginal)}).</p>}
       <div className="tabla-envoltura">
         <table className="tabla tabla-rutas">
@@ -465,7 +465,10 @@ function EditorRuta({ eventoId, ruta, accion, onCerrar }: { eventoId: string; ru
   const inicial = useMemo(() => Object.fromEntries(CAMPOS_EDITABLES_RUTA.map((c) => [c.clave, cruda[c.clave] == null ? "" : String(cruda[c.clave])])), [ruta]);
   const [valores, setValores] = useState<Record<string, string>>(inicial);
   const cambiados = CAMPOS_EDITABLES_RUTA.filter((c) => valores[c.clave].trim() !== inicial[c.clave].trim());
-  const numeroMalo = cambiados.find((c) => c.numerico && valores[c.clave].trim() && !Number.isFinite(Number(valores[c.clave].replace(/,/g, ""))));
+  const numeroMalo = cambiados.find((c) => {
+    const v = valores[c.clave].trim();
+    return c.numerico && v !== "" && !(Number.isFinite(Number(v.replace(/,/g, ""))) && Number(v.replace(/,/g, "")) >= 0);
+  });
   const puede = cambiados.length > 0 && valores.origin.trim() !== "" && valores.destination.trim() !== "" && !numeroMalo;
   const guardar = () => {
     const patch: Record<string, unknown> = {};
@@ -491,7 +494,7 @@ function EditorRuta({ eventoId, ruta, accion, onCerrar }: { eventoId: string; ru
           </label>
         ))}
       </div>
-      {numeroMalo && <p className="error">«{numeroMalo.texto}» debe ser un número.</p>}
+      {numeroMalo && <p className="error">«{numeroMalo.texto}» debe ser un número, cero o mayor.</p>}
       <div className="fila-icono">
         <button className="btn-chico" onClick={onCerrar}>Cancelar</button>
         <button className="btn-primario" disabled={!puede} onClick={guardar}>{cambiados.length ? `Guardar ${plural(cambiados.length, "cambio", "cambios")}` : "Sin cambios"}</button>
