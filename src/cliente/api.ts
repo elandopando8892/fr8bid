@@ -376,6 +376,23 @@ export class MesaApi {
       reviewed_vendor_ids: revisados
     });
   }
+  // Archivar solo lo saca de las listas activas: rutas, ofertas y borradores se
+  // quedan. No cierra el evento ni avisa a nadie.
+  archivar(eventId: string) {
+    return this.rw({ action: "archive_rfx_event", id: eventId, confirmed: true, confirmation_action: "archive_rfx_event" });
+  }
+  // Borrar es definitivo. Rateware lo revisa y borra en un solo paso: solo un
+  // borrador sin invitaciones enviadas ni ofertas (409 RFX_DELETE_NOT_DRAFT /
+  // RFX_DELETE_HAS_ACTIVITY si no).
+  async borrar(eventId: string) {
+    try {
+      return await this.rw({ action: "delete_rfx_event", id: eventId, confirmed: true, confirmation_action: "delete_rfx_event" });
+    } catch (e) {
+      if (e instanceof ErrorApi && e.code === "RFX_DELETE_NOT_DRAFT") throw new ErrorApi(409, e.code, "Solo se borra un evento en borrador: archívalo en lugar de borrarlo.");
+      if (e instanceof ErrorApi && e.code === "RFX_DELETE_HAS_ACTIVITY") throw new ErrorApi(409, e.code, "El evento ya tiene invitaciones u ofertas: archívalo en lugar de borrarlo.");
+      throw e;
+    }
+  }
   publicar(eventId: string) {
     return this.rw({ action: "update_rfx_event", event_id: eventId, patch: { status: "open" } });
   }

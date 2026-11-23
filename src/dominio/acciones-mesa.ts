@@ -94,3 +94,10 @@ export function bloqueoPlazo(d: Detalle, nueva: string, hoy: string): string | n
   if (actual && nueva <= actual) return `Solo hacia adelante: la fecha nueva debe ser posterior al plazo actual (${actual}).`;
   return null;
 }
+
+// Un evento sin actividad: ninguna invitación salió (todas siguen
+// preseleccionadas, que es «shortlisted» o «drafted» en Rateware), sin ofertas
+// ni adjudicaciones. La misma regla que usa Rateware para dejar borrarlo.
+export function sinActividad(d: Pick<Detalle, "rutas">): boolean {
+  return d.rutas.every((r) => r.participaciones.every((p) => p.estado === "preseleccionada" && !p.versiones.length && !p.rol));
+}

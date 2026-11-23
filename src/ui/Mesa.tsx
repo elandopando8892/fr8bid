@@ -1,5 +1,5 @@
 import { createContext, useContext, Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ErrorApi, type AvanceEnvio } from "../cliente/api";
 import { proyeccionLoads } from "../dominio/loads";
 import { operacionAdjudicacion } from "../dominio/operacion";
@@ -23,7 +23,7 @@ import {
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
 import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
 import { cambiosComerciales, describirModelo, modeloCorto, tarifaVenta } from "../dominio/modelo";
-import { bloqueoRespondio, bloqueoRevision, candidatasCaptura, marcablesRespondio } from "../dominio/acciones-mesa";
+import { bloqueoRespondio, bloqueoRevision, candidatasCaptura, marcablesRespondio, sinActividad } from "../dominio/acciones-mesa";
 import { eventoSinAvisos } from "../dominio/protegidos.js";
 import { candidatosRecordatorio, claveIntento, esperaRespuesta, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
@@ -231,11 +231,47 @@ export function Mesa({ id }: { id: string }) {
           {verInvitacion && <MasCarriers {...p} />}
           {actual === "entrega" && <PanelEntrega {...p} />}
           {actual === "aviso" && <PanelAviso {...p} />}
+          {s.modo === "rateware" && actual === "evento" && ctx.rol === "admin" && <AccionesEvento d={d} accion={accion} />}
           {s.modo === "rateware" && <MasDelEvento id={id} borrador={d.evento.estado === "borrador"} />}
         </div>
       </div>
     </section>
     </FocoContactos.Provider>
+  );
+}
+
+// Archivar y borrar viven en la página del evento (antes solo en «Detalle
+// completo»). Archivar lo saca de las listas activas y no cierra ni avisa nada.
+// Borrar es definitivo y solo para un borrador sin actividad; Rateware lo vuelve
+// a revisar y lo borra en un solo paso.
+function AccionesEvento({ d, accion }: Pick<Props, "d" | "accion">) {
+  const s = useSesion();
+  const navegar = useNavigate();
+  const archivado = d.evento.estado === "archivado";
+  const borrable = d.evento.estado === "borrador" && sinActividad(d);
+  if (archivado && !borrable) return null;
+  return (
+    <div className="linea-accion">
+      <span className="linea-icono"><I.Bandeja size={16} /></span>
+      <p className="tenue">{borrable ? "¿Ya no se usará? Archívalo para sacarlo de las listas o bórralo: sigue en borrador y nadie lo ha visto." : "¿Ya no se usará? Archívalo para sacarlo de las listas activas."}</p>
+      {!archivado && (
+        <Confirmar
+          etiqueta="Archivar"
+          clase="btn-secundario"
+          icono={<I.Bandeja size={15} />}
+          advertencia={<>Saca «{nombreEvento(d.evento)}» de las listas activas. Rutas, ofertas y borradores se quedan como están; no cierra el evento ni avisa a nadie. {ADVERTENCIA_REAL(s, d)}</>}
+          onConfirmar={() => accion(() => s.api.archivar(d.evento.id), "Evento archivado.")}
+        />
+      )}
+      {borrable && (
+        <Confirmar
+          etiqueta="Borrar"
+          clase="btn-secundario"
+          advertencia={<>Borra «{nombreEvento(d.evento)}» con sus {plural(d.rutas.length, "ruta")} para siempre; no se puede deshacer. Rateware solo lo borra si sigue en borrador y sin invitaciones ni ofertas. {ADVERTENCIA_REAL(s, d)}</>}
+          onConfirmar={() => accion(async () => { await s.api.borrar(d.evento.id); navegar("/eventos"); }, "Evento borrado.")}
+        />
+      )}
+    </div>
   );
 }
 
@@ -246,7 +282,6 @@ function MasDelEvento({ id, borrador }: { id: string; borrador: boolean }) {
     { a: `/rfx/${id}/review`, t: "Revisión de contactos", icono: I.Lista },
     { a: `/rfx/${id}/message`, t: "Mensaje a carriers", icono: I.Sobre },
     { a: `/rfx/${id}/delivery`, t: "Cola de envío", icono: I.Bandeja },
-    { a: `/rfx/${id}/chat`, t: "Chat del Bid Room", icono: I.Chat },
     { a: `/rfx/${id}/detalle`, t: "Detalle completo", icono: I.Libro }
   ];
   return (
