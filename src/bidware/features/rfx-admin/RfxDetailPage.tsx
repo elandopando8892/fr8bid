@@ -85,7 +85,9 @@ export function RfxDetailPage() {
   /** Con invitaciones enviadas u ofertas, el evento ya no se borra: se archiva. */
   const activityIn = (ls: LaneWithInvitations[]) =>
     ls.some((lane) =>
-      (lane.invitations ?? []).some((i) => i.bid_rate != null || !["drafted", ""].includes(statusOf(i))),
+      // Solo una invitación explícitamente «drafted» y sin tarifa cuenta como
+      // sin actividad; un estado ausente no lo acredita.
+      (lane.invitations ?? []).some((i) => i.bid_rate != null || statusOf(i) !== "drafted"),
     );
   const hasActivity = activityIn(lanes);
 
