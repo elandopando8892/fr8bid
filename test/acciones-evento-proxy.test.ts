@@ -100,3 +100,29 @@ describe("proxy: restaurar un evento archivado a borrador", () => {
     expect(await pasa({ event: { id: EV, status: "archived" }, lanes: [] }, restaurar({ expected_status: "open" }))).toMatchObject({ code: "FALTA_ESTADO_ESPERADO", escribio: false });
   });
 });
+
+describe("proxy: corregir una ruta desde la página del evento", () => {
+  const LANE = "22222222-2222-4222-8222-222222222222";
+  const corregir = (x: Record<string, unknown> = {}) => ({ action: "update_rfx_lane", event_id: EV, id: LANE, patch: { target_rate: 1500 }, ...x });
+  const det = (status: string, lane: Record<string, unknown> = {}) => ({ event: { id: EV, status }, lanes: [{ id: LANE, invitations: [], ...lane }] });
+  const pasa = async (d: unknown, body: Record<string, unknown>) => {
+    const env: string[] = [];
+    const r = await manejar("rateware-api", body, "Bearer x", op(d, env));
+    return { status: r.status, code: r.body?.code, escribio: env.includes("update_rfx_lane") };
+  };
+  it("solo una ruta de este evento, abierto o en borrador, sin adjudicar", async () => {
+    expect(await pasa(det("open"), corregir())).toMatchObject({ status: 200, escribio: true });
+    expect(await pasa(det("draft"), corregir())).toMatchObject({ status: 200, escribio: true });
+    expect(await pasa(det("archived"), corregir())).toMatchObject({ code: "EVENTO_NO_PERMITE", escribio: false });
+    expect(await pasa(det("open"), corregir({ id: "33333333-3333-4333-8333-333333333333" }))).toMatchObject({ status: 404, escribio: false });
+    expect(await pasa(det("open", { invitations: [{ id: "lv", award_role: "primary" }] }), corregir())).toMatchObject({ code: "RUTA_ADJUDICADA", escribio: false });
+    expect(await pasa(det("open", { no_award_at: "2026-11-01" }), corregir())).toMatchObject({ code: "RUTA_DESIERTA", escribio: false });
+  });
+  it("rechaza campos fuera de la lista, identificadores extra y ids que no son texto", async () => {
+    expect(await pasa(det("open"), corregir({ patch: { rfx_event_id: "otro" } }))).toMatchObject({ code: "CAMPOS_NO_PERMITIDOS", escribio: false });
+    expect(await pasa(det("open"), corregir({ patch: {} }))).toMatchObject({ code: "CAMPOS_NO_PERMITIDOS", escribio: false });
+    expect(await pasa(det("open"), corregir({ rfx_event_id: EV }))).toMatchObject({ code: "CAMPO_EXTRA", escribio: false });
+    expect(await pasa(det("open"), corregir({ id: [LANE] }))).toMatchObject({ code: "FALTA_RUTA", escribio: false });
+    expect(await pasa(det("open"), corregir({ event_id: [EV] }))).toMatchObject({ code: "FALTA_EVENTO", escribio: false });
+  });
+});

@@ -1273,4 +1273,14 @@ describe("archivar y restaurar (simulado)", () => {
     expect(despues.evento.estado).toBe("borrador");
     expect(despues.rutas).toHaveLength(antes.rutas.length);
   });
+  it("corregir una ruta cambia solo esos campos", async () => {
+    const { eventId: id, adm } = await eventoConTres();
+    const antes = await adm.detalle(id);
+    const ruta = antes.rutas[0];
+    await adm.corregirRuta(id, ruta.id, { target_rate: 1234 });
+    const despues = (await adm.detalle(id)).rutas.find((r) => r.id === ruta.id)!;
+    expect(despues.objetivo).toBe(1234);
+    expect(despues.origen).toBe(ruta.origen);
+    expect(despues.cruda?.target_rate).toBe(1234);
+  });
 });

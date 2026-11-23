@@ -114,7 +114,9 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
     "delete_rfx_event",
     "reject_rfx_bid",
     // «Cerrar sin adjudicar» y rutas desiertas desde la página del evento (bloque C).
-    "set_rfx_lane_no_award"
+    "set_rfx_lane_no_award",
+    // Corregir una ruta (origen, destino, objetivo…) desde la página del evento.
+    "update_rfx_lane"
   ]),
   "rfx-bid-api": new Set(["submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
@@ -250,6 +252,11 @@ export async function manejar(
 
   if (op.real && SOLO_SIMULADO[servicio].has(action)) {
     return error(501, "PASO_EN_RATEWARE", "Este paso todavía se hace en Rateware (Bid Room o Cola). Fr8Bid solo lo ejecuta en modo simulado.", { action });
+  }
+
+  if (action === "update_rfx_lane") {
+    const bloqueo = await guardaRuta(body!, autorizacion, op);
+    if (bloqueo) return bloqueo;
   }
 
   if (action === "update_rfx_event") {
@@ -448,6 +455,38 @@ async function guardaRechazo(body: Record<string, unknown>, autorizacion: string
 
 // Restaurar a borrador (deshacer «Archivar»): solo un evento archivado y solo el
 // estado, nada más. Una lectura fresca comprueba el estado actual.
+// Campos de una ruta que se corrigen desde la página del evento.
+export const CAMPOS_RUTA = new Set([
+  "origin", "destination", "origin_city", "origin_state", "origin_country",
+  "destination_city", "destination_state", "destination_country",
+  "equipment", "trailer", "config", "operation", "service",
+  "weekly_volume", "annual_volume", "target_rate", "currency",
+  "incumbent_vendor", "carrier_requirements", "notes"
+]);
+
+// Corregir una ruta: con el evento a la vista (borrador o abierto), solo campos de la lista,
+// y una ruta que de verdad pertenezca a ese evento.
+async function guardaRuta(body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
+  const evento = body.event_id, ruta = body.id;
+  if (typeof evento !== "string" || !UUID.test(evento)) return error(400, "FALTA_EVENTO", "Indica el evento.");
+  if (typeof ruta !== "string" || !UUID.test(ruta)) return error(400, "FALTA_RUTA", "Indica la ruta.");
+  if (Object.keys(body).some((k) => !["action", "id", "event_id", "patch"].includes(k))) return error(400, "CAMPO_EXTRA", "Corregir una ruta solo lleva id, event_id y patch.");
+  const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch) ? (body.patch as Record<string, unknown>) : null;
+  const claves = patch ? Object.keys(patch) : [];
+  if (!patch || !claves.length || claves.some((k) => !CAMPOS_RUTA.has(k))) return error(400, "CAMPOS_NO_PERMITIDOS", "Solo se corrigen datos de la ruta (origen, destino, caja, volumen, objetivo, notas).");
+  const lectura = await leerDetalle(evento, autorizacion, op);
+  if (lectura === "sin_respuesta") return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se corrigió nada.");
+  if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
+  if (!["draft", "open"].includes(String(lectura.body?.event?.status || "").toLowerCase())) return error(409, "EVENTO_NO_PERMITE", "Solo se corrigen rutas de un evento en borrador o abierto.");
+  const lanes: any[] = Array.isArray(lectura.body?.lanes) ? lectura.body.lanes : [];
+  const fila = lanes.find((l) => l?.id === ruta);
+  if (!fila) return error(404, "NOT_FOUND", "La ruta no pertenece a este evento.");
+  if (fila.no_award_at) return error(409, "RUTA_DESIERTA", "La ruta está declarada desierta; reábrela antes de corregirla.");
+  const adjudicada = (Array.isArray(fila.invitations) ? fila.invitations : []).some((v: any) => v?.award_role);
+  if (adjudicada) return error(409, "RUTA_ADJUDICADA", "La ruta ya tiene primario o respaldo; quita la adjudicación antes de corregirla.");
+  return null;
+}
+
 async function guardaRestaurar(body: Record<string, unknown>, patch: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
   const id = body.event_id;
   if (typeof id !== "string" || !UUID.test(id)) return error(400, "FALTA_EVENTO", "Indica el evento.");

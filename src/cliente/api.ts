@@ -451,6 +451,10 @@ export class MesaApi {
   restaurar(eventId: string) {
     return this.rw({ action: "update_rfx_event", event_id: eventId, patch: { status: "draft" }, expected_status: "archived" });
   }
+  // Corrige datos de una ruta (origen, destino, caja, volumen, objetivo, notas).
+  corregirRuta(eventId: string, rutaId: string, patch: Record<string, unknown>) {
+    return this.rw({ action: "update_rfx_lane", event_id: eventId, id: rutaId, patch });
+  }
   archivar(eventId: string) {
     return this.rw({ action: "archive_rfx_event", id: eventId, confirmed: true, confirmation_action: "archive_rfx_event" });
   }

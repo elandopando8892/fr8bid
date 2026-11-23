@@ -45,7 +45,6 @@ import { LecturaIA } from "./LecturaIA";
 import { Bw } from "./bidware";
 
 // Corregir una ruta y ver la preselección de carriers: módulos de Bidware, cargados al usarse.
-const EditarRuta = lazy(() => import("../bidware/features/rfx-admin/OperateDialogs").then((m) => ({ default: m.LaneEditDialog })));
 const Preseleccion = lazy(() => import("../bidware/features/rfx-admin/CarrierPreselection").then((m) => ({ default: m.CarrierPreselection })));
 
 // Fecha corta sin hora, para columnas angostas.
@@ -398,18 +397,7 @@ function PanelEvento({ d, ctx, accion }: Props) {
     <div className="tarjeta">
       <h2>Necesidad y evento</h2>
       {d.paqueteMaestro != null && <Bw><Preseleccion eventId={d.evento.id} master={d.paqueteMaestro} /></Bw>}
-      {editando?.cruda && (
-        <Bw>
-          <EditarRuta
-            lane={{ ...editando.cruda, invitations: [] } as any}
-            onClose={() => setEditando(null)}
-            onSaved={(mensaje) => {
-              setEditando(null);
-              void accion(async () => undefined, mensaje);
-            }}
-          />
-        </Bw>
-      )}
+      {editando?.cruda && <EditorRuta eventoId={d.evento.id} ruta={editando} accion={accion} onCerrar={() => setEditando(null)} />}
       {d.evento.cierre && <p className="tenue">Cerrado a ofertas el {fecha(d.evento.cierre.el)} (plazo original {fecha(d.evento.cierre.plazoOriginal)}).</p>}
       <div className="tabla-envoltura">
         <table className="tabla tabla-rutas">
@@ -453,6 +441,60 @@ function PanelEvento({ d, ctx, accion }: Props) {
             })}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+const CAMPOS_EDITABLES_RUTA: { clave: string; texto: string; numerico?: boolean; ancho?: boolean }[] = [
+  { clave: "origin", texto: "Origen" },
+  { clave: "destination", texto: "Destino" },
+  { clave: "equipment", texto: "Equipo" },
+  { clave: "trailer", texto: "Caja" },
+  { clave: "weekly_volume", texto: "Cruces por semana", numerico: true },
+  { clave: "target_rate", texto: "Objetivo de compra", numerico: true },
+  { clave: "currency", texto: "Moneda" },
+  { clave: "carrier_requirements", texto: "Requisitos del carrier", ancho: true },
+  { clave: "notes", texto: "Notas", ancho: true }
+];
+
+// Corregir una ruta: solo viajan los campos que cambiaron.
+function EditorRuta({ eventoId, ruta, accion, onCerrar }: { eventoId: string; ruta: Ruta; accion: Props["accion"]; onCerrar: () => void }) {
+  const s = useSesion();
+  const cruda = ruta.cruda ?? {};
+  const inicial = useMemo(() => Object.fromEntries(CAMPOS_EDITABLES_RUTA.map((c) => [c.clave, cruda[c.clave] == null ? "" : String(cruda[c.clave])])), [ruta]);
+  const [valores, setValores] = useState<Record<string, string>>(inicial);
+  const cambiados = CAMPOS_EDITABLES_RUTA.filter((c) => valores[c.clave].trim() !== inicial[c.clave].trim());
+  const numeroMalo = cambiados.find((c) => c.numerico && valores[c.clave].trim() && !Number.isFinite(Number(valores[c.clave].replace(/,/g, ""))));
+  const puede = cambiados.length > 0 && valores.origin.trim() !== "" && valores.destination.trim() !== "" && !numeroMalo;
+  const guardar = () => {
+    const patch: Record<string, unknown> = {};
+    for (const c of cambiados) {
+      const v = valores[c.clave].trim();
+      patch[c.clave] = c.numerico ? (v ? Number(v.replace(/,/g, "")) : null) : v || null;
+    }
+    onCerrar();
+    return accion(() => s.api.corregirRuta(eventoId, ruta.id, patch), "Ruta corregida.");
+  };
+  return (
+    <div className="tarjeta" role="group" aria-label="Corregir ruta">
+      <h3>Corregir ruta {ruta.numero}</h3>
+      <div className="rejilla-campos">
+        {CAMPOS_EDITABLES_RUTA.map((c) => (
+          <label key={c.clave} className="campo" style={c.ancho ? { gridColumn: "1 / -1" } : undefined}>
+            <span>{c.texto}</span>
+            {c.ancho ? (
+              <textarea rows={2} value={valores[c.clave]} onChange={(e) => setValores((v) => ({ ...v, [c.clave]: e.target.value }))} />
+            ) : (
+              <input value={valores[c.clave]} inputMode={c.numerico ? "decimal" : undefined} onChange={(e) => setValores((v) => ({ ...v, [c.clave]: e.target.value }))} />
+            )}
+          </label>
+        ))}
+      </div>
+      {numeroMalo && <p className="error">«{numeroMalo.texto}» debe ser un número.</p>}
+      <div className="fila-icono">
+        <button className="btn-chico" onClick={onCerrar}>Cancelar</button>
+        <button className="btn-primario" disabled={!puede} onClick={guardar}>{cambiados.length ? `Guardar ${plural(cambiados.length, "cambio", "cambios")}` : "Sin cambios"}</button>
       </div>
     </div>
   );
