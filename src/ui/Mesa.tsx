@@ -233,7 +233,7 @@ export function Mesa({ id }: { id: string }) {
           {verInvitacion && <MasCarriers {...p} />}
           {actual === "entrega" && <PanelEntrega {...p} />}
           {actual === "aviso" && <PanelAviso {...p} />}
-          {s.modo === "rateware" && actual === "evento" && ctx.rol === "admin" && <AccionesEvento d={d} accion={accion} />}
+          {s.modo === "rateware" && (actual === "evento" || d.evento.estado === "archivado") && ctx.rol === "admin" && <AccionesEvento d={d} accion={accion} />}
           {s.modo === "rateware" && <MasDelEvento id={id} borrador={d.evento.estado === "borrador"} />}
           <ReportarFr8Desk eventoId={id} asuntoInicial={`${d.evento.folio} · ${d.evento.nombre}`} />
         </div>
@@ -243,8 +243,8 @@ export function Mesa({ id }: { id: string }) {
   );
 }
 
-// Archivar y borrar viven en la página del evento (antes solo en «Detalle
-// completo»). Archivar lo saca de las listas activas y no cierra ni avisa nada.
+// Archivar, restaurar y borrar viven en la página del evento (antes solo en la
+// pantalla heredada «Detalle completo», ya retirada). Archivar lo saca de las listas activas y no cierra ni avisa nada.
 // Borrar es definitivo y solo para un borrador sin actividad; Rateware lo vuelve
 // a revisar y lo borra en un solo paso.
 function AccionesEvento({ d, accion }: Pick<Props, "d" | "accion">) {
@@ -254,6 +254,21 @@ function AccionesEvento({ d, accion }: Pick<Props, "d" | "accion">) {
   // comprueban con el estado «adjudicado».
   const archivado = d.evento.estado === "archivado" || d.evento.estado === "adjudicado";
   const borrable = d.evento.estado === "borrador" && sinActividad(d);
+  if (d.evento.estado === "archivado") {
+    return (
+      <div className="linea-accion">
+        <span className="linea-icono"><I.Bandeja size={16} /></span>
+        <p className="tenue">Este evento está archivado y fuera de las listas activas.</p>
+        <Confirmar
+          etiqueta="Restaurar a borrador"
+          clase="btn-secundario"
+          icono={<I.Bandeja size={15} />}
+          advertencia={<>«{nombreEvento(d.evento)}» vuelve a las listas como borrador, con sus rutas y ofertas como estaban. No lo publica ni avisa a nadie. {ADVERTENCIA_REAL(s, d)}</>}
+          onConfirmar={() => accion(() => s.api.restaurar(d.evento.id), "Evento restaurado a borrador.")}
+        />
+      </div>
+    );
+  }
   if (archivado && !borrable) return null;
   return (
     <div className="linea-accion">
@@ -286,8 +301,7 @@ function MasDelEvento({ id, borrador }: { id: string; borrador: boolean }) {
     ...(borrador ? [{ a: `/rfx/new/${id}`, t: "Editar el borrador", icono: I.Lapiz }] : []),
     { a: `/rfx/${id}/review`, t: "Revisión de contactos", icono: I.Lista },
     { a: `/rfx/${id}/message`, t: "Mensaje a carriers", icono: I.Sobre },
-    { a: `/rfx/${id}/delivery`, t: "Cola de envío", icono: I.Bandeja },
-    { a: `/rfx/${id}/detalle`, t: "Detalle completo", icono: I.Libro }
+    { a: `/rfx/${id}/delivery`, t: "Cola de envío", icono: I.Bandeja }
   ];
   return (
     <nav className="mas-del-evento" aria-label="Más del evento">
@@ -1760,7 +1774,7 @@ function PreguntaCarrier({ d, ruta, p, onCerrar }: { d: Detalle; ruta: Ruta; p: 
   );
 }
 
-// Rechazar una oferta (antes solo en «Detalle completo»): Rateware la quita y
+// Rechazar una oferta (antes solo en la pantalla heredada «Detalle completo», ya retirada): Rateware la quita y
 // deja al carrier como «declinó». El motivo se queda con el equipo; el carrier
 // no lo ve. Una oferta adjudicada no se rechaza: primero se quita la decisión.
 const MOTIVOS_DESIERTA = ["Ofertas por arriba del objetivo", "Sin ofertas suficientes", "El shipper canceló la ruta"];

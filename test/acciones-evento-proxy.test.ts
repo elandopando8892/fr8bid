@@ -81,3 +81,20 @@ describe("proxy: rechazar solo la versión que se vio", () => {
     expect(await pasa(detalle("open", lv({ updated_at: undefined })), rechazo({ expected_updated_at: vista }))).toMatchObject({ code: "OFERTA_CAMBIO", escribio: false });
   });
 });
+
+describe("proxy: restaurar un evento archivado a borrador", () => {
+  const restaurar = (x: Record<string, unknown> = {}) => ({ action: "update_rfx_event", event_id: EV, patch: { status: "draft" }, ...x });
+  const pasa = async (det: unknown, body: Record<string, unknown>) => {
+    const env: string[] = [];
+    const r = await manejar("rateware-api", body, "Bearer x", op(det, env));
+    return { status: r.status, code: r.body?.code, escribio: env.includes("update_rfx_event") };
+  };
+  it("solo un evento archivado y solo el estado", async () => {
+    expect(await pasa({ event: { id: EV, status: "archived" }, lanes: [] }, restaurar())).toMatchObject({ status: 200, escribio: true });
+    expect(await pasa({ event: { id: EV, status: "open" }, lanes: [] }, restaurar())).toMatchObject({ code: "NO_ARCHIVADO", escribio: false });
+    expect(await pasa({ event: { id: EV, status: "awarded" }, lanes: [] }, restaurar())).toMatchObject({ code: "NO_ARCHIVADO", escribio: false });
+    expect(await pasa({ event: { id: EV, status: "archived" }, lanes: [] }, restaurar({ patch: { status: "draft", due_date: "2026-12-01" } }))).toMatchObject({ code: "SOLO_ESTADO", escribio: false });
+    expect(await pasa({ event: { id: EV, status: "archived" }, lanes: [] }, restaurar({ event_id: [EV] }))).toMatchObject({ code: "FALTA_EVENTO", escribio: false });
+    expect(await pasa({ event: { id: EV, status: "archived" }, lanes: [] }, restaurar({ event_id: "no" }))).toMatchObject({ code: "FALTA_EVENTO", escribio: false });
+  });
+});

@@ -1260,3 +1260,17 @@ describe("rechazar oferta con la versión vista (rateware #225)", () => {
     expect(part(d, ids.A).versiones).toHaveLength(0);
   });
 });
+
+describe("archivar y restaurar (simulado)", () => {
+  beforeEach(preparar);
+  it("un evento archivado vuelve a borrador con sus rutas", async () => {
+    const { eventId: id, adm } = await eventoConTres();
+    const antes = await adm.detalle(id);
+    await adm.archivar(id);
+    expect((await adm.detalle(id)).evento.estado).toBe("archivado");
+    await adm.restaurar(id);
+    const despues = await adm.detalle(id);
+    expect(despues.evento.estado).toBe("borrador");
+    expect(despues.rutas).toHaveLength(antes.rutas.length);
+  });
+});

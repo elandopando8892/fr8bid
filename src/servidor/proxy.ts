@@ -258,6 +258,10 @@ export async function manejar(
     if (ESTADOS_DE_CIERRE.has(String(patch.status ?? "").toLowerCase())) {
       return error(409, "CIERRE_POR_ENTREGA", "Cerrar el evento en Rateware es la entrega: usa «Entregar a Rateware», que lleva su operation_id.");
     }
+    if (String(patch.status ?? "").toLowerCase() === "draft") {
+      const bloqueo = await guardaRestaurar(body!, patch, autorizacion, op);
+      if (bloqueo) return bloqueo;
+    }
   }
 
   if (action === "extend_rfx_due_date_if_unchanged") {
@@ -439,6 +443,19 @@ async function guardaRechazo(body: Record<string, unknown>, autorizacion: string
   const actual = Date.parse(String(fila.updated_at || ""));
   if (!Number.isFinite(vista) || !Number.isFinite(actual) || actual !== vista)
     return error(409, "OFERTA_CAMBIO", "La oferta cambió desde que la viste o no se pudo comprobar su versión. No se rechazó nada; revísala otra vez.");
+  return null;
+}
+
+// Restaurar a borrador (deshacer «Archivar»): solo un evento archivado y solo el
+// estado, nada más. Una lectura fresca comprueba el estado actual.
+async function guardaRestaurar(body: Record<string, unknown>, patch: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
+  const id = body.event_id;
+  if (typeof id !== "string" || !UUID.test(id)) return error(400, "FALTA_EVENTO", "Indica el evento.");
+  if (Object.keys(patch).join(",") !== "status") return error(400, "SOLO_ESTADO", "Restaurar un evento solo cambia su estado a borrador.");
+  const lectura = await leerDetalle(id, autorizacion, op);
+  if (lectura === "sin_respuesta") return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se restauró.");
+  if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
+  if (String(lectura.body?.event?.status || "").toLowerCase() !== "archived") return error(409, "NO_ARCHIVADO", "Solo se restaura un evento archivado.");
   return null;
 }
 

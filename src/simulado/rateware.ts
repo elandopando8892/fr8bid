@@ -693,7 +693,7 @@ export class RatewareSimulado {
             if (!roles.includes("admin")) throw new Falla(403, "Cerrar es del Administrador.", "TEAM_ROLE_REQUIRED");
             return this.closeout(u, { event_id: event.id });
           }
-          const permitidos: Record<string, string[]> = { draft: ["open"], open: ["draft"] };
+          const permitidos: Record<string, string[]> = { draft: ["open"], open: ["draft"], archived: ["draft"] };
           if (!(permitidos[event.status] || []).includes(destino)) throw new Falla(409, `Transición no permitida: ${event.status} → ${destino}`, "INVALID_TRANSITION");
           const antes = event.status;
           event.status = destino;

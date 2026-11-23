@@ -14,7 +14,6 @@ export const P = {
   Panel: pantalla(() => import("@/pages/DashboardPage"), "DashboardPage"),
   Callback: pantalla(() => import("@/pages/CallbackPage"), "CallbackPage"),
   NuevoEvento: pantalla(() => import("@/features/rfx-admin/NewEventPage"), "NewEventPage"),
-  DetalleEvento: pantalla(() => import("@/features/rfx-admin/RfxDetailPage"), "RfxDetailPage"),
   Mensaje: pantalla(() => import("@/features/outreach/MessagePage"), "MessagePage"),
   Cola: pantalla(() => import("@/features/outreach/DeliveryQueuePage"), "DeliveryQueuePage"),
   RevisionContactos: pantalla(() => import("@/features/outreach/ContactReviewPage"), "ContactReviewPage"),
