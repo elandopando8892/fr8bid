@@ -796,6 +796,18 @@ export class RatewareSimulado {
         this.bitacorar(u.email, "rfx.award.clear", "rfx_lane_vendors", lv.id, antes, null);
         return ok({ row: this.invitacionCruda(lv), before: { award_role: antes } });
       }
+      case "reject_rfx_bid": {
+        // Como rateware-api: una adjudicada no se rechaza; la oferta se borra y
+        // el carrier queda «declined». El motivo es del equipo.
+        const lv = this.laneVendor(u, body.id || body.rfx_lane_vendor_id);
+        if (["primary", "backup"].includes(String(lv.award_role || ""))) throw new Falla(400, "Awarded and backup bids cannot be rejected. Clear the award decision first.", "AWARDED");
+        if (lv.invitation_status === "declined" && lv.bid_rate == null) return ok({ row: this.invitacionCruda(lv), idempotent: true });
+        const antes = lv.bid_rate;
+        lv.invitation_status = "declined";
+        lv.bid_rate = null;
+        this.bitacorar(u.email, "rfx.bid.reject", "rfx_lane_vendors", lv.id, antes, null, { reason: String(body.reason || "") });
+        return ok({ row: this.invitacionCruda(lv) });
+      }
       case "closeout_awarded_rfx_to_rateware":
         return this.closeout(u, body);
       default:

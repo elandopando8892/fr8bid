@@ -62,6 +62,17 @@ export function bloqueoRevision(d: Detalle, p: Pick<Participacion, "carrierId" |
   return null;
 }
 
+// Volver a dar «Revisado» a una revisión revocada: solo el Administrador desde
+// la página del evento (el MCP sigue sin poder hacerlo). Mismas condiciones que
+// una revisión nueva, pero solo aplica a la revocada.
+export function bloqueoReRevision(d: Detalle, p: Pick<Participacion, "carrierId" | "carrier" | "correo">): string | null {
+  if (bloqueoEvento(d)) return bloqueoEvento(d);
+  if (!editable(d)) return "Solo en eventos abiertos o en borrador.";
+  if (estadoRevision(d, p.carrierId) !== "revocada") return `La revisión de ${p.carrier} no está revocada.`;
+  if (!p.correo) return `${p.carrier} no tiene correo.`;
+  return null;
+}
+
 // Intentos de seguimiento: evento abierto y respuestas consultadas.
 export function bloqueoIntentos(d: Detalle): string | null {
   if (bloqueoEvento(d)) return bloqueoEvento(d);
