@@ -228,7 +228,8 @@ function MessageContent() {
         return;
       }
       if (!isCurrent()) return;
-      if (isEventClosed(fresh)) {
+      // Sin evento en la respuesta no se puede confirmar que siga abierto.
+      if (!fresh || isEventClosed(fresh)) {
         setNotice("El evento ya cerró a ofertas: no se generan invitaciones.");
         return;
       }

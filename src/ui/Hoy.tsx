@@ -10,25 +10,22 @@ import { useSesion } from "./sesion";
 import { useAsync } from "../bidware/components/useAsync";
 import { awaitsTeam, listShipperProjects } from "../bidware/features/shipper-intake/intake.service";
 import { listPendingRates } from "../bidware/features/rate-review/rateReview.service";
-import { looksLikeTest } from "../bidware/features/rate-review/readiness";
 
 /**
  * Lo que el Panel mostraba y Hoy no tenía (decisión de Jose, 5-nov): solo lo que
- * espera al equipo, y solo si hay algo. Las tarifas que parecen de prueba no
- * cuentan; las detenidas sí, porque también hay que revisarlas.
+ * espera al equipo, y solo si hay algo.
  */
 function Indicadores() {
   const tarifasPendientes = useAsync(listPendingRates, []);
   const proyectos = useAsync(listShipperProjects, []);
   // Sin marca explícita de prueba en las solicitudes, no se oculta ninguna por su nombre.
   const solicitudes = proyectos.data?.filter(awaitsTeam).length ?? 0;
-  // La lista llega hasta 1,000 filas: si hay más, no se sabe cuántas son
-  // atendibles y el aviso vuelve a contar todas las que esperan revisión.
+  // Cuentan todas las que esperan revisión (la lista llega hasta 1,000 filas,
+  // el total viene aparte); ninguna se oculta por su nombre.
   const lectura = tarifasPendientes.data;
-  const incompleta = !!lectura && lectura.total > lectura.rows.length;
+  const tarifas = lectura ? Math.max(lectura.total, lectura.rows.length) : 0;
   // «Por revisar», no «listas»: si se aprueban lo decide la pantalla de
   // tarifas (catálogo y valores normalizados), no este aviso.
-  const tarifas = !lectura ? 0 : incompleta ? lectura.total : lectura.rows.filter((r) => !looksLikeTest(r)).length;
   if (!solicitudes && !tarifas) return null;
   return (
     <div className="atajos-chips indicadores">
