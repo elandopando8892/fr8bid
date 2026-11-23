@@ -301,8 +301,17 @@ export async function manejar(
   }
 
   if (action === "archive_rfx_event" || action === "delete_rfx_event") {
-    if (!UUID.test(String(body?.id || ""))) return error(400, "FALTA_EVENTO", "Indica el evento.");
+    // Un texto, nunca un arreglo: el candado de eventos protegidos compara el id tal cual.
+    if (typeof body?.id !== "string" || !UUID.test(body.id)) return error(400, "FALTA_EVENTO", "Indica el evento.");
     if (body?.confirmed !== true || body?.confirmation_action !== action) return error(400, "SIN_CONFIRMAR", "Esta acción requiere confirmación explícita.");
+    if (action === "archive_rfx_event") {
+      // Un evento adjudicado ya se entregó a Rateware: archivarlo lo sacaría de la vista sin deshacer la entrega.
+      const lectura = await leerDetalle(body.id, autorizacion, op);
+      if (lectura === "sin_respuesta") return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se archivó.");
+      if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
+      if (String(lectura.body?.event?.status || "").toLowerCase() === "awarded")
+        return error(409, "EVENTO_ADJUDICADO", "Un evento adjudicado no se archiva desde Fr8Bid.");
+    }
   }
 
   if (action === "reject_rfx_bid") {
