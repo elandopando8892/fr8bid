@@ -121,7 +121,7 @@ function EmpresaPanel({ empresa, cliente, onVinculado, simulado, onCorreo }: { e
           setContexto(r as ContextoContacto); setOp(r.operation || null); if (r.known.state === "linked") aviso.current?.();
         })}>Usar este contacto</button>}</li>)}</ul>}
       {simulado && <p className="tenue">Datos de demostración. Apollo y el guardado real se habilitan en la conexión con Rateware.</p>}
-      {!simulado && !contexto.capabilities.can_write && <p className="tenue">Modo consulta: las actualizaciones están deshabilitadas para esta cuenta o entorno.</p>}
+      {!simulado && !contexto.capabilities.can_write && <p className="tenue">Solo consulta: tu cuenta no puede guardar contactos aquí.</p>}
       {!correo && !pendiente && (op?.state !== "draft" || cancelado) && <>
         <button type="button" className="btn-secundario" disabled={ocupado || !contexto.capabilities.can_search} onClick={() => void ejecutar(async () => {
           const r = await cliente({ action: "search", vendor_id: empresa.id });
