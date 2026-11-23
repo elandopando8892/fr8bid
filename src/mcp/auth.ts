@@ -32,5 +32,7 @@ export async function autenticar(authorization: string | undefined, c: ConfigAut
   if (user.id !== payload.sub || !isTeamEmail(user.email)) throw new Error("Cuenta fuera del equipo");
   const roles: unknown[] = Array.isArray(user.app_metadata?.roles) ? user.app_metadata.roles : [];
   const rol: Rol = roles.includes("admin") ? "admin" : roles.includes("operator") ? "operator" : "viewer";
-  return { token, rol, userId: user.id as string, clientId: payload.client_id, email: String(user.email).toLowerCase() };
+  const org = user.app_metadata?.rateware_organization_id || user.app_metadata?.organization_id;
+  return { token, rol, userId: user.id as string, clientId: payload.client_id, email: String(user.email).toLowerCase(),
+    organizacionId: typeof org === "string" ? org.trim() : null };
 }

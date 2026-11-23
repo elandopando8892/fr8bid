@@ -35,7 +35,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Escrituras (Entrega 2) solo para Operador/Administrador; sin FR8BID_MCP_CONFIRM_SECRET
   // preparar_*/confirmar responden «confirmaciones pendientes de configurar» y las lecturas siguen.
   const escrituras = sesion.rol === "viewer" ? undefined
-    : { t: transporteEscritura(c.resource, sesion.token), tc: transporteContactos(c.resource, sesion.token), tl: transporteListas(c.resource, sesion.token), userId: sesion.userId, clientId: sesion.clientId, email: sesion.email, aprobadores: aprobadoresDe(process.env), secreto: secretoConfirmacion(process.env) };
+    : { t: transporteEscritura(c.resource, sesion.token), tc: transporteContactos(c.resource, sesion.token), tl: transporteListas(c.resource, sesion.token),
+      userId: sesion.userId, clientId: sesion.clientId, email: sesion.email, organizacionId: sesion.organizacionId,
+      aprobadores: aprobadoresDe(process.env), secreto: secretoConfirmacion(process.env),
+      secretoReapertura: process.env.FR8BID_RFX_REOPEN_APPROVAL_SECRET };
   const servidor = crearServidor(transporteApi(c.resource, sesion.token), sesion.rol, undefined, escrituras);
   const transporte = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   try {

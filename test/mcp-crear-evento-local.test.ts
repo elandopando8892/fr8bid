@@ -22,7 +22,11 @@ function localMcp(role: 'admin' | 'operator') {
   };
   let enabled=false;
   const t=async(service:any,body:Record<string,unknown>)=>manejar(service,body,'Bearer synthetic-user',{enviar:send,permitirEscrituras:enabled,real:true,timeoutMs:45000});
-  const newServer=()=>crearServidor(t,role,()=>new Date('2026-11-17T12:00:00Z'),{t,userId:'00000000-0000-4000-8000-000000000001',clientId:'synthetic-chat',email:'sales@heymarksman.com',secreto:new TextEncoder().encode('synthetic-secret-never-production-0123456789')});
+  const newServer=()=>crearServidor(t,role,()=>reopen?new Date():new Date('2026-11-17T12:00:00Z'),{
+    t,userId:'00000000-0000-4000-8000-000000000001',clientId:'synthetic-chat',email:'sales@heymarksman.com',
+    secreto:new TextEncoder().encode('synthetic-secret-never-production-0123456789'),
+    organizacionId:'synthetic-mcp',secretoReapertura:'synthetic-reopen-signing-key-for-tests-only',
+  });
   const rpc=async(method:string,params?:object)=>{
     const server=newServer();
     const transport=new WebStandardStreamableHTTPServerTransport({sessionIdGenerator:undefined,enableJsonResponse:true});await server.connect(transport);

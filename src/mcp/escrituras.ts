@@ -1,4 +1,5 @@
 import { crearEventos, herramientasCrearEvento } from "./crear-evento.js";
+import { createHmac } from "node:crypto";
 import { z } from "zod";
 import { ErrorApi, MesaApi, type Transporte } from "../cliente/api.js";
 import { LECTURAS, sinSecretos } from "../servidor/proxy.js";
@@ -253,6 +254,8 @@ export function respuestaValida(action: string, b: any, enviados: number): boole
 }
 
 export interface ContextoEscrituras {
+  organizacionId?: string | null;
+  secretoReapertura?: string | null;
   userId: string;
   clientId: string;
   rol: Rol;
@@ -303,7 +306,10 @@ const bloqueoReapertura: Record<string, string> = {
   CON_ENTREGA_RATEWARE: "El administrador debe conciliar la entrega a Rateware y su recibo.",
   CON_PROCESOS_OPERATIVOS: "El administrador debe revisar los procesos operativos vinculados.",
   CON_RUTAS_RESUELTAS: "El administrador debe revisar las rutas declaradas desiertas.",
+  APROBACION_NO_VERIFICADA: "Rateware no pudo verificar la aprobación firmada.",
+  REAPERTURA_NO_CONFIGURADA: "La aprobación de reapertura todavía no está configurada.",
 };
+const reaperturaNoConfigurada = () => new Rechazo("REAPERTURA_NO_CONFIGURADA", bloqueoReapertura.REAPERTURA_NO_CONFIGURADA, 503);
 
 export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
   const ahora = ctx.ahora ?? (() => new Date());
@@ -497,6 +503,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
     },
 
     async reapertura_evento(a: { event_id: string; nueva_fecha: string; motivo: string }) {
+      if (!ctx.organizacionId || (ctx.secretoReapertura?.length ?? 0) < 32) throw reaperturaNoConfigurada();
       const r = await seguro("rateware-api", { action: "preview_rfx_event_reopen", event_id: a.event_id, new_due_date: a.nueva_fecha });
       if (accionNoDesplegada(r.status, r.body)) throw new Rechazo("ACCION_NO_DESPLEGADA", "Rateware aún no ofrece la vista previa de reapertura.", 503);
       if (r.status !== 200) throw new Rechazo(String(r.body?.code || "REAPERTURA_NO_DISPONIBLE"), "No se pudo verificar si el evento puede reabrirse.", r.status);
@@ -510,6 +517,7 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       return { act: "reapertura_evento", ev: e.event_id,
         evento: { id: e.event_id, folio: e.folio, nombre: e.name, estado, plazo: e.due_date },
         arg: { ...a, event_id: e.event_id }, foto: { version: e.version }, bloqueos: blocking,
+        fijo: { organizacion_id: ctx.organizacionId },
         cuerpos: [{ action: "reopen_rfx_event_if_unchanged", event_id: e.event_id,
           new_due_date: a.nueva_fecha, reason: a.motivo, expected_version: e.version }],
         vista: { estado_actual: estado, estado_rateware: e.status, estado_propuesto: "abierto",
@@ -732,13 +740,26 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
         if (c.cuerpos.length !== 1 || body.action !== "reopen_rfx_event_if_unchanged" || !id.safeParse(c.jti).success) {
           throw new Rechazo("ALTERADA", "La confirmación no coincide con su vista previa.", 400);
         }
+        const { organizacionId, secretoReapertura } = ctx;
+        if (!organizacionId || !secretoReapertura || secretoReapertura.length < 32) throw reaperturaNoConfigurada();
+        if ((c.fijo as { organizacion_id?: string } | undefined)?.organizacion_id !== organizacionId) {
+          throw new Rechazo("OTRA_SESION", "La organización cambió desde la vista previa.", 403);
+        }
+        if (frase.length > 100) throw new Rechazo("SIN_SI", "La aprobación supera el máximo de 100 caracteres.", 400);
+        // Este contrato se verifica en Rateware con el actor del acceso OAuth.
+        const approval_signature = createHmac("sha256", secretoReapertura).update(JSON.stringify([
+          "fr8bid.rfx.reopen.approval.v1", body.action, ctx.userId, organizacionId, body.event_id,
+          body.new_due_date, body.expected_version, c.jti, body.reason, frase, c.exp,
+        ])).digest("hex");
         const base = { accion: c.act, event_id: c.ev, operation_id: c.jti, mesa_url: ligaMesa(c.ev), reintentar: false };
         let r;
-        try { r = await seguro("rateware-api", { ...body, operation_id: c.jti, approval_text: frase }); }
+        try { r = await seguro("rateware-api", { ...body, operation_id: c.jti, approval_text: frase,
+          approval_expires_at: c.exp, approval_signature }); }
         catch { r = { status: 504, body: {} }; }
         const recibo = r.body?.receipt;
         if (r.status === 200 && recibo?.operation_id === c.jti && recibo.event_id === c.ev &&
-            recibo.actor_id === ctx.userId && recibo.status === "open" && recibo.due_date === body.new_due_date &&
+            recibo.actor_id === ctx.userId && recibo.organization_id === organizacionId &&
+            recibo.status === "open" && recibo.due_date === body.new_due_date &&
             typeof recibo.committed_at === "string" && Number.isFinite(Date.parse(recibo.committed_at))) {
           let verificada = false;
           try {
@@ -755,7 +776,8 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
               : "Rateware registró el recibo. Revisa el estado actual en Fr8Bid antes de continuar." };
         }
         const codigo = accionNoDesplegada(r.status, r.body) ? "ACCION_NO_DESPLEGADA" : String(r.body?.code || "REAPERTURA_NO_CONFIRMADA");
-        const estado = r.status < 400 || r.status >= 500 || r.body?.incierta ? "incierta" : "rechazada";
+        const estado = codigo === "REAPERTURA_NO_CONFIGURADA" ? "rechazada"
+          : r.status < 400 || r.status >= 500 || r.body?.incierta ? "incierta" : "rechazada";
         log.resultado = estado;
         return { ...base, estado, codigo,
           instruccion: estado === "incierta" ? "Consulta el evento y su recibo antes de cualquier nueva acción."

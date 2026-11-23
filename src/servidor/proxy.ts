@@ -270,10 +270,12 @@ export async function manejar(
   }
 
   if (action === "reopen_rfx_event_if_unchanged" &&
-      (Object.keys(body ?? {}).sort().join(",") !== "action,approval_text,event_id,expected_version,new_due_date,operation_id,reason" ||
+      (Object.keys(body ?? {}).sort().join(",") !== "action,approval_expires_at,approval_signature,approval_text,event_id,expected_version,new_due_date,operation_id,reason" ||
         !UUID_RATEWARE.test(String(body?.event_id || "")) || !UUID_RATEWARE.test(String(body?.operation_id || "")) ||
-        !/^[a-f0-9]{64}$/.test(String(body?.expected_version || "")))) {
-    return error(400, "SOLO_REAPERTURA", "La reapertura requiere el evento, plazo, motivo, versión leída y operación aprobada.");
+        !/^[a-f0-9]{64}$/.test(String(body?.expected_version || "")) ||
+        !/^[a-f0-9]{64}$/.test(String(body?.approval_signature || "")) ||
+        !Number.isSafeInteger(body?.approval_expires_at))) {
+    return error(400, "SOLO_REAPERTURA", "La reapertura requiere la aprobación firmada del MCP para el cambio exacto.");
   }
 
   if (action === "update_carrier_list_template") {
