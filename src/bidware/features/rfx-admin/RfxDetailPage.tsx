@@ -286,7 +286,11 @@ export function RfxDetailPage() {
       // Otra sesión pudo invitar o recibir una oferta con el diálogo abierto:
       // se relee el evento y, si ya tiene actividad, no se borra.
       const fresh = await fetchRfxDetail(id);
-      if (!fresh?.event || !Array.isArray(fresh.lanes)) {
+      // Cada ruta debe traer su lista de invitaciones: una lectura parcial no
+      // acredita que el evento siga sin actividad.
+      const complete = !!fresh?.event && Array.isArray(fresh.lanes) &&
+        (fresh.lanes as LaneWithInvitations[]).every((lane) => Array.isArray(lane.invitations));
+      if (!complete) {
         setNotice("No se pudo confirmar que el evento siga sin actividad: vuelve a cargar antes de borrarlo.");
         setBusy(false);
         return;

@@ -48,13 +48,17 @@ const SIN_ACENTO: Record<string, string> = { á: "a", é: "e", í: "i", ó: "o",
 const plural = (word: string, suffix: string) =>
   suffix === "es" ? `${word.replace(/([áéíóú])([nsl])$/, (_m, v: string, c: string) => SIN_ACENTO[v] + c)}es` : `${word}s`;
 
+// Hasta dos palabras sin marca entre el número y la primera «(s)»: «2 new
+// draft(s)», «1 reading warning(s)».
+const MARKED_WORDS = String.raw`((?:\s+[^\s(){}\d]+){0,2}?(?:\s+[^\s(){}]+\((?:s|es)\))+)`;
+
 /**
  * «1 tarifa(s)» → «1 tarifa»; «7 tarifa(s)» → «7 tarifas»; «2 acción(es)» →
  * «2 acciones». Every «palabra(s)» right after a number agrees with it, so
  * «1 correo(s) rebotado(s)» reads «1 correo rebotado».
  */
 export function pluralize(text: string): string {
-  return text.replace(/(\d[\d.,]*)((?:\s+[^\s(){}]+\((?:s|es)\))+)/g, (_m, n: string, words: string) => {
+  return text.replace(new RegExp(String.raw`(\d[\d.,]*)` + MARKED_WORDS, "g"), (_m, n: string, words: string) => {
     const one = Number(n.replace(/[.,]/g, "")) === 1;
     return n + words.replace(/([^\s(){}]+)\((s|es)\)/g, (_w, word: string, suffix: string) => (one ? word : plural(word, suffix)));
   });
@@ -66,7 +70,7 @@ export function translator<T extends Copy>(copy: T) {
     // Solo el texto de la plantilla se pluraliza: «{0} tarifa(s)» concuerda con
     // el valor, y los valores interpolados (nombres, datos) quedan intactos.
     const text = pluralize(copy[key]?.[getLang()] ?? String(key)).replace(
-      /\{(\d+)\}((?:\s+[^\s(){}]+\((?:s|es)\))*)/g,
+      new RegExp(String.raw`\{(\d+)\}` + MARKED_WORDS + "?", "g"),
       (token, index: string, words: string) => {
         if (Number(index) >= values.length) return token;
         return words ? pluralize(`${value(index)}${words}`) : value(index);
