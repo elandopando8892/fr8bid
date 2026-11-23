@@ -37,10 +37,11 @@ export function ofertasOrdenadas(ruta: Ruta): Participacion[] {
   return [...conOferta(ruta)].sort((a, b) => grupo(a).localeCompare(grupo(b)) || v(a).tarifaAllIn - v(b).tarifaAllIn);
 }
 
-// La «mejor» de la tabla: la más baja en la moneda de la ruta, si hay con qué compararla.
+// La «mejor» de la tabla: la más baja en la moneda de la ruta, solo si hay al
+// menos otra en esa misma moneda con qué compararla.
 export function masBajaComparable(ruta: Ruta): Participacion | null {
   const mismas = ofertasOrdenadas(ruta).filter((p) => versionVigente(p)!.moneda === ruta.moneda);
-  return conOferta(ruta).length > 1 && mismas.length ? mismas[0] : null;
+  return mismas.length > 1 ? mismas[0] : null;
 }
 
 export function resumenPorRuta(d: Detalle): FilaResumen[] {

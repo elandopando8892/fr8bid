@@ -73,6 +73,8 @@ describe("resumen de ofertas arriba de las rutas", () => {
     expect(masBajaComparable(r)?.carrier).toBe("US");
     // Solo ofertas en otra moneda: ninguna es «mejor».
     expect(masBajaComparable(ruta(2, 1000, [oferta("mx", mxn), oferta("mx2", { ...version(800), moneda: "MXN" })]))).toBeNull();
+    // Una en la moneda de la ruta y otra en otra moneda: no hay con qué compararla.
+    expect(masBajaComparable(ruta(4, 1000, [oferta("us", version(1010)), oferta("mx", mxn)]))).toBeNull();
     // Una sola oferta: no hay con qué compararla.
     expect(masBajaComparable(ruta(3, 1000, [oferta("us", version(1010))]))).toBeNull();
   });
