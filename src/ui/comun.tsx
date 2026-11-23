@@ -9,6 +9,7 @@ import * as I from "./Iconos";
 import { ContextoEventos, useEventos } from "./Eventos";
 import { grupoDe } from "./eventosVista";
 import { hoyMexico } from "../dominio/recorrido";
+import { BotonAyudas } from "./BotonAyudas";
 
 // ——— Rutas: react-router (las comparten la Mesa y los módulos de Bidware) ———
 export function useRuta(): string {
@@ -185,6 +186,7 @@ export function Marco({ children }: { children: ReactNode }) {
                 <I.Salir size={15} /> Salir
               </button>
             )}
+            <BotonAyudas />
             <Idioma />
           </div>
         </div>
@@ -202,6 +204,7 @@ export function Marco({ children }: { children: ReactNode }) {
   );
 }
 
+// «?»: muestra u oculta las explicaciones de los módulos (ocultas por defecto).
 // Idioma de los módulos traídos de Bidware (el equipo trabaja en español o en
 // inglés); la página del evento sigue en español.
 function Idioma() {
@@ -276,8 +279,12 @@ export function Desactualizado({ leidoEn, actualizar }: { leidoEn: number; actua
 
 export const Prueba = () => <span className="pill prueba">PRUEBA CONTROLADA</span>;
 
-export const dinero = (n: number | null | undefined, moneda = "USD") =>
-  n === null || n === undefined ? "—" : `${n.toLocaleString("es-MX", { maximumFractionDigits: 2 })} ${moneda}`;
+// Dinero: entero sin decimales («4,000 USD»); con centavos, siempre dos («4,501.70 USD»).
+export const dinero = (n: number | null | undefined, moneda = "USD") => {
+  if (n === null || n === undefined) return "—";
+  const decimales = Number.isInteger(Math.round(n * 100) / 100) ? 0 : 2;
+  return `${n.toLocaleString("es-MX", { minimumFractionDigits: decimales, maximumFractionDigits: 2 })} ${moneda}`;
+};
 
 export const fecha = (iso: string | null | undefined) => {
   if (!iso) return "—";

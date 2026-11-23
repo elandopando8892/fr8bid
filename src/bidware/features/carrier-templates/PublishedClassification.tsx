@@ -24,7 +24,7 @@ export function PublishedClassification({ org }: { org: string }) {
       <h2 id="published-classification-title">{text("Clasificación publicada", "Published classification")}</h2>
       <button disabled={busy || !org} onClick={() => void reader.current?.refresh()}>{text("Actualizar publicación", "Refresh publication")}</button>
     </div>
-    <p>{text("Se carga automáticamente desde Rateware para tu organización. La publicación parcial conserva el censo y las fuentes originales.", "Loaded automatically from Rateware for your organization. This partial publication preserves the census and original sources.")}</p>
+    <p className="ayuda">{text("Se carga automáticamente desde Rateware para tu organización. La publicación parcial conserva el censo y las fuentes originales.", "Loaded automatically from Rateware for your organization. This partial publication preserves the census and original sources.")}</p>
     {busy && <p role="status">{text("Cargando clasificación publicada…", "Loading published classification…")}</p>}
     {matching && state.status === "error" && <ErrorBanner message={text("No se pudo cargar y verificar la clasificación publicada. Actualiza para volver a consultar; no se muestran resultados anteriores.", "The published classification could not be loaded and verified. Refresh to query again; previous results are hidden.")} />}
     {matching && state.status === "ready" && !current && <p role="status">{text("Lectura vencida · actualiza la publicación para consultar su estado vigente.", "Read expired · refresh the publication to check its current state.")}</p>}

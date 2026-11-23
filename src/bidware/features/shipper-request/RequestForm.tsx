@@ -80,7 +80,7 @@ function RequestType({ type, copy }: { type: string | null; copy: Copy }) {
   return (
     <p className="sr-type">
       <span className="sr-type-label">{copy.requestType}:</span> <b>{copy.types[current] ?? current}</b>
-      <small> · {copy.requestTypeHint}</small>
+      <small className="ayuda"> · {copy.requestTypeHint}</small>
     </p>
   );
 }
@@ -265,11 +265,6 @@ function Lanes({ token, draft, lang, copy, country, showProblems, update }: Form
     <>
       <div className="sr-h">
         <h2>{copy.lanesTitle}</h2>
-        {draft.kind === "rfq" && (
-          <span className="sr-hint">
-            <i className="sr-req">•</i> {copy.templateMark}
-          </span>
-        )}
         <span className="spacer" />
         {filled.length > 0 && <span className="sr-count">{copy.lanesComplete(complete, filled.length)}</span>}
         <button type="button" className="sr-link" onClick={() => void downloadTemplate(lang)}>
@@ -588,7 +583,7 @@ function SpotRequest(props: FormProps) {
       <details className="sr-crit-fold sr-more" open={opened || undefined}>
         <summary className="sr-h">
           <h2>{copy.moreDetails}</h2>
-          <span className="sr-hint">{copy.moreDetailsHint}</span>
+          <span className="sr-hint ayuda">{copy.moreDetailsHint}</span>
         </summary>
         <section className="sr-card sr-lane">
           {/* One load, one segment: the lane's own picker below covers it. */}
@@ -645,7 +640,7 @@ export function RequestForm(props: FormProps) {
       <button type="button" className="primary sr-submit" disabled={sending} onClick={onSubmit}>
         {sending ? copy.sending : copy.submit}
       </button>
-      <p className="sr-footnote">{copy.footnote}</p>
+      <p className="sr-footnote ayuda">{copy.footnote}</p>
     </div>
   );
 }

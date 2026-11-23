@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { listBidRoomChat, postBidRoomChatMessage, explainBidError } from "./bidroom.service";
 import { useAsync } from "@/components/useAsync";
 import { Spinner, ErrorBanner, dateShort } from "@/components/ui";
+import * as I from "../../../ui/Iconos";
 
 type Row = Record<string, unknown>;
 
 /** Who reads each kind of thread; the carrier writes in its private one. */
 const THREAD_LABEL: Record<string, string> = {
   carrier_private: "Privado con MARKSMAN",
-  lane_group: "Todos los carriers de tu lane",
+  lane_group: "Todos los carriers de tu ruta",
   event_group: "Todos los carriers del evento",
 };
 const ORDER = ["carrier_private", "lane_group", "event_group"];
@@ -24,7 +25,7 @@ const when = (value: unknown) => {
  * emails. rfx-bid-api returns threads (private, lane, event), each with its
  * messages; what the carrier writes goes to its private thread.
  */
-export function BidRoomChat({ token }: { token: string }) {
+export function BidRoomChat({ token, assistant }: { token: string; /** The room's assistant, on top. */ assistant?: ReactNode }) {
   const { data, loading, error, reload } = useAsync(() => listBidRoomChat(token), [token]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -53,6 +54,7 @@ export function BidRoomChat({ token }: { token: string }) {
   return (
     <div className="croom-body side-narrow">
       <div className="croom-main">
+        {assistant}
         {error && <ErrorBanner message={error} />}
         {sendError && <ErrorBanner message={sendError} />}
         <section className="croom-card">
@@ -104,16 +106,17 @@ export function BidRoomChat({ token }: { token: string }) {
       </div>
 
       <aside className="croom-side">
-        <div className="croom-eyebrow">Quién lee esto</div>
-        <p className="croom-side-text">
-          <b>Privado con MARKSMAN:</b> lo que escribas aquí solo lo ven tu empresa y el equipo de MARKSMAN, y queda
-          ligado a tu invitación.
+        <div className="croom-eyebrow ayuda">Quién lee esto</div>
+        <p className="croom-side-text croom-privado">
+          <I.Candado size={15} /> <b>Privado con MARKSMAN</b>
+          <span className="ayuda">: lo que escribas aquí solo lo ven tu empresa y el equipo de MARKSMAN, y queda
+          ligado a tu invitación.</span>
         </p>
-        <p className="croom-side-text">
-          <b>Carriers de tu lane o del evento:</b> avisos del equipo para todos los invitados. Lo que tú escribes no
+        <p className="croom-side-text ayuda">
+          <b>Carriers de tu ruta o del evento:</b> avisos del equipo para todos los invitados. Lo que tú escribes no
           se publica ahí.
         </p>
-        <div className="croom-box">
+        <div className="croom-box ayuda">
           <b>Mejor que un correo suelto</b>
           <p>Para dudas de precio o alcance, la respuesta queda junto a tu oferta.</p>
         </div>

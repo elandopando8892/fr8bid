@@ -73,8 +73,8 @@ function BatchReviewContent({ org, enabled }: { org: string; enabled: boolean })
   const errorLabel = error ? t(error as Parameters<typeof t>[0]) : "";
   return <section className="batch-review" aria-labelledby="batch-review-title">
     <h2 id="batch-review-title">{t("title")}</h2>
-    <p>{t("intro")}</p>
-    <p className="batch-readonly">{t("readonly")}</p>
+    <p className="ayuda">{t("intro")}</p>
+    <p className="batch-readonly ayuda">{t("readonly")}</p>
     <div className="evidence-toolbar">
       <label className="evidence-file">{t("import")}
         <input type="file" accept=".json,application/json" disabled={busy || executionBusy || !enabled || !org}
@@ -86,7 +86,7 @@ function BatchReviewContent({ org, enabled }: { org: string; enabled: boolean })
     {(!enabled || !org) && <p role="status">{t("authenticated")}</p>}
     {busy && <p role="status">{t("loading")}</p>}
     {errorLabel && <ErrorBanner message={errorLabel} />}
-    {!batch && !busy && !error && <p>{t("empty")}</p>}
+    {!batch && !busy && !error && <p className="ayuda">{t("empty")}</p>}
     {batch && !busy && !error && !current && <p role="status">{t("stale")}</p>}
     {current && batch && catalog && stats && <>
       <p>{t("scope", batch.reviewedOn)}</p>

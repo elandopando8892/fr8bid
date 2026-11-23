@@ -161,17 +161,17 @@ export async function downloadTemplate(lang: Lang) {
     (lang === "es"
       ? [
           ["Una ruta por renglón en la hoja «Rutas», a partir del renglón 4."],
-          ["Las columnas con * son las que pide el template RFI de MARKSMAN."],
+          ["Las columnas con * son obligatorias."],
           ["En las columnas (Dropdown) usa un valor de la hoja «Catálogo»; también aceptamos su nombre en español."],
           ["Ubicación: «Ciudad, Estado» (p. ej. Monterrey, NL o Laredo, TX)."],
-          ["También puedes subir el template RFI original tal cual."],
+          ["También puedes subir el formato RFI que te enviamos, tal cual."],
         ]
       : [
           ["One lane per row on the \"Lanes\" sheet, from row 4 on."],
-          ["Columns marked * are the ones MARKSMAN's RFI template requires."],
+          ["Columns marked * are required."],
           ["In (Dropdown) columns use a value from the \"Catalog\" sheet."],
           ["Location: \"City, State\" (e.g. Monterrey, NL or Laredo, TX)."],
-          ["You can also upload the original RFI template as is."],
+          ["You can also upload the RFI form we sent you, as is."],
         ]),
   );
   guide["!cols"] = [{ wch: 100 }];

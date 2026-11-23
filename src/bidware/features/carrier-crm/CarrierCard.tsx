@@ -127,7 +127,7 @@ export function CarrierCard({
 
       <div className="crm-status">
         <b>{tr("text048")}</b>
-        <p>{tr("text049")}</p>
+        <p className="ayuda">{tr("text049")}</p>
         <div className="crm-seg" role="group" aria-label={tr("text043")}>
           {STATUSES.map((s) => (
             <button

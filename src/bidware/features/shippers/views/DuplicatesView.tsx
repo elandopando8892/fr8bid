@@ -71,7 +71,7 @@ export function DuplicatesView() {
         ]}
       />
       <div className="row">
-        <span className="cell-sub">Compara dominio, correo del contacto principal y nombre (sin acentos). Los archivados no cuentan.</span>
+        <span className="cell-sub ayuda">Compara dominio, correo del contacto principal y nombre (sin acentos). Los archivados no cuentan.</span>
         <div className="spacer" />
         <button onClick={data.reload} disabled={data.loading}>
           Volver a revisar

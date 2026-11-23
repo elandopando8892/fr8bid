@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { pluralize } from "@/i18n/language";
 import { useAuth } from "@/auth/AuthContext";
 import { confirmAsync } from "@/components/confirm";
 import { Empty, ErrorBanner, InfoBanner, Pill, dateShort, money } from "@/components/ui";
@@ -271,7 +272,7 @@ export function ActionsTab({ shipperId, rows, onChanged }: TabProps) {
                 onClick={() =>
                   run(async () => {
                     const { created, skipped } = await applyPlaybook(shipperId, playbook.key);
-                    return `${playbook.label}: ${created} acción(es) nueva(s)${skipped ? `; ${skipped} ya estaban abiertas` : ""}.`;
+                    return `${playbook.label}: ${pluralize(`${created} acción(es) nueva(s)`)}${skipped ? `; ${skipped} ya estaban abiertas` : ""}.`;
                   })
                 }
               >

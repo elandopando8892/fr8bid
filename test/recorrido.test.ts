@@ -24,7 +24,7 @@ import type { Detalle, EntregaLocal, Participacion } from "../src/dominio/tipos"
 import { hojaComparativo, nombreArchivo } from "../src/dominio/exportar";
 import { cambiosComerciales, describirModelo, tarifaVenta } from "../src/dominio/modelo";
 import { audienciaInvitacion } from "../src/dominio/revision";
-import { candidatosRecordatorio, diasEntre, preguntaAlCarrier, recordatorio, seguimiento } from "../src/dominio/seguimiento";
+import { candidatosRecordatorio, diasEntre, etiquetaSeguimiento, preguntaAlCarrier, recordatorio, seguimiento } from "../src/dominio/seguimiento";
 import { crearXlsx } from "../src/dominio/xlsx";
 import { configCarrierFit } from "../src/dominio/carrierFit";
 import { operacionTanda, planearTandas } from "../src/dominio/tandas";
@@ -181,7 +181,7 @@ describe("§9 recorrido de la rebanada", () => {
     let d = await admin.detalle(eventId);
     const intento = d.avisos.find((a) => a.id === r.outreach_message.id)!;
     expect(intento).toMatchObject({ tipo: "invitacion", intento: true, enHilo: false, estado: "borrador" });
-    expect(intento.asunto).toMatch(/\| Question about /);
+    expect(intento.asunto).toMatch(/^Seguimiento /);
     // Ya no cuenta como invitación original pendiente.
     expect(d.avisos.filter((a) => a.tipo === "invitacion" && !a.intento).some((a) => a.id === intento.id)).toBe(false);
     const p = part(d, ids.A);
@@ -610,6 +610,23 @@ describe("ya respondió por otro canal", () => {
     s.fallas.fallarRespuestas = true;
     expect((await adm.detalle(id)).respuestas).toBeNull();
 
+    // Correos de la respuesta (13-nov-2026): Fr8Bid trae su texto y su PDF para leerlos con IA.
+    s.fallas.fallarRespuestas = false;
+    s.respuestasCarrier[0].messages = [{ gmail_message_id: "msg-a-2", at: "2026-10-23T12:00:00.000Z", from: "ops@a.mx" }];
+    s.correosCarrier.set("msg-a-2", { event_id: id, gmail_message_id: "msg-a-2", from: "ops@a.mx", at: "2026-10-23T12:00:00.000Z", subject: "RE: cotización", text: "Va nuestra tarifa en el PDF.", attachments: [{ filename: "tarifa.pdf", mime_type: "application/pdf", base64: "JVBERi0x" }, { filename: "tarifas.xlsx", mime_type: "application/vnd.ms-excel", base64: "AAAA" }], skipped_attachments: [{ filename: "otro.docx" }] });
+    expect((await adm.detalle(id)).respuestas?.[pa.id]?.correos).toEqual([{ id: "msg-a-2", en: "2026-10-23T12:00:00.000Z", de: "ops@a.mx" }]);
+    const traido = await adm.traerCorreo(id, "msg-a-2");
+    expect(traido).toMatchObject({ texto: "Va nuestra tarifa en el PDF.", de: "ops@a.mx", omitidos: ["otro.docx", "tarifas.xlsx"] });
+    expect(traido.adjuntos).toEqual([{ nombre: "tarifa.pdf", tipo: "application/pdf", base64: "JVBERi0x" }]);
+    await expect(adm.traerCorreo(id, "msg-de-otro")).rejects.toMatchObject({ code: "CORREO_NO_ENCONTRADO" });
+    // Leer un correo es solo lectura: también pasa contra Rateware real.
+    const correoReal = await manejar("rateware-api", { action: "get_rfx_carrier_reply", event_id: "e1", gmail_message_id: "m1" }, "Bearer x", { enviar: async () => ({ status: 200, body: { text: "x" }, headers: {} }), permitirEscrituras: false, real: true });
+    expect(correoReal.status).toBe(200);
+    // Si Rateware todavía no tiene la acción, se pide pegar el texto.
+    const sinAccion = new MesaApi(async () => ({ status: 400, body: { error: "Unsupported action" }, headers: {} }));
+    await expect(sinAccion.traerCorreo(id, "msg-a-2")).rejects.toMatchObject({ code: "CORREO_NO_DISPONIBLE" });
+    s.fallas.fallarRespuestas = true;
+
     // R2 está en rateware-prod (v716): la lectura pasa también contra Rateware real.
     const real = await manejar("rateware-api", { action: "list_rfx_carrier_replies", event_id: "e1" }, "Bearer x", { enviar: async () => ({ status: 200, body: { email_status: "checked", rows: [] }, headers: {} }), permitirEscrituras: false, real: true });
     expect(real.status).toBe(200);
@@ -630,6 +647,15 @@ async function eventoConTres() {
 }
 
 describe("solo carriers revisados", () => {
+  it("sin nadie revisado, lo que sigue es revisar contactos, no enviar", async () => {
+    const { adm, eventId: id } = await eventoConTres();
+    const d = await adm.detalle(id);
+    const r = recorrido(d, ctx());
+    expect(r.actual?.clave).toBe("invitacion");
+    expect(r.siguiente.accion).toBe("Revisar 3 contactos");
+    expect(r.actual?.detalle).toBe("3 carriers sin revisión: revisa sus contactos para invitarlos");
+  });
+
   it("prepara solo para revisados, dice a quién omite y por qué", async () => {
     const { s, carriers, op, adm, eventId: id } = await eventoConTres();
     s.revisar(id, carriers.A.id);
@@ -765,10 +791,18 @@ describe("invitar desde la Mesa", () => {
     s.revisar(id, carriers.A.id);
     await op.prepararInvitaciones(id, [carriers.A.id]);
     expect(s.campanas).toHaveLength(1);
+    // Con más de 100 campañas más recientes, la propia sale del catálogo global:
+    // crearla otra vez no la duplica, y como el servidor no puede comprobarla por
+    // idempotency_key, no se adivina por nombre ni se prepara nada.
+    const propia = s.campanas[0];
+    for (let i = 0; i < 120; i++) s.campanas.push({ id: `cmp-otra-${i}`, owner_email: propia.owner_email, status: "draft", channel: "email", name: `Fr8Bid · invitación ${i}`, audience_policy: { mode: "all_eligible" } });
+    s.revisar(id, carriers.B.id);
+    await expect(op.prepararInvitaciones(id, [carriers.B.id])).rejects.toMatchObject({ code: "CAMPANA_NO_VERIFICADA" });
+    expect(s.campanas.filter((c) => c.idempotency_key === `fr8bid-invitacion-${id}`)).toHaveLength(1);
 
     d = await adm.detalle(id);
     const r2 = await adm.enviarAvisos(id, d.avisos);
-    expect(r2.sent).toBe(2);
+    expect(r2.sent).toBe(2); // Gena y A
   });
 
   it("contra Rateware real: sin campaña de Fr8Bid, con otra plantilla o con evento cerrado no se escribe", async () => {
@@ -866,6 +900,55 @@ describe("seguimiento por carrier y recordatorio", () => {
     await adm.cerrarAOfertas(id);
     d = await adm.detalle(id);
     expect(candidatosRecordatorio(d, s.hoy())).toEqual([]);
+  });
+
+  it("con el píxel distingue «no abrió el correo» de «abrió el correo, no la liga» y para a quien contestó por WhatsApp", async () => {
+    const { s, carriers, op, adm, eventId: id } = await eventoConTres();
+    for (const c of [carriers.A, carriers.B, carriers.C]) s.revisar(id, c.id);
+    await op.prepararInvitaciones(id, [carriers.A.id, carriers.B.id, carriers.C.id]);
+    let d = await adm.detalle(id);
+    await adm.enviarAvisos(id, d.avisos);
+    const lvDe = (vendorId: string) => s.laneVendors.find((x) => x.rfx_event_id === id && x.vendor_id === vendorId)!.id;
+    const mensajeDe = (vendorId: string) => s.mensajes.find((m) => m.rfx_event_id === id && m.rfx_lane_vendor_id === lvDe(vendorId))!.id;
+    // A abrió el correo en Gmail; B solo tiene la precarga de Apple Mail; C salió con píxel y no lo abrió.
+    s.aperturasCorreo.push(
+      { outreach_message_id: mensajeDe(carriers.A.id), open_count: 2, first_opened_at: "2026-10-24T16:00:00.000Z", possible_count: 0, first_possible_at: null },
+      { outreach_message_id: mensajeDe(carriers.B.id), open_count: 0, first_opened_at: null, possible_count: 1, first_possible_at: "2026-10-24T15:30:00.000Z" },
+      { outreach_message_id: mensajeDe(carriers.C.id), open_count: 0, first_opened_at: null, possible_count: 0, first_possible_at: null }
+    );
+    d = await adm.detalle(id);
+    let filas = seguimiento(d, "2026-10-25");
+    const de = (nombre: string) => filas.find((x) => x.carrier === nombre)!;
+    expect(de("Carrier Prueba A")).toMatchObject({ estado: "abrio_correo", correoMedido: true, correoAbiertoEn: "2026-10-24T16:00:00.000Z" });
+    expect(etiquetaSeguimiento(de("Carrier Prueba A"))).toBe("abrió el correo, no la liga");
+    expect(de("Carrier Prueba B").estado).toBe("sin_abrir");
+    expect(etiquetaSeguimiento(de("Carrier Prueba B"))).toBe("sin apertura confirmada (Apple Mail precarga)");
+    expect(etiquetaSeguimiento(de("Carrier Prueba C"))).toBe("no abrió el correo");
+    // Abrir el correo no es responder: siguen recibiendo recordatorios.
+    expect(candidatosRecordatorio(d, "2026-10-25").map((x) => x.carrier)).toEqual(["Carrier Prueba A", "Carrier Prueba B", "Carrier Prueba C"]);
+
+    // Abrir la liga gana sobre abrir el correo.
+    await s.llamar("rfx-bid-api", { action: "get_invitation", token: s.tokenDe(lvDe(carriers.A.id)) }, null);
+    // C contesta por WhatsApp (Meta): Rateware lo trae en la revisión de respuestas; queda «respondió sin tarifa» (sin recordatorio de Gmail).
+    s.respuestasCarrier.push({ rfx_lane_vendor_id: lvDe(carriers.C.id), vendor_id: carriers.C.id, channels: ["whatsapp"], count: 1, first_reply_at: "2026-10-24T18:00:00.000Z", last_reply_at: "2026-10-24T18:00:00.000Z" });
+    d = await adm.detalle(id);
+    filas = seguimiento(d, "2026-10-25");
+    expect(de("Carrier Prueba A").estado).toBe("abrio");
+    expect(de("Carrier Prueba C")).toMatchObject({ estado: "respondio", respondioPor: ["whatsapp"] });
+    expect(etiquetaSeguimiento(de("Carrier Prueba C"))).toBe("respondió sin tarifa por WhatsApp");
+    expect(candidatosRecordatorio(d, "2026-10-25").map((x) => x.carrier)).toEqual(["Carrier Prueba A", "Carrier Prueba B"]);
+  });
+
+  it("sin píxel (correos de antes) sigue diciendo «no ha abierto la liga»", async () => {
+    const { s, carriers, op, adm, eventId: id } = await eventoConTres();
+    s.revisar(id, carriers.C.id);
+    await op.prepararInvitaciones(id, [carriers.C.id]);
+    let d = await adm.detalle(id);
+    await adm.enviarAvisos(id, d.avisos);
+    d = await adm.detalle(id);
+    const c = seguimiento(d, "2026-10-25")[0];
+    expect(c).toMatchObject({ estado: "sin_abrir", correoMedido: false });
+    expect(etiquetaSeguimiento(c)).toBe("no ha abierto la liga");
   });
 
   it("cuenta días completos entre la invitación y hoy", () => {
@@ -1141,6 +1224,18 @@ describe("adjudicar en lote", () => {
     // B sigue siendo la más barata en la ruta 2: no se salta a A en silencio.
     expect(propuesta[1].p).toBeNull();
     expect(propuesta[1].motivo).toContain("Carrier Prueba B");
+  });
+
+  it("deja a mano la ruta con ofertas en otra moneda en vez de comparar importes de monedas distintas", async () => {
+    await admin.cerrarAOfertas(eventId);
+    const d = await admin.detalle(eventId, null);
+    const r1 = structuredClone(d.rutas[0]);
+    const a = r1.participaciones.find((p) => p.id === ids.A)!;
+    versionVigente(a)!.moneda = r1.moneda === "MXN" ? "USD" : "MXN";
+    versionVigente(a)!.tarifaAllIn = 1;
+    const propuesta = propuestaPrimarios({ ...d, rutas: [r1] }, ctx());
+    expect(propuesta[0].p).toBeNull();
+    expect(propuesta[0].motivo).toContain("otra moneda");
   });
 
   it("no propone nada a quien no es Administrador", async () => {

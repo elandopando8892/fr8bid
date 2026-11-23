@@ -52,14 +52,14 @@ export function BoardSide({
         ) : (
           <>
             <b>{tr("text041")}</b>
-            <p>{tr("text042")}</p>
+            <p className="ayuda">{tr("text042")}</p>
             <button type="button" className="primary" onClick={onFind}>
               {tr("text020")}</button>
-            <p className="pb-small">{tr("text043")}</p>
+            <p className="pb-small ayuda">{tr("text043")}</p>
           </>
         )}
         {/* Una sola tarjeta (decisión de Jose, 5-nov): el acceso, el paso a paso y los avisos juntos. */}
-        <ol className="pb-steps">
+        <ol className="pb-steps ayuda">
           <li>
             <b>{tr("text049")}</b>{tr("text050")}</li>
           <li>
@@ -67,10 +67,9 @@ export function BoardSide({
           <li>
             <b>{tr("text053")}</b>{tr("text054")}</li>
         </ol>
-        {!notify && (
-          <button type="button" className="pb-avisos" onClick={onNotify}>
-            {tr("text057")}</button>
-        )}
+        <button type="button" className="pb-avisos" aria-pressed={notify} onClick={onNotify}>
+          {notify ? tr("text146") : tr("text057")}
+        </button>
       </section>
 
       {hot.length > 0 && (

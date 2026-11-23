@@ -41,7 +41,7 @@ export function ClientFeeRevocationPanel({reference,recoveryKey,isCurrent}:{refe
   finally{if(mounted.current&&currentToken.current===bundle.token&&current.current()){setConfirmed(false);redraw(v=>v+1);}}
  }
  return <section aria-label={tr('title')} aria-busy={view.busy}>
-  <h3>{tr('title')}</h3><p className="qd-muted">{tr('intro')}</p>
+  <h3>{tr('title')}</h3><p className="qd-muted ayuda">{tr('intro')}</p>
   <button type="button" disabled={!ready||view.busy} onClick={()=>void run()}>{view.busy?tr('reading'):tr('read')}</button>
   {error&&<div role="alert"><ErrorBanner message={tr('error')}/></div>}
   {storageError&&<ErrorBanner message={tr('storage')}/>}

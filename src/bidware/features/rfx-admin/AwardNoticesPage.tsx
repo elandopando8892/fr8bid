@@ -1,4 +1,5 @@
 import { tr } from "@/i18n/rfx-admin";
+import { pluralize } from "@/i18n/language";
 import { useLang, getLang } from "@/i18n/language";
 import { confirmAsync } from "@/components/confirm";
 import { useMemo, useState } from "react";
@@ -17,6 +18,7 @@ import {
   noticeAudience,
   noticeCopy,
   noticeLanguage,
+  recipientLanguage,
   type NoticeGroup,
   type NoticesResult,
 } from "./award.service";
@@ -107,7 +109,7 @@ export function AwardNoticesPage() {
         }
       />
       <main className="main launch-main">
-        <p className="rev-intro">
+        <p className="rev-intro ayuda">
           {tr("text012")}</p>
         <div className="rev-contract">
           <Pill tone="amber">{tr("text013")}</Pill>
@@ -141,11 +143,16 @@ export function AwardNoticesPage() {
         ) : (
           <>
             <p className="an-lang">
-              {tr("text023")}<b>{language === "es" ? tr("text024") : tr("text025")}</b> {tr("text026")}</p>
+              {tr("text023")}
+              <b>{tr("text793", audience.filter((r) => recipientLanguage(r, language) === "es").length, audience.filter((r) => recipientLanguage(r, language) === "en").length)}</b>
+              {tr("text792")}
+            </p>
             <div className="an-grid">
               {GROUPS.filter((g) => g.key !== "no_award" || inGroup(g.key).length).map((g) => {
                 const people = inGroup(g.key);
-                const copy = noticeCopy(g.key, language, rfxKey);
+                // The preview speaks the language most of the group will read.
+                const spanish = people.filter((p) => recipientLanguage(p, language) === "es").length;
+                const copy = noticeCopy(g.key, people.length ? (spanish * 2 >= people.length ? "es" : "en") : language, rfxKey);
                 const quotedOnly = people.filter((p) => p.quoted).length;
                 const missing = people.filter((p) => !p.email).length;
                 return (
@@ -191,7 +198,7 @@ export function AwardNoticesPage() {
                 {tr("text035")}</p>
               {result && (
                 <p className="an-result">
-                  {result.created ?? 0} {tr("text036")}{result.refreshed ?? 0} {tr("text037")}{result.preserved ? tr("text038", result.preserved) : ""}
+                  {pluralize(`${result.created ?? 0} ${tr("text036")}`)}{result.refreshed ?? 0} {tr("text037")}{result.preserved ? tr("text038", result.preserved) : ""}
                   {result.skipped?.length
                     ? tr("text039", result.skipped.length)
                     : ""}

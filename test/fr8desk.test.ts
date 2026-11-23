@@ -153,7 +153,7 @@ describe("Mesa con el simulado", () => {
     const { sim, eventId } = await sembrarDemo();
     const desk = new Fr8DeskSimulado();
     let usuario = "admin";
-    const api = new MesaApi(transporteSimulado(sim, () => usuario), undefined, undefined, undefined, fr8deskSimulado(sim, () => usuario, desk));
+    const api = new MesaApi(transporteSimulado(sim, () => usuario), undefined, undefined, undefined, undefined, fr8deskSimulado(sim, () => usuario, desk));
     const hecho = await api.reportarFr8Desk(eventId, { requestId: RID, asunto: "Duda con el evento", descripcion: "¿Se puede mover el plazo?", impacto: "consulta" });
     expect(hecho.folio).toBe("FD-0001");
     expect(await api.casosFr8Desk(eventId)).toHaveLength(1);

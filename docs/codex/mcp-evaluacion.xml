@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Escenario sintético de test/mcp.test.ts, reloj 29-oct-2026, rol Operador.
+     Casos para aceptación del skill/cliente; no se han ejecutado inferencias LLM.
+     Las cifras corresponden a sembrarDemo, no son resultados operativos. -->
+<evaluation>
+  <qa_pair><question>Localiza RFx-FR8BID-PRUEBA-01 y compara la versión más reciente de Carrier Prueba A con su target: ¿cuánto queda por encima, en USD?</question><answer>50</answer></qa_pair>
+  <qa_pair><question>Resuelve el evento de prueba y consulta historial de Carrier Prueba A: ¿cuánto bajó su all-in en USD entre sus dos versiones?</question><answer>50</answer></qa_pair>
+  <qa_pair><question>Busca el evento de prueba y compara all-in de los tres carriers: ¿cuál tiene el menor importe?</question><answer>Carrier Prueba B</answer></qa_pair>
+  <qa_pair><question>En el evento de prueba, consulta ofertas e historial: ¿el share de 3% de Carrier Prueba A se suma a su all-in de 1750?</question><answer>No</answer></qa_pair>
+  <qa_pair><question>Localiza la ruta del evento de prueba y consulta sus candados: ¿un Operador puede adjudicar desde este MCP?</question><answer>No</answer></qa_pair>
+  <qa_pair><question>Consulta evento y ofertas del evento de prueba: ¿qué moneda usa el target de Monterrey a Dallas?</question><answer>USD</answer></qa_pair>
+  <qa_pair><question>Consulta ofertas e historial de Carrier Prueba A en el evento de prueba: ¿cuál es el all-in más reciente en USD?</question><answer>1750</answer></qa_pair>
+  <qa_pair><question>Tras resolver el evento y comparar ofertas, ¿puedes confirmar mediante este MCP la adjudicación recomendada?</question><answer>No</answer></qa_pair>
+  <qa_pair><question>Resuelve la ruta del evento de prueba y consulta tarifas_ruta: ¿esta evidencia basta para acreditar pagos reales al carrier?</question><answer>No</answer></qa_pair>
+  <qa_pair><question>Consulta las ofertas e historial del evento de prueba: ¿una sola versión devuelta por Rateware real acredita que nunca hubo cambios?</question><answer>No</answer></qa_pair>
+</evaluation>

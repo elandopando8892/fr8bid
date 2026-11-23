@@ -402,6 +402,27 @@ export function offerWarnings(form: OfferForm): string[] {
   return warnings;
 }
 
+/** The same gaps as offerWarnings, in a word each, for the panel's one-line reminder. */
+export function offerGaps(form: OfferForm): string[] {
+  const gaps: string[] = [];
+  if (!form.weekly_capacity.trim()) gaps.push("capacidad");
+  if (!form.transit_days.trim()) gaps.push("tránsito");
+  if (!form.valid_through) gaps.push("vigencia");
+  if (!form.equipment_available) gaps.push("equipo disponible");
+  if (form.equipment_available === "yes") {
+    if (!form.current_unit_location.trim()) gaps.push("ubicación de la unidad");
+    if (!form.deadhead_distance.trim()) gaps.push("vacío al origen");
+    if (!form.unit_details.trim()) gaps.push("detalle de la unidad");
+    if (!form.eta_pickup) gaps.push("ETA de recolección");
+    if (!form.eta_delivery) gaps.push("ETA de entrega");
+  }
+  if (form.best_alternative_offered) {
+    if (!form.alternative_equipment.trim() && !form.alternative_units.trim()) gaps.push("equipo alterno");
+    if (!form.alternative_notes.trim()) gaps.push("condiciones de la alternativa");
+  }
+  return gaps;
+}
+
 /**
  * Validation is MARKSMAN's call once it has one (validated, mirror enabled,
  * rejected); until then the carrier only asks for the GPS mirror or not.
@@ -736,7 +757,7 @@ export function isWindowClosed(err: unknown): boolean {
 export function explainBidError(err: unknown): string {
   const message = (err as Error)?.message || String(err);
   if (isWindowClosed(err)) {
-    return `${message} La ventana de cotización ya cerró para este lane.`;
+    return `${message} La ventana de cotización ya cerró para esta ruta.`;
   }
   return message;
 }

@@ -2,23 +2,27 @@
 // recorrido usan esta misma capa; solo cambia el transporte (HTTP a /api o el
 // Rateware simulado detrás del mismo proxy).
 
-import type { ConsultaTelefono, Telefono } from "../dominio/telefonos";
-import { MAX_TELEFONOS, revisarTelefonos } from "../servidor/telefonos";
-import type { CorreoRevelado, PersonaApollo } from "../dominio/apollo";
-import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier } from "../dominio/contactos";
-import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit";
-import type { EntradaCatalogo } from "../dominio/condiciones-r1";
-import { MAX_PAGINAS, POR_PAGINA, claveSegmento, consultaSegmento, leerHistorialSegmento, segmentoDeRuta, type HistorialSegmento, type Segmento } from "../dominio/segmento";
-import { campanaDelEvento, campanaFr8bid, elegirPlantilla } from "../dominio/invitacion";
-import { operacionEntrega } from "../dominio/operacion";
-import { notasConCierre } from "../dominio/cierre";
-import { hoyMexico, primario, versionMasReciente, versionVigente } from "../dominio/recorrido";
-import { ESPERA_ENTRE_TANDAS_MS, esCuota, leerResultado, operacionTanda, planearTandas, requiereAtencion, type ResultadoEnvio } from "../dominio/tandas";
-import type { Aviso, Detalle, EntregaLocal, Recibo, ResumenEvento } from "../dominio/tipos";
-import { manejar, type Respuesta, type Servicio } from "../servidor/proxy";
-import type { RatewareSimulado } from "../simulado/rateware";
-import { manejarFr8Desk, type CasoFr8Desk, type Impacto } from "../servidor/fr8desk";
-import * as mapear from "./mapear";
+import type { ConsultaTelefono, Telefono } from "../dominio/telefonos.js";
+import { MAX_TELEFONOS, revisarTelefonos } from "../servidor/telefonos.js";
+import { leerRespuesta } from "../servidor/lectura.js";
+import { correoParaLectura, type AdjuntoLectura, type AnexoTexto, type CanalLectura, type CorreoTraido, type Lectura, type RutaLectura } from "../dominio/lectura.js";
+import type { CorreoRevelado, PersonaApollo } from "../dominio/apollo.js";
+import type { LecturaServidor } from "../dominio/lecturaAutomatica.js";
+import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier } from "../dominio/contactos.js";
+import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit.js";
+import type { EntradaCatalogo } from "../dominio/condiciones-r1.js";
+import { MAX_PAGINAS, POR_PAGINA, claveSegmento, consultaSegmento, leerHistorialSegmento, segmentoDeRuta, type HistorialSegmento, type Segmento } from "../dominio/segmento.js";
+import { campanaDelEvento, campanasDelEventoCompletas, campanaFr8bid, elegirPlantilla, plantillasDelEvento } from "../dominio/invitacion.js";
+import { operacionEntrega } from "../dominio/operacion.js";
+import { notasConCierre } from "../dominio/cierre.js";
+import { env } from "../bidware/config/env.js";
+import { hoyMexico, primario, versionMasReciente, versionVigente } from "../dominio/recorrido.js";
+import { ESPERA_ENTRE_TANDAS_MS, esCuota, leerResultado, operacionTanda, planearTandas, requiereAtencion, type ResultadoEnvio } from "../dominio/tandas.js";
+import type { Aviso, Detalle, EntregaLocal, Recibo, ResumenEvento } from "../dominio/tipos.js";
+import { manejar, type Respuesta, type Servicio } from "../servidor/proxy.js";
+import type { RatewareSimulado } from "../simulado/rateware.js";
+import { manejarFr8Desk, type CasoFr8Desk, type Impacto } from "../servidor/fr8desk.js";
+import * as mapear from "./mapear.js";
 
 export type Transporte = (servicio: Servicio, body: Record<string, unknown>) => Promise<Respuesta>;
 
@@ -99,6 +103,29 @@ export function revisorHttp(token: () => Promise<string | null>): RevisorTelefon
   };
 }
 
+// Lectura con IA de la respuesta de un carrier (POST /api/lectura). Solo
+// propone: nada se guarda hasta que el equipo confirma.
+export type LectorRespuestas = (body: Record<string, unknown>) => Promise<{ status: number; body: any }>;
+
+export function lectorHttp(token: () => Promise<string | null>): LectorRespuestas {
+  return async (body) => {
+    const t = await token();
+    try {
+      const r = await fetch("/api/lectura", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(t ? { authorization: `Bearer ${t}` } : {}) },
+        body: JSON.stringify(body)
+      });
+      return { status: r.status, body: await r.json().catch(() => ({ error: "Respuesta no válida", code: "RESPUESTA_INVALIDA" })) };
+    } catch {
+      return { status: 504, body: { error: "Sin conexión con Fr8Bid.", code: "SIN_RESPUESTA" } };
+    }
+  };
+}
+
+// En el simulado no hay IA: responde «no configurada» y la captura sigue a mano.
+export const lectorSimulado: LectorRespuestas = async (body) => leerRespuesta(body, true, null);
+
 // En el simulado no hay IA: solo reglas (los dudosos siguen dudosos).
 export const revisorSimulado: RevisorTelefonos = async (telefonos) => revisarTelefonos({ telefonos }, true, null);
 
@@ -172,7 +199,7 @@ export interface RevisionTelefonos {
 }
 
 export class MesaApi {
-  constructor(private t: Transporte, private hoy: () => string = () => hoyMexico(), private revisor: RevisorTelefonos = revisorSimulado, private apollo: ConsultaApollo = apolloSimulado, private fr8desk: ConsultaFr8Desk = fr8deskNoDisponible) {}
+  constructor(private t: Transporte, private hoy: () => string = () => hoyMexico(), private revisor: RevisorTelefonos = revisorSimulado, private apollo: ConsultaApollo = apolloSimulado, private lector: LectorRespuestas = lectorSimulado, private fr8desk: ConsultaFr8Desk = fr8deskNoDisponible) {}
 
   private async pedirFr8Desk(metodo: "GET" | "POST", eventoId: string, body?: Record<string, unknown>) {
     const r = await this.fr8desk(metodo, eventoId, body);
@@ -188,6 +215,39 @@ export class MesaApi {
   async reportarFr8Desk(eventoId: string, caso: { requestId: string; asunto: string; descripcion: string; impacto: Impacto }): Promise<{ folio: string; url: string; repetido: boolean }> {
     const b = await this.pedirFr8Desk("POST", eventoId, { request_id: caso.requestId, asunto: caso.asunto, descripcion: caso.descripcion, impacto: caso.impacto });
     return { folio: b.folio, url: b.url, repetido: Boolean(b.repetido) };
+  }
+
+
+  // La IA lee lo que contestó el carrier y propone la oferta por ruta. Solo
+  // viajan el texto (sin el correo citado), los archivos subidos, el nombre
+  // del carrier y origen, destino y equipo de cada ruta. No guarda nada: el resultado es un borrador para confirmar.
+  async leerRespuesta(c: { texto: string; canal: CanalLectura; carrier: string; rutas: RutaLectura[]; adjuntos?: AdjuntoLectura[]; anexos?: AnexoTexto[] }): Promise<Lectura & { recortado: boolean }> {
+    const r = await this.lector({ ...c, hoy: this.hoy() });
+    if (r.status < 200 || r.status >= 300) throw new ErrorApi(r.status, String(r.body?.code || r.status), String(r.body?.error || "La IA no respondió"));
+    return { ...r.body.lectura, recortado: Boolean(r.body.recortado) };
+  }
+
+  // Texto y PDF/imágenes de un correo del carrier, desde Gmail vía Rateware
+  // (solo lectura). Si Rateware aún no tiene la acción, el equipo pega el texto.
+  async traerCorreo(eventId: string, gmailMessageId: string): Promise<CorreoTraido> {
+    try {
+      return correoParaLectura(await this.rw({ action: "get_rfx_carrier_reply", event_id: eventId, gmail_message_id: gmailMessageId }));
+    } catch (e) {
+      if (e instanceof ErrorApi && e.status === 404) throw new ErrorApi(404, "CORREO_NO_ENCONTRADO", "Ese correo ya no está en Gmail o no es una respuesta a este evento. Pega el texto.");
+      if (e instanceof ErrorApi && e.status >= 500) throw new ErrorApi(e.status, "GMAIL_NO_RESPONDIO", "Gmail no respondió. Intenta de nuevo o pega el texto.");
+      throw new ErrorApi(e instanceof ErrorApi ? e.status : 400, "CORREO_NO_DISPONIBLE", "Rateware todavía no entrega el correo. Pega el texto o sube el archivo.");
+    }
+  }
+
+  // Borradores que dejó la revisión programada de Rateware (solo lectura). Si Rateware aún no tiene
+  // la acción o no responde, se sigue con la lectura al abrir la página.
+  async lecturasServidor(eventId: string): Promise<LecturaServidor[]> {
+    try {
+      const r: any = await this.rw({ action: "list_rfx_reply_readings", event_id: eventId });
+      return Array.isArray(r?.readings) ? r.readings : [];
+    } catch {
+      return [];
+    }
   }
 
   private async pedirApollo(body: Record<string, unknown>) {
@@ -224,7 +284,7 @@ export class MesaApi {
   }
 
   async detalle(eventId: string, recibo: Recibo | null = null): Promise<Detalle> {
-    const [crudo, mensajes, rubros, condiciones, revisiones, respuestas] = await Promise.all([
+    const [crudo, mensajes, rubros, condiciones, revisiones, revision] = await Promise.all([
       this.rw({ action: "list_rfx_detail", event_id: eventId }),
       this.rw({ action: "list_outreach_messages", rfx_event_id: eventId, channel: "email" }),
       this.rw({ action: "list_rfx_segment_confirmations", event_id: eventId }),
@@ -233,7 +293,8 @@ export class MesaApi {
       this.respuestasDe(eventId)
     ]);
     if (mensajes.has_more === true) throw new ErrorApi(409, "LECTURA_INCOMPLETA", "Hay más avisos de los que devuelve esta lectura. Consulta la cola de Rateware antes de continuar.");
-    const d = mapear.detalle(crudo, mapear.filasListado(mensajes, "messages"), null, { hoy: this.hoy(), rubros: rubros.rows || [], condiciones, revisiones, respuestas });
+    const { respuestas, aperturas } = revision;
+    const d = mapear.detalle(crudo, mapear.filasListado(mensajes, "messages"), null, { hoy: this.hoy(), rubros: rubros.rows || [], condiciones, revisiones, respuestas, aperturas });
     return { ...d, recibo };
   }
 
@@ -256,16 +317,19 @@ export class MesaApi {
       return null;
     }
   }
-  // Quién ya contestó por correo o en el chat del Bid Room (parche R2). Si
-  // Rateware todavía no tiene la acción, no se consultó (undefined) y queda el
-  // botón «Ya respondió»; si falla, null: la Mesa no prepara intentos.
-  private async respuestasDe(eventId: string): Promise<Record<string, unknown>[] | null | undefined> {
+  // Quién ya contestó por correo, en el chat del Bid Room o por WhatsApp de
+  // Meta (parche R2). Si Rateware todavía no tiene la acción, no se consultó
+  // (undefined) y queda el botón «Ya respondió»; si falla, null: la Mesa no
+  // prepara intentos. La misma lectura trae las aperturas del correo (píxel,
+  // 7-nov-2026); sin ellas, el seguimiento sigue como antes.
+  private async respuestasDe(eventId: string): Promise<{ respuestas: Record<string, unknown>[] | null | undefined; aperturas: Record<string, unknown>[] }> {
     try {
       const r = await this.rw({ action: "list_rfx_carrier_replies", event_id: eventId });
-      return r.email_status === "checked" ? r.rows || [] : null;
+      const aperturas = r.opens_status === "checked" && Array.isArray(r.opens) ? r.opens : [];
+      return { respuestas: r.email_status === "checked" ? r.rows || [] : null, aperturas };
     } catch (e) {
-      if (e instanceof ErrorApi && e.code === "PASO_EN_RATEWARE") return undefined;
-      return null;
+      if (e instanceof ErrorApi && e.code === "PASO_EN_RATEWARE") return { respuestas: undefined, aperturas: [] };
+      return { respuestas: null, aperturas: [] };
     }
   }
   // Contactos que Rateware ya conoce del carrier y de otros registros con su
@@ -350,15 +414,28 @@ export class MesaApi {
   // comprobar). Rateware reporta los omitidos en skipped_rows. Usa la campaña
   // de Fr8Bid del evento (la crea la primera vez) con la plantilla en español.
   async prepararInvitaciones(eventId: string, revisados: string[], folio = eventId) {
-    const [campanas, plantillas] = await Promise.all([this.rw({ action: "list_outreach_campaigns" }), this.rw({ action: "list_outreach_templates" })]);
-    const plantilla = elegirPlantilla(plantillas.rows || []);
-    if (!plantilla) throw new ErrorApi(409, "SIN_PLANTILLA", "No encontré en Rateware la plantilla «RFx carrier invitation - Spanish». No se preparó nada.");
+    const [campanas, delEvento, plantillas] = await Promise.all([
+      this.rw({ action: "list_outreach_campaigns" }),
+      this.rw({ action: "list_outreach_campaigns", rfx_event_id: eventId }),
+      this.rw({ action: "list_outreach_templates" })
+    ]);
     const filas: Record<string, any>[] = campanas.rows || [];
+    const completas = campanasDelEventoCompletas(delEvento, eventId);
+    if (!completas) throw new ErrorApi(503, "CAMPANAS_INCOMPLETAS", "No se pudieron leer completas las campañas del evento. No se preparó nada.");
+    // La campaña propia se identifica solo por idempotency_key. Si no está entre las
+    // 100 más recientes del catálogo global, se crea: Rateware no duplica y, si ya
+    // existía, devuelve la verdadera. La plantilla se elige con esa campaña real.
     let campana = campanaDelEvento(filas, eventId);
     if (!campana) {
+      const tentativa = elegirPlantilla(plantillas.rows || [], plantillasDelEvento(completas, eventId));
+      if (!tentativa) throw new ErrorApi(409, "SIN_PLANTILLA", "No encontré en Rateware la plantilla «RFx carrier invitation - Spanish». No se preparó nada.");
       const base = filas.find((c) => c.rfx_event_id === eventId && c.sender_email) ?? filas.find((c) => c.channel === "email" && c.sender_email) ?? null;
-      campana = (await this.rw({ action: "create_outreach_campaign", event_id: eventId, campaign: campanaFr8bid(eventId, folio, String(plantilla.id), base) })).row;
+      campana = (await this.rw({ action: "create_outreach_campaign", event_id: eventId, campaign: campanaFr8bid(eventId, folio, String(tentativa.id), base) })).row;
+      if (!campana?.id) throw new ErrorApi(502, "SIN_CAMPANA", "Rateware no devolvió la campaña del evento. No se preparó nada.");
     }
+    const propia = completas.find((c) => c.id === campana!.id) ?? campana;
+    const plantilla = elegirPlantilla(plantillas.rows || [], plantillasDelEvento(completas, eventId, propia));
+    if (!plantilla) throw new ErrorApi(409, "SIN_PLANTILLA", "No encontré en Rateware la plantilla «RFx carrier invitation - Spanish». No se preparó nada.");
     return this.rw({
       action: "generate_outreach_drafts",
       event_id: eventId,
@@ -367,6 +444,28 @@ export class MesaApi {
       channel: "email",
       reviewed_vendor_ids: revisados
     });
+  }
+  // Archivar solo lo saca de las listas activas: rutas, ofertas y borradores se
+  // quedan. No cierra el evento ni avisa a nadie.
+  archivar(eventId: string) {
+    return this.rw({ action: "archive_rfx_event", id: eventId, confirmed: true, confirmation_action: "archive_rfx_event" });
+  }
+  // Borrar es definitivo. Rateware lo revisa y borra en un solo paso: solo un
+  // borrador sin invitaciones enviadas ni ofertas (409 RFX_DELETE_NOT_DRAFT /
+  // RFX_DELETE_HAS_ACTIVITY si no).
+  async borrar(eventId: string) {
+    try {
+      return await this.rw({ action: "delete_rfx_event", id: eventId, confirmed: true, confirmation_action: "delete_rfx_event" });
+    } catch (e) {
+      if (e instanceof ErrorApi && e.code === "RFX_DELETE_NOT_DRAFT") throw new ErrorApi(409, e.code, "Solo se borra un evento en borrador: archívalo en lugar de borrarlo.");
+      if (e instanceof ErrorApi && e.code === "RFX_DELETE_HAS_ACTIVITY") throw new ErrorApi(409, e.code, "El evento ya tiene invitaciones u ofertas: archívalo en lugar de borrarlo.");
+      throw e;
+    }
+  }
+  // Rateware quita la oferta y deja la participación como «declinó» (rateware
+  // #164: el motivo no lo ve el carrier). Una adjudicada no se rechaza.
+  rechazarOferta(eventId: string, participacionId: string, motivo: string) {
+    return this.rw({ action: "reject_rfx_bid", event_id: eventId, id: participacionId, reason: motivo, confirmed: true, confirmation_action: "reject_rfx_bid" });
   }
   publicar(eventId: string) {
     return this.rw({ action: "update_rfx_event", event_id: eventId, patch: { status: "open" } });
@@ -378,13 +477,17 @@ export class MesaApi {
   }
   // 2º/3º intento: rateware-api deja un borrador en la Cola como respuesta en
   // el hilo de Gmail de la invitación (con la liga privada). No envía: el envío
-  // se aprueba en la Cola de Rateware.
+  // se aprueba en la Cola. scope «event»: el seguimiento es del bid completo, no
+  // de una ruta. app_origin: la liga del Bid Room sale con el dominio de Fr8Bid
+  // (sin él Rateware usa rateware.vercel.app).
   prepararIntento(eventId: string, participacionId: string, texto: string, clave: string) {
     return this.rw({
       action: "draft_bid_room_carrier_message",
       event_id: eventId,
       rfx_event_id: eventId,
       rfx_lane_vendor_id: participacionId,
+      scope: "event",
+      app_origin: env.appOrigin,
       body: texto,
       idempotency_key: clave,
       confirmed: true,
@@ -403,6 +506,8 @@ export class MesaApi {
     diasTransito: number | null;
     canal: "email" | "phone" | "whatsapp" | "other";
     notas: string;
+    // La propuso la IA a partir del texto del carrier y el equipo la confirmó.
+    leidaConIA?: boolean;
   }) {
     const etiqueta = { email: "Email", phone: "Phone", whatsapp: "WhatsApp", other: "Other" }[c.canal];
     const notas = c.notas.trim();
@@ -419,7 +524,7 @@ export class MesaApi {
         notes: notas || null,
         capture_source: "manual_operator",
         manual_source_channel: c.canal,
-        source_note: `Captured from ${etiqueta}${notas ? `: ${notas}` : ""}`
+        source_note: `Captured from ${etiqueta}${c.leidaConIA ? " (read by AI, confirmed by operator)" : ""}${notas ? `: ${notas}` : ""}`
       }
     });
   }
@@ -458,6 +563,15 @@ export class MesaApi {
       operation_id: a.operationId,
       confirma_sin_vigencia: a.confirmaSinVigencia
     });
+  }
+
+  // Ruta desierta: se cierra sin adjudicar. El motivo queda interno (nunca llega a los carriers).
+  declararDesiertas(eventId: string, rutaIds: string[], motivo: string) {
+    return this.rw({ action: "set_rfx_lane_no_award", rfx_event_id: eventId, lane_ids: rutaIds, no_award: true, reason: motivo.trim(), confirmed: true, confirmation_action: "set_rfx_lane_no_award" });
+  }
+
+  reabrirRuta(eventId: string, rutaId: string) {
+    return this.rw({ action: "set_rfx_lane_no_award", rfx_event_id: eventId, lane_ids: [rutaId], no_award: false, confirmed: true, confirmation_action: "set_rfx_lane_no_award" });
   }
 
   quitarAdjudicacion(participacionId: string) {

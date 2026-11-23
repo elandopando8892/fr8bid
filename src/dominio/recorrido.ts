@@ -95,7 +95,10 @@ export function entregaConfirmada(detalle: Detalle, entrega: EntregaLocal): bool
   // Tras recargar, la prueba del recibo es el propio Rateware: el evento queda
   // adjudicado y cada primario con rateware_closeout_at.
   const primarios = detalle.rutas.map(primario).filter(Boolean) as Participacion[];
-  return detalle.evento.estado === "adjudicado" && primarios.length > 0 && primarios.every((p) => p.entregadaEn);
+  // Con todas las rutas desiertas no hay primarios: basta el evento adjudicado
+  // (solo la entrega lo deja así) con cada ruta decidida.
+  if (detalle.evento.estado !== "adjudicado" || !detalle.rutas.length || !detalle.rutas.every(rutaDecidida)) return false;
+  return primarios.every((p) => p.entregadaEn);
 }
 
 // Hay una versión posterior a la adjudicada (I2): la adjudicación no la sigue.
@@ -195,10 +198,12 @@ export function propuestaPrimarios(detalle: Detalle, ctx: Contexto): PropuestaPr
   return detalle.rutas
     .filter((ruta) => !rutaDecidida(ruta))
     .map((ruta): PropuestaPrimario => {
-      const filas = conOferta(ruta)
-        .filter((p) => !p.rol)
-        .sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
-      if (!filas.length) return { ruta, p: null, motivo: "sin ofertas" };
+      const libres = conOferta(ruta).filter((p) => !p.rol);
+      if (!libres.length) return { ruta, p: null, motivo: "sin ofertas" };
+      // Importes en monedas distintas no se ordenan entre sí: esa ruta se
+      // adjudica a mano.
+      if (libres.some((p) => versionVigente(p)!.moneda !== ruta.moneda)) return { ruta, p: null, motivo: "hay ofertas en otra moneda que la ruta: revisión a mano" };
+      const filas = libres.sort((a, b) => versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
       const mejor = filas[0];
       if (puedeAdjudicar(candadosAdjudicacion(detalle, ruta, mejor, ctx, "primario"), false)) return { ruta, p: mejor };
       return { ruta, p: null, motivo: `la más barata (${mejor.carrier}) necesita revisión a mano` };
@@ -268,13 +273,18 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
   const porInvitar = detalle.revisiones ? carriers(aptas) : carriers(preseleccionadas);
   const invitadas = carriers(todas.filter((p) => p.estado !== "preseleccionada"));
   const invitacionHecha = invitadas > 0 && porInvitar === 0 && evento.estado !== "borrador";
+  const sinRevisar = detalle.revisiones ? carriers(omitidas.map((o) => o.p)) : 0;
   const sinRevision = detalle.revisiones && omitidas.length ? ` · ${carriers(omitidas.map((o) => o.p))} sin revisión (no se invitan)` : "";
   pasos.push(
     paso(
       "invitacion",
       4,
       !todas.length ? "pendiente" : invitacionHecha ? "hecho" : "actual",
-      (invitacionHecha ? `${cuenta(invitadas, "invitación aceptada", "invitaciones aceptadas")}` : `${porInvitar} por aprobar y enviar`) + sinRevision,
+      invitacionHecha
+        ? `${cuenta(invitadas, "invitación aceptada", "invitaciones aceptadas")}` + sinRevision
+        : porInvitar === 0 && sinRevisar > 0
+          ? `${cuenta(sinRevisar, "carrier")} sin revisión: revisa sus contactos para invitarlos`
+          : `${porInvitar} por aprobar y enviar` + sinRevision,
       "Administrador"
     )
   );
@@ -322,19 +332,32 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
       "Administrador"
     )
   );
-  const avisoHecho = primarios.length > 0 && avisosAceptados === primarios.length;
-  pasos.push(
-    paso("aviso", 10, avisoHecho ? "hecho" : confirmada && primarios.length ? "actual" : "bloqueado", avisoHecho ? "Aviso aceptado por Gmail" : confirmada ? "Aprobar y enviar el texto" : "Requiere recibo", "Administrador")
-  );
-  const loadsHecho = primarios.length > 0 && visiblesLoads === primarios.length;
-  pasos.push(
-    paso("loads", 11, loadsHecho && confirmada ? "hecho" : confirmada ? "actual" : "bloqueado", loadsHecho && confirmada ? "Inferido del recibo de Rateware" : confirmada ? "Esperando a Loads" : "Requiere recibo", "Sistema")
-  );
+  // Todas las rutas desiertas: no hay ganador que avisar ni carga que publicar en
+  // Loads; solo se avisa a quienes ofertaron que no hubo adjudicación.
+  const sinGanadores = confirmada && primarios.length === 0;
+  if (sinGanadores) {
+    const avisos = detalle.avisos.filter((a) => a.tipo === "adjudicacion");
+    const enviados = avisos.length > 0 && avisos.every((a) => a.estado === "aceptado");
+    pasos.push(paso("aviso", 10, enviados ? "hecho" : "actual", enviados ? "Sin ganadores · avisos aceptados por Gmail" : "Sin ganadores · avisar a quienes ofertaron", "Administrador"));
+    pasos.push(paso("loads", 11, "hecho", "Sin rutas adjudicadas: nada que publicar", "Sistema"));
+  } else {
+    const avisoHecho = primarios.length > 0 && avisosAceptados === primarios.length;
+    pasos.push(
+      paso("aviso", 10, avisoHecho ? "hecho" : confirmada && primarios.length ? "actual" : "bloqueado", avisoHecho ? "Aviso aceptado por Gmail" : confirmada ? "Aprobar y enviar el texto" : "Requiere recibo", "Administrador")
+    );
+    const loadsHecho = primarios.length > 0 && visiblesLoads === primarios.length;
+    pasos.push(
+      paso("loads", 11, loadsHecho && confirmada ? "hecho" : confirmada ? "actual" : "bloqueado", loadsHecho && confirmada ? "Inferido del recibo de Rateware" : confirmada ? "Esperando a Loads" : "Requiere recibo", "Sistema")
+    );
+  }
 
   if (evento.estado === "archivado") for (const p of pasos) if (p.estado !== "hecho") p.estado = "pendiente";
 
   const actual = pasos.find((p) => p.estado === "actual") ?? null;
   const siguiente = siguientePaso(actual, ctx.rol);
+  // Nada por enviar y carriers sin revisión: lo que sigue es revisarlos, no
+  // «Enviar las invitaciones» (recorrido 22-nov, Spot Palos Garza).
+  if (actual?.clave === "invitacion" && porInvitar === 0 && sinRevisar > 0) siguiente.accion = `Revisar ${cuenta(sinRevisar, "contacto")}`;
   return { pasos, actual, siguiente, entregaConfirmada: confirmada };
 }
 

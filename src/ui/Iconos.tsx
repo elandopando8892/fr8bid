@@ -99,3 +99,5 @@ export const Usuarios = (p: Props) => <Icono {...p}><circle cx={9} cy={8.5} r={3
 export const Recargar = (p: Props) => <Icono {...p}><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4.5h-4.5" /></Icono>;
 export const Reloj = (p: Props) => <Icono {...p}><circle cx={12} cy={12} r={8.5} /><path d="M12 7.5V12l3 2" /></Icono>;
 export const Mano = (p: Props) => <Icono {...p}><path d="M8 11V5.5a1.5 1.5 0 0 1 3 0V11M11 10V4.5a1.5 1.5 0 0 1 3 0V11M14 10.5V6a1.5 1.5 0 0 1 3 0v8a6.5 6.5 0 0 1-6.5 6.5h-.6a6 6 0 0 1-4.6-2.2L3 15.3a1.5 1.5 0 0 1 2.3-1.9L8 16.5V8a1.5 1.5 0 0 1 3 0" /></Icono>;
+export const Info = (p: Props) => <Icono {...p}><circle cx={12} cy={12} r={8.5} /><path d="M12 11v5M12 8h.01" strokeWidth={2} /></Icono>;
+export const Pregunta = (p: Props) => <Icono {...p}><circle cx={12} cy={12} r={8.5} /><path d="M9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.4M12 16.5h.01" /></Icono>;

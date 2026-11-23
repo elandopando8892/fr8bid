@@ -11,8 +11,10 @@
 
 import { detalle } from "../cliente/mapear.js";
 import { UUID_RATEWARE } from "../dominio/operacion.js";
+import { paginaTarifario } from "../mcp/tarifario.js";
 import { claveCampana, esPlantillaInvitacion } from "../dominio/invitacion.js";
 import { esProtegido } from "../dominio/protegidos.js";
+import { bloqueoDesierta, bloqueoReabrirRuta } from "../dominio/acciones-mesa.js";
 import { candadosAdjudicacion, hoyMexico, puedeAdjudicar } from "../dominio/recorrido.js";
 import { revisionesVigentes } from "../dominio/revision.js";
 import { MAX_REGISTROS } from "../dominio/contactos.js";
@@ -65,12 +67,13 @@ export interface Respuesta {
 export type Enviar = (servicio: Servicio, body: Record<string, unknown>, autorizacion: string | null) => Promise<Respuesta>;
 
 export const LECTURAS: Record<Servicio, Set<string>> = {
-  "rateware-api": new Set(["list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware", "list_rfx_carrier_replies", "list_outreach_campaigns", "list_outreach_templates", "list_vendors", "list_contact_history"]),
+  "rateware-api": new Set(["list_carrier_tariff_candidates", "preview_rfx_event_creation", "list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware", "list_rfx_carrier_replies", "get_rfx_carrier_reply", "list_rfx_reply_readings", "list_outreach_campaigns", "list_outreach_templates", "list_vendors", "list_contact_history", "list_carrier_list_templates", "get_carrier_list_template"]),
   "rfx-bid-api": new Set(["get_invitation"])
 };
 
 export const ESCRITURAS: Record<Servicio, Set<string>> = {
   "rateware-api": new Set([
+    "create_rfx_event_draft",
     "create_rfx_event",
     "import_rfx_lanes",
     "shortlist_rfx_lane_vendors",
@@ -89,7 +92,29 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
     // Invitar desde la Mesa: campaña propia de Fr8Bid por evento y la marca
     // «Revisado» que antes se ponía en Bidware.
     "create_outreach_campaign",
-    "record_rfx_invitation_wave_review"
+    "record_rfx_invitation_wave_review",
+    // MCP: escrituras condicionales atómicas (rateware PR #213). Solo escriben si la
+    // participación sigue sin tarifa o si el plazo sigue igual al leído; si no, 409.
+    "capture_rfx_bid_if_empty",
+    "mark_rfx_replied_if_empty",
+    "extend_rfx_due_date_if_unchanged",
+    // MCP: intento/recordatorio por WhatsApp con plantilla de Meta (rateware PR #215). Rateware
+    // revalida número, «no contactar», permiso y plantilla APROBADA contra Meta, y no repite
+    // el mismo recordatorio; desde el MCP solo lo confirma el propietario.
+    "prepare_whatsapp_rfx_reminder",
+    "send_whatsapp_outreach_messages",
+    // MCP: alta de un carrier en una lista (vendor_segments participant_template). Solo
+    // vendor_ids y con expected_version: Rateware la aplica únicamente si la lista sigue
+    // en esa versión (409 template_version_conflict si otro la cambió).
+    "update_carrier_list_template",
+    // Página del evento (bloque C del recorrido 22-nov), antes solo en «Detalle
+    // completo»: archivar, borrar un borrador sin actividad (Rateware revisa y
+    // borra en un solo paso, rateware #224) y rechazar una oferta no adjudicada.
+    "archive_rfx_event",
+    "delete_rfx_event",
+    "reject_rfx_bid",
+    // «Cerrar sin adjudicar» y rutas desiertas desde la página del evento (bloque C).
+    "set_rfx_lane_no_award"
   ]),
   "rfx-bid-api": new Set(["submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
@@ -209,6 +234,10 @@ export async function manejar(
     return error(400, "SOLO_HISTORIAL_SEGMENTO", "Fr8Bid solo consulta el historial del segmento de una ruta.");
   }
 
+  if (action === "list_carrier_tariff_candidates" && !paginaTarifario.safeParse(body).success) {
+    return error(400, "CONSULTA_TARIFARIO_INVALIDA", "Indica ciudades de origen y destino y una página válida del tarifario.");
+  }
+
   if (action === "list_vendors" && !esConsultaContactos(body!)) {
     // Solo los contactos de carriers concretos (por id) o de su dominio: no es
     // una puerta al directorio completo de carriers.
@@ -229,6 +258,23 @@ export async function manejar(
     if (ESTADOS_DE_CIERRE.has(String(patch.status ?? "").toLowerCase())) {
       return error(409, "CIERRE_POR_ENTREGA", "Cerrar el evento en Rateware es la entrega: usa «Entregar a Rateware», que lleva su operation_id.");
     }
+  }
+
+  if (action === "extend_rfx_due_date_if_unchanged") {
+    // Solo mover el plazo, con el plazo leído: nunca estado, notas ni otra cosa.
+    const patch = body?.patch && typeof body.patch === "object" ? (body.patch as Record<string, unknown>) : null;
+    if (!body?.event_id) return error(400, "FALTA_EVENTO", "Extender el plazo necesita event_id.");
+    if (!patch || Object.keys(patch).join(",") !== "due_date" || !("expected_due_date" in body!))
+      return error(400, "SOLO_PLAZO", "Solo se extiende el plazo y con el plazo leído (expected_due_date).");
+  }
+
+  if (action === "update_carrier_list_template") {
+    // Solo membresía, con la versión leída: nunca nombre, descripción ni estado (archivar o
+    // restaurar es del Administrador en Rateware).
+    const patch = body?.patch && typeof body.patch === "object" ? (body.patch as Record<string, unknown>) : null;
+    const claves = Object.keys(body ?? {}).filter(k => k !== "action").sort().join(",");
+    if (claves !== "expected_version,patch,template_id" || !patch || Object.keys(patch).join(",") !== "vendor_ids" || !Array.isArray(patch.vendor_ids) || !Number.isSafeInteger(body?.expected_version))
+      return error(400, "SOLO_MIEMBROS", "Desde Fr8Bid solo se cambia la membresía de una lista, con expected_version.");
   }
 
   if (esEscritura && !op.permitirEscrituras && op.soloBorradores && !SOLO_BORRADORES[servicio].has(action)) {
@@ -254,12 +300,36 @@ export async function manejar(
     if (bloqueo) return bloqueo;
   }
 
+  if (action === "archive_rfx_event" || action === "delete_rfx_event") {
+    // Un texto, nunca un arreglo: el candado de eventos protegidos compara el id tal cual.
+    if (typeof body?.id !== "string" || !UUID.test(body.id)) return error(400, "FALTA_EVENTO", "Indica el evento.");
+    if (body?.confirmed !== true || body?.confirmation_action !== action) return error(400, "SIN_CONFIRMAR", "Esta acción requiere confirmación explícita.");
+    if (action === "archive_rfx_event") {
+      // Un evento adjudicado ya se entregó a Rateware: archivarlo lo sacaría de la vista sin deshacer la entrega.
+      const lectura = await leerDetalle(body.id, autorizacion, op);
+      if (lectura === "sin_respuesta") return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se archivó.");
+      if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
+      if (String(lectura.body?.event?.status || "").toLowerCase() === "awarded")
+        return error(409, "EVENTO_ADJUDICADO", "Un evento adjudicado no se archiva desde Fr8Bid.");
+    }
+  }
+
+  if (action === "reject_rfx_bid") {
+    const bloqueo = await guardaRechazo(body!, autorizacion, op);
+    if (bloqueo) return bloqueo;
+  }
+
+  if (action === "set_rfx_lane_no_award") {
+    const bloqueo = await guardaDesierta(body!, autorizacion, op);
+    if (bloqueo) return bloqueo;
+  }
+
   if (action === "create_outreach_campaign") {
     const bloqueo = await guardaCampana(body!, autorizacion, op);
     if (bloqueo) return bloqueo;
   }
 
-  if (action === "update_rfx_bid" || action === "invite_rfx_lane_vendors" || action === "draft_bid_room_carrier_message") {
+  if (action === "update_rfx_bid" || action === "invite_rfx_lane_vendors" || action === "draft_bid_room_carrier_message" || action === "capture_rfx_bid_if_empty" || action === "mark_rfx_replied_if_empty") {
     const bloqueo = await guardaParticipaciones(action, body!, autorizacion, op);
     if (bloqueo) return bloqueo;
   }
@@ -281,6 +351,10 @@ export async function manejar(
 
   if (action === "generate_rfx_award_notices" || action === "send_outreach_messages") {
     const bloqueo = await guardaAvisos(action, body!, autorizacion, op);
+    if (bloqueo) return bloqueo;
+  }
+  if (action === "prepare_whatsapp_rfx_reminder" || action === "send_whatsapp_outreach_messages") {
+    const bloqueo = await guardaWhatsapp(action, body!, autorizacion, op);
     if (bloqueo) return bloqueo;
   }
 
@@ -340,11 +414,63 @@ async function guardaAdjudicacion(body: Record<string, unknown>, autorizacion: s
 // La captura del equipo y «marcar invitadas» llevan ids de participación, no
 // de evento: se exige event_id y se comprueba con una lectura fresca que cada id
 // es de ese evento (así un id ajeno, p. ej. de HDships, no pasa).
+// Rechazar una oferta: la participación tiene que ser de este evento, tener
+// oferta y no estar adjudicada; el evento, abierto o cerrado (no adjudicado ni
+// archivado). Rateware vuelve a negar la adjudicada.
+async function guardaRechazo(body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
+  if (!body.event_id) return error(400, "FALTA_EVENTO", "Esta acción necesita event_id.");
+  if (!body.id) return error(400, "FALTA_PARTICIPACION", "Indica la participación.");
+  if (!String(body.reason || "").trim()) return error(400, "FALTA_MOTIVO", "Rechazar una oferta necesita el motivo.");
+  if (body.confirmed !== true || body.confirmation_action !== "reject_rfx_bid") return error(400, "SIN_CONFIRMAR", "Rechazar una oferta requiere confirmación explícita.");
+  const lectura = await leerDetalle(body.event_id, autorizacion, op);
+  if (lectura === "sin_respuesta") return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se escribió nada.");
+  if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
+  const estado = String(lectura.body?.event?.status || "").toLowerCase();
+  // «Cerrado a ofertas» es un evento abierto con el plazo vencido; «closed» en
+  // Rateware ya es un evento cerrado y sus ofertas no se tocan.
+  if (!["open", "live", "published"].includes(estado)) return error(409, "EVENTO_NO_PERMITE", "Solo se rechazan ofertas en un evento abierto o cerrado a ofertas.");
+  const fila = ((lectura.body?.lanes || []) as any[]).flatMap((l) => l.invitations || []).find((v: any) => v.id === body.id);
+  if (!fila) return error(404, "NOT_FOUND", "La participación no pertenece a este evento.");
+  if (fila.bid_rate === null || fila.bid_rate === undefined) return error(409, "SIN_OFERTA", "Esta participación no tiene oferta.");
+  if (["primary", "backup"].includes(String(fila.award_role || "").toLowerCase())) return error(409, "ADJUDICADA", "Una oferta adjudicada no se rechaza: primero quita la decisión.");
+  return null;
+}
+
+// Ruta desierta o reabierta: rutas de este evento, confirmación explícita, motivo al
+// declarar, y las mismas reglas que la página del evento (evento cerrado a ofertas,
+// ruta sin primario ni respaldo). Rateware no rechaza un evento ya adjudicado: aquí sí.
+async function guardaDesierta(body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
+  if (!UUID.test(String(body.rfx_event_id || ""))) return error(400, "FALTA_EVENTO", "Indica el evento.");
+  const ids = Array.isArray(body.lane_ids) ? body.lane_ids.map(String) : [];
+  if (!ids.length || ids.length > 500 || ids.some((x) => !UUID.test(x)) || new Set(ids).size !== ids.length) return error(400, "FALTA_RUTA", "Indica entre 1 y 500 rutas válidas.");
+  if (body.confirmed !== true || body.confirmation_action !== "set_rfx_lane_no_award") return error(400, "SIN_CONFIRMAR", "Esta acción requiere confirmación explícita.");
+  const declarar = body.no_award !== false;
+  if (declarar && !String(body.reason || "").trim()) return error(400, "FALTA_MOTIVO", "Declarar una ruta desierta necesita el motivo.");
+  const lectura = await leerDetalle(body.rfx_event_id, autorizacion, op);
+  if (lectura === "sin_respuesta") return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se escribió nada.");
+  if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
+  if (["closed", "archived", "awarded"].includes(String(lectura.body?.event?.status || "").toLowerCase())) return error(409, "EVENTO_NO_PERMITE", "El evento ya está cerrado; sus rutas ya no cambian.");
+  const d = detalle(lectura.body, [], null, { hoy: op.hoy?.() ?? hoyMexico() });
+  for (const id of ids) {
+    const ruta = d.rutas.find((r) => r.id === id);
+    if (!ruta) return error(404, "NOT_FOUND", "Alguna ruta no pertenece a este evento.");
+    const motivo = declarar ? bloqueoDesierta(d, ruta) : bloqueoReabrirRuta(d, ruta);
+    if (motivo) return error(409, "NO_PERMITIDO", motivo);
+  }
+  return null;
+}
+
 async function guardaParticipaciones(action: string, body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
   if (!body.event_id) return error(400, "FALTA_EVENTO", "Esta acción necesita event_id.");
-  const ids = action === "update_rfx_bid" ? [body.id] : action === "draft_bid_room_carrier_message" ? [body.rfx_lane_vendor_id] : Array.isArray(body.ids) ? body.ids : [];
+  const porId = action === "update_rfx_bid" || action === "capture_rfx_bid_if_empty" || action === "mark_rfx_replied_if_empty";
+  const ids = porId ? [body.id] : action === "draft_bid_room_carrier_message" ? [body.rfx_lane_vendor_id] : Array.isArray(body.ids) ? body.ids : [];
   if (!ids.length || ids.some((x) => !x)) return error(400, "FALTA_PARTICIPACION", "Indica la participación.");
-  if (action === "update_rfx_bid" && (!body.patch || typeof body.patch !== "object")) return error(400, "FALTA_PATCH", "update_rfx_bid necesita patch.");
+  if (porId && (!body.patch || typeof body.patch !== "object")) return error(400, "FALTA_PATCH", `${action} necesita patch.`);
+  const patchCondicional = body.patch as Record<string, unknown> | undefined;
+  if (action === "capture_rfx_bid_if_empty" && !(typeof patchCondicional?.bid_rate === "number" && patchCondicional.bid_rate > 0))
+    return error(400, "SIN_TARIFA", "La captura necesita una tarifa mayor que cero.");
+  if (action === "mark_rfx_replied_if_empty" && ("bid_rate" in (patchCondicional ?? {}) || !["responded", "declined"].includes(String(patchCondicional?.invitation_status || ""))))
+    return error(400, "SIN_TARIFA", "«Ya respondió» solo marca respondió o rechazó, sin tarifa.");
   if (action === "invite_rfx_lane_vendors" && (body.confirmed !== true || body.confirmation_action !== "invite_rfx_lane_vendors"))
     return error(400, "SIN_CONFIRMAR", "Marcar como invitadas requiere confirmación explícita.");
   if (action === "draft_bid_room_carrier_message" && (body.confirmed !== true || body.confirmation_action !== "draft_bid_room_carrier_message"))
@@ -376,6 +502,35 @@ async function guardaParticipaciones(action: string, body: Record<string, unknow
 // Aquí, con lecturas frescas: avisos solo tras el recibo, solo mensajes de este
 // evento y solo la versión que el Administrador vio. Desde el 24-oct-2026 los
 // avisos de no adjudicación y de respaldo también salen desde la Mesa.
+// WhatsApp por plantilla de Meta (rateware PR #215): solo el recordatorio de RFx y un mensaje por envío,
+// con su versión y aprobación; el mensaje debe ser un recordatorio de WhatsApp de ese evento (lectura fresca).
+// Rateware vuelve a revisar número, «no contactar», permiso, plantilla APROBADA y duplicados.
+async function guardaWhatsapp(action: string, body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
+  const eventId = body.rfx_event_id;
+  if (!eventId) return error(400, "FALTA_EVENTO", "Esta acción necesita el evento.");
+  if (action === "prepare_whatsapp_rfx_reminder") {
+    if (body.purpose !== "rfx_reminder" || !body.vendor_id || !body.reminder_window) return error(400, "SOLO_RECORDATORIO", "Solo el recordatorio de RFx por WhatsApp.");
+    return null;
+  }
+  const ids: unknown[] = Array.isArray(body.ids) ? body.ids : [];
+  const versiones = Array.isArray(body.expected_versions) ? body.expected_versions as any[] : [];
+  if (ids.length !== 1 || !ids[0] || versiones.length !== 1 || versiones[0]?.id !== ids[0] || !versiones[0]?.updated_at || !versiones[0]?.whatsapp_approval)
+    return error(400, "UN_WHATSAPP", "Un WhatsApp a la vez, con su versión y su aprobación.");
+  if (body.confirmed !== true || body.confirmation_action !== "send_whatsapp_outreach_messages") return error(400, "SIN_CONFIRMAR", "Enviar requiere confirmación explícita.");
+  let mensajes: Respuesta;
+  try {
+    mensajes = await conLimite(op.enviar("rateware-api", { action: "list_outreach_messages", rfx_event_id: eventId, channel: "whatsapp", limit: 200 }, autorizacion), op.timeoutMs ?? 25000);
+  } catch {
+    return error(504, "SIN_RESPUESTA", "No se pudo comprobar el mensaje. No se envió nada.");
+  }
+  if (mensajes.status !== 200) return { ...mensajes, body: sinSecretos(mensajes.body) };
+  const filas: any[] = mensajes.body?.rows ?? mensajes.body?.messages ?? [];
+  const m = filas.find((x) => x?.id === ids[0]);
+  if (!m || m.channel !== "whatsapp" || m.rfx_event_id !== eventId || m.metadata?.whatsapp_purpose !== "rfx_reminder")
+    return error(409, "MENSAJE_AJENO", "El mensaje no es un recordatorio de WhatsApp de este evento. No se envió nada.");
+  return null;
+}
+
 async function guardaAvisos(action: string, body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
   const eventId = action === "send_outreach_messages" ? body.rfx_event_id : body.event_id;
   if (!eventId) return error(400, "FALTA_EVENTO", "Esta acción necesita el evento.");
@@ -516,8 +671,11 @@ async function guardaCampanaDeEnvio(body: Record<string, unknown>, autorizacion:
   }
   if (campanas.status !== 200) return { ...campanas, body: sinSecretos(campanas.body) };
   const c = ((campanas.body?.rows || []) as any[]).find((x) => x.id === body.campaign_id);
-  if (!c || c.rfx_event_id !== body.event_id || c.idempotency_key !== claveCampana(String(body.event_id)))
+  if (c && (c.rfx_event_id !== body.event_id || c.idempotency_key !== claveCampana(String(body.event_id))))
     return error(409, "CAMPANA_FR8BID", "La campaña no es la de Fr8Bid para este evento. No se preparó nada.");
+  // El catálogo global trae solo las 100 más recientes y la lectura del evento no
+  // trae idempotency_key: si la campaña no aparece, no se adivina por nombre.
+  if (!c) return error(409, "CAMPANA_NO_VERIFICADA", "No pude comprobar que la campaña sea la de Fr8Bid para este evento. No se preparó nada.");
   const plantillas = await leerPlantillas(autorizacion, op);
   if (!plantillas) return error(503, "PLANTILLAS_NO_DISPONIBLES", "No se pudieron leer las plantillas. No se preparó nada.");
   if (!esPlantillaInvitacion(plantillas.find((t) => t.id === body.template_id))) return error(409, "PLANTILLA", "La invitación sale solo con la plantilla en español.");

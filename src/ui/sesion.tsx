@@ -8,13 +8,14 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { useAuth } from "@/auth/AuthContext";
 import { isConfigured } from "@/config/env";
 import { getAccessToken } from "@/lib/auth";
-import { MesaApi, apolloHttp, fr8deskHttp, fr8deskSimulado, revisorHttp, transporteHttp, transporteSimulado } from "../cliente/api";
+import { MesaApi, apolloHttp, fr8deskHttp, fr8deskSimulado, lectorHttp, revisorHttp, transporteHttp, transporteSimulado } from "../cliente/api";
 import type { Rol } from "../dominio/tipos";
 import type { RatewareSimulado } from "../simulado/rateware";
 
 export const MODO: "simulado" | "rateware" = import.meta.env.VITE_FR8BID_MODO === "rateware" ? "rateware" : "simulado";
 
 export interface Sesion {
+  identidad?: string;
   modo: typeof MODO;
   api: MesaApi;
   rol: Rol;
@@ -67,13 +68,14 @@ export function ProveedorSesion({ children }: { children: ReactNode }) {
   const api = useMemo(() => {
     if (MODO === "simulado") {
       if (!sim || !desk) return new MesaApi(async () => ({ status: 503, body: { error: "Cargando", code: "CARGANDO" }, headers: {} }));
-      return new MesaApi(transporteSimulado(sim, () => usuarioSimulado), undefined, undefined, undefined, fr8deskSimulado(sim, () => usuarioSimulado, desk));
+      return new MesaApi(transporteSimulado(sim, () => usuarioSimulado), undefined, undefined, undefined, undefined, fr8deskSimulado(sim, () => usuarioSimulado, desk));
     }
-    return new MesaApi(transporteHttp(getAccessToken), undefined, revisorHttp(getAccessToken), apolloHttp(getAccessToken), fr8deskHttp(getAccessToken));
+    return new MesaApi(transporteHttp(getAccessToken), undefined, revisorHttp(getAccessToken), apolloHttp(getAccessToken), lectorHttp(getAccessToken), fr8deskHttp(getAccessToken));
   }, [sim, desk, usuarioSimulado]);
 
   const u = USUARIOS_SIMULADOS.find((x) => x.clave === usuarioSimulado)!;
   const valor: Sesion = {
+    identidad: MODO === "simulado" ? usuarioSimulado : JSON.stringify([auth.user?.id, auth.user?.app_metadata?.organization_id]),
     modo: MODO,
     api,
     rol: MODO === "simulado" ? u.rol : auth.role,

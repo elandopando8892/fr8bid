@@ -248,7 +248,7 @@ export function OperateStage({
             </select>
             <label className="op-anon" title={tr("text634")}>
               <input type="checkbox" checked={anon} onChange={(e) => setAnon(e.target.checked)} /> {tr("text635")}</label>
-            <span className="op-note">
+            <span className="op-note ayuda">
               {history.error ? tr("text636") : tr("text637")}
             </span>
           </div>

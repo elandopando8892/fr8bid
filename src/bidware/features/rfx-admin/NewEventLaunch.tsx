@@ -1,4 +1,5 @@
 import { tr } from "@/i18n/rfx-admin";
+import { pluralize } from "@/i18n/language";
 import { useLang, locale, getLang } from "@/i18n/language";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -400,7 +401,7 @@ export function NewEventLaunch({
               <dd className="bad">{template ? (loadingMembers ? "…" : unavailable) : "—"}</dd>
             </div>
           </dl>
-          <p className="nev-note">{tr("text467")}</p>
+          <p className="nev-note ayuda">{tr("text467")}</p>
         </section>
 
         <section className="nev-card">
@@ -444,7 +445,7 @@ export function NewEventLaunch({
         <section className="nev-go">
           <b>{tr("text476")}</b>
           <p>
-            {tr("text477")}{template ? tr("text478", toAdd.length) : tr("text479")} {tr("text480")}{lanes.length} {tr("text481")}</p>
+            {tr("text477")}{template ? tr("text478", toAdd.length) : tr("text479")} {tr("text480")}{pluralize(`${lanes.length} ${tr("text481")}`)}</p>
           <div className="nev-gate">
             <Pill tone="orange">{tr("text482")}</Pill>
             <span>{tr("text483")}</span>

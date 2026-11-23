@@ -38,10 +38,27 @@ export const COPY = {
   badEmail: t("Revisa los correos: alguno no es válido.", "Check the emails: one is not valid."),
   whoRequired: t("Escribe tu nombre y tu correo para saber quién envió el perfil.", "Enter your name and email so we know who sent the profile."),
   primary: t("Contacto principal", "Primary contact"),
+  steps: t("Pasos del perfil", "Profile steps"),
+  stepOf: t("Paso", "Step"),
+  of: t("de", "of"),
+  back: t("Atrás", "Back"),
+  next: t("Continuar", "Continue"),
+  saveNext: t("Guardar y continuar", "Save and continue"),
+  savingAs: t("Guardas como", "Saving as"),
+  change: t("Cambiar", "Change"),
+  savedStep: t("Guardado.", "Saved."),
+  choose: t("Selecciona…", "Select…"),
+  stepCompany: t("Empresa", "Company"),
+  stepOperation: t("Operación", "Operation"),
+  stepBilling: t("Facturación", "Billing"),
   appointment: t("Requiere cita", "Appointment required"),
 };
 
-export const SHIPPER_FIELDS: { key: string; label: Text }[] = [
+/** A field with few possible answers is a list (decisión de Jose, 6-nov); the value saved is the option's value. */
+export type Option = { value: string; label: Text };
+const opt = (value: string, es: string = value, en: string = value): Option => ({ value, label: t(es, en) });
+
+export const SHIPPER_FIELDS: { key: string; label: Text; options?: Option[] }[] = [
   { key: "shipper_name", label: t("Nombre de la empresa *", "Company name *") },
   { key: "legal_name", label: t("Razón social", "Legal name") },
   { key: "industry", label: t("Industria", "Industry") },
@@ -49,10 +66,19 @@ export const SHIPPER_FIELDS: { key: string; label: Text }[] = [
   { key: "domain", label: t("Dominio de correo", "Business domain") },
   { key: "headquarters_city", label: t("Ciudad (sede)", "HQ city") },
   { key: "headquarters_state", label: t("Estado (sede)", "HQ state") },
-  { key: "headquarters_country", label: t("País", "Country") },
+  {
+    key: "headquarters_country",
+    label: t("País", "Country"),
+    options: [opt("MX", "México", "Mexico"), opt("US", "Estados Unidos", "United States"), opt("CA", "Canadá", "Canada"), opt("Other", "Otro", "Other")],
+  },
 ];
 
-export const SECTIONS: { key: Section; title: Text; help: Text; fields: { key: string; label: Text; long?: boolean }[] }[] = [
+/**
+ * What the shipper fills. Fields MARKSMAN fills (how they found us, customer type, credit limit and terms)
+ * are not on the shipper's link (decisión de Jose, 6-nov); the backend keeps their saved values, since a
+ * section is sent with everything it already had.
+ */
+export const SECTIONS: { key: Section; title: Text; help: Text; fields: { key: string; label: Text; long?: boolean; options?: Option[] }[] }[] = [
   {
     key: "company",
     title: t("Más sobre la empresa", "More about the company"),
@@ -60,12 +86,20 @@ export const SECTIONS: { key: Section; title: Text; help: Text; fields: { key: s
     fields: [
       { key: "dba_name", label: t("Nombre comercial (DBA)", "DBA name") },
       { key: "legal_form", label: t("Tipo de sociedad", "Legal form") },
-      { key: "company_type", label: t("Tipo de empresa", "Company type") },
+      {
+        key: "company_type",
+        label: t("Tipo de empresa", "Company type"),
+        options: [
+          opt("Manufacturer", "Fabricante", "Manufacturer"),
+          opt("Distributor", "Distribuidor", "Distributor"),
+          opt("Retailer", "Comercio / retail", "Retailer"),
+          opt("3PL / Broker", "3PL / broker"),
+          opt("Other", "Otro", "Other"),
+        ],
+      },
       { key: "duns_number", label: t("DUNS", "DUNS") },
       { key: "owner_name", label: t("Responsable de la cuenta", "Account owner") },
       { key: "owner_phone", label: t("Teléfono del responsable", "Account owner phone") },
-      { key: "source", label: t("¿Cómo nos conociste?", "How did you hear about us?") },
-      { key: "solution_type", label: t("Tipo de cliente / solución", "Customer type / solution") },
     ],
   },
   {
@@ -74,11 +108,35 @@ export const SECTIONS: { key: Section; title: Text; help: Text; fields: { key: s
     help: t("Cómo nos conectamos con tu operación.", "How we connect with your operation."),
     fields: [
       { key: "tms_provider", label: t("Proveedor de TMS", "TMS provider") },
-      { key: "integration_method", label: t("Método de integración", "Integration method") },
+      {
+        key: "integration_method",
+        label: t("Método de integración", "Integration method"),
+        options: [
+          opt("Email / portal", "Correo o portal", "Email / portal"),
+          opt("API"),
+          opt("EDI"),
+          opt("TMS", "Directo en el TMS", "Directly in the TMS"),
+          opt("None", "Ninguna por ahora", "None for now"),
+        ],
+      },
       { key: "integration_contact", label: t("Contacto de integración", "Integration contact") },
       { key: "api_edi", label: t("Capacidad API / EDI", "API / EDI capability") },
-      { key: "main_communication", label: t("Canal principal de comunicación", "Main communication channel") },
-      { key: "tracking_period", label: t("Frecuencia de rastreo", "Tracking period") },
+      {
+        key: "main_communication",
+        label: t("Canal principal de comunicación", "Main communication channel"),
+        options: [opt("Email", "Correo", "Email"), opt("Phone", "Teléfono", "Phone"), opt("WhatsApp"), opt("Portal")],
+      },
+      {
+        key: "tracking_period",
+        label: t("Frecuencia de rastreo", "Tracking period"),
+        options: [
+          opt("Hourly", "Cada hora", "Hourly"),
+          opt("Every 2 hours", "Cada 2 horas", "Every 2 hours"),
+          opt("Every 4 hours", "Cada 4 horas", "Every 4 hours"),
+          opt("Daily", "Diario", "Daily"),
+          opt("Milestones", "Solo en hitos (recolección, cruce, entrega)", "Milestones only (pickup, crossing, delivery)"),
+        ],
+      },
       { key: "onboarding_notes", label: t("Notas para el arranque", "Operational onboarding notes"), long: true },
     ],
   },
@@ -87,8 +145,27 @@ export const SECTIONS: { key: Section; title: Text; help: Text; fields: { key: s
     title: t("Red y alcance del servicio", "Network & service scope"),
     help: t("Dónde y qué movemos para ti.", "Where and what we move for you."),
     fields: [
-      { key: "geographic_scope", label: t("Alcance geográfico", "Geographic scope") },
-      { key: "service_scope", label: t("Alcance del servicio", "Service scope") },
+      {
+        key: "geographic_scope",
+        label: t("Alcance geográfico", "Geographic scope"),
+        options: [
+          opt("Mexico domestic", "Nacional México", "Mexico domestic"),
+          opt("US / Canada domestic", "Nacional EE. UU. / Canadá", "US / Canada domestic"),
+          opt("Crossborder", "Transfronterizo", "Crossborder"),
+          opt("North America", "Toda Norteamérica", "All of North America"),
+        ],
+      },
+      {
+        key: "service_scope",
+        label: t("Alcance del servicio", "Service scope"),
+        options: [
+          opt("FTL", "Caja completa (FTL)", "Full truckload (FTL)"),
+          opt("LTL", "Carga consolidada (LTL)", "Less than truckload (LTL)"),
+          opt("FTL + LTL", "FTL y LTL", "FTL and LTL"),
+          opt("Dedicated", "Dedicado", "Dedicated"),
+          opt("Managed transportation", "Administración de transporte", "Managed transportation"),
+        ],
+      },
       { key: "mx_coverage", label: t("Cobertura en México", "Mexico regional coverage") },
       { key: "us_ca_coverage", label: t("Cobertura en EE. UU. / Canadá", "US / Canada coverage") },
       { key: "primary_cargo", label: t("Carga principal", "Primary cargo") },
@@ -109,8 +186,6 @@ export const SECTIONS: { key: Section; title: Text; help: Text; fields: { key: s
       { key: "usa_credit_type", label: t("Tipo de crédito (EE. UU.)", "USA credit type") },
       { key: "can_row_pay_to_entity", label: t("Entidad que paga en Canadá / otros", "Canada / ROW pay-to entity") },
       { key: "tax_id", label: t("ID fiscal (EIN / RFC)", "Tax ID / EIN / RFC") },
-      { key: "credit_limit", label: t("Límite de crédito", "Credit limit") },
-      { key: "credit_terms", label: t("Términos de crédito", "Credit terms") },
       { key: "billing_reference", label: t("Referencia de facturación", "Billing reference") },
       { key: "billing_notes", label: t("Requisitos de facturación", "Billing requirements"), long: true },
     ],

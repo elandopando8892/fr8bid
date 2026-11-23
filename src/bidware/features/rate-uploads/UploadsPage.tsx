@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { pluralize } from "@/i18n/language";
 import "@/styles/table-scroll.css";
 import { words, tr } from "@/i18n/rate-uploads";
 import { useLang } from "@/i18n/language";
@@ -272,7 +273,7 @@ export function UploadsPage() {
                 {busy === "upload" ? tr("text034") : tr("text035")}
               </button>
             </div>
-            <p className="ayuda-campos">{tr("text027")}</p>
+            <p className="ayuda-campos ayuda">{tr("text027")}</p>
             {file && !pickedType && <ErrorBanner message={tr("text036", file.name)} />}
           </div>
 
@@ -333,7 +334,7 @@ export function UploadsPage() {
                         <td>
                           <Pill tone={status.tone}>{status.label}</Pill>
                           {u.error_message && <div className="cell-sub">{u.error_message}</div>}
-                          {!u.error_message && warnings > 0 && <div className="cell-sub">{warnings}{tr("text043")}</div>}
+                          {!u.error_message && warnings > 0 && <div className="cell-sub">{pluralize(`${warnings}${tr("text043")}`)}</div>}
                         </td>
                         <td className="mono">
                           {u.interpreted_rate_rows ?? 0}

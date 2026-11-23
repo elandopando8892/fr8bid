@@ -155,7 +155,7 @@ export const callRatewareApi = <T = any>(action: string, payload?: Record<string
 export const callQuotedeskApi = <T = any>(action: string, payload?: Record<string, unknown>) =>
   callFunction<T>("quotedesk-api", action, payload);
 
-/** rfx-bid-api is token-based (carrier private room); no Kinde token needed there. */
+/** rfx-bid-api is token-based (carrier private room); no session token needed there. */
 export const callRfxBidApi = <T = any>(action: string, payload: Record<string, unknown> = {}) =>
   callTokenFunction<T>("rfx-bid-api", action, payload);
 

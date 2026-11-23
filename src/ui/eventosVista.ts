@@ -67,10 +67,25 @@ export function resumenRutas(rutas: string[]): string {
 }
 
 // Nombres que Rateware deja a medias en los spots sin ruta («Spot — → — · …»).
-export function nombreEvento(e: ResumenEvento): string {
+// Es el mismo nombre en Hoy, en Eventos y en la página del evento.
+export function nombreEvento(e: Pick<ResumenEvento, "nombre" | "shipper" | "folio">): string {
   const n = e.nombre.replace(/—\s*→\s*—/g, "ruta sin capturar").trim();
   if (!n || /^Spot\s+ruta sin capturar/i.test(n)) return e.shipper && e.shipper !== "—" ? `${e.shipper} · spot sin ruta` : n || e.folio;
   return n;
+}
+
+// Los eventos creados desde el chat llevan un UUID en el folio
+// («FR8-ec3eecfc-8424-…»): se muestra solo su primer bloque.
+export function folioCorto(folio: string): string {
+  const m = /^(FR8-)?([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.exec(folio.trim());
+  return m ? `${m[1] ?? ""}${m[2].toUpperCase()}` : folio;
+}
+
+// El shipper como dato aparte, solo si hay uno y el nombre no lo dice ya.
+export function shipperAparte(e: Pick<ResumenEvento, "nombre" | "shipper" | "folio">): string | null {
+  const s = e.shipper?.trim();
+  if (!s || s === "—") return null;
+  return nombreEvento(e).toLowerCase().includes(s.toLowerCase()) ? null : s;
 }
 
 export function cuantasRutas(e: ResumenEvento): number {

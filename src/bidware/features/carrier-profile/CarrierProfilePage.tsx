@@ -17,6 +17,7 @@ import {
 } from "./carrierProfile.service";
 import { ALL_STEPS, COMPANY_STEP, OPTION_LABEL, type FieldSpec, type Lang, type StepSpec } from "./profile.schema";
 import { Spinner, ErrorBanner, InfoBanner, Pill } from "@/components/ui";
+import { BotonAyudas } from "../../../ui/BotonAyudas";
 
 /**
  * Carrier profile, reached from the "keep your carrier profile up to date"
@@ -66,6 +67,9 @@ export function CarrierProfilePage() {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  /** The submitter's fields open only on «Cambiar» or when nothing fills them. */
+  const [editSubmitter, setEditSubmitter] = useState(false);
+  const [stepsOpen, setStepsOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -89,6 +93,12 @@ export function CarrierProfilePage() {
         setOriginal(d);
         setDraft(d);
         setTickets(res.support_tickets ?? []);
+        // Nombre y correo se piden una vez y se llenan con el contacto principal (decisión de Jose, 6-nov).
+        const general = (d.profile.general ?? {}) as Record<string, unknown>;
+        setSubmitter({
+          name: String(general.full_name || res.vendor.contact_name || "").trim(),
+          email: String(res.vendor.primary_email || "").trim(),
+        });
       })
       .catch((e) => alive && setLoadError((e as Error).message))
       .finally(() => alive && setLoading(false));
@@ -166,8 +176,19 @@ export function CarrierProfilePage() {
     });
   }
 
-  async function save() {
-    if (!submit || !dirty || Object.keys(fieldErrors).length || saving) return;
+  /** Guardar y continuar en cada paso (decisión de Jose, 6-nov): sin cambios, solo avanza. */
+  async function saveAndNext() {
+    if (Object.keys(fieldErrors).length || saving) return;
+    if (dirty && !(await save())) return;
+    if (dirty) setNotice(t.savedStep);
+    if (stepIndex < ALL_STEPS.length - 1) {
+      setStepIndex((i) => i + 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
+  async function save(): Promise<boolean> {
+    if (!submit || !dirty || Object.keys(fieldErrors).length || saving) return false;
     setSaving(true);
     setNotice(null);
     setSaveError(null);
@@ -182,8 +203,10 @@ export function CarrierProfilePage() {
       setDraft(next);
       if (res.support_tickets) setTickets(res.support_tickets);
       setNotice(t.saved);
+      return true;
     } catch (e) {
       setSaveError(explainProfileError((e as Error).message, lang));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -225,7 +248,21 @@ export function CarrierProfilePage() {
             </div>
           </div>
 
-          <nav className="profile-steps" aria-label={t.progress}>
+          {/* En el celular: una línea con el paso actual; tocarla abre la lista (decisión de Jose, 6-nov). */}
+          <button
+            type="button"
+            className="profile-step-now"
+            aria-expanded={stepsOpen}
+            onClick={() => setStepsOpen((v) => !v)}
+          >
+            <span>
+              <b>{t.stepOf(stepIndex + 1, ALL_STEPS.length)}</b> · {step.label[lang]}
+            </span>
+            <span className="profile-step-now-bar">
+              <i style={{ width: `${((stepIndex + 1) / ALL_STEPS.length) * 100}%` }} />
+            </span>
+          </button>
+          <nav className={`profile-steps${stepsOpen ? " open" : ""}`} aria-label={t.progress}>
             {ALL_STEPS.map((s, i) => {
               const p = progress.perStep[i];
               const complete = p.total ? p.done === p.total : p.filled > 0;
@@ -235,7 +272,10 @@ export function CarrierProfilePage() {
                   type="button"
                   className={i === stepIndex ? "active" : ""}
                   aria-current={i === stepIndex ? "step" : undefined}
-                  onClick={() => setStepIndex(i)}
+                  onClick={() => {
+                    setStepIndex(i);
+                    setStepsOpen(false);
+                  }}
                 >
                   <span className={`profile-step-num${complete ? " done" : ""}`}>{complete ? "✓" : i + 1}</span>
                   <span className="profile-step-label">{s.label[lang]}</span>
@@ -247,7 +287,7 @@ export function CarrierProfilePage() {
             })}
           </nav>
 
-          <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 2px 0" }}>{t.privacy}</p>
+          <p className="ayuda" style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 2px 0" }}>{t.privacy}</p>
         </aside>
 
         <div style={{ display: "grid", gap: 14, alignContent: "start" }}>
@@ -259,65 +299,73 @@ export function CarrierProfilePage() {
             onChange={(field, value) => setField(step.key, field, value)}
           />
 
-          <div className="row">
-            <button type="button" disabled={stepIndex === 0} onClick={() => setStepIndex((i) => i - 1)}>
-              ← {t.back}
-            </button>
-            <div className="spacer" />
-            {stepIndex < ALL_STEPS.length - 1 && (
-              <button type="button" onClick={() => setStepIndex((i) => i + 1)}>
-                {t.next} →
-              </button>
-            )}
-          </div>
-
           <div className="card profile-save">
-            <div className="cell-title" style={{ marginBottom: 10 }}>
-              {t.whoSaves}
-            </div>
-            <div className="profile-grid">
-              <label className="field">
-                <span>{t.yourName}</span>
-                <input
-                  value={submitter.name}
-                  onChange={(e) => setSubmitter((s) => ({ ...s, name: e.target.value }))}
-                  autoComplete="name"
-                />
-              </label>
-              <label className="field">
-                <span>{t.yourEmail}</span>
-                <input
-                  type="email"
-                  value={submitter.email}
-                  onChange={(e) => setSubmitter((s) => ({ ...s, email: e.target.value }))}
-                  autoComplete="email"
-                />
-                {fieldErrors.submitter_email && <FieldError text={fieldErrors.submitter_email} />}
-              </label>
-            </div>
+            {editSubmitter || !submitter.name.trim() || !submitter.email.trim() ? (
+              <div className="profile-grid">
+                <label className="field">
+                  <span>{t.yourName}</span>
+                  <input
+                    value={submitter.name}
+                    onChange={(e) => setSubmitter((s) => ({ ...s, name: e.target.value }))}
+                    autoComplete="name"
+                  />
+                </label>
+                <label className="field">
+                  <span>{t.yourEmail}</span>
+                  <input
+                    type="email"
+                    value={submitter.email}
+                    onChange={(e) => setSubmitter((s) => ({ ...s, email: e.target.value }))}
+                    autoComplete="email"
+                  />
+                  {fieldErrors.submitter_email && <FieldError text={fieldErrors.submitter_email} />}
+                </label>
+              </div>
+            ) : (
+              <p className="profile-saving-as">
+                {t.savingAs} <b>{submitter.name}</b> · {submitter.email}{" "}
+                <button type="button" className="link" onClick={() => setEditSubmitter(true)}>
+                  {t.change}
+                </button>
+              </p>
+            )}
             <div className="row">
-              <span style={{ fontSize: 11.5, color: "var(--muted)", flex: 1 }}>
-                {dirty ? t.pending(submit!.changed) : t.nothingToSave}
-              </span>
-              <button
-                type="button"
-                className="primary"
-                disabled={!dirty || saving || Object.keys(fieldErrors).length > 0}
-                onClick={save}
-              >
-                {saving ? t.saving : t.save}
+              <button type="button" disabled={stepIndex === 0 || saving} onClick={() => setStepIndex((i) => i - 1)}>
+                ← {t.back}
               </button>
+              <span style={{ fontSize: 11.5, color: "var(--muted)", flex: 1, textAlign: "right" }}>
+                {dirty ? t.pending(submit!.changed) : ""}
+              </span>
+              {stepIndex < ALL_STEPS.length - 1 ? (
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={saving || Object.keys(fieldErrors).length > 0}
+                  onClick={saveAndNext}
+                >
+                  {saving ? t.saving : dirty ? `${t.saveNext} →` : `${t.next} →`}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={!dirty || saving || Object.keys(fieldErrors).length > 0}
+                  onClick={() => void save()}
+                >
+                  {saving ? t.saving : t.save}
+                </button>
+              )}
             </div>
           </div>
 
-          <SupportLog
+          {tickets.length > 0 && <SupportLog
             token={token}
             lang={lang}
             tickets={tickets}
             onTickets={setTickets}
             onNotice={setNotice}
             onError={setSaveError}
-          />
+          />}
         </div>
       </div>
     </Shell>
@@ -340,30 +388,34 @@ function Shell({
   children?: ReactNode;
 }) {
   return (
-    <div style={{ maxWidth: 1080, margin: "0 auto", padding: "28px 20px 60px" }}>
-      <div className="brand" style={{ paddingLeft: 0 }}>
-        <span className="dot" /> Marksman
+    <>
+    {/* La misma barra oscura del Bid Room (decisión de Jose, 6-nov). */}
+    <div className="croom-bar">
+      <span className="croom-logo">
+        MARKS<b>MAN</b>
+      </span>
+      <span className="croom-bar-note">{COPY[lang].eyebrow}</span>
+      <BotonAyudas en={lang === "en"} className="boton-ayudas-publica" />
+      <div className="profile-lang sr-lang" role="group" aria-label="Idioma / Language">
+        {(["es", "en"] as Lang[]).map((l) => (
+          <button key={l} type="button" className={lang === l ? "active" : ""} onClick={() => setLang(l)}>
+            {l.toUpperCase()}
+          </button>
+        ))}
       </div>
+    </div>
+    <div style={{ maxWidth: 1080, margin: "0 auto", padding: "24px 20px 60px" }}>
       <div className="public-head">
         <div>
-          <p className="crumb">{COPY[lang].eyebrow}</p>
           <h1>{title}</h1>
-          {sub && <p className="sub">{sub}</p>}
+          {sub && <p className="sub ayuda">{sub}</p>}
         </div>
         <div className="spacer" />
-        <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
-          <div className="profile-lang" role="group" aria-label="Idioma / Language">
-            {(["es", "en"] as Lang[]).map((l) => (
-              <button key={l} type="button" className={lang === l ? "active" : ""} onClick={() => setLang(l)}>
-                {l === "es" ? COPY[lang].spanishLanguage : "English"}
-              </button>
-            ))}
-          </div>
-          {aside}
-        </div>
+        {aside && <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>{aside}</div>}
       </div>
       <div style={{ display: "grid", gap: 14 }}>{children}</div>
     </div>
+    </>
   );
 }
 
@@ -393,7 +445,7 @@ function StepCard({
     <section className="card">
       <div style={{ marginBottom: 14 }}>
         <h2 style={{ fontSize: 16, margin: "0 0 4px" }}>{step.label[lang]}</h2>
-        <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>{step.help[lang]}</p>
+        <p className="ayuda" style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>{step.help[lang]}</p>
       </div>
       <div className="profile-grid">
         {step.fields.map((field) => {
@@ -529,7 +581,7 @@ function SupportLog({
       <div className="row" style={{ marginBottom: 10 }}>
         <div style={{ flex: 1 }}>
           <h2 style={{ fontSize: 14, margin: "0 0 2px" }}>{t.support}</h2>
-          <p style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>{t.supportHelp}</p>
+          <p className="ayuda" style={{ margin: 0, fontSize: 12, color: "var(--muted)" }}>{t.supportHelp}</p>
         </div>
         <Pill>{tickets.length}</Pill>
       </div>

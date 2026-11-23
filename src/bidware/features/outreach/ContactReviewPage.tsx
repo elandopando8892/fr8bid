@@ -1,5 +1,5 @@
 import { words, tr } from "@/i18n/outreach";
-import { useLang, locale } from "@/i18n/language";
+import { getLang, useLang, locale } from "@/i18n/language";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useAsync } from "@/components/useAsync";
@@ -12,6 +12,13 @@ import { updateVendorContact, type ContactPatch } from "@/features/carrier-crm/c
 import { listContactReviews, recordContactReview, type CarrierReview, type ContactSnapshot } from "./review.service";
 import { LaunchHeader, LaunchTabs, audienceOf } from "./LaunchShell";
 import type { Vendor } from "@/types/domain";
+
+/** Who reviewed, without internal ids: an organization key reads as «el equipo». */
+function reviewerLabel(by: unknown): string {
+  const v = String(by ?? "").trim();
+  if (!v) return "—";
+  return /^org:/i.test(v) ? (getLang() === "en" ? "the team" : "el equipo") : v;
+}
 
 type State = "pending" | "changed" | "reviewed" | "no_contact" | "revoked";
 /** Lo que falta por revisar: nuevos, revocados y los que cambiaron de contacto. */
@@ -221,7 +228,7 @@ export function ContactReviewPage() {
       />
       <main className="main launch-main">
         <LaunchTabs eventId={id} active="review" />
-        <p className="rev-intro">{tr("text276")}</p>
+        <p className="rev-intro ayuda">{tr("text276")}</p>
 
         {!canWork && (
           <InfoBanner title={tr("text022")}>{tr("text023")}</InfoBanner>
@@ -353,7 +360,7 @@ function ReviewCard({
           {state === "reviewed" ? (
             <>
               <span className="mono rev-by">
-                {tr("text043")}{review?.reviewed_by || "—"} · {when(review?.reviewed_at)}
+                {tr("text043")}{reviewerLabel(review?.reviewed_by)} · {when(review?.reviewed_at)}
               </span>
               <button disabled={busy || Boolean(locked)} title={locked} onClick={() => onReview(false)}>
                 {tr("text045")}</button>
@@ -369,12 +376,12 @@ function ReviewCard({
               <span>
                 {state === "revoked" && (
                   <span className="mono rev-by">
-                    {tr("text048")}{review?.reviewed_by || "—"} · {when(review?.reviewed_at)} ·{" "}
+                    {tr("text048")}{reviewerLabel(review?.reviewed_by)} · {when(review?.reviewed_at)} ·{" "}
                   </span>
                 )}
                 {state === "changed" && (
                   <span className="mono rev-by">
-                    {tr("text043")}{review?.reviewed_by || "—"} · {when(review?.reviewed_at)}
+                    {tr("text043")}{reviewerLabel(review?.reviewed_by)} · {when(review?.reviewed_at)}
                     <em>{tr("text044")}{changed.join(", ")})</em>{" "}
                   </span>
                 )}

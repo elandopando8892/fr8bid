@@ -564,7 +564,7 @@ function EditQuoteDialog({
             </select>
           </label>
         </div>
-        {hasCosts && <p className="qd-muted qd-small">{tr("text277")}</p>}
+        {hasCosts && <p className="qd-muted qd-small ayuda">{tr("text277")}</p>}
         <div className="qd-two">
           <label className="field">
             <span>{tr("text147")}</span>

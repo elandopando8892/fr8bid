@@ -8,7 +8,11 @@
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:bidware": "node --test \"test/bidware/*.test.mjs\" \"test/bidware/*.test.cjs\""
+    "test:bidware": "node --test \"test/bidware/*.test.mjs\" \"test/bidware/*.test.cjs\"",
+    "agentes:verificar": "node scripts/agentes/codex.mjs verificar",
+    "agentes:revisar": "node scripts/agentes/codex.mjs revisar",
+    "agentes:delegar": "node scripts/agentes/codex.mjs delegar",
+    "agentes:integrar": "node scripts/agentes/codex.mjs integrar"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
@@ -23,10 +27,14 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",
+    "@modelcontextprotocol/node": "2.1.2",
+    "@modelcontextprotocol/server": "2.4.0",
     "@supabase/supabase-js": "^2.46.1",
+    "jose": "6.2.17",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.18.4",
-    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "zod": "4.6.7"
   }
 }

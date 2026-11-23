@@ -15,8 +15,8 @@ import {
   RFX_CONDITION_CATALOG,
   RFX_CONDITION_CATALOG_VERSION,
   sameRequirement
-} from "../dominio/condiciones-r1";
-import { UUID_RATEWARE } from "../dominio/operacion";
+} from "../dominio/condiciones-r1.js";
+import { UUID_RATEWARE } from "../dominio/operacion.js";
 
 export type Servicio = "rateware-api" | "rfx-bid-api";
 
@@ -41,7 +41,10 @@ const ADMIN_ACTIONS = new Set([
   "set_rfx_lane_no_award",
   "closeout_awarded_rfx_to_rateware",
   "generate_rfx_award_notices",
-  "send_outreach_messages"
+  "send_outreach_messages",
+  "reject_rfx_bid",
+  "archive_rfx_event",
+  "delete_rfx_event"
 ]);
 const WRITE_ACTIONS = new Set([
   ...ADMIN_ACTIONS,
@@ -55,7 +58,12 @@ const WRITE_ACTIONS = new Set([
   "save_rfx_lane_conditions",
   "draft_bid_room_carrier_message",
   "create_outreach_campaign",
-  "record_rfx_invitation_wave_review"
+  "record_rfx_invitation_wave_review",
+  "capture_rfx_bid_if_empty",
+  "mark_rfx_replied_if_empty",
+  "extend_rfx_due_date_if_unchanged",
+  "prepare_whatsapp_rfx_reminder",
+  "send_whatsapp_outreach_messages"
 ]);
 
 export class ErrorRed extends Error {
@@ -99,14 +107,22 @@ export class RatewareSimulado {
   campanas: Fila[] = [];
   plantillas: Fila[] = [
     { id: "tpl00000-0000-4000-8000-000000000001", owner_email: null, name: "SPRINT 15 · RFx carrier invitation (PRUEBA)", channel: "email", is_default: true, active: true },
-    { id: "tpl00000-0000-4000-8000-000000000002", owner_email: null, name: "RFx carrier invitation - Spanish", channel: "email", is_default: false, active: true }
+    { id: "tpl00000-0000-4000-8000-000000000002", owner_email: null, name: "RFx carrier invitation - Spanish", channel: "multi", is_default: false, active: true }
   ];
   // Lo que list_rfx_carrier_replies (R2) encontraría en Gmail y en el chat.
   respuestasCarrier: Fila[] = [];
+  // Contenido de cada correo de respuesta (get_rfx_carrier_reply) por gmail_message_id.
+  correosCarrier = new Map<string, Fila>();
+  // outreach_email_opens: aperturas del píxel por mensaje (7-nov-2026).
+  aperturasCorreo: Fila[] = [];
   // Resultado de send_outreach_messages por operation_id (repetirlo no reenvía).
   operacionesEnvio = new Map<string, Fila>();
   // cuotaGmail: cuántos mensajes más acepta Gmail hoy (null = sin límite).
   fallas = { perderRespuestaDe: new Set<string>(), sinResponder: new Set<string>(), cuotaGmail: null as number | null, fallarRevisiones: false, fallarRespuestas: false };
+  // Plantilla de Meta del recordatorio (rateware PR #215) en los mappings: null = no registrada.
+  plantillaRecordatorio: "APPROVED" | "PENDING" | "REJECTED" | null = null;
+  // Acciones que este Rateware «todavía no tiene» (p. ej. sin desplegar): responden 400 «Unknown action.».
+  sinDesplegar = new Set<string>();
   hoy: () => string = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" }).format(new Date());
   ahora: () => string = () => new Date().toISOString();
 
@@ -183,6 +199,7 @@ export class RatewareSimulado {
     if (WRITE_ACTIONS.has(action) && roles.includes("viewer") && !roles.includes("admin") && !roles.includes("operator"))
       throw new Falla(403, "Tu rol es de consulta.", "TEAM_ROLE_REQUIRED");
     const ok = (b: unknown, headers: Record<string, string> = {}) => ({ status: 200, body: b, headers });
+    if (this.sinDesplegar.has(action)) throw new Falla(400, "Unknown action.", "UNKNOWN_ACTION");
 
     switch (action) {
       case "list_rfx_events": {
@@ -281,10 +298,27 @@ export class RatewareSimulado {
         this.revisionesCarrier.push(fila);
         return ok({ row: { ...fila } });
       }
-      case "list_outreach_templates":
-        return ok({ rows: this.plantillas.filter((t) => t.active && (!t.owner_email || t.owner_email === u.ownerEmail)).map((t) => ({ ...t })) });
-      case "list_outreach_campaigns":
-        return ok({ rows: this.campanas.filter((c) => c.owner_email === u.ownerEmail && c.status !== "archived").map((c) => ({ ...c })) });
+      case "list_outreach_templates": {
+        const rows: Fila[] = this.plantillas.filter((t) => t.active && (!t.owner_email || t.owner_email === u.ownerEmail)).map((t) => ({ ...t, whatsapp_meta: null }));
+        // Como rateware-api: cada plantilla con su mapping de Meta (whatsapp_meta).
+        if (this.plantillaRecordatorio) rows.push({ id: "tpl00000-0000-4000-8000-000000000003", owner_email: u.ownerEmail, name: "Recordatorio RFx WhatsApp", channel: "whatsapp", is_default: false, active: true,
+          meta_template_name: "rateware_rfx_reminder_es", whatsapp_meta: { meta_template_name: "rateware_rfx_reminder_es", meta_template_language: "es_MX", meta_template_category: "UTILITY", meta_template_status: this.plantillaRecordatorio } });
+        return ok({ rows });
+      }
+      case "list_outreach_campaigns": {
+        const propias = this.campanas.filter((c) => c.owner_email === u.ownerEmail && c.status !== "archived");
+        // Como rateware-api: con rfx_event_id, lectura completa y acotada al evento.
+        if (Object.prototype.hasOwnProperty.call(body, "rfx_event_id")) {
+          const ev = this.evento(u, body.rfx_event_id);
+          // Mismas columnas que rateware-api: sin idempotency_key ni remitente.
+          const rows = propias
+            .filter((c) => c.rfx_event_id === ev.id)
+            .map((c) => ({ id: c.id, organization_id: "org-simulada", owner_email: c.owner_email, rfx_event_id: c.rfx_event_id, template_id: c.template_id, name: c.name, status: c.status, audience_policy: c.audience_policy, created_at: c.created_at, updated_at: c.updated_at }));
+          return ok({ rows, total: rows.length, complete: true, has_more: false, campaign_read_version: 1, rfx_event_id: ev.id, organization_id: "org-simulada" });
+        }
+        // Como rateware-api: el catálogo global trae solo las 100 más recientes.
+        return ok({ rows: [...propias].reverse().slice(0, 100).map((c) => ({ ...c })) });
+      }
       case "create_outreach_campaign": {
         const c: Fila = body.campaign && typeof body.campaign === "object" ? body.campaign : {};
         if (!c.name) throw new Falla(400, "Campaign name is required.", "NAME_REQUIRED");
@@ -299,7 +333,21 @@ export class RatewareSimulado {
         const event = this.evento(u, body.event_id);
         if (this.fallas.fallarRespuestas) throw new Falla(500, "Gmail reply lookup failed", "REPLIES_UNAVAILABLE");
         const ids = new Set(this.laneVendors.filter((lv) => lv.rfx_event_id === event.id).map((lv) => lv.id));
-        return ok({ event_id: event.id, checked_at: this.ahora(), email_status: "checked", rows: this.respuestasCarrier.filter((r) => ids.has(r.rfx_lane_vendor_id)).map((r) => ({ ...r })) });
+        const mensajes = new Set(this.mensajes.filter((m) => m.rfx_event_id === event.id).map((m) => m.id));
+        return ok({
+          event_id: event.id,
+          checked_at: this.ahora(),
+          email_status: "checked",
+          rows: this.respuestasCarrier.filter((r) => ids.has(r.rfx_lane_vendor_id)).map((r) => ({ ...r })),
+          opens_status: "checked",
+          opens: this.aperturasCorreo.filter((a) => mensajes.has(a.outreach_message_id)).map((a) => ({ ...a }))
+        });
+      }
+      case "get_rfx_carrier_reply": {
+        const event = this.evento(u, body.event_id);
+        const correo = this.correosCarrier.get(String(body.gmail_message_id || ""));
+        if (!correo || correo.event_id !== event.id) throw new Falla(404, "This email is not a carrier reply to this RFx.", "404");
+        return ok({ ...correo });
       }
       case "list_vendors": {
         // Como list_vendors con lightweight: por ids o búsqueda (nombre o dominio).
@@ -369,7 +417,7 @@ export class RatewareSimulado {
         const event = this.evento(u, body.rfx_event_id || body.event_id);
         // Como OUTREACH_MESSAGE_SELECT de rateware-api: cada mensaje con vendors(...).
         const rows = this.mensajes
-            .filter((m) => m.rfx_event_id === event.id)
+            .filter((m) => m.rfx_event_id === event.id && (!body.channel || (m.channel ?? "email") === body.channel))
             .map((m) => {
               const v = this.vendors.find((x) => x.id === m.vendor_id);
               return { ...structuredClone(m), vendors: v ? { vendor_name: v.vendor_name, domain: v.domain || null, primary_email: v.primary_email, whatsapp_phone: v.whatsapp_phone ?? null, whatsapp_do_not_contact: v.whatsapp_do_not_contact === true } : null };
@@ -495,10 +543,11 @@ export class RatewareSimulado {
         const vendor = this.vendors.find((v) => v.id === lv.vendor_id)!;
         // Como rateware-api: responde en el hilo solo si encuentra un correo
         // del carrier; si no (el caso de quien no ha respondido), sale como
-        // correo nuevo con asunto en inglés «<folio> | Question about …».
+        // correo nuevo. Asunto «Seguimiento <folio> · <origen> → <destino>»
+        // (decisión de Jose, 6-nov; el asunto va en español aunque el mensaje vaya en inglés).
         const lane = this.lanes.find((l) => l.id === lv.rfx_lane_id);
-        const ruta = [lane?.origin_city, lane?.destination_city].filter(Boolean).join(" -> ") || "this RFx";
-        const m = this.filaMensaje(event, lv, vendor, `${event.rfx_id} | Question about ${ruta}`, texto, {
+        const ruta = [lane?.origin_city, lane?.destination_city].filter(Boolean).join(" → ");
+        const m = this.filaMensaje(event, lv, vendor, `Seguimiento ${event.rfx_id}${ruta ? ` · ${ruta}` : ""}`, texto, {
           source: "bid_room_carrier_ask",
           bid_room_request_key: clave,
           rfx_lane_vendor_ids: [lv.id],
@@ -577,6 +626,60 @@ export class RatewareSimulado {
         if (body.operation_id) this.operacionesEnvio.set(String(body.operation_id), structuredClone(resultado));
         return ok(resultado);
       }
+      case "prepare_whatsapp_rfx_reminder": {
+        // rateware PR #215: borrador + aprobación de 15 min; mismos bloqueos y llave por participación + ventana.
+        if (body.purpose !== "rfx_reminder") throw new Falla(400, "Only purpose rfx_reminder is supported here.", "PROPOSITO_NO_SOPORTADO");
+        const event = this.evento(u, body.rfx_event_id);
+        if (["awarded", "archived", "closed"].includes(event.status)) throw new Falla(409, "The event is closed.", "CONDICION_NO_CUMPLIDA");
+        const window = String(body.reminder_window || "");
+        if (!["attempt_4", "48h", "24h"].includes(window)) throw new Falla(400, "reminder_window is invalid.", "DATOS_INVALIDOS");
+        const parts = this.laneVendors.filter((lv) => lv.rfx_event_id === event.id && lv.vendor_id === body.vendor_id);
+        const v = this.vendors.find((x) => x.id === body.vendor_id && x.owner_email === u.ownerEmail);
+        if (!parts.length || !v) throw new Falla(404, "The carrier is not participating in this RFx.", "NO_ENCONTRADO");
+        if (v.whatsapp_do_not_contact) throw new Falla(409, "The carrier is marked do-not-contact for WhatsApp.", "WHATSAPP_NO_CONTACTAR");
+        if (!["consent", "contractual", "manual"].includes(String(v.whatsapp_permission_basis ?? ""))) throw new Falla(409, "No WhatsApp permission basis.", "WHATSAPP_SIN_PERMISO");
+        if (!/^\+[1-9]\d{7,14}$/.test(String(v.whatsapp_phone ?? ""))) throw new Falla(409, "The WhatsApp number needs an explicit E.164 country code.", "NUMERO_DUDOSO");
+        if (this.plantillaRecordatorio !== "APPROVED") throw new Falla(409, "Plantilla de recordatorio pendiente de aprobación en Meta (rateware_rfx_reminder_es).", "PLANTILLA_RECORDATORIO_PENDIENTE");
+        const key = `rfx_reminder:${event.id}:${v.id}:${window}`;
+        const previo = this.mensajes.find((m) => m.channel === "whatsapp" && m.status !== "archived" && m.metadata?.whatsapp_reminder_key === key);
+        if (previo && previo.status !== "drafted") throw new Falla(409, "This reminder was already sent for this carrier and window.", "RECORDATORIO_DUPLICADO");
+        const d = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(event.due_date ?? ""));
+        const parametros = [
+          { key: "vendor_name", value: String(v.vendor_name) },
+          { key: "event_name", value: `${event.name} (${event.rfx_id})` },
+          { key: "due_date", value: d ? `${d[3]}/${d[2]}/${d[1]} a las 23:59 (hora CDMX)` : "" },
+          { key: "bid_link", value: `https://rateware.example/rfx-bid.html?token=${parts[0].invitation_token}` }
+        ];
+        const texto = `Hola ${parametros[0].value}, te recordamos que la solicitud de cotización ${parametros[1].value} cierra el ${parametros[2].value}. Si aún no has enviado tu tarifa, puedes hacerlo aquí: ${parametros[3].value}\nGracias, MARKSMAN.`;
+        const m: Fila = previo ?? { id: nuevoId("wam"), owner_email: u.ownerEmail, rfx_event_id: event.id, rfx_lane_vendor_id: parts[0].id, vendor_id: v.id, channel: "whatsapp", status: "drafted",
+          recipient_phone: v.whatsapp_phone, whatsapp_template_name: "rateware_rfx_reminder_es", metadata: { whatsapp_purpose: "rfx_reminder", whatsapp_reminder_window: window, whatsapp_reminder_key: key } };
+        Object.assign(m, { whatsapp_text: texto, updated_at: this.marca() });
+        if (!previo) this.mensajes.push(m);
+        this.bitacorar(u.email, "outreach.whatsapp.reminder_prepared", "outreach_messages", m.id, null, "drafted", { reminder_key: key });
+        const preview = { template_name: "rateware_rfx_reminder_es", language: "es_MX", category: "UTILITY", to: v.whatsapp_phone, text: texto, parameters: parametros, reminder_window: window, reminder_key: key };
+        return ok({ listo_para_meta: true, reused: Boolean(previo), preview, row: { id: m.id, updated_at: m.updated_at, status: m.status, rfx_event_id: event.id, vendor_id: v.id },
+          whatsapp_approval: { contract: "bidware.whatsapp-approval.v1", fingerprint: `sim-${m.id}-${m.updated_at}`, issued_at: this.ahora(), expires_at: this.ahora(), signature: "sim" }, whatsapp_preview: { kind: "pending", text: texto } });
+      }
+      case "send_whatsapp_outreach_messages": {
+        // Envío por Meta (simulado): versión exacta + aprobación del borrador; nunca reenvía.
+        if (body.confirmed !== true || body.confirmation_action !== "send_whatsapp_outreach_messages") throw new Falla(400, "WhatsApp bulk send requires confirmed=true.", "CONFIRMATION_REQUIRED");
+        const ids: string[] = Array.isArray(body.ids) ? body.ids : [];
+        const versiones = new Map((body.expected_versions || []).map((x: Fila) => [x.id, x]));
+        const enviados: Fila[] = [];
+        for (const id of ids) {
+          const m = this.mensajes.find((x) => x.id === id && x.owner_email === u.ownerEmail && x.channel === "whatsapp");
+          if (!m) throw new Falla(404, "Message not found.", "404");
+          const esperado = versiones.get(id) as Fila | undefined;
+          if (!esperado || esperado.updated_at !== m.updated_at || esperado.whatsapp_approval?.fingerprint !== `sim-${m.id}-${m.updated_at}`) throw new Falla(409, "OUTREACH_APPROVAL_REQUIRED: approve the current version.", "OUTREACH_APPROVAL_REQUIRED");
+          if (m.status !== "drafted") throw new Falla(409, "OUTREACH_VERSION_CONFLICT: review the current message again.", "OUTREACH_VERSION_CONFLICT");
+          const v = this.vendors.find((x) => x.id === m.vendor_id);
+          if (v?.whatsapp_do_not_contact || this.plantillaRecordatorio !== "APPROVED") throw new Falla(409, "OUTREACH_APPROVAL_REQUIRED: Contact permission is missing or excluded.", "OUTREACH_APPROVAL_REQUIRED");
+          Object.assign(m, { status: "sent", sent_at: this.ahora(), provider_message_id: `wamid.${m.id.slice(-6)}`, updated_at: this.marca() });
+          this.bitacorar(u.email, "outreach.whatsapp.send", "outreach_messages", m.id, "drafted", "sent", { provider_message_id: m.provider_message_id });
+          enviados.push(m);
+        }
+        return ok({ sent: enviados.length, failed: 0, skipped: 0, delivery_unknown: 0, rows: enviados.map((m) => structuredClone(m)), failures: [], skipped_rows: [] });
+      }
       case "update_rfx_event": {
         // rateware-api: el cambio llega en body.patch. status «closed» NO es el
         // cierre a ofertas: exige todas las rutas decididas y ejecuta la entrega
@@ -611,7 +714,8 @@ export class RatewareSimulado {
         if (!body.id) throw new Falla(400, "RFx invitation id is required.", "BAD_REQUEST");
         const lv = this.laneVendor(u, body.id);
         const e = this.events.find((x) => x.id === lv.rfx_event_id)!;
-        if (e.status === "awarded") throw new Falla(409, "El evento ya se entregó.", "RFX_CLOSED");
+        // Como la Mesa: nada se captura en un evento entregado o archivado.
+        if (e.status === "awarded" || e.status === "archived") throw new Falla(409, "El evento ya se entregó o se archivó.", "RFX_CLOSED");
         if (!body.patch) return ok({ row: this.invitacionCruda(lv) });
         if (body.patch.bid_rate === null || body.patch.bid_rate === undefined) {
           // Igual que rateware-api: sin tarifa queda el estado que se mande.
@@ -622,6 +726,44 @@ export class RatewareSimulado {
         }
         this.registrarOferta(lv, body.patch, "team_capture", u.email);
         return ok({ row: this.invitacionCruda(lv) });
+      }
+      // Escrituras condicionales atómicas de rateware-api (PR #213): la condición se evalúa
+      // en el mismo paso que la escritura; si no se cumple, 409 y nada cambia.
+      case "capture_rfx_bid_if_empty":
+      case "mark_rfx_replied_if_empty": {
+        if (!body.id) throw new Falla(400, "RFx invitation id is required.", "BAD_REQUEST");
+        const lv = this.laneVendor(u, body.id);
+        const e = this.events.find((x) => x.id === lv.rfx_event_id)!;
+        const patch: Fila = body.patch && typeof body.patch === "object" ? body.patch : {};
+        if (action === "capture_rfx_bid_if_empty" && !(Number(patch.bid_rate) > 0)) throw new Falla(400, "Bid rate is required.", "OFERTA_INVALIDA");
+        if (action === "mark_rfx_replied_if_empty" && !["responded", "declined"].includes(String(patch.invitation_status))) throw new Falla(400, "invitation_status must be responded or declined.", "ESTADO_INVALIDO");
+        if (["awarded", "archived", "closed"].includes(e.status)) throw new Falla(409, `The event is ${e.status}; nothing was written.`, "CONDICION_NO_CUMPLIDA");
+        if (lv.bid_rate !== null && lv.bid_rate !== undefined) throw new Falla(409, "This participation already has a bid; nothing was written.", "YA_HAY_OFERTA");
+        if (lv.award_role || ["archived", "awarded"].includes(lv.invitation_status)) throw new Falla(409, "The participation is awarded or archived; nothing was written.", "CONDICION_NO_CUMPLIDA");
+        if (action === "capture_rfx_bid_if_empty") {
+          this.registrarOferta(lv, patch, "team_capture", u.email);
+          return ok({ row: this.invitacionCruda(lv) });
+        }
+        // Nunca escribe bid_rate (tampoco a null).
+        const antes = lv.invitation_status;
+        Object.assign(lv, { invitation_status: patch.invitation_status, notes: patch.notes ?? lv.notes ?? null, responded_at: this.ahora(), response_source: "manual_operator" });
+        this.bitacorar(u.email, "rfx.vendor.status", "rfx_lane_vendors", lv.id, antes, lv.invitation_status, { canal: patch.channel ?? null, condicional: true });
+        return ok({ row: this.invitacionCruda(lv) });
+      }
+      case "extend_rfx_due_date_if_unchanged": {
+        const event = this.evento(u, body.event_id || body.id);
+        const patch: Fila = body.patch && typeof body.patch === "object" ? body.patch : {};
+        const nueva = String(patch.due_date ?? "");
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(nueva)) throw new Falla(400, "due_date (YYYY-MM-DD) is required.", "PLAZO_INVALIDO");
+        if (!("expected_due_date" in body)) throw new Falla(400, "expected_due_date is required.", "PLAZO_INVALIDO");
+        const esperado = body.expected_due_date === null ? null : String(body.expected_due_date).slice(0, 10);
+        if (nueva <= this.hoy() || (esperado && nueva <= esperado)) throw new Falla(400, "The new deadline must be after today and after the current one.", "PLAZO_INVALIDO");
+        if (event.status !== "open" && event.status !== "draft") throw new Falla(409, `The event is ${event.status}.`, "CONDICION_NO_CUMPLIDA");
+        const actual = event.due_date ? String(event.due_date).slice(0, 10) : null;
+        if (actual !== esperado) return { status: 409, body: { error: "The deadline changed since it was read; nothing was written.", code: "PLAZO_CAMBIO", current_due_date: actual }, headers: {} };
+        event.due_date = nueva;
+        this.bitacorar(u.email, "rfx.event.due_date", "rfx_events", event.id, actual, nueva, { condicional: true });
+        return ok({ row: { ...event } });
       }
       case "invite_rfx_lane_vendors": {
         // «Mark as invited» del Bid Room: solo cambia el estado, no envía nada.
@@ -669,6 +811,60 @@ export class RatewareSimulado {
         this.bitacorar(u.email, "rfx.award.clear", "rfx_lane_vendors", lv.id, antes, null);
         return ok({ row: this.invitacionCruda(lv), before: { award_role: antes } });
       }
+      case "archive_rfx_event": {
+        const event = this.evento(u, body.id);
+        if (event.status !== "archived") {
+          const antes = event.status;
+          event.status = "archived";
+          this.bitacorar(u.email, "rfx.event.archive", "rfx_events", event.id, antes, "archived", {});
+        }
+        return ok({ row: { ...event } });
+      }
+      case "delete_rfx_event": {
+        // Como delete_rfx_event_if_idle (rateware #224): solo un borrador sin actividad.
+        const event = this.evento(u, body.id);
+        if (event.status !== "draft") throw new Falla(409, "Solo se borra un evento en borrador.", "RFX_DELETE_NOT_DRAFT");
+        const filas = this.laneVendors.filter((lv) => lv.rfx_event_id === event.id);
+        if (filas.some((lv) => !["shortlisted", "drafted"].includes(String(lv.invitation_status)) || lv.bid_rate != null || lv.award_role))
+          throw new Falla(409, "El evento ya tiene actividad.", "RFX_DELETE_HAS_ACTIVITY");
+        this.laneVendors = this.laneVendors.filter((lv) => lv.rfx_event_id !== event.id);
+        this.lanes = this.lanes.filter((l) => l.rfx_event_id !== event.id);
+        this.events = this.events.filter((e) => e.id !== event.id);
+        this.bitacorar(u.email, "rfx.event.delete", "rfx_events", event.id, "draft", null, {});
+        return ok({ deleted: true, id: event.id });
+      }
+      case "reject_rfx_bid": {
+        // Como rateware-api: una adjudicada no se rechaza; la oferta se borra y
+        // el carrier queda «declined». El motivo es del equipo.
+        const lv = this.laneVendor(u, body.id || body.rfx_lane_vendor_id);
+        if (["primary", "backup"].includes(String(lv.award_role || ""))) throw new Falla(400, "Awarded and backup bids cannot be rejected. Clear the award decision first.", "AWARDED");
+        if (lv.invitation_status === "declined" && lv.bid_rate == null) return ok({ row: this.invitacionCruda(lv), idempotent: true });
+        const antes = lv.bid_rate;
+        lv.invitation_status = "declined";
+        lv.bid_rate = null;
+        this.bitacorar(u.email, "rfx.bid.reject", "rfx_lane_vendors", lv.id, antes, null, { reason: String(body.reason || "") });
+        return ok({ row: this.invitacionCruda(lv) });
+      }
+      case "set_rfx_lane_no_award": {
+        // Como rateware-api: rechaza eventos cerrados y rutas con primario o respaldo.
+        const event = this.evento(u, body.rfx_event_id || body.event_id);
+        if (["closed", "archived"].includes(String(event.status))) throw new Falla(409, "El evento ya está cerrado; sus lanes ya no cambian.", "RFX_CLOSED");
+        const ids: string[] = Array.isArray(body.lane_ids) ? body.lane_ids.map(String) : [];
+        const lanes = this.lanes.filter((l) => l.rfx_event_id === event.id && ids.includes(l.id));
+        if (!ids.length || lanes.length !== ids.length) throw new Falla(404, "Algún lane no pertenece a este evento.", "NOT_FOUND");
+        const declarar = body.no_award !== false;
+        if (declarar && lanes.some((l) => this.laneVendors.some((lv) => lv.rfx_lane_id === l.id && lv.award_role)))
+          throw new Falla(409, "Quita primero el primario y los respaldos para declararlo desierto.", "lane_has_award");
+        const momento = this.ahora();
+        const rows = lanes.filter((l) => Boolean(l.no_award_at) !== declarar);
+        for (const l of rows) {
+          l.no_award_at = declarar ? momento : null;
+          l.no_award_reason = declarar ? String(body.reason || "").trim() || "Ruta desierta" : null;
+          l.no_award_by = declarar ? u.email : null;
+        }
+        if (rows.length) this.bitacorar(u.email, declarar ? "rfx.lane.no_award" : "rfx.lane.no_award.clear", "rfx_events", event.id, null, null, { lane_ids: rows.map((l) => l.id) });
+        return ok({ no_award: declarar, updated: rows.length, unchanged: lanes.length - rows.length, rows });
+      }
       case "closeout_awarded_rfx_to_rateware":
         return this.closeout(u, body);
       default:
@@ -693,6 +889,7 @@ export class RatewareSimulado {
     const filas = this.laneVendors.filter((lv) => lv.rfx_event_id === event.id);
     const hoy = this.hoy();
     // requireCompleteRfxAwardDecisions / requireEligibleRfxCloseout / requireHandoffParity
+    if (!filas.some((lv) => lv.bid_rate !== null && lv.bid_rate !== undefined)) throw new Falla(409, "At least one carrier bid is required before Rateware closeout.", "RFX_NO_BIDS");
     for (const lane of lanes) {
       if (lane.no_award_reason) continue;
       const prim = filas.find((lv) => lv.rfx_lane_id === lane.id && lv.award_role === "primary" && lv.bid_rate !== null);

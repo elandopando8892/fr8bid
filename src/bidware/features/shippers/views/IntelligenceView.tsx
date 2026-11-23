@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { pluralize } from "@/i18n/language";
 import { Link } from "react-router-dom";
 import { useAsync } from "@/components/useAsync";
 import { Empty, ErrorBanner, InfoBanner, Kpis, Pill, Spinner, dateShort, money } from "@/components/ui";
@@ -123,14 +124,14 @@ export function IntelligenceView() {
                       </div>
                     </td>
                     <td className="cell-sub">
-                      {num(row.contact_count)} contacto(s) · {num(row.location_count)} sitio(s)
+                      {pluralize(`${num(row.contact_count)} contacto(s) · ${num(row.location_count)} sitio(s)`)}
                       <br />
-                      {num(row.lane_count)} ruta(s) · {num(row.market_count)} mercado(s)
+                      {pluralize(`${num(row.lane_count)} ruta(s) · ${num(row.market_count)} mercado(s)`)}
                     </td>
                     <td className="cell-sub">
-                      {num(row.active_rfi_count)} RFI(s) · {num(row.open_opportunity_count)} oportunidad(es)
+                      {pluralize(`${num(row.active_rfi_count)} RFI(s) · ${num(row.open_opportunity_count)} oportunidad(es)`)}
                       <br />
-                      {num(row.open_action_count)} acción(es)
+                      {pluralize(`${num(row.open_action_count)} acción(es)`)}
                       {row.pipeline_value ? ` · ${money(row.pipeline_value, row.pipeline_currency || "USD")}` : ""}
                     </td>
                     <td style={{ maxWidth: 260 }}>

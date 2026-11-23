@@ -124,7 +124,7 @@ function CarrierTemplatesContent() {
       <header className="identity crm-head">
         <div className="crm-head-main">
           <h1>{language === "es" ? "Listas de carriers" : "Carrier lists"}</h1>
-          <p className="sub">{tr("text013")}</p>
+          <p className="sub ayuda">{tr("text013")}</p>
         </div>
         <div className="crm-head-actions">
           <Link to="/templates/review" className="btn">{language === "es" ? "Revisar evidencia" : "Review evidence"}</Link>
@@ -343,7 +343,7 @@ function TemplateSide({
         )}
       </div>
       {lc === "draft" && (
-        <p className="tpl-hint">{tr("text040")}</p>
+        <p className="tpl-hint ayuda">{tr("text040")}</p>
       )}
 
       <p className="tpl-static">{tr("text041")}</p>

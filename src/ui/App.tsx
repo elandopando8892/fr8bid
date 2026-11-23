@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes, useParams } from "react
 import { AuthProvider } from "@/auth/AuthContext";
 import { ConfirmHost } from "@/components/confirm";
 import { AIntegraciones, AMesa, Bw, P } from "./bidware";
+import { ConsentimientoOAuth, esDominioDeAcceso } from "./ConsentimientoOAuth";
 import { Eventos } from "./Eventos";
 import { Hoy } from "./Hoy";
 import { LigaCarrier } from "./LigaCarrier";
@@ -26,15 +27,31 @@ export function App() {
 }
 
 const publica = (x: JSX.Element) => <Bw publica>{x}</Bw>;
+const SoloAcceso = () => (
+  <main style={{ maxWidth: 520, margin: "48px auto", padding: "0 16px" }}>
+    <h1>Acceso MARKSMAN</h1>
+    <p>Este dominio solo autoriza conexiones (ChatGPT, Claude) a Fr8Bid. Para trabajar entra a tu app.</p>
+  </main>
+);
 const modulo = (x: JSX.Element) => <Bw>{x}</Bw>;
 
 function Rutas() {
+  // Dominio neutro de acceso (auth.heymarksman.com): solo consentimiento OAuth y su login.
+  if (esDominioDeAcceso(window.location.hostname))
+    return (
+      <Routes>
+        <Route path="/callback" element={publica(<P.Callback />)} />
+        <Route path="/oauth/consent" element={publica(<ConsentimientoOAuth />)} />
+        <Route path="*" element={publica(<SoloAcceso />)} />
+      </Routes>
+    );
   return (
     <Routes>
       {/* Públicas: carriers y shippers entran con su liga, sin sesión. */}
       <Route path="/bid/:token" element={<LigaDelCarrier />} />
       <Route path="/rfx-bid.html" element={publica(<P.BidRoom />)} />
       <Route path="/callback" element={publica(<P.Callback />)} />
+      <Route path="/oauth/consent" element={publica(<ConsentimientoOAuth />)} />
       <Route path="/board" element={publica(<P.Tablero />)} />
       <Route path="/bid-room-board.html" element={publica(<P.Tablero />)} />
       <Route path="/carrier-profile.html" element={publica(<P.PerfilCarrier />)} />
