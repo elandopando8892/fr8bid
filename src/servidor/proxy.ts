@@ -105,7 +105,13 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
     // MCP: alta de un carrier en una lista (vendor_segments participant_template). Solo
     // vendor_ids y con expected_version: Rateware la aplica únicamente si la lista sigue
     // en esa versión (409 template_version_conflict si otro la cambió).
-    "update_carrier_list_template"
+    "update_carrier_list_template",
+    // Página del evento (bloque C del recorrido 22-nov), antes solo en «Detalle
+    // completo»: archivar, borrar un borrador sin actividad (Rateware revisa y
+    // borra en un solo paso, rateware #224) y rechazar una oferta no adjudicada.
+    "archive_rfx_event",
+    "delete_rfx_event",
+    "reject_rfx_bid"
   ]),
   "rfx-bid-api": new Set(["submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
@@ -291,6 +297,25 @@ export async function manejar(
     if (bloqueo) return bloqueo;
   }
 
+  if (action === "archive_rfx_event" || action === "delete_rfx_event") {
+    // Un texto, nunca un arreglo: el candado de eventos protegidos compara el id tal cual.
+    if (typeof body?.id !== "string" || !UUID.test(body.id)) return error(400, "FALTA_EVENTO", "Indica el evento.");
+    if (body?.confirmed !== true || body?.confirmation_action !== action) return error(400, "SIN_CONFIRMAR", "Esta acción requiere confirmación explícita.");
+    if (action === "archive_rfx_event") {
+      // Un evento adjudicado ya se entregó a Rateware: archivarlo lo sacaría de la vista sin deshacer la entrega.
+      const lectura = await leerDetalle(body.id, autorizacion, op);
+      if (lectura === "sin_respuesta") return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se archivó.");
+      if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
+      if (String(lectura.body?.event?.status || "").toLowerCase() === "awarded")
+        return error(409, "EVENTO_ADJUDICADO", "Un evento adjudicado no se archiva desde Fr8Bid.");
+    }
+  }
+
+  if (action === "reject_rfx_bid") {
+    const bloqueo = await guardaRechazo(body!, autorizacion, op);
+    if (bloqueo) return bloqueo;
+  }
+
   if (action === "create_outreach_campaign") {
     const bloqueo = await guardaCampana(body!, autorizacion, op);
     if (bloqueo) return bloqueo;
@@ -381,6 +406,28 @@ async function guardaAdjudicacion(body: Record<string, unknown>, autorizacion: s
 // La captura del equipo y «marcar invitadas» llevan ids de participación, no
 // de evento: se exige event_id y se comprueba con una lectura fresca que cada id
 // es de ese evento (así un id ajeno, p. ej. de HDships, no pasa).
+// Rechazar una oferta: la participación tiene que ser de este evento, tener
+// oferta y no estar adjudicada; el evento, abierto o cerrado (no adjudicado ni
+// archivado). Rateware vuelve a negar la adjudicada.
+async function guardaRechazo(body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
+  if (!body.event_id) return error(400, "FALTA_EVENTO", "Esta acción necesita event_id.");
+  if (!body.id) return error(400, "FALTA_PARTICIPACION", "Indica la participación.");
+  if (!String(body.reason || "").trim()) return error(400, "FALTA_MOTIVO", "Rechazar una oferta necesita el motivo.");
+  if (body.confirmed !== true || body.confirmation_action !== "reject_rfx_bid") return error(400, "SIN_CONFIRMAR", "Rechazar una oferta requiere confirmación explícita.");
+  const lectura = await leerDetalle(body.event_id, autorizacion, op);
+  if (lectura === "sin_respuesta") return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se escribió nada.");
+  if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
+  const estado = String(lectura.body?.event?.status || "").toLowerCase();
+  // «Cerrado a ofertas» es un evento abierto con el plazo vencido; «closed» en
+  // Rateware ya es un evento cerrado y sus ofertas no se tocan.
+  if (!["open", "live", "published"].includes(estado)) return error(409, "EVENTO_NO_PERMITE", "Solo se rechazan ofertas en un evento abierto o cerrado a ofertas.");
+  const fila = ((lectura.body?.lanes || []) as any[]).flatMap((l) => l.invitations || []).find((v: any) => v.id === body.id);
+  if (!fila) return error(404, "NOT_FOUND", "La participación no pertenece a este evento.");
+  if (fila.bid_rate === null || fila.bid_rate === undefined) return error(409, "SIN_OFERTA", "Esta participación no tiene oferta.");
+  if (["primary", "backup"].includes(String(fila.award_role || "").toLowerCase())) return error(409, "ADJUDICADA", "Una oferta adjudicada no se rechaza: primero quita la decisión.");
+  return null;
+}
+
 async function guardaParticipaciones(action: string, body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
   if (!body.event_id) return error(400, "FALTA_EVENTO", "Esta acción necesita event_id.");
   const porId = action === "update_rfx_bid" || action === "capture_rfx_bid_if_empty" || action === "mark_rfx_replied_if_empty";

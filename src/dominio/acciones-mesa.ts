@@ -62,6 +62,17 @@ export function bloqueoRevision(d: Detalle, p: Pick<Participacion, "carrierId" |
   return null;
 }
 
+// Volver a dar «Revisado» a una revisión revocada: solo el Administrador desde
+// la página del evento (el MCP sigue sin poder hacerlo). Mismas condiciones que
+// una revisión nueva, pero solo aplica a la revocada.
+export function bloqueoReRevision(d: Detalle, p: Pick<Participacion, "carrierId" | "carrier" | "correo">): string | null {
+  if (bloqueoEvento(d)) return bloqueoEvento(d);
+  if (!editable(d)) return "Solo en eventos abiertos o en borrador.";
+  if (estadoRevision(d, p.carrierId) !== "revocada") return `La revisión de ${p.carrier} no está revocada.`;
+  if (!p.correo) return `${p.carrier} no tiene correo.`;
+  return null;
+}
+
 // Intentos de seguimiento: evento abierto y respuestas consultadas.
 export function bloqueoIntentos(d: Detalle): string | null {
   if (bloqueoEvento(d)) return bloqueoEvento(d);
@@ -93,4 +104,11 @@ export function bloqueoPlazo(d: Detalle, nueva: string, hoy: string): string | n
   const actual = d.evento.plazo ? d.evento.plazo.slice(0, 10) : null;
   if (actual && nueva <= actual) return `Solo hacia adelante: la fecha nueva debe ser posterior al plazo actual (${actual}).`;
   return null;
+}
+
+// Un evento sin actividad: ninguna invitación salió (todas siguen
+// preseleccionadas, que es «shortlisted» o «drafted» en Rateware), sin ofertas
+// ni adjudicaciones. La misma regla que usa Rateware para dejar borrarlo.
+export function sinActividad(d: Pick<Detalle, "rutas">): boolean {
+  return d.rutas.every((r) => r.participaciones.every((p) => p.estado === "preseleccionada" && !p.versiones.length && !p.rol));
 }

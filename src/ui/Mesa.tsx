@@ -1,5 +1,5 @@
 import { createContext, useContext, Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ErrorApi, type AvanceEnvio } from "../cliente/api";
 import { proyeccionLoads } from "../dominio/loads";
 import { operacionAdjudicacion } from "../dominio/operacion";
@@ -23,7 +23,7 @@ import {
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
 import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
 import { cambiosComerciales, describirModelo, modeloCorto, tarifaVenta } from "../dominio/modelo";
-import { bloqueoRespondio, bloqueoRevision, candidatasCaptura, marcablesRespondio } from "../dominio/acciones-mesa";
+import { bloqueoReRevision, bloqueoRespondio, bloqueoRevision, candidatasCaptura, marcablesRespondio, sinActividad } from "../dominio/acciones-mesa";
 import { eventoSinAvisos } from "../dominio/protegidos.js";
 import { candidatosRecordatorio, claveIntento, esperaRespuesta, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
@@ -232,11 +232,49 @@ export function Mesa({ id }: { id: string }) {
           {verInvitacion && <MasCarriers {...p} />}
           {actual === "entrega" && <PanelEntrega {...p} />}
           {actual === "aviso" && <PanelAviso {...p} />}
+          {s.modo === "rateware" && actual === "evento" && ctx.rol === "admin" && <AccionesEvento d={d} accion={accion} />}
           {s.modo === "rateware" && <MasDelEvento id={id} borrador={d.evento.estado === "borrador"} />}
         </div>
       </div>
     </section>
     </FocoContactos.Provider>
+  );
+}
+
+// Archivar y borrar viven en la página del evento (antes solo en «Detalle
+// completo»). Archivar lo saca de las listas activas y no cierra ni avisa nada.
+// Borrar es definitivo y solo para un borrador sin actividad; Rateware lo vuelve
+// a revisar y lo borra en un solo paso.
+function AccionesEvento({ d, accion }: Pick<Props, "d" | "accion">) {
+  const s = useSesion();
+  const navegar = useNavigate();
+  // Un evento adjudicado no se archiva desde aquí: su entrega y sus avisos se
+  // comprueban con el estado «adjudicado».
+  const archivado = d.evento.estado === "archivado" || d.evento.estado === "adjudicado";
+  const borrable = d.evento.estado === "borrador" && sinActividad(d);
+  if (archivado && !borrable) return null;
+  return (
+    <div className="linea-accion">
+      <span className="linea-icono"><I.Bandeja size={16} /></span>
+      <p className="tenue">{borrable ? "¿Ya no se usará? Archívalo para sacarlo de las listas o bórralo: sigue en borrador y nadie lo ha visto." : "¿Ya no se usará? Archívalo para sacarlo de las listas activas."}</p>
+      {!archivado && (
+        <Confirmar
+          etiqueta="Archivar"
+          clase="btn-secundario"
+          icono={<I.Bandeja size={15} />}
+          advertencia={<>Saca «{nombreEvento(d.evento)}» de las listas activas. Rutas, ofertas y borradores se quedan como están; no cierra el evento ni avisa a nadie. {ADVERTENCIA_REAL(s, d)}</>}
+          onConfirmar={() => accion(() => s.api.archivar(d.evento.id), "Evento archivado.")}
+        />
+      )}
+      {borrable && (
+        <Confirmar
+          etiqueta="Borrar"
+          clase="btn-secundario"
+          advertencia={<>Borra «{nombreEvento(d.evento)}» con sus {plural(d.rutas.length, "ruta")} para siempre; no se puede deshacer. Rateware solo lo borra si sigue en borrador y sin invitaciones ni ofertas. {ADVERTENCIA_REAL(s, d)}</>}
+          onConfirmar={() => accion(async () => { await s.api.borrar(d.evento.id); navegar("/eventos"); }, "Evento borrado.")}
+        />
+      )}
+    </div>
   );
 }
 
@@ -247,7 +285,6 @@ function MasDelEvento({ id, borrador }: { id: string; borrador: boolean }) {
     { a: `/rfx/${id}/review`, t: "Revisión de contactos", icono: I.Lista },
     { a: `/rfx/${id}/message`, t: "Mensaje a carriers", icono: I.Sobre },
     { a: `/rfx/${id}/delivery`, t: "Cola de envío", icono: I.Bandeja },
-    { a: `/rfx/${id}/chat`, t: "Chat del Bid Room", icono: I.Chat },
     { a: `/rfx/${id}/detalle`, t: "Detalle completo", icono: I.Libro }
   ];
   return (
@@ -477,6 +514,15 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
           onConfirmar={() => accion(() => s.api.marcarRevisado(d.evento.id, o.p), `${o.p.carrier} marcado «Revisado».`)}
         />
       )}
+      {ctx.rol === "admin" && !bloqueoReRevision(d, o.p) && (
+        <Confirmar
+          etiqueta="Volver a dar «Revisado»"
+          clase="btn-chico"
+          icono={<I.Check size={14} />}
+          advertencia={<>La revisión de {o.p.carrier} se había revocado. Confirmas que volviste a revisar el contacto ({o.p.correo}) y que puede recibir la invitación. Queda registrado en Rateware. No envía nada. {ADVERTENCIA_REAL(s, d)}</>}
+          onConfirmar={() => accion(() => s.api.marcarRevisado(d.evento.id, o.p), `${o.p.carrier} marcado «Revisado» otra vez.`)}
+        />
+      )}
     </>
   );
   const TABLA = mostrarLista && (enviables.length > 0 || omitidas.length > 0) && (
@@ -508,7 +554,7 @@ function PanelInvitacion({ d, ctx, accion }: Props) {
             <b>{resumenOmisiones(audiencia)}</b>{" "}
             {!listaSola && !verTextos && <button className="btn-texto" onClick={() => setVerLista(!verLista)}>{verLista ? "Ocultar" : "Ver y marcar «Revisado»"}</button>}
             {s.modo === "rateware" && <> · <Liga a={`/rfx/${d.evento.id}/review`}>Revisar contactos</Liga></>}
-            {omitidas.some((o) => o.estado === "revocada") && <span className="tenue"> · Una revisión revocada se vuelve a dar en Revisión de contactos.</span>}
+
           </span>
         </p>
       )}
@@ -1330,7 +1376,8 @@ function PanelComparar({ d, ctx, accion }: Props) {
       {d.rutas.map((ruta) => {
         const filas = ofertasOrdenadas(ruta);
         const laMejor = masBajaComparable(ruta);
-        const sel = ruta.participaciones.find((x) => x.id === elegido) ?? null;
+        // Una oferta rechazada deja de tener versión: ya no se puede elegir.
+        const sel = ruta.participaciones.find((x) => x.id === elegido && x.versiones.length > 0) ?? null;
         const prim = primario(ruta);
         const respaldos = ruta.participaciones.filter((x) => x.rol === "respaldo");
         // Sin primario se elige primario; con primario y antes de entregar, respaldo.
@@ -1389,9 +1436,9 @@ function PanelComparar({ d, ctx, accion }: Props) {
             {!abierto && !prim && !sel && filas.length > 0 && (
               <p className={puedeElegir ? "tenue ayuda" : "tenue"}>{puedeElegir ? "Elige la oferta a adjudicar como primario: sus candados y el motivo aparecen abajo." : ctx.rol !== "admin" && d.rutas.length === 1 ? "Solo el Administrador adjudica." : ""}</p>
             )}
-            {declinaron.length > 0 && <p className="tenue">Declinaron: {declinaron.join(", ")}.</p>}
+            {declinaron.length > 0 && <p className="tenue">Declinaron o se rechazó su oferta: {declinaron.join(", ")}.</p>}
             <MatrizCondiciones ruta={ruta} carriers={filas} />
-            {historial && ruta.participaciones.some((x) => x.id === historial) && <Historial p={ruta.participaciones.find((x) => x.id === historial)!} />}
+            {historial && ruta.participaciones.some((x) => x.id === historial) && <Historial p={ruta.participaciones.find((x) => x.id === historial)!} d={d} ctx={ctx} accion={accion} />}
             {preguntaA && ruta.participaciones.some((x) => x.id === preguntaA) && (
               <PreguntaCarrier d={d} ruta={ruta} p={ruta.participaciones.find((x) => x.id === preguntaA)!} onCerrar={() => setPreguntaA(null)} />
             )}
@@ -1709,7 +1756,30 @@ function PreguntaCarrier({ d, ruta, p, onCerrar }: { d: Detalle; ruta: Ruta; p: 
   );
 }
 
-function Historial({ p }: { p: Participacion }) {
+// Rechazar una oferta (antes solo en «Detalle completo»): Rateware la quita y
+// deja al carrier como «declinó». El motivo se queda con el equipo; el carrier
+// no lo ve. Una oferta adjudicada no se rechaza: primero se quita la decisión.
+const MOTIVOS_RECHAZO = ["Tarifa fuera de mercado", "No cumple condiciones", "Oferta duplicada o por error"];
+
+function RechazarOferta({ p, d, accion }: { p: Participacion; d: Detalle; accion: Props["accion"] }) {
+  const s = useSesion();
+  const m = useMotivo();
+  return (
+    <div className="aviso-caja">
+      <Motivo opciones={MOTIVOS_RECHAZO} m={m} etiqueta="Rechazar esta oferta · motivo (solo lo ve el equipo)" />
+      <Confirmar
+        etiqueta="Rechazar oferta"
+        clase="btn-secundario"
+        deshabilitado={!m.motivo}
+        advertencia={<>Rateware quita la oferta de {p.carrier} en esta ruta y lo deja como «declinó». No se avisa al carrier y no se puede deshacer desde aquí. Motivo: «{m.motivo}». {ADVERTENCIA_REAL(s, d)}</>}
+        onConfirmar={() => accion(() => s.api.rechazarOferta(d.evento.id, p.id, m.motivo), `Oferta de ${p.carrier} rechazada.`)}
+      />
+    </div>
+  );
+}
+
+function Historial({ p, d, ctx, accion }: { p: Participacion; d: Detalle; ctx: Contexto; accion: Props["accion"] }) {
+  const rechazable = ctx.rol === "admin" && !p.rol && p.versiones.length > 0 && ["abierto", "cerrado"].includes(d.evento.estado);
   return (
     <div className="historial">
       <h3>Historial de la oferta · {p.carrier}</h3>
@@ -1728,6 +1798,7 @@ function Historial({ p }: { p: Participacion }) {
         })}
       </ol>
       {p.versiones.length === 1 && <p className="nota">Con Rateware real solo llega la versión vigente: Rateware no expone el historial por acción (contrato C2 pendiente).</p>}
+      {rechazable && <RechazarOferta p={p} d={d} accion={accion} />}
     </div>
   );
 }

@@ -126,10 +126,12 @@ function instante(fecha: string): number {
 function participacion(lv: Fila, confirmaciones: Fila[]): Participacion {
   // Rateware real: solo la versión vigente (columnas de rfx_lane_vendors).
   // Simulado: además `bid_revisions`, el historial que Rateware no expone.
-  const revisiones: Fila[] = Array.isArray(lv.bid_revisions) ? lv.bid_revisions : [];
+  // Sin tarifa vigente (p. ej., una oferta rechazada) no hay versión que mostrar.
+  const conTarifa = lv.bid_rate !== null && lv.bid_rate !== undefined;
+  const revisiones: Fila[] = conTarifa && Array.isArray(lv.bid_revisions) ? lv.bid_revisions : [];
   const versiones = revisiones.length
     ? revisiones.map((r) => version(r, Number(r.revision)))
-    : lv.bid_rate !== null && lv.bid_rate !== undefined
+    : conTarifa
       ? [version({ ...lv, created_at: lv.responded_at }, 1)]
       : [];
   const rol = lv.award_role === "primary" ? "primario" : lv.award_role === "backup" ? "respaldo" : null;
