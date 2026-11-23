@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { revisar, sinProtegidos, esRespuestaProtegida } from "../src/servidor/paso";
+import { revisar, sinProtegidos, esRespuestaProtegida, tableroPublico } from "../src/servidor/paso";
 
 const HD = "5894a5f1-f523-40b1-963e-445ab780b5f9";
 const AUTH = "Bearer x";
@@ -57,5 +57,23 @@ describe("paso de los módulos de Bidware (/api/funcion)", () => {
   it("un operation_id que no es UUID no pasa (Rateware pondría uno nuevo en cada intento)", () => {
     expect(llamada("rateware-api", { action: "send_outreach_messages", operation_id: "abc" })?.body.code).toBe("OPERACION_INVALIDA");
     expect(llamada("rateware-api", { action: "send_outreach_messages", operation_id: op })).toBeNull();
+  });
+
+  it("el tablero público no muestra shipper, bodegas ni notas", () => {
+    const fila = {
+      id: "l1", event_id: "e1", board_status: "live", quote_count: 2,
+      event: { id: "e1", rfx_id: "RFx-1", name: "Cliente Secreto Segment 1", customer: "Cliente Secreto", status: "open", due_date: "2026-12-01" },
+      lane: { id: "l1", origin: "Bodega Secreta, Nuevo Laredo, TM 88299", destination: "Planta Cliente, San Nicolas, NL 66440", origin_city: "Nuevo Laredo", origin_state: "TM", destination_city: "San Nicolas", destination_state: "NL", equipment: "Refrigerado", weekly_volume: 3, notes: "Llamar a Fulano", business_rules: "x", carrier_requirements: "y" },
+      route_label: "Bodega Secreta, Nuevo Laredo, TM 88299 -> Planta Cliente, San Nicolas, NL 66440"
+    };
+    const salida = tableroPublico({ rows: [fila], summary: { events: 1 } });
+    const texto = JSON.stringify(salida);
+    for (const prohibido of ["Cliente Secreto", "Bodega Secreta", "Planta Cliente", "Fulano", "88299", "business_rules", "carrier_requirements"]) expect(texto).not.toContain(prohibido);
+    expect(salida.rows[0].event).toMatchObject({ id: "e1", name: "RFx-1", due_date: "2026-12-01" });
+    expect(salida.rows[0].lane).toMatchObject({ origin: "Nuevo Laredo, TM", destination: "San Nicolas, NL", equipment: "Refrigerado", weekly_volume: 3 });
+    expect(salida.rows[0].route_label).toBe("Nuevo Laredo, TM -> San Nicolas, NL");
+    expect(salida.rows[0]).toMatchObject({ quote_count: 2, board_status: "live" });
+    expect(salida.summary).toEqual({ events: 1 });
+    expect(tableroPublico({ error: "x" })).toEqual({ error: "x" });
   });
 });
