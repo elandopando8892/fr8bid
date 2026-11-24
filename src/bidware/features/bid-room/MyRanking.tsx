@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Empty, Pill, money } from "@/components/ui";
+import { locale, useLang } from "@/i18n/language";
+import { q } from "@/i18n/bid-room-quote";
+import { o } from "@/i18n/bid-room-overview";
 import { SCORE_FACTORS, canQuote, getLaneBoard, laneState, type BookLane, type LiveBoard } from "./bidroom.service";
 
 /**
@@ -20,61 +23,65 @@ const route = (lane: BookLane) => `${String(lane.origin ?? "—")} → ${String(
 
 function signalOf(lane: BookLane, board: LiveBoard | null, mode: string): { label: string; tone: Tone; sub: string } {
   const state = laneState(lane);
-  if (state === "awarded") return { label: "Adjudicado", tone: "green", sub: "la ruta es tuya" };
-  if (state === "backup") return { label: "Respaldo", tone: "blue", sub: "quedaste como respaldo" };
-  if (state === "not_awarded") return { label: "No adjudicado", tone: "", sub: "se adjudicó a otro carrier" };
-  if (state === "declined") return { label: "No participo", tone: "", sub: "marcaste que no participas" };
-  if (lane.bid_rate == null) return { label: "Sin cotizar", tone: "", sub: "cotiza para ver tu posición" };
-  if (!board) return { label: "…", tone: "", sub: "cargando tu posición" };
-  if (mode === "private") return { label: "Enviada", tone: "", sub: "evento privado, sin ranking" };
-  const place = board.current_rank ? `lugar ${board.current_rank}${board.bid_count ? ` de ${board.bid_count}` : ""}` : "";
-  if (board.current_rank === 1) return { label: "Líder", tone: "green", sub: place || "vas primero" };
-  if (board.current_score_bucket === "needs_review") return { label: "Lejos", tone: "amber", sub: place || "hay ofertas mejor armadas" };
-  return { label: "Competitivo", tone: "green", sub: place || "estás dentro del rango" };
+  if (state === "awarded") return { label: o("sig.awarded"), tone: "green", sub: o("sig.awardedSub") };
+  if (state === "backup") return { label: o("sig.backup"), tone: "blue", sub: o("sig.backupSub") };
+  if (state === "not_awarded") return { label: o("sig.notAwarded"), tone: "", sub: o("sig.notAwardedSub") };
+  if (state === "declined") return { label: o("sig.declined"), tone: "", sub: o("sig.declinedSub") };
+  if (lane.bid_rate == null) return { label: o("sig.unquoted"), tone: "", sub: o("sig.unquotedSub") };
+  if (!board) return { label: "…", tone: "", sub: o("sig.loadingSub") };
+  if (mode === "private") return { label: o("sig.sent"), tone: "", sub: o("sig.sentSub") };
+  const place = !board.current_rank
+    ? ""
+    : board.bid_count
+      ? o("sig.placeOf", board.current_rank, board.bid_count)
+      : o("sig.place", board.current_rank);
+  if (board.current_rank === 1) return { label: o("sig.leader"), tone: "green", sub: place || o("sig.leaderSub") };
+  if (board.current_score_bucket === "needs_review") return { label: o("sig.far"), tone: "amber", sub: place || o("sig.farSub") };
+  return { label: o("sig.competitive"), tone: "green", sub: place || o("sig.competitiveSub") };
 }
 
 /** The distance to the lowest offer: exact only on an open leaderboard, a range otherwise. */
-function distanceOf(lane: BookLane, board: LiveBoard | null, mode: string): { value: string; sub: string } {
+type Distance = { value: string; sub: string; /** "4.8" on an open board: how far above the lowest offer. */ pct?: string };
+function distanceOf(lane: BookLane, board: LiveBoard | null, mode: string): Distance {
   const currency = String(lane.currency || board?.currency || "USD");
-  if (lane.bid_rate == null) return { value: "—", sub: "sin oferta" };
+  if (lane.bid_rate == null) return { value: "—", sub: o("dist.noOffer") };
   if (!board) return { value: "…", sub: "" };
-  if (mode === "private") return { value: "—", sub: "no se comparte" };
+  if (mode === "private") return { value: "—", sub: o("dist.notShared") };
   const delta = board.delta_to_leader;
   if (delta != null) {
-    if (delta <= 0) return { value: money(0, currency), sub: "tienes la más baja" };
+    if (delta <= 0) return { value: money(0, currency), sub: o("dist.lowest") };
     const mine = board.rows?.find((r) => r.is_current)?.amount ?? Number(lane.bid_rate);
     const best = Number(mine) - delta;
-    return {
-      value: `+${money(delta, currency)}`,
-      sub: best > 0 ? `${((delta / best) * 100).toFixed(1)} % arriba` : "arriba de la más baja",
-    };
+    if (best <= 0) return { value: `+${money(delta, currency)}`, sub: o("dist.above") };
+    const pct = ((delta / best) * 100).toFixed(1);
+    return { value: `+${money(delta, currency)}`, sub: o("dist.pctAbove", pct), pct };
   }
   switch (board.delta_bucket) {
     case "leading":
-      return { value: money(0, currency), sub: "tienes la más baja" };
+      return { value: money(0, currency), sub: o("dist.lowest") };
     case "within_250":
-      return { value: `< ${money(250, currency)}`, sub: "de la oferta más baja" };
+      return { value: `< ${money(250, currency)}`, sub: o("dist.fromLowest") };
     case "within_500":
-      return { value: `< ${money(500, currency)}`, sub: "de la oferta más baja" };
+      return { value: `< ${money(500, currency)}`, sub: o("dist.fromLowest") };
     case "above_500":
-      return { value: `> ${money(500, currency)}`, sub: "de la oferta más baja" };
+      return { value: `> ${money(500, currency)}`, sub: o("dist.fromLowest") };
     default:
-      return { value: "—", sub: "aún sin con quién comparar" };
+      return { value: "—", sub: o("dist.nobody") };
   }
 }
 
 /** "+$820 · 4.8 %" on an open board, the range otherwise. */
-function distanceCell(d: { value: string; sub: string }): string {
-  return d.sub.endsWith("% arriba") ? `${d.value} · ${d.sub.replace(" arriba", "")}` : d.value;
+function distanceCell(d: Distance): string {
+  return d.pct ? `${d.value} · ${d.pct} %` : d.value;
 }
 
 function scoreOf(board: LiveBoard | null, mode: string): { value: string; sub: string } {
-  if (mode === "private") return { value: "—", sub: "sin score en eventos privados" };
+  if (mode === "private") return { value: "—", sub: o("score.private") };
   if (!board || board.current_score == null) return { value: "—", sub: "" };
-  if (board.current_rank === 1) return { value: String(board.current_score), sub: "la mejor de esta ruta" };
+  if (board.current_rank === 1) return { value: String(board.current_score), sub: o("score.best") };
   return {
     value: String(board.current_score),
-    sub: board.leader_score != null ? `la mejor está en ${board.leader_score}` : "",
+    sub: board.leader_score != null ? o("score.leaderAt", board.leader_score) : "",
   };
 }
 
@@ -89,6 +96,7 @@ export function MyRanking({
   /** Opens the quote panel on this lane, with the score fields in view. */
   onComplete: (lane: BookLane) => void;
 }) {
+  useLang();
   const quoted = useMemo(() => lanes.filter((l) => l.bid_rate != null && l.invitation_token), [lanes]);
   const [boards, setBoards] = useState<Record<string, BoardState>>({});
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
@@ -123,14 +131,19 @@ export function MyRanking({
     return () => window.clearInterval(id);
   }, [load, refreshSeconds]);
 
-  if (!lanes.length) return <Empty title="Sin rutas en tu invitación" />;
+  if (!lanes.length) return <Empty title={q("page.emptyTitle")} />;
 
   const selected = lanes.find((l) => l.rfx_lane_id === picked) ?? quoted[0] ?? lanes[0];
   const board = boards[selected.rfx_lane_id]?.board ?? null;
   const signal = signalOf(selected, board, mode);
   const distance = distanceOf(selected, board, mode);
   const score = scoreOf(board, mode);
-  const factors = SCORE_FACTORS.map((f) => ({ ...f, ok: f.done(selected) }));
+  const factors = SCORE_FACTORS.map((f) => ({
+    key: f.key,
+    label: o(`factor.${f.key}.label`),
+    hint: o(`factor.${f.key}.hint`),
+    ok: f.done(selected),
+  }));
   const pending = factors.filter((f) => !f.ok).length + (selected.bid_rate == null ? 1 : 0);
   const rows = board?.rows ?? [];
 
@@ -139,30 +152,28 @@ export function MyRanking({
       <div className="croom-main">
         <div className="croom-kpis">
           <div className="croom-kpis-lane">
-            {selected.lane_number != null ? `Ruta ${String(selected.lane_number)} · ` : ""}
+            {selected.lane_number != null ? o("rank.lane", String(selected.lane_number)) : ""}
             {route(selected)}
           </div>
           <div>
-            <span>Tu señal</span>
+            <span>{o("rank.signal")}</span>
             <strong className="signal">{signal.label}</strong>
             <small>{signal.sub}</small>
           </div>
           <div>
-            <span>Distancia a la mejor</span>
+            <span>{o("rank.distance")}</span>
             <strong>{distance.value}</strong>
             <small>{distance.sub}</small>
           </div>
           <div>
-            <span>Tu score</span>
+            <span>{o("rank.score")}</span>
             <strong>{score.value}</strong>
             <small>{score.sub}</small>
           </div>
           <div>
-            <span>Rutas cotizadas</span>
-            <strong>
-              {quoted.length} de {lanes.length}
-            </strong>
-            <small>{lanes.length - quoted.length} sin oferta</small>
+            <span>{o("rank.quoted")}</span>
+            <strong>{o("biz.count", quoted.length, lanes.length)}</strong>
+            <small>{o("rank.unquotedCount", lanes.length - quoted.length)}</small>
           </div>
         </div>
 
@@ -177,11 +188,11 @@ export function MyRanking({
             </colgroup>
             <thead>
               <tr>
-                <th>Ruta</th>
-                <th>Tu oferta</th>
-                <th>Vs mejor</th>
-                <th>Score</th>
-                <th>Señal</th>
+                <th>{o("rank.colLane")}</th>
+                <th>{o("rank.colOffer")}</th>
+                <th>{o("rank.colVsBest")}</th>
+                <th>{o("rank.colScore")}</th>
+                <th>{o("rank.colSignal")}</th>
               </tr>
             </thead>
             <tbody>
@@ -202,7 +213,7 @@ export function MyRanking({
                     </td>
                     <td className="mono">{lane.bid_rate != null ? money(lane.bid_rate, String(lane.currency || "USD")) : "—"}</td>
                     <td className="mono croom-soft" title={state?.error ?? undefined}>
-                      {state?.error ? "no disponible" : distanceCell(d)}
+                      {state?.error ? o("dist.unavailable") : distanceCell(d)}
                     </td>
                     <td className="mono">{mode !== "private" && b?.current_score != null ? b.current_score : "—"}</td>
                     <td>
@@ -217,12 +228,12 @@ export function MyRanking({
             <div className="croom-table-foot">
               <span>
                 {loadedAt
-                  ? `Actualizado ${loadedAt.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })} · se actualiza solo cada ${refreshSeconds} s`
-                  : "Cargando tu posición…"}
+                  ? o("rank.updated", loadedAt.toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" }), refreshSeconds)
+                  : o("rank.loading")}
               </span>
               <div className="spacer" />
               <button type="button" className="link" disabled={loading} onClick={load}>
-                {loading ? "Actualizando…" : "Actualizar"}
+                {loading ? o("rank.refreshing") : o("rank.refresh")}
               </button>
             </div>
           )}
@@ -239,17 +250,17 @@ export function MyRanking({
               </colgroup>
               <thead>
                 <tr>
-                  <th>Lugar</th>
-                  <th>Carrier · {route(selected)}</th>
-                  <th>Oferta</th>
-                  <th>Score</th>
+                  <th>{o("rank.colPlace")}</th>
+                  <th>{o("rank.colCarrier", route(selected))}</th>
+                  <th>{o("rank.colBid")}</th>
+                  <th>{o("rank.colScore")}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.rank} className={r.is_current ? "picked" : undefined}>
                     <td className="mono">#{r.rank}</td>
-                    <td className="ellipsis">{r.is_current ? "Tú" : r.bidder}</td>
+                    <td className="ellipsis">{r.is_current ? o("rank.you") : r.bidder}</td>
                     <td className="mono">{r.amount != null ? money(r.amount, String(r.currency || selected.currency || "USD")) : "—"}</td>
                     <td className="mono">{r.marketplace_score ?? "—"}</td>
                   </tr>
@@ -261,16 +272,16 @@ export function MyRanking({
 
         <section className="croom-card">
           <header className="croom-card-head">
-            <b className="grow">Qué sube tu score sin bajar tu tarifa</b>
-            <Pill tone={pending ? "amber" : "green"}>{pending ? `${pending} PENDIENTE${pending === 1 ? "" : "S"}` : "COMPLETO"}</Pill>
+            <b className="grow">{o("raise.title")}</b>
+            <Pill tone={pending ? "amber" : "green"}>{pending ? o(pending === 1 ? "raise.pendingOne" : "raise.pendingMany", pending) : o("raise.complete")}</Pill>
           </header>
           <div className={`croom-check-row${selected.bid_rate != null ? " ok" : ""}`}>
             <span className="mark">{selected.bid_rate != null ? "✓" : "○"}</span>
-            <span className="grow">Tarifa all-in declarada</span>
-            <span className="hint ayuda">{selected.bid_rate != null ? "ya la tienes" : "sin tarifa no hay score"}</span>
+            <span className="grow">{o("raise.rate")}</span>
+            <span className="hint ayuda">{selected.bid_rate != null ? o("raise.rateOk") : o("raise.rateMissing")}</span>
           </div>
           {factors.map((f) => (
-            <div key={f.label} className={`croom-check-row${f.ok ? " ok" : ""}`}>
+            <div key={f.key} className={`croom-check-row${f.ok ? " ok" : ""}`}>
               <span className="mark">{f.ok ? "✓" : "○"}</span>
               <span className="grow">{f.label}</span>
               <span className="hint ayuda">{f.hint}</span>
@@ -281,11 +292,11 @@ export function MyRanking({
               <>
                 <div className="spacer" />
                 <button type="button" className="primary" onClick={() => onComplete(selected)}>
-                  {selected.bid_rate != null ? "Completar mi oferta" : "Cotizar esta ruta"}
+                  {selected.bid_rate != null ? o("raise.completeOffer") : o("raise.quoteLane")}
                 </button>
               </>
             ) : (
-              <span className="croom-soft">Esta ruta ya no admite cambios.</span>
+              <span className="croom-soft">{o("raise.noChanges")}</span>
             )}
           </div>
         </section>
@@ -294,13 +305,10 @@ export function MyRanking({
       <aside className="croom-side">
         {mode === "private" ? (
           <>
-            <div className="croom-eyebrow">Evento privado</div>
+            <div className="croom-eyebrow">{o("side.privateEyebrow")}</div>
             <div className="croom-box">
-              <b>No hay ranking en este evento</b>
-              <p>
-                MARKSMAN compara todas las ofertas; tú solo ves la tuya. Lo que pesa es lo mismo: tarifa, capacidad,
-                tránsito, equipo y validación.
-              </p>
+              <b>{o("side.privateTitle")}</b>
+              <p>{o("side.privateText")}</p>
             </div>
           </>
         ) : (
@@ -308,23 +316,20 @@ export function MyRanking({
             {/* Solo a quien no ha cotizado (decisión de Jose, 6-nov). */}
             {quoted.length === 0 && (
               <>
-                <div className="croom-eyebrow">Si no has cotizado</div>
+                <div className="croom-eyebrow">{o("side.unquotedEyebrow")}</div>
                 <div className="croom-box">
-                  <b>Tu score está bloqueado</b>
-                  <p>Envía tu tarifa all-in con capacidad, ETA y datos de validación para desbloquearlo.</p>
+                  <b>{o("side.lockedTitle")}</b>
+                  <p>{o("side.lockedText")}</p>
                 </div>
               </>
             )}
-            <div className="croom-eyebrow ayuda">El score no es solo precio</div>
-            <p className="croom-side-text ayuda">
-              Una tarifa más alta con capacidad firme, ETA clara y equipo confirmado puede ganarle a una más barata sin
-              respaldo. Por eso ves el score junto a la distancia, y no solo la distancia.
-            </p>
+            <div className="croom-eyebrow ayuda">{o("side.notOnlyPrice")}</div>
+            <p className="croom-side-text ayuda">{o("side.notOnlyPriceText")}</p>
           </>
         )}
         <div className="croom-box amber">
-          <b>Cuando la ventana cierra</b>
-          <p>El tablero se congela con tu última posición y la oferta ya no se puede corregir.</p>
+          <b>{o("side.closeTitle")}</b>
+          <p>{o("side.closeText")}</p>
         </div>
       </aside>
     </div>
