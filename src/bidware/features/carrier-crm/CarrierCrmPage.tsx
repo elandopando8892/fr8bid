@@ -105,7 +105,9 @@ export function CarrierCrmPage() {
     );
   }, [getLang(), rows, search]);
 
-  const focused = visible.find((v) => v.id === focusId) ?? visible[0] ?? null;
+  // La ficha abre solo cuando eliges un carrier: abrir la primera fila por sí sola invitaba a
+  // cambiar el estatus de un carrier que nadie escogió.
+  const focused = visible.find((v) => v.id === focusId) ?? null;
 
 
 
@@ -199,7 +201,7 @@ export function CarrierCrmPage() {
   // Como en Eventos (decisión de Jose, 5-nov): las etapas en cero se ocultan,
   // salvo Prospección, la elegida y las que aún no contestan.
   const pestanas = columns.filter((c) => c === "sourcing" || c === column || countPending(c) || (stageCounts.get(c) ?? 0) > 0);
-  const conFicha = !loading && Boolean(focused);
+  const conFicha = !loading && visible.length > 0;
 
   return (
     <>

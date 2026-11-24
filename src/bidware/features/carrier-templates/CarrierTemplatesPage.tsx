@@ -96,7 +96,8 @@ function CarrierTemplatesContent() {
     );
   }, [all, filter, search]);
 
-  const focused = rows.find((t) => t.id === focusId) ?? rows[0] ?? null;
+  // La ficha abre solo cuando eliges una lista, no con la primera por omisión.
+  const focused = rows.find((t) => t.id === focusId) ?? null;
 
   async function run(id: string, fn: () => Promise<unknown>, ok: string) {
     setBusyId(id);
@@ -241,7 +242,7 @@ function CarrierTemplatesContent() {
               />
             )}
 
-            {focused && <TemplateSide
+            {rows.length > 0 && <TemplateSide
               template={focused}
               busy={Boolean(focused && busyId === focused.id)}
               locked={locked}

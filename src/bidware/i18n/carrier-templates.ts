@@ -124,8 +124,8 @@ export const copy = {
     "en": "Create the first with + New template."
   },
   "text031": {
-    "es": "Elige una lista de la lista para ver su detalle.",
-    "en": "Choose a template from the list to see its details."
+    "es": "Elige una lista de la tabla para ver su detalle.",
+    "en": "Choose a list from the table to see its details."
   },
   "text032": {
     "es": "Descripción",
