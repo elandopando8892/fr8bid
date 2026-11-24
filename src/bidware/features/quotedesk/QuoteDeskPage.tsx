@@ -63,12 +63,12 @@ export function QuoteDeskPage() {
   }, [getLang(), data, search]);
 
   useEffect(() => {
-    // The first row opens by itself, as in the wireframe; a quote that left the
-    // list (filter or search) gives way to the first one, unless mid-edit.
+    // Nothing opens by itself: the editor shows the quote you choose. One that left
+    // the list (filter or search) closes, unless mid-edit.
     // While the list reloads, `rows` is still the old one: a quote just
     // created is not in it yet, so wait for the fresh list before judging.
     if (!data || loading || panelDirty) return;
-    if (!selectedId || !rows.some((q) => q.id === selectedId)) setSelectedId(rows[0]?.id ?? null);
+    if (selectedId && !rows.some((q) => q.id === selectedId)) setSelectedId(null);
   }, [data, loading, rows, selectedId, panelDirty]);
 
   async function pick(id: string) {
