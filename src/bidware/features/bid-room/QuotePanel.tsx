@@ -6,6 +6,8 @@ import { q } from "@/i18n/bid-room-quote";
 import {
   acceptedModelKeys,
   billingNotice,
+  droppedModelNotice,
+  eventModelKey,
   SCORE_FACTORS,
   canQuote,
   declineInvitation,
@@ -92,8 +94,10 @@ export function QuotePanel({
   const revision = isRevision(lane);
   const editable = canQuote(lane);
   const lockedCommercialModel = isLockedBrokerage(lane);
-  // The event says which models it accepts; with several, choosing one is optional.
+  // The event says which models it accepts; unless it settled on one, choosing is optional.
   const acceptedModels = acceptedModelKeys(lane);
+  const eventModel = eventModelKey(lane);
+  const droppedModel = droppedModelNotice(lane);
   const spec = form.commercial_model ? { ...modelSpec(form.commercial_model), ...modelCopy(form.commercial_model) } : null;
   const problems = offerProblems(form);
   const warnings = offerWarnings(form);
@@ -126,7 +130,9 @@ export function QuotePanel({
     sending.current = true;
     setBusy(true);
     try {
-      if (billing && !await confirmAsync(`${spec?.label ?? q("model.none.label")} · ${route(lane)}\n\n${billing}`, { ok: q("form.confirmSend"), cancel: q("form.backToReview") })) return;
+      // Billing terms and a model the event dropped are confirmed before the offer goes.
+      const toConfirm = [droppedModel, billing].filter(Boolean).join("\n\n");
+      if (toConfirm && !await confirmAsync(`${spec?.label ?? q("model.none.label")} · ${route(lane)}\n\n${toConfirm}`, { ok: q("form.confirmSend"), cancel: q("form.backToReview") })) return;
       if (!active.current || scopeToken.current !== token) return;
       await run(
         () => submitBid(token, offerPayload(form, lane)),
@@ -246,10 +252,10 @@ export function QuotePanel({
       ) : (<>
       <div className="croom-fields">
         <label className="grow">
-          <span>{q(acceptedModels.length > 1 ? "form.modelOptional" : "form.model")}</span>
-          {acceptedModels.length === 1 ? (
-            // One accepted model is the event's, not a choice.
-            <input value={modelCopy(acceptedModels[0]).label} readOnly disabled />
+          <span>{q(eventModel ? "form.model" : "form.modelOptional")}</span>
+          {eventModel ? (
+            // The event's only model is the event's, not a choice.
+            <input value={modelCopy(eventModel).label} readOnly disabled />
           ) : (
             <select
               value={form.commercial_model}
@@ -279,6 +285,8 @@ export function QuotePanel({
           </label>
         )}
       </div>
+      {/* A model the event dropped is never swapped in silence. */}
+      {droppedModel && <p className="croom-note warn" role="note">{droppedModel}</p>}
       {spec ? (
         <p className="croom-hint ayuda">
           {spec.enter} {spec.effect}

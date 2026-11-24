@@ -52,6 +52,27 @@ export function modeloEfectivo(guardado: unknown, aceptados: readonly ModeloCome
   return effectiveCommercialModel(guardado, aceptados ?? null);
 }
 
+// Lo que la liga del carrier ofrece y envía. El modelo vigente de su oferta, si
+// el evento lo acepta, no se puede quitar: Rateware lo conserva cuando no llega
+// otro, así que «Sin elegir» solo se ofrece a quien no tiene uno. Un modelo que
+// el evento retiró se nombra para avisarlo antes de reenviar.
+export function eleccionModeloCarrier(
+  guardado: unknown,
+  enFormulario: unknown,
+  aceptados: readonly ModeloComercial[] | null | undefined
+): { modelos: readonly ModeloComercial[]; propio: ModeloComercial | null; elegido: ModeloComercial | null; puedeNoElegir: boolean; retirado: string | null } {
+  const modelos = aceptados && aceptados.length ? aceptados : MODELOS;
+  const enLista = (m: unknown): m is ModeloComercial => modelos.includes(m as ModeloComercial);
+  const propio = enLista(guardado) ? guardado : null;
+  return {
+    modelos,
+    propio,
+    elegido: enLista(enFormulario) ? enFormulario : propio,
+    puedeNoElegir: modelos.length > 1 && !propio,
+    retirado: guardado && !propio ? String(guardado) : null
+  };
+}
+
 export function aceptaModelo(aceptados: readonly string[] | null | undefined, modelo: string | null): boolean {
   return !modelo || !aceptados || aceptados.includes(modelo);
 }

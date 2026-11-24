@@ -4,7 +4,7 @@ import { useLang } from "@/i18n/language";
 import { q } from "@/i18n/bid-room-quote";
 import { xls } from "@/i18n/bid-room-excel";
 import { confirmAsync } from "@/components/confirm";
-import { billingNotice, eventLanes, getInvitation, modelCopy, isLockedBrokerage, offerPayload, submitBid, type BookLane } from "./bidroom.service";
+import { billingNotice, droppedModelNotice, eventLanes, getInvitation, modelCopy, isLockedBrokerage, offerPayload, submitBid, type BookLane } from "./bidroom.service";
 import { buildBidTemplate, currentOfferForSend, displayOfferValue, offerColumns, parseBidTemplate, type ImportedOffer } from "./bid-template";
 
 export function QuoteExcel({ token, eventId, onBusy, onSettled, progress }: {
@@ -140,6 +140,7 @@ export function QuoteExcel({ token, eventId, onBusy, onSettled, progress }: {
           <b>{q("xl.lane", offer.lane.lane_number ?? offer.row, String(offer.lane.origin ?? ""), String(offer.lane.destination ?? ""))}</b>
           <p>{offer.form.bid_rate} {offer.form.currency} · {model.label}{!isLockedBrokerage(offer.lane) && offer.form.commercial_model && <> · {displayOfferValue("pct", offer.form)}</>}</p>
           <p>{isLockedBrokerage(offer.lane) ? q("xl.lockedModel") : `${model.enter} ${model.effect}`.trim()}</p>
+          {droppedModelNotice(offer.lane) && <p><strong>{droppedModelNotice(offer.lane)}</strong></p>}
           {billingNotice(offer.form) && <p><strong>{billingNotice(offer.form)}</strong></p>}
           {done.includes(offer.lane.rfx_lane_id) && <strong>{q("xl.sentOk")}</strong>}
           <details><summary>{q("xl.reviewAll", offer.lane.lane_number ?? offer.row)}</summary>

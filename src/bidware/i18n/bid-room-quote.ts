@@ -131,6 +131,14 @@ export const quoteCopy = {
   },
   "form.model": { es: "Modelo comercial", en: "Commercial model" },
   "form.modelOptional": { es: "Modelo comercial (opcional)", en: "Commercial model (optional)" },
+  "form.modelDroppedOne": {
+    es: "Tu oferta tenía el modelo «{0}», que este evento ya no acepta. Si la reenvías, queda con «{1}», el modelo del evento.",
+    en: "Your offer had the “{0}” model, which this event no longer accepts. If you resend it, it will carry “{1}”, the event's model.",
+  },
+  "form.modelDroppedMany": {
+    es: "Tu oferta tenía el modelo «{0}», que este evento ya no acepta. Elige otro o déjalo sin elegir.",
+    en: "Your offer had the “{0}” model, which this event no longer accepts. Choose another one or leave it not chosen.",
+  },
   "form.modelNoneHint": {
     es: "Si no eliges, MARKSMAN define el modelo comercial antes de adjudicar.",
     en: "If you don't choose, MARKSMAN sets the commercial model before awarding.",

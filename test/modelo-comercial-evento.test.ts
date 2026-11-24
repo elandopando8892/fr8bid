@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { MesaApi, transporteSimulado } from "../src/cliente/api";
 import { hojaComparativo } from "../src/dominio/exportar";
-import { describirModelo, modeloCorto, tarifaVenta, textoModelosAceptados } from "../src/dominio/modelo";
+import { describirModelo, eleccionModeloCarrier, modeloCorto, tarifaVenta, textoModelosAceptados } from "../src/dominio/modelo";
 import { operacionAdjudicacion } from "../src/dominio/operacion";
 import { candadosAdjudicacion, propuestaPrimarios, puedeAdjudicar, versionVigente, type Contexto } from "../src/dominio/recorrido";
 import { fueraDeAceptados, modelosMixtos, sinModelo } from "../src/dominio/resumenOfertas";
@@ -171,6 +171,41 @@ describe("el modelo es opcional para el carrier", () => {
     await admin.cerrarAOfertas(eventId);
     const cerrado = await admin.detalle(eventId);
     expect(puedeAdjudicar(candadosAdjudicacion(cerrado, cerrado.rutas[0], part(cerrado, A), ctx(), "primario"), false)).toBe(true);
+  });
+});
+
+// Revisión escéptica del 24-nov: lo que la liga ofrece tiene que coincidir con lo que Rateware guarda.
+describe("la liga del carrier no ofrece quitar un modelo que Rateware conservaría", () => {
+  it("una oferta con modelo vigente no puede volver a «sin elegir»: sin elección se reenvía con el suyo", async () => {
+    await preparar(["brokerage", "sell_share"]);
+    await oferta(A, { commercial_model: "sell_share", carrier_share_pct: 4 });
+    const guardado = cruda(A).commercial_model;
+    const liga = eleccionModeloCarrier(guardado, "", ["brokerage", "sell_share"]);
+    expect(liga).toMatchObject({ propio: "sell_share", elegido: "sell_share", puedeNoElegir: false, retirado: null });
+    // Aunque llegara vacío, Rateware conserva el modelo: por eso la liga no lo ofrece.
+    await oferta(A, { bid_rate: 1590, commercial_model: null });
+    expect(cruda(A).commercial_model).toBe("sell_share");
+    // Y sí puede cambiarlo por otro aceptado.
+    expect(eleccionModeloCarrier(guardado, "brokerage", ["brokerage", "sell_share"]).elegido).toBe("brokerage");
+  });
+
+  it("sin modelo propio puede no elegir; con un solo modelo no hay elección; un modelo retirado se nombra", () => {
+    expect(eleccionModeloCarrier(null, "", ["brokerage", "sell_share"])).toMatchObject({ propio: null, elegido: null, puedeNoElegir: true, retirado: null });
+    expect(eleccionModeloCarrier(null, "", null)).toMatchObject({ modelos: ["brokerage", "cost_plus", "sell_share", "fee_plus"], puedeNoElegir: true });
+    expect(eleccionModeloCarrier(null, "", ["brokerage"])).toMatchObject({ elegido: null, puedeNoElegir: false });
+    // El evento dejó de aceptar sell share: se avisa y la elección vuelve a estar abierta.
+    expect(eleccionModeloCarrier("sell_share", "sell_share", ["brokerage", "cost_plus"])).toMatchObject({ propio: null, elegido: null, puedeNoElegir: true, retirado: "sell_share" });
+    expect(eleccionModeloCarrier("sell_share", "", ["brokerage"])).toMatchObject({ elegido: null, puedeNoElegir: false, retirado: "sell_share" });
+  });
+
+  it("cost plus y fee plus aceptados: el carrier que no elige entra «sin elegir», no como cost plus", async () => {
+    await preparar(["cost_plus", "fee_plus"]);
+    await oferta(A);
+    expect(cruda(A).commercial_model).toBeNull();
+    expect((await vigente(A)).modeloComercial).toBeNull();
+    // La etiqueta única del portal («costo + margen») sí es una elección y se guarda como cost plus.
+    await oferta(B, { commercial_model: "direct_cost_plus" });
+    expect(cruda(B).commercial_model).toBe("cost_plus");
   });
 });
 

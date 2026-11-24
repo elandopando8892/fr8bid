@@ -354,21 +354,52 @@ function storedModelKey(lane: BookLane): ModelKey | null {
 }
 
 /**
- * Whether the offer may go without a model: the event accepts several and the
- * lane has none of them yet. An offer that already has one keeps it (the server
- * would keep it anyway), so "not chosen" would be a lie there.
+ * The event's only model as a portal key, or null. It counts Rateware's own
+ * models, not the portal's labels: an event that accepts cost_plus and fee_plus
+ * shows one option here but has not settled on a model, so its offers still
+ * arrive "not chosen" unless the carrier picks the option.
+ */
+export function eventModelKey(lane: BookLane): ModelKey | null {
+  if (isLockedBrokerage(lane)) return "xbf_buy_sell";
+  const accepted = acceptedCommercialModels(lane);
+  return accepted?.length === 1 ? modelKeyOf(accepted[0]) : null;
+}
+
+/**
+ * Whether the offer may go without a model: the event has not settled on one
+ * and the lane has none of the accepted ones yet. An offer that already has one
+ * keeps it (the server would keep it anyway), so "not chosen" would be a lie there.
  */
 export function modelIsOptional(lane: BookLane): boolean {
-  return acceptedModelKeys(lane).length > 1 && !storedModelKey(lane);
+  return !eventModelKey(lane) && !storedModelKey(lane);
+}
+
+/**
+ * The lane's own model when its event no longer accepts it. Resending the
+ * offer changes that model, so the carrier is told before it happens.
+ */
+export function droppedModelKey(lane: BookLane): ModelKey | null {
+  if (isLockedBrokerage(lane) || !str(lane.commercial_model).trim()) return null;
+  const key = modelKeyOf(lane.commercial_model);
+  return acceptedModelKeys(lane).includes(key) ? null : key;
+}
+
+/** What happens to a model the event dropped, in the carrier's language; null when there is nothing to say. */
+export function droppedModelNotice(lane: BookLane): string | null {
+  const dropped = droppedModelKey(lane);
+  if (!dropped) return null;
+  const only = eventModelKey(lane);
+  return only
+    ? q("form.modelDroppedOne", modelCopy(dropped).label, modelCopy(only).label)
+    : q("form.modelDroppedMany", modelCopy(dropped).label);
 }
 
 export function offerForm(lane: BookLane): OfferForm {
   const locked = isLockedBrokerage(lane);
-  const accepted = acceptedModelKeys(lane);
   const stored = storedModelKey(lane);
-  // One accepted model is the event's choice, not the carrier's; with several,
+  // The event's only model is the event's choice, not the carrier's; otherwise
   // the offer starts with its own model or with none.
-  const model: ModelChoice = accepted.length === 1 ? accepted[0] : stored ?? "";
+  const model: ModelChoice = eventModelKey(lane) ?? stored ?? "";
   // A percentage belongs to the model it was stored with.
   const pct = !model || model !== stored ? null : model === "carrier_share" ? lane.carrier_share_pct : lane.marksman_margin_pct;
   const available = lane.equipment_available;

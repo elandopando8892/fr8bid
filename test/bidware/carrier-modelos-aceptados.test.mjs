@@ -149,3 +149,42 @@ test('Excel: con un solo modelo aceptado la celda trae ese modelo y vacía lo co
   const [offer] = await m.parseBidTemplate(bytes(book), [lane]);
   assert.equal(offer.form.commercial_model, 'carrier_share');
 });
+
+// Revisión escéptica del 24-nov: «un solo modelo» se cuenta en modelos de Rateware, no en etiquetas del portal.
+test('cost plus y fee plus son una sola etiqueta pero dos modelos: la oferta nueva sigue sin elegir', () => {
+  const lane = ruta(acepta('cost_plus', 'fee_plus'));
+  assert.deepEqual(m.acceptedModelKeys(lane), ['direct_cost_plus']);
+  assert.equal(m.eventModelKey(lane), null, 'el evento no fijó un modelo');
+  assert.equal(m.modelIsOptional(lane), true);
+  const form = { ...m.offerForm(lane), bid_rate: '1200' };
+  assert.equal(form.commercial_model, '');
+  assert.equal(m.offerPayload(form, lane).commercial_model, null);
+  // Elegir la única etiqueta sí es una elección del carrier.
+  assert.equal(m.offerPayload({ ...form, commercial_model: 'direct_cost_plus' }, lane).commercial_model, 'direct_cost_plus');
+  // Con un solo modelo de Rateware sí es el del evento, también bajo candado.
+  assert.equal(m.eventModelKey(ruta(acepta('fee_plus'))), 'direct_cost_plus');
+  assert.equal(m.eventModelKey(ruta({ status: 'open', rfx_master_package: { carrier_commercial_policy: { locked: true, model: 'brokerage' } } })), 'xbf_buy_sell');
+  assert.equal(m.eventModelKey(ruta()), null);
+});
+
+test('un modelo que el evento retiró no se cambia en silencio: el carrier lo lee antes de reenviar', () => {
+  const uno = ruta(acepta('brokerage'), { commercial_model: 'sell_share', carrier_share_pct: 4, bid_rate: 1000 });
+  assert.equal(m.droppedModelKey(uno), 'carrier_share');
+  assert.equal(m.offerForm(uno).commercial_model, 'xbf_buy_sell');
+  assert.equal(m.droppedModelNotice(uno), 'Tu oferta tenía el modelo «Carrier comparte facturación», que este evento ya no acepta. Si la reenvías, queda con «XBF compra-venta», el modelo del evento.');
+  const varios = ruta(acepta('brokerage', 'cost_plus'), { commercial_model: 'sell_share', carrier_share_pct: 4, bid_rate: 1000 });
+  assert.equal(m.offerForm(varios).commercial_model, '');
+  assert.equal(m.droppedModelNotice(varios), 'Tu oferta tenía el modelo «Carrier comparte facturación», que este evento ya no acepta. Elige otro o déjalo sin elegir.');
+  m.setLang('en');
+  assert.equal(m.droppedModelNotice(uno), "Your offer had the “Carrier shares billing” model, which this event no longer accepts. If you resend it, it will carry “XBF buy-sell”, the event's model.");
+  assert.equal(m.droppedModelNotice(varios), 'Your offer had the “Carrier shares billing” model, which this event no longer accepts. Choose another one or leave it not chosen.');
+});
+
+test('sin modelo retirado no hay aviso: oferta nueva, modelo vigente, misma etiqueta o evento bloqueado', () => {
+  assert.equal(m.droppedModelNotice(ruta(acepta('brokerage', 'cost_plus'))), null);
+  assert.equal(m.droppedModelNotice(ruta(acepta('brokerage', 'sell_share'), { commercial_model: 'sell_share', bid_rate: 1000 })), null);
+  // fee plus guardado y evento que acepta cost plus: para el carrier sigue siendo «Costo + margen».
+  assert.equal(m.droppedModelNotice(ruta(acepta('cost_plus'), { commercial_model: 'fee_plus', bid_rate: 1000 })), null);
+  const fijo = ruta({ status: 'open', rfx_master_package: { carrier_commercial_policy: { locked: true, model: 'brokerage' } } }, { commercial_model: 'sell_share', bid_rate: 1000 });
+  assert.equal(m.droppedModelNotice(fijo), null);
+});

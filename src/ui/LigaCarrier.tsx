@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ErrorApi } from "../cliente/api";
-import { describirModelo, modeloEfectivo, MODELOS, modelosAceptados, nombreModelo } from "../dominio/modelo";
+import { describirModelo, eleccionModeloCarrier, modeloEfectivo, modelosAceptados, nombreModelo } from "../dominio/modelo";
 import { aCarga, Confirmar, dinero, EstadoVista, fecha, Prueba, type Carga } from "./comun";
 import { textoObjetivo } from "./condiciones";
 import { useSesion } from "./sesion";
@@ -71,7 +71,7 @@ export function LigaCarrier({ token }: { token: string }) {
   const prueba = /PRUEBA CONTROLADA/i.test(event?.name || "");
   // Los modelos comerciales que acepta el evento; el carrier solo ve esos.
   const aceptados = modelosAceptados(event?.rfx_master_package);
-  const modelos = aceptados ?? MODELOS;
+  const { modelos, elegido, puedeNoElegir, retirado } = eleccionModeloCarrier(inv.commercial_model, form.commercial_model, aceptados);
 
   const hacer = async (f: () => Promise<unknown>, ok: string) => {
     if (enCurso.current || bid_window_closed || inv.invitation_status === "declined") return;
@@ -126,7 +126,7 @@ export function LigaCarrier({ token }: { token: string }) {
                   bid_rate: n(form.bid_rate),
                   currency: form.currency,
                   // Elegir modelo es opcional: sin elección, Rateware usa el único del evento o lo deja «sin elegir».
-                  commercial_model: modelos.includes(form.commercial_model as (typeof modelos)[number]) ? form.commercial_model : null,
+                  commercial_model: elegido,
                   weekly_capacity: n(form.weekly_capacity),
                   transit_days: n(form.transit_days),
                   valid_through: form.valid_through || null,
@@ -141,11 +141,11 @@ export function LigaCarrier({ token }: { token: string }) {
           <div className="rejilla">
             <label className="campo"><span>Tarifa all-in</span><input required inputMode="decimal" value={form.bid_rate} onChange={(e) => setForm({ ...form, bid_rate: e.target.value })} /></label>
             <label className="campo"><span>Moneda</span><select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}><option>USD</option><option>MXN</option></select></label>
-            <label className="campo"><span>Modelo comercial{modelos.length > 1 ? " (opcional)" : ""}</span>
+            <label className="campo"><span>Modelo comercial{puedeNoElegir ? " (opcional)" : ""}</span>
               {modelos.length === 1
                 ? <input value={nombreModelo(modelos[0])} disabled />
-                : <select value={modelos.includes(form.commercial_model as (typeof modelos)[number]) ? form.commercial_model : ""} onChange={(e) => setForm({ ...form, commercial_model: e.target.value })}>
-                    <option value="">Sin elegir</option>
+                : <select value={elegido ?? ""} onChange={(e) => setForm({ ...form, commercial_model: e.target.value })}>
+                    {puedeNoElegir && <option value="">Sin elegir</option>}
                     {modelos.map((m) => <option key={m} value={m}>{nombreModelo(m)}</option>)}
                   </select>}
             </label>
@@ -153,6 +153,11 @@ export function LigaCarrier({ token }: { token: string }) {
             <label className="campo"><span>Tránsito (días)</span><input inputMode="numeric" value={form.transit_days} onChange={(e) => setForm({ ...form, transit_days: e.target.value })} /></label>
             <label className="campo"><span>Vigente hasta</span><input type="date" value={form.valid_through} onChange={(e) => setForm({ ...form, valid_through: e.target.value })} /></label>
           </div>
+          {retirado && (
+            <p className="estado estado-permiso">
+              Tu oferta tenía el modelo «{nombreModelo(retirado)}», que este evento ya no acepta. {modelos.length === 1 ? `Si la corriges, queda con «${nombreModelo(modelos[0])}», el modelo del evento.` : "Elige otro o déjalo sin elegir."}
+            </p>
+          )}
           <label className="campo"><span>Nota (sin valor comercial)</span><input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
           <div className="fila-botones">
             <button className="btn-primario" type="submit" disabled={enviando}>{enviando ? "Procesando…" : inv.bid_rate === null ? "Enviar oferta" : "Enviar corrección"}</button>
