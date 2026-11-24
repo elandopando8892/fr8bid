@@ -6,6 +6,9 @@ import { build } from 'esbuild';
 const store = new Map();
 globalThis.location = { pathname: '/bid/fixture-token' };
 globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) };
+// El navegador del carrier: la primera visita abre en su idioma.
+const browser = (...languages) => Object.defineProperty(globalThis, 'navigator', { value: { languages, language: languages[0] }, configurable: true });
+browser('es-MX', 'en-US');
 
 const built = await build({
   stdin: {
@@ -13,7 +16,7 @@ const built = await build({
       export * from './src/bidware/i18n/bid-room-overview.ts';
       export * from './src/bidware/i18n/bid-room-messages.ts';
       export * from './src/bidware/i18n/bid-room-excel.ts';
-      export { setLang, getLang } from './src/bidware/i18n/language.ts';
+      export { setLang, getLang, browserLang } from './src/bidware/i18n/language.ts';
       export * as svc from './src/bidware/features/bid-room/bidroom.service.ts';`,
     resolveDir: process.cwd(),
   },
@@ -23,11 +26,15 @@ const built = await build({
     b.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export class ApiError extends Error{}; export const callRfxBidApi=(action,body)=>{(globalThis.bidCalls??=[]).push({action,...body});return {};};', loader: 'js' }));
   } }],
 });
-const m = await import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
+const moduleUrl = 'data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64');
+const m = await import(moduleUrl);
+/** Otra visita: el módulo se carga de nuevo con el navegador y lo guardado en ese momento. */
+const visit = (name) => import(`${moduleUrl}#${name}`);
 const lane = { rfx_lane_id: 'lane-a', invitation_token: 'fixture-token', commercial_model: 'cost_plus' };
 
-test('el Bid Room arranca en español y no cambia sin que el carrier lo pida', () => {
+test('con el navegador en español el Bid Room arranca en español y no guarda nada sin que el carrier lo pida', () => {
   assert.equal(m.getLang(), 'es');
+  assert.equal(store.has('bidware.bidroom.lang'), false);
   assert.equal(m.q('tab.bids'), 'Cotizar rutas');
   assert.equal(m.q('lanes.progress', 2, 5), '2 de 5 rutas cotizadas.');
 });
@@ -89,4 +96,35 @@ test('Mensajes y el asistente: el asistente recibe el idioma elegido por el carr
   const [es, en] = globalThis.bidCalls.filter((call) => call.action === 'bid_support_reply');
   assert.deepEqual([es.language, es.create_ticket], ['es', false]);
   assert.deepEqual([en.language, en.create_ticket, en.message], ['en', true, 'How do I improve my ranking?']);
+});
+
+test('la primera visita sigue el idioma del navegador; después manda lo que eligió el carrier', async () => {
+  for (const [languages, expected] of [
+    [['en-US'], 'en'], [['en'], 'en'], [['EN_gb'], 'en'], [['es-419', 'en-US'], 'es'], [['en-US', 'es-MX'], 'en'],
+    [['fr-FR', 'en-US'], 'en'], [['pt-BR', 'es-MX'], 'es'], [['pt-BR'], 'es'], [[], 'es'], [[undefined, ''], 'es'],
+  ]) assert.equal(m.browserLang(languages), expected, JSON.stringify(languages));
+
+  store.clear();
+  browser('en-US', 'es-MX');
+  const english = await visit('navegador-en');
+  assert.equal(english.getLang(), 'en');
+  assert.equal(english.q('tab.bids'), 'Quote lanes');
+  assert.equal(store.has('bidware.bidroom.lang'), false, 'el idioma del navegador no se guarda como elección');
+
+  english.setLang('es');
+  assert.equal(store.get('bidware.bidroom.lang'), 'es');
+  assert.equal((await visit('eligio-es')).getLang(), 'es', 'su elección gana al navegador en la siguiente visita');
+
+  store.clear();
+  browser('fr-FR');
+  assert.equal((await visit('navegador-fr')).getLang(), 'es');
+  store.set('bidware.bidroom.lang', 'de');
+  browser('en-US');
+  assert.equal((await visit('guardado-invalido')).getLang(), 'en', 'un valor guardado que no es es/en no cuenta');
+
+  // Sin navegador (por ejemplo al generar la página fuera del navegador) queda español.
+  store.clear();
+  Object.defineProperty(globalThis, 'navigator', { value: undefined, configurable: true });
+  assert.equal((await visit('sin-navegador')).getLang(), 'es');
+  browser('es-MX', 'en-US');
 });

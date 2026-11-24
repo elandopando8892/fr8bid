@@ -17,6 +17,10 @@ export const quoteCopy = {
   "page.opening": { es: "Abriendo tu Bid Room…", en: "Opening your Bid Room…" },
   "page.failed": { es: "No pudimos abrir tu Bid Room", en: "We couldn't open your Bid Room" },
   "page.invalidLink": { es: "El enlace no es válido.", en: "The link is not valid." },
+  "page.expiredLink": {
+    es: "El enlace de invitación no es válido o ya venció.",
+    en: "The invitation link is invalid or has expired.",
+  },
   "page.oldLink": {
     es: "Si el enlace viene de un correo anterior, pide uno nuevo al equipo de MARKSMAN.",
     en: "If the link comes from an earlier email, ask the MARKSMAN team for a new one.",

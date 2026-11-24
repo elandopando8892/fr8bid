@@ -13,13 +13,25 @@ let teamBoard = false;
 const publicPage = () => typeof location !== "undefined" && /^\/(?:bid\/|rfi\/|board(?:\/|$)|(?:rfx-bid|customer-rfi|carrier-profile|shipper-profile|bid-room-board)\.html)/.test(location.pathname);
 const boardPage = () => typeof location !== "undefined" && /^\/(?:board(?:\/|$)|bid-room-board\.html)/.test(location.pathname);
 // El Bid Room del carrier (/bid/:token y rfx-bid.html) tiene su propio idioma y
-// su propia llave: no mezcla la preferencia del equipo. Por omisión es español
-// hasta que todas sus pantallas estén traducidas.
+// su propia llave: no mezcla la preferencia del equipo. La primera vez abre en
+// el idioma del navegador del carrier; desde que elige uno, manda su elección.
 export const BID_ROOM_LANGUAGE_KEY = "bidware.bidroom.lang";
 const bidRoomPage = () => typeof location !== "undefined" && /^\/(?:bid\/|rfx-bid\.html)/.test(location.pathname);
+/** The first of the browser's languages that the Bid Room speaks; Spanish when none is. */
+export function browserLang(languages: readonly unknown[]): Lang {
+  for (const tag of languages) {
+    const base = String(tag ?? "").trim().toLowerCase().split(/[-_]/)[0];
+    if (base === "es" || base === "en") return base;
+  }
+  return "es";
+}
 function initialBidRoomLang(): Lang {
-  try { return localStorage.getItem(BID_ROOM_LANGUAGE_KEY) === "en" ? "en" : "es"; }
-  catch { return "es"; }
+  try {
+    const stored = localStorage.getItem(BID_ROOM_LANGUAGE_KEY);
+    if (stored === "es" || stored === "en") return stored;
+  } catch { /* Storage may be blocked: the browser decides. */ }
+  if (typeof navigator === "undefined") return "es";
+  return browserLang(navigator.languages?.length ? navigator.languages : [navigator.language]);
 }
 let bidRoomLang: Lang | null = null;
 export const getLang = (): Lang => {

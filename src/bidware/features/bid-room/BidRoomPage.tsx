@@ -62,6 +62,10 @@ function deadlineText(due: DueState): string {
 /** La barra de marca: el carrier llega desde un correo y ve primero quién lo invita. */
 function MarcaCarrier() {
   const lang = useLang();
+  // El documento declara el idioma que se ve: lectores de pantalla y traductores del navegador lo usan.
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
   return (
     <div className="croom-bar">
       <span className="croom-logo">
@@ -143,7 +147,8 @@ function BidRoomContent({ token }: { token: string }) {
           <h1>{q("page.failed")}</h1>
         </header>
         <main className="croom-page">
-          <ErrorBanner message={error || q("page.invalidLink")} />
+          {/* El servidor redacta el rechazo de un enlace vencido solo en inglés; aquí va en el idioma del carrier. */}
+          <ErrorBanner message={/invitation link is invalid/i.test(error ?? "") ? q("page.expiredLink") : error || q("page.invalidLink")} />
           <p className="croom-side-text" style={{ marginTop: 12 }}>
             {q("page.oldLink")}
           </p>

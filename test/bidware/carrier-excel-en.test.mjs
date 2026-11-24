@@ -11,6 +11,7 @@ const XLSX = require('xlsx');
 const store = new Map();
 globalThis.location = { pathname: '/bid/fixture-token' };
 globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) };
+Object.defineProperty(globalThis, 'navigator', { value: { languages: ['es-MX'], language: 'es-MX' }, configurable: true });
 
 fs.mkdirSync('.test-output/carrier-excel-en-20261124', { recursive: true });
 const outfile = '.test-output/carrier-excel-en-20261124/module.cjs';
