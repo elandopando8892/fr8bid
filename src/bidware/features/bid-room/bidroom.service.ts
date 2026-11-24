@@ -377,6 +377,11 @@ export function modelIsOptional(lane: BookLane): boolean {
 /**
  * The lane's own model when its event no longer accepts it. Resending the
  * offer changes that model, so the carrier is told before it happens.
+ * It compares the portal's options on purpose: cost_plus and fee_plus are one
+ * option to the carrier ("Costo + margen", same percentage and same billing
+ * terms), so an event moving from one to the other changes nothing the carrier
+ * can see or choose. That move keeps the percentage and shows in the offer's
+ * history on the event page, where the team tells the two apart.
  */
 export function droppedModelKey(lane: BookLane): ModelKey | null {
   if (isLockedBrokerage(lane) || !str(lane.commercial_model).trim()) return null;
