@@ -1,4 +1,5 @@
 import { q } from "../../i18n/bid-room-quote";
+import { getLang } from "../../i18n/language";
 import { lockedBrokeragePolicy } from "../../../../packages/carrier-commercial/locked-policy.mjs";
 import { callRfxBidApi, ApiError } from "@/lib/api-client";
 
@@ -488,7 +489,8 @@ export function offerPayload(form: OfferForm, lane: BookLane): BidInput {
 
 /** Prices ONE lane. `laneToken` must be that lane's own invitation token. */
 export async function submitBid(laneToken: string, bid: BidInput) {
-  return await callRfxBidApi("submit_bid", { token: laneToken, language: "es", ...bid });
+  // `language` only chooses the language of the "bidding is closed" message.
+  return await callRfxBidApi("submit_bid", { token: laneToken, language: getLang(), ...bid });
 }
 
 /** Withdraws this lane's quote. Identified by the lane's token, not a bid id. */
@@ -752,7 +754,8 @@ export async function askBidSupport(
   return await callRfxBidApi<SupportReply>("bid_support_reply", {
     token,
     message: question,
-    language: "es",
+    // The assistant answers in the language the carrier chose for the Bid Room.
+    language: getLang(),
     create_ticket: createTicket,
   });
 }

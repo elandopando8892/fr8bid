@@ -11,6 +11,8 @@ const built = await build({
   stdin: {
     contents: `export * from './src/bidware/i18n/bid-room-quote.ts';
       export * from './src/bidware/i18n/bid-room-overview.ts';
+      export * from './src/bidware/i18n/bid-room-messages.ts';
+      export * from './src/bidware/i18n/bid-room-excel.ts';
       export { setLang, getLang } from './src/bidware/i18n/language.ts';
       export * as svc from './src/bidware/features/bid-room/bidroom.service.ts';`,
     resolveDir: process.cwd(),
@@ -18,7 +20,7 @@ const built = await build({
   bundle: true, write: false, format: 'esm', platform: 'node',
   plugins: [{ name: 'api-fixture', setup(b) {
     b.onResolve({ filter: /^@\/lib\/api-client$/ }, () => ({ path: 'api', namespace: 'fixture' }));
-    b.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export class ApiError extends Error{}; export const callRfxBidApi=()=>({});', loader: 'js' }));
+    b.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: 'export class ApiError extends Error{}; export const callRfxBidApi=(action,body)=>{(globalThis.bidCalls??=[]).push({action,...body});return {};};', loader: 'js' }));
   } }],
 });
 const m = await import('data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64'));
@@ -32,7 +34,7 @@ test('el Bid Room arranca en español y no cambia sin que el carrier lo pida', (
 
 test('cada texto del catálogo existe en los dos idiomas con los mismos marcadores', () => {
   const marks = (text) => [...text.matchAll(/\{(\d+)\}/g)].map((x) => x[1]).sort().join(',');
-  for (const [key, value] of [...Object.entries(m.quoteCopy), ...Object.entries(m.overviewCopy)]) {
+  for (const [key, value] of [m.quoteCopy, m.overviewCopy, m.messagesCopy, m.excelCopy].flatMap((copy) => Object.entries(copy))) {
     assert.ok(value.es !== undefined && value.en !== undefined, key);
     if (key !== 'form.finalAfter') { assert.ok(value.es.trim() && value.en.trim(), key); }
     assert.equal(marks(value.es), marks(value.en), `marcadores de ${key}`);
@@ -72,4 +74,19 @@ test('El negocio y Mi ranking concuerdan en número y cubren cada modo y cada fa
   assert.equal(m.o('sig.placeOf', 2, 5), 'place 2 of 5');
   assert.equal(m.o('factor.eta.label'), 'Pickup ETA');
   m.setLang('es');
+});
+
+test('Mensajes y el asistente: el asistente recibe el idioma elegido por el carrier', async () => {
+  assert.equal(m.msg('thread.carrier_private'), 'Privado con MARKSMAN');
+  assert.equal(m.msg('ai.starterRoute', 'Monterrey → Laredo'), '¿Qué detalles tiene Monterrey → Laredo?');
+  await m.svc.askBidSupport('fixture-token', '¿Cómo mejoro mi ranking?');
+  m.setLang('en');
+  assert.equal(m.msg('thread.lane_group'), 'All carriers on your lane');
+  assert.equal(m.msg('ai.starterRoute', 'Monterrey → Laredo'), 'What details does Monterrey → Laredo have?');
+  assert.ok(m.msg('ai.ticketConfirm', 'Can I change my rate?').includes('"Can I change my rate?"'));
+  await m.svc.askBidSupport('fixture-token', 'How do I improve my ranking?', { createTicket: true });
+  m.setLang('es');
+  const [es, en] = globalThis.bidCalls.filter((call) => call.action === 'bid_support_reply');
+  assert.deepEqual([es.language, es.create_ticket], ['es', false]);
+  assert.deepEqual([en.language, en.create_ticket, en.message], ['en', true, 'How do I improve my ranking?']);
 });
