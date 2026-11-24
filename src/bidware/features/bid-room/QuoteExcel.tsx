@@ -2,9 +2,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ErrorBanner } from "@/components/ui";
 import { useLang } from "@/i18n/language";
 import { q } from "@/i18n/bid-room-quote";
+import { xls } from "@/i18n/bid-room-excel";
 import { confirmAsync } from "@/components/confirm";
 import { billingNotice, eventLanes, getInvitation, modelCopy, isLockedBrokerage, offerPayload, submitBid, type BookLane } from "./bidroom.service";
-import { buildBidTemplate, currentOfferForSend, displayOfferValue, OFFER_COLUMNS, parseBidTemplate, type ImportedOffer } from "./bid-template";
+import { buildBidTemplate, currentOfferForSend, displayOfferValue, offerColumns, parseBidTemplate, type ImportedOffer } from "./bid-template";
 
 export function QuoteExcel({ token, eventId, onBusy, onSettled, progress }: {
   token: string;
@@ -51,7 +52,7 @@ export function QuoteExcel({ token, eventId, onBusy, onSettled, progress }: {
       if (!lanes.length || lanes.length > 1000) throw new Error(q("xl.noLanes"));
       const book = await buildBidTemplate(lanes);
       const XLSX = await import("xlsx");
-      if (active.current) XLSX.writeFile(book, "ofertas-rfx.xlsx");
+      if (active.current) XLSX.writeFile(book, xls("file.name"));
     } catch (e) {
       if (active.current) setError(e instanceof Error ? e.message : q("xl.downloadFailed"));
     } finally { finish(); }
@@ -139,7 +140,7 @@ export function QuoteExcel({ token, eventId, onBusy, onSettled, progress }: {
           {billingNotice(offer.form) && <p><strong>{billingNotice(offer.form)}</strong></p>}
           {done.includes(offer.lane.rfx_lane_id) && <strong>{q("xl.sentOk")}</strong>}
           <details><summary>{q("xl.reviewAll", offer.lane.lane_number ?? offer.row)}</summary>
-            <dl>{OFFER_COLUMNS.filter(([key]) => !isLockedBrokerage(offer.lane) || key !== "pct").map(([key, label]) => <div key={key} style={{ margin: "6px 0", overflowWrap: "anywhere" }}>
+            <dl>{offerColumns().filter(([key]) => !isLockedBrokerage(offer.lane) || key !== "pct").map(([key, label]) => <div key={key} style={{ margin: "6px 0", overflowWrap: "anywhere" }}>
               <dt><b>{label}</b></dt><dd style={{ margin: 0 }}>{displayOfferValue(key, offer.form)}</dd>
             </div>)}</dl>
           </details>

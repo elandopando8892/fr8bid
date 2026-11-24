@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { askBidSupport, explainBidError, type SupportReply } from "./bidroom.service";
 import { confirmAsync } from "@/components/confirm";
+import { useLang } from "@/i18n/language";
+import { msg } from "@/i18n/bid-room-messages";
 
 /**
  * Bid Room assistant — the carrier's "ask about this opportunity" box.
@@ -16,6 +18,7 @@ import { confirmAsync } from "@/components/confirm";
  * one place to ask, the assistant on top and the conversation with the team below).
  */
 export function BidSupportAssistant({ token, route, inline = false }: { token: string; route?: string; inline?: boolean }) {
+  useLang();
   const [openState, setOpen] = useState(false);
   const open = inline || openState;
   const [draft, setDraft] = useState("");
@@ -30,11 +33,11 @@ export function BidSupportAssistant({ token, route, inline = false }: { token: s
   }, [open, inline]);
 
   const starters = [
-    "Resumen de la oportunidad",
-    route ? `¿Qué detalles tiene ${route}?` : "¿Qué detalles tiene esta ruta?",
-    "¿Cómo mejoro mi ranking?",
-    "¿Qué modelo comercial debo elegir?",
-    "¿Cómo subo una alternativa?",
+    msg("ai.starterSummary"),
+    route ? msg("ai.starterRoute", route) : msg("ai.starterThisRoute"),
+    msg("ai.starterRanking"),
+    msg("ai.starterModel"),
+    msg("ai.starterAlternative"),
   ];
 
   async function ask(question: string) {
@@ -57,10 +60,7 @@ export function BidSupportAssistant({ token, route, inline = false }: { token: s
   /** Escalation notifies people, so it is always a deliberate, confirmed step. */
   async function sendToTeam() {
     if (!asked || busy || reply?.ticket?.id) return;
-    const ok = await confirmAsync(
-      `Tu pregunta se enviará al equipo de MARKSMAN como ticket de soporte:\n\n"${asked}"\n\n` +
-        "Te darán seguimiento y podrás verlo en la bitácora de tu perfil de carrier. ¿Enviar?",
-    );
+    const ok = await confirmAsync(msg("ai.ticketConfirm", asked), { ok: msg("ai.sendToTeam") });
     if (!ok) return;
     setBusy("ticket");
     setError(null);
@@ -81,30 +81,24 @@ export function BidSupportAssistant({ token, route, inline = false }: { token: s
       {/* The room's assistant bar (wireframe 11); the panel floats over the page. */}
       {!inline && <div className="croom-assist">
         <div className="grow">
-          <b>Asistente de la sala</b>
-          <span>
-            Dudas de acceso, fechas, alcance de rutas o cómo cotizar. Si hace falta una persona, envía tu pregunta al
-            equipo.
-          </span>
+          <b>{msg("ai.barTitle")}</b>
+          <span>{msg("ai.barText")}</span>
         </div>
         <button type="button" className="primary" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-          {open ? "Cerrar" : "Preguntar"}
+          {open ? msg("ai.close") : msg("ai.ask")}
         </button>
       </div>}
       {open && (
         <div className={`support-assistant ${inline ? "inline" : "open"}`}>
-          <section className="support-panel" role="dialog" aria-label="Asistente del Bid Room">
+          <section className="support-panel" role="dialog" aria-label={msg("ai.dialog")}>
             <header className="support-head">
               <div>
-                <p className="support-eyebrow">Asistente de puja</p>
-                <h3>Pregunta sobre esta oportunidad</h3>
-                <p className="support-help ayuda">
-                  Responde con el evento, tus rutas, las reglas visibles y tu ranking. Si hace falta una
-                  persona, envía tu pregunta al equipo.
-                </p>
+                <p className="support-eyebrow">{msg("ai.eyebrow")}</p>
+                <h3>{msg("ai.heading")}</h3>
+                <p className="support-help ayuda">{msg("ai.help")}</p>
               </div>
               {!inline && (
-                <button type="button" onClick={() => setOpen(false)} aria-label="Cerrar asistente">
+                <button type="button" onClick={() => setOpen(false)} aria-label={msg("ai.closeAria")}>
                   ✕
                 </button>
               )}
@@ -125,14 +119,14 @@ export function BidSupportAssistant({ token, route, inline = false }: { token: s
                 <>
                   {asked && (
                     <div className="support-bubble you">
-                      <span>Tu pregunta</span>
+                      <span>{msg("ai.yourQuestion")}</span>
                       <p>{asked}</p>
                     </div>
                   )}
                   <article className={`support-answer${reply.needs_ticket ? " needs-person" : ""}`}>
                     <strong>
                       {reply.intent_label ||
-                        (reply.needs_ticket ? "Requiere seguimiento de una persona" : "Respuesta")}
+                        (reply.needs_ticket ? msg("ai.needsPerson") : msg("ai.answer"))}
                     </strong>
                     {(reply.support_highlights ?? []).filter((h) => h.label).length > 0 && (
                       <dl className="support-facts">
@@ -155,10 +149,7 @@ export function BidSupportAssistant({ token, route, inline = false }: { token: s
                       </ol>
                     )}
                     {sent && (
-                      <p className="support-sent">
-                        Enviado al equipo de MARKSMAN. Verás su seguimiento en la bitácora de tu perfil de
-                        carrier.
-                      </p>
+                      <p className="support-sent">{msg("ai.sent")}</p>
                     )}
                   </article>
 
@@ -175,9 +166,7 @@ export function BidSupportAssistant({ token, route, inline = false }: { token: s
                   {!sent && (
                     <div className="support-escalate">
                       <span>
-                        {reply.needs_ticket
-                          ? "Esta pregunta necesita a una persona del equipo."
-                          : "¿No resolvió tu duda?"}
+                        {reply.needs_ticket ? msg("ai.needsTeam") : msg("ai.notSolved")}
                       </span>
                       <button
                         type="button"
@@ -185,7 +174,7 @@ export function BidSupportAssistant({ token, route, inline = false }: { token: s
                         disabled={busy !== null}
                         onClick={sendToTeam}
                       >
-                        {busy === "ticket" ? "Enviando…" : "Enviar al equipo"}
+                        {busy === "ticket" ? msg("ai.sending") : msg("ai.sendToTeam")}
                       </button>
                     </div>
                   )}
@@ -206,7 +195,7 @@ export function BidSupportAssistant({ token, route, inline = false }: { token: s
                 ref={input}
                 rows={2}
                 value={draft}
-                placeholder="Escribe tu pregunta…"
+                placeholder={msg("ai.placeholder")}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
@@ -216,7 +205,7 @@ export function BidSupportAssistant({ token, route, inline = false }: { token: s
                 }}
               />
               <button type="submit" className="primary" disabled={!draft.trim() || busy !== null}>
-                {busy === "ask" ? "…" : "Preguntar"}
+                {busy === "ask" ? "…" : msg("ai.ask")}
               </button>
             </form>
           </section>

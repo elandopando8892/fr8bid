@@ -3,20 +3,21 @@ import { listBidRoomChat, postBidRoomChatMessage, explainBidError } from "./bidr
 import { useAsync } from "@/components/useAsync";
 import { Spinner, ErrorBanner, dateShort } from "@/components/ui";
 import * as I from "../../../ui/Iconos";
+import { locale, useLang } from "@/i18n/language";
+import { msg } from "@/i18n/bid-room-messages";
 
 type Row = Record<string, unknown>;
 
 /** Who reads each kind of thread; the carrier writes in its private one. */
-const THREAD_LABEL: Record<string, string> = {
-  carrier_private: "Privado con MARKSMAN",
-  lane_group: "Todos los carriers de tu ruta",
-  event_group: "Todos los carriers del evento",
-};
-const ORDER = ["carrier_private", "lane_group", "event_group"];
+const ORDER = ["carrier_private", "lane_group", "event_group"] as const;
+type ThreadType = (typeof ORDER)[number];
+const threadLabel = (type: string) => ((ORDER as readonly string[]).includes(type) ? msg(`thread.${type as ThreadType}`) : "");
+
+const order = (type: unknown) => (ORDER as readonly string[]).indexOf(String(type));
 
 const when = (value: unknown) => {
   const date = new Date(String(value ?? ""));
-  return Number.isNaN(date.getTime()) ? "" : `${dateShort(value)} ${date.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}`;
+  return Number.isNaN(date.getTime()) ? "" : `${dateShort(value)} ${date.toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" })}`;
 };
 
 /**
@@ -26,6 +27,7 @@ const when = (value: unknown) => {
  * messages; what the carrier writes goes to its private thread.
  */
 export function BidRoomChat({ token, assistant }: { token: string; /** The room's assistant, on top. */ assistant?: ReactNode }) {
+  useLang();
   const { data, loading, error, reload } = useAsync(() => listBidRoomChat(token), [token]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -33,7 +35,7 @@ export function BidRoomChat({ token, assistant }: { token: string; /** The room'
 
   const threads = ((data as { rows?: Row[] } | null)?.rows ?? [])
     .filter((thread) => Array.isArray(thread.messages) && (thread.messages as Row[]).length)
-    .sort((a, b) => ORDER.indexOf(String(a.thread_type)) - ORDER.indexOf(String(b.thread_type)));
+    .sort((a, b) => order(a.thread_type) - order(b.thread_type));
 
   async function send() {
     const body = text.trim();
@@ -59,26 +61,26 @@ export function BidRoomChat({ token, assistant }: { token: string; /** The room'
         {sendError && <ErrorBanner message={sendError} />}
         <section className="croom-card">
           <header className="croom-card-head">
-            <b className="grow">Conversación con MARKSMAN</b>
+            <b className="grow">{msg("chat.title")}</b>
             <button type="button" className="link" disabled={loading} onClick={reload}>
-              {loading ? "Cargando…" : "Actualizar"}
+              {loading ? msg("chat.loading") : msg("chat.refresh")}
             </button>
           </header>
 
           {loading && !data ? (
-            <Spinner label="Cargando mensajes…" />
+            <Spinner label={msg("chat.loadingMessages")} />
           ) : threads.length ? (
             threads.map((thread) => (
               <div key={String(thread.id)} className="croom-thread">
                 <div className="croom-thread-name">
-                  {THREAD_LABEL[String(thread.thread_type)] ?? String(thread.title ?? "Conversación")}
+                  {threadLabel(String(thread.thread_type)) || String(thread.title ?? msg("chat.thread"))}
                 </div>
                 {(thread.messages as Row[]).map((m, i) => {
                   const mine = String(m.sender_role) === "carrier";
                   return (
                     <div key={String(m.id ?? i)} className={`croom-msg${mine ? " mine" : ""}`}>
                       <div className="croom-msg-head">
-                        <b>{String(m.sender_name ?? (mine ? "Tu empresa" : "MARKSMAN"))}</b>
+                        <b>{String(m.sender_name ?? (mine ? msg("chat.yourCompany") : "MARKSMAN"))}</b>
                         <span className="mono">{when(m.created_at)}</span>
                       </div>
                       <p>{String(m.body ?? "")}</p>
@@ -88,37 +90,35 @@ export function BidRoomChat({ token, assistant }: { token: string; /** The room'
               </div>
             ))
           ) : (
-            <p className="croom-card-note">Sin mensajes todavía. Escribe el primero si tienes dudas del evento.</p>
+            <p className="croom-card-note">{msg("chat.empty")}</p>
           )}
 
           <div className="croom-compose">
             <textarea
               rows={2}
               value={text}
-              placeholder="Tu mensaje, privado con MARKSMAN"
+              placeholder={msg("chat.placeholder")}
               onChange={(e) => setText(e.target.value)}
             />
             <button type="button" className="primary" disabled={!text.trim() || busy} onClick={send}>
-              {busy ? "Enviando…" : "Enviar"}
+              {busy ? msg("chat.sending") : msg("chat.send")}
             </button>
           </div>
         </section>
       </div>
 
       <aside className="croom-side">
-        <div className="croom-eyebrow ayuda">Quién lee esto</div>
+        <div className="croom-eyebrow ayuda">{msg("chat.whoReads")}</div>
         <p className="croom-side-text croom-privado">
-          <I.Candado size={15} /> <b>Privado con MARKSMAN</b>
-          <span className="ayuda">: lo que escribas aquí solo lo ven tu empresa y el equipo de MARKSMAN, y queda
-          ligado a tu invitación.</span>
+          <I.Candado size={15} /> <b>{msg("thread.carrier_private")}</b>
+          <span className="ayuda">{msg("chat.privateText")}</span>
         </p>
         <p className="croom-side-text ayuda">
-          <b>Carriers de tu ruta o del evento:</b> avisos del equipo para todos los invitados. Lo que tú escribes no
-          se publica ahí.
+          <b>{msg("chat.groupBold")}</b>{msg("chat.groupText")}
         </p>
         <div className="croom-box ayuda">
-          <b>Mejor que un correo suelto</b>
-          <p>Para dudas de precio o alcance, la respuesta queda junto a tu oferta.</p>
+          <b>{msg("chat.betterTitle")}</b>
+          <p>{msg("chat.betterText")}</p>
         </div>
       </aside>
     </div>

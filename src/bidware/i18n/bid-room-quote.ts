@@ -128,6 +128,7 @@ export const quoteCopy = {
   "form.model": { es: "Modelo comercial", en: "Commercial model" },
   "form.blankPlaceholder": { es: "vacío = {0}", en: "blank = {0}" },
   "form.extrasSummary": { es: "Sumar puntos a tu oferta", en: "Add points to your offer" },
+  "form.extrasCount": { es: "{0} de {1}", en: "{0} of {1}" },
   "form.extrasHint": {
     es: "Equipo, ETA, GPS y vacío suben tu score; puedes completarlos después de enviar.",
     en: "Equipment, ETA, GPS and deadhead raise your score; you can fill them in after sending.",

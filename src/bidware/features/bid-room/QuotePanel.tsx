@@ -277,9 +277,7 @@ export function QuotePanel({
       <details className="croom-extras" open={extras} onToggle={(e) => setExtras((e.target as HTMLDetailsElement).open)}>
         <summary>
           {q("form.extrasSummary")}
-          <span className="mono">
-            {scored} de {SCORE_FACTORS.length}
-          </span>
+          <span className="mono">{q("form.extrasCount", scored, SCORE_FACTORS.length)}</span>
         </summary>
         <p className="croom-hint ayuda">{q("form.extrasHint")}</p>
         <div className="croom-fields">

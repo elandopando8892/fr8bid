@@ -8853,6 +8853,8 @@ table.data.uploads-table {
 .support-assistant.inline {
   position: static;
   display: block;
+  /* El flotante alinea su panel al final; aquí ocupa todo el ancho aunque la respuesta sea corta. */
+  justify-items: stretch;
   margin-bottom: 14px;
 }
 .support-assistant.inline .support-panel {
