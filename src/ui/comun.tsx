@@ -73,9 +73,8 @@ export const MENU: { grupo: string; plegado?: boolean; modulos: Modulo[] }[] = [
     grupo: "Shippers y tarifas",
     modulos: [
       { etiqueta: "Shippers", a: "/shippers", icono: I.Edificio },
-      { etiqueta: "Revisión de tarifas", a: "/tarifas", icono: I.Etiqueta },
-      { etiqueta: "Tarifario", a: "/tarifario", icono: I.Libro },
-      { etiqueta: "Archivos de tarifas", a: "/archivos", icono: I.Carpeta }
+      // Un solo módulo con tres pestañas: por revisar, tarifario y archivos.
+      { etiqueta: "Tarifas", a: "/tarifas", icono: I.Etiqueta, activo: (r) => ["/tarifas", "/tarifario", "/archivos"].some((a) => bajo(a)(r)) }
     ]
   },
   {

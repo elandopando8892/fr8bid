@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/auth/AuthContext";
 import { confirmAsync, promptAsync } from "@/components/confirm";
 import { useAsync } from "@/components/useAsync";
+import { RateTabs } from "@/components/RateTabs";
 import { NEED_REASON } from "@/lib/roles";
 import { Empty, ErrorBanner, InfoBanner, Pill, Spinner, TopBar, dateShort } from "@/components/ui";
 import { SIMULATED_MESSAGE } from "@/lib/api-client";
@@ -206,6 +207,7 @@ export function UploadsPage() {
       />
       <main className="main">
         <div style={{ display: "grid", gap: 14 }}>
+          <RateTabs active="files" />
           {notice && <InfoBanner>{notice}</InfoBanner>}
 
           <div className="card" style={{ display: "grid", gap: 10 }}>
