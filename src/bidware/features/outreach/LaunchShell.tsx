@@ -48,7 +48,6 @@ export function LaunchHeader({
 }
 
 const STEPS = [
-  { key: "fit", label: "Carrier fit", to: (id: string) => `/carrier-fit?event=${id}` },
   { key: "review", get label() { return tr("text144"); }, to: (id: string) => `/rfx/${id}/review` },
   { key: "message", get label() { return tr("text145"); }, to: (id: string) => `/rfx/${id}/message` },
   { key: "delivery", get label() { return tr("text090"); }, to: (id: string) => `/rfx/${id}/delivery` },

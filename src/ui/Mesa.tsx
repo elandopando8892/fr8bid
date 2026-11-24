@@ -891,7 +891,10 @@ function SumarAlEvento({ d, ctx, accion, vendorId, nombre }: { d: Detalle; ctx: 
 // Carrier fit y Historial del segmento en una sola tarjeta: dos botones, y
 // cada uno consulta a Rateware al abrirlo (un clic en vez de dos).
 function MasCarriers(p: Props) {
+  const s = useSesion();
   const [abierto, setAbierto] = useState<"fit" | "historial" | null>(null);
+  // Sumar una lista completa vive en Carrier fit; se llega desde aquí, con el evento ya elegido.
+  const desdeLista = s.modo === "rateware" && p.ctx.rol !== "viewer" && ["borrador", "abierto"].includes(p.d.evento.estado);
   return (
     <div className="tarjeta">
       <div className="fila">
@@ -899,9 +902,10 @@ function MasCarriers(p: Props) {
         <div className="fila-botones sin-margen">
           <button className={`btn-chico ${abierto === "fit" ? "activo" : ""}`} aria-pressed={abierto === "fit"} onClick={() => setAbierto(abierto === "fit" ? null : "fit")}><I.Mira size={15} />Carrier fit</button>
           <button className={`btn-chico ${abierto === "historial" ? "activo" : ""}`} aria-pressed={abierto === "historial"} onClick={() => setAbierto(abierto === "historial" ? null : "historial")}><I.Grafica size={15} />Historial del segmento</button>
+          {desdeLista && <Liga a={`/carrier-fit?event=${p.d.evento.id}`} className="btn-chico"><I.Lista size={15} />Desde una lista</Liga>}
         </div>
       </div>
-      {!abierto && <p className="tenue ayuda">Sugeridos por cotizaciones y ofertas anteriores, o por tarifas aprobadas del mismo segmento.</p>}
+      {!abierto && <p className="tenue ayuda">Sugeridos por cotizaciones y ofertas anteriores, o por tarifas aprobadas del mismo segmento.{desdeLista ? " También puedes sumar una lista de carriers completa." : ""}</p>}
       {abierto === "fit" && <PanelCarrierFit {...p} incrustado />}
       {abierto === "historial" && <PanelHistorialSegmento {...p} incrustado />}
     </div>

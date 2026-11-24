@@ -30,7 +30,7 @@ const copy = {
   routesCount: { es: '{0} ruta(s); muestra de hasta dos. Alcance por validar en Carrier fit.', en: '{0} route(s); sample of up to two. Scope requires checking in Carrier fit.' },
   selectedRow: { es: 'Seleccionado', en: 'Selected' }, excludedRow: { es: 'Fuera de selección', en: 'Outside selection' }, reviewedRow: { es: 'Revisado', en: 'Reviewed' }, pendingRow: { es: 'Sin revisión vigente', en: 'No current review' },
   noRows: { es: 'No hay coincidencias para este filtro.', en: 'No matches for this filter.' }, more: { es: 'Ver más carriers', en: 'Show more carriers' },
-  reviewLink: { es: 'Ir a Revisión', en: 'Go to Review' }, queueLink: { es: 'Ir a Cola de envío', en: 'Go to Delivery queue' }, fitLink: { es: 'Validar alcance en Carrier fit', en: 'Check scope in Carrier fit' },
+  reviewLink: { es: 'Ir a Revisión', en: 'Go to Review' }, queueLink: { es: 'Ir a Cola de envío', en: 'Go to Delivery queue' },
   prepare: { es: 'Sin registro; contacto revisado', en: 'No record; contact reviewed' },
   not_selected: { es: 'Fuera de la selección guardada', en: 'Outside saved selection' }, not_reviewed: { es: 'Falta revisar el contacto', en: 'Contact review needed' },
   contact_changed: { es: 'Contacto distinto o revisión sin comprobante', en: 'Contact changed or review snapshot missing' }, no_contact: { es: 'Sin contacto utilizable en este canal', en: 'No usable contact for this channel' },
