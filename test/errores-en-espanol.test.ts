@@ -6,6 +6,8 @@ describe("rechazos del servidor en español", () => {
   it("traduce los códigos nuevos y deja los demás tal cual", () => {
     expect(mensajeDelServidor("RFX_EVENT_CLOSED_FOR_INVITES", "Bidding on this RFx event is closed.")).toMatch(/plazo de este evento ya cerró/);
     expect(mensajeDelServidor("ACCEPTED_COMMERCIAL_MODELS_INVALID", "accepted_commercial_models must be")).toMatch(/no son válidos/);
+    expect(mensajeDelServidor("RFX_LANE_AWARDED", "The lane already has a primary or backup carrier; it can no longer be corrected.")).toMatch(/^La ruta ya tiene primario o respaldo/);
+    expect(mensajeDelServidor("RFX_LANE_CHANGED", "The lane changed since it was read; nothing was updated.")).toMatch(/no se guardó nada/);
     expect(mensajeDelServidor("COMMERCIAL_MODEL_NOT_ACCEPTED", "This event does not accept that commercial model.")).toBe("This event does not accept that commercial model.");
     expect(mensajeDelServidor("COMMERCIAL_MODEL_LOCKED", "Este evento opera únicamente en XBF compra-venta.")).toBe("Este evento opera únicamente en XBF compra-venta.");
   });
