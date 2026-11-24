@@ -1,3 +1,4 @@
+import { q } from "../../i18n/bid-room-quote";
 import { lockedBrokeragePolicy } from "../../../../packages/carrier-commercial/locked-policy.mjs";
 import { callRfxBidApi, ApiError } from "@/lib/api-client";
 
@@ -242,6 +243,17 @@ export function modelSpec(key: ModelKey) {
   return COMMERCIAL_MODELS.find((m) => m.key === key) ?? COMMERCIAL_MODELS[0];
 }
 
+/** The model's texts in the carrier's language (the constants above stay in Spanish). */
+export function modelCopy(key: ModelKey) {
+  const { key: k } = modelSpec(key);
+  return {
+    label: q(`model.${k}.label`),
+    pctLabel: q(`model.${k}.pct`),
+    enter: q(`model.${k}.enter`),
+    effect: q(`model.${k}.effect`),
+  };
+}
+
 /** Everything `submit_bid` writes. */
 export interface BidInput {
   bid_rate: number;
@@ -356,27 +368,27 @@ export function billingNotice(form: Pick<OfferForm, "commercial_model" | "pct">)
   if (form.commercial_model === "xbf_buy_sell") return null;
   const pct = parseAmount(form.pct) ?? modelSpec(form.commercial_model).blank;
   const amount = Number.isFinite(pct) ? ` (${pct} %)` : "";
-  return `El porcentaje acordado${amount} se facturará 5 días hábiles después de la confirmación de pago del embarcador.`;
+  return q("billing.notice", amount);
 }
 
 /** What stops the form from being sent, in the carrier's words. */
 export function offerProblems(form: OfferForm): string[] {
   const problems: string[] = [];
   const rate = parseAmount(form.bid_rate);
-  if (rate === null || Number.isNaN(rate) || rate <= 0) problems.push("Escribe tu tarifa all-in.");
+  if (rate === null || Number.isNaN(rate) || rate <= 0) problems.push(q("problem.rate"));
   for (const [value, label] of [
-    [form.weekly_capacity, "La capacidad"],
-    [form.transit_days, "El tránsito"],
-    [form.deadhead_distance, "El vacío"],
-    [form.alternative_units, "Las unidades alternas"],
+    [form.weekly_capacity, q("problem.capacity")],
+    [form.transit_days, q("problem.transit")],
+    [form.deadhead_distance, q("problem.deadhead")],
+    [form.alternative_units, q("problem.altUnits")],
   ] as const) {
     const n = parseAmount(value);
-    if (n !== null && (Number.isNaN(n) || n < 0)) problems.push(`${label} debe ser un número.`);
+    if (n !== null && (Number.isNaN(n) || n < 0)) problems.push(q("problem.number", label));
   }
   const spec = modelSpec(form.commercial_model);
   const pct = parseAmount(form.pct);
   if (pct !== null && (Number.isNaN(pct) || pct < spec.min || pct > spec.max)) {
-    problems.push(`El porcentaje va de ${spec.min} a ${spec.max} %.`);
+    problems.push(q("problem.pct", spec.min, spec.max));
   }
   return problems;
 }
@@ -384,20 +396,20 @@ export function offerProblems(form: OfferForm): string[] {
 /** Advisory completeness, separate from errors: missing context never blocks a bid. */
 export function offerWarnings(form: OfferForm): string[] {
   const warnings: string[] = [];
-  if (!form.weekly_capacity.trim()) warnings.push("Indica la capacidad semanal que puedes comprometer.");
-  if (!form.transit_days.trim()) warnings.push("Indica los días de tránsito para comparar el servicio.");
-  if (!form.valid_through) warnings.push("Indica la fecha de vigencia de tu oferta.");
-  if (!form.equipment_available) warnings.push("Confirma la disponibilidad de equipo: sí o no.");
+  if (!form.weekly_capacity.trim()) warnings.push(q("warn.capacity"));
+  if (!form.transit_days.trim()) warnings.push(q("warn.transit"));
+  if (!form.valid_through) warnings.push(q("warn.valid"));
+  if (!form.equipment_available) warnings.push(q("warn.equipment"));
   if (form.equipment_available === "yes") {
-    if (!form.current_unit_location.trim()) warnings.push("Indica la ubicación actual de la unidad.");
-    if (!form.deadhead_distance.trim()) warnings.push("Indica la distancia de vacío al origen; puede ser cero.");
-    if (!form.unit_details.trim()) warnings.push("Agrega el detalle de la unidad y el equipo ofrecido.");
-    if (!form.eta_pickup) warnings.push("Indica la fecha y hora estimadas de recolección.");
-    if (!form.eta_delivery) warnings.push("Indica la fecha y hora estimadas de entrega.");
+    if (!form.current_unit_location.trim()) warnings.push(q("warn.location"));
+    if (!form.deadhead_distance.trim()) warnings.push(q("warn.deadhead"));
+    if (!form.unit_details.trim()) warnings.push(q("warn.unit"));
+    if (!form.eta_pickup) warnings.push(q("warn.etaPickup"));
+    if (!form.eta_delivery) warnings.push(q("warn.etaDelivery"));
   }
   if (form.best_alternative_offered) {
-    if (!form.alternative_equipment.trim() && !form.alternative_units.trim()) warnings.push("Describe el equipo o las unidades de tu oferta alternativa.");
-    if (!form.alternative_notes.trim()) warnings.push("Aclara las condiciones de la oferta alternativa.");
+    if (!form.alternative_equipment.trim() && !form.alternative_units.trim()) warnings.push(q("warn.altEquipment"));
+    if (!form.alternative_notes.trim()) warnings.push(q("warn.altNotes"));
   }
   return warnings;
 }
@@ -405,20 +417,20 @@ export function offerWarnings(form: OfferForm): string[] {
 /** The same gaps as offerWarnings, in a word each, for the panel's one-line reminder. */
 export function offerGaps(form: OfferForm): string[] {
   const gaps: string[] = [];
-  if (!form.weekly_capacity.trim()) gaps.push("capacidad");
-  if (!form.transit_days.trim()) gaps.push("tránsito");
-  if (!form.valid_through) gaps.push("vigencia");
-  if (!form.equipment_available) gaps.push("equipo disponible");
+  if (!form.weekly_capacity.trim()) gaps.push(q("gap.capacity"));
+  if (!form.transit_days.trim()) gaps.push(q("gap.transit"));
+  if (!form.valid_through) gaps.push(q("gap.valid"));
+  if (!form.equipment_available) gaps.push(q("gap.equipment"));
   if (form.equipment_available === "yes") {
-    if (!form.current_unit_location.trim()) gaps.push("ubicación de la unidad");
-    if (!form.deadhead_distance.trim()) gaps.push("vacío al origen");
-    if (!form.unit_details.trim()) gaps.push("detalle de la unidad");
-    if (!form.eta_pickup) gaps.push("ETA de recolección");
-    if (!form.eta_delivery) gaps.push("ETA de entrega");
+    if (!form.current_unit_location.trim()) gaps.push(q("gap.location"));
+    if (!form.deadhead_distance.trim()) gaps.push(q("gap.deadhead"));
+    if (!form.unit_details.trim()) gaps.push(q("gap.unit"));
+    if (!form.eta_pickup) gaps.push(q("gap.etaPickup"));
+    if (!form.eta_delivery) gaps.push(q("gap.etaDelivery"));
   }
   if (form.best_alternative_offered) {
-    if (!form.alternative_equipment.trim() && !form.alternative_units.trim()) gaps.push("equipo alterno");
-    if (!form.alternative_notes.trim()) gaps.push("condiciones de la alternativa");
+    if (!form.alternative_equipment.trim() && !form.alternative_units.trim()) gaps.push(q("gap.altEquipment"));
+    if (!form.alternative_notes.trim()) gaps.push(q("gap.altNotes"));
   }
   return gaps;
 }
@@ -436,7 +448,7 @@ function validationStatus(current: unknown, mirror: boolean): string {
 export function offerPayload(form: OfferForm, lane: BookLane): BidInput {
   const locked = isLockedBrokerage(lane);
   if (locked && (form.commercial_model !== "xbf_buy_sell" || form.pct.trim())) {
-    throw new Error("Este evento solo admite XBF compra-venta; el margen es interno.");
+    throw new Error(q("error.locked"));
   }
   const spec = modelSpec(form.commercial_model);
   const pct = parseAmount(form.pct);
@@ -757,7 +769,7 @@ export function isWindowClosed(err: unknown): boolean {
 export function explainBidError(err: unknown): string {
   const message = (err as Error)?.message || String(err);
   if (isWindowClosed(err)) {
-    return `${message} La ventana de cotización ya cerró para esta ruta.`;
+    return q("error.windowClosed", message);
   }
   return message;
 }

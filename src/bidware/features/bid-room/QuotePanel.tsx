@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { confirmAsync, promptAsync } from "@/components/confirm";
 import { ErrorBanner, dateShort, money } from "@/components/ui";
+import { useLang } from "@/i18n/language";
+import { q } from "@/i18n/bid-room-quote";
 import {
   COMMERCIAL_MODELS,
   billingNotice,
@@ -11,6 +13,7 @@ import {
   isRevision,
   isLockedBrokerage,
   laneState,
+  modelCopy,
   modelSpec,
   offerForm,
   offerPayload,
@@ -35,11 +38,11 @@ const offerAmount = (lane: BookLane) => {
 /** Why a lane can't be priced here, in the order the server checks it. */
 function lockedReason(lane: BookLane): string {
   const state = laneState(lane);
-  if (state === "awarded") return "Esta ruta ya es tuya. Para renegociar una tarifa adjudicada, escribe al equipo.";
-  if (state === "backup") return "Quedaste como respaldo en esta ruta. Si cambia algo, el equipo te escribe.";
-  if (state === "not_awarded") return "Esta ruta se adjudicó a otro carrier. Gracias por cotizar.";
-  if (!lane.invitation_token) return "Esta ruta no trae su propio enlace. Pide acceso al equipo en Mensajes.";
-  return "La ventana de cotización cerró. Tu última oferta queda como está.";
+  if (state === "awarded") return q("locked.awarded");
+  if (state === "backup") return q("locked.backup");
+  if (state === "not_awarded") return q("locked.not_awarded");
+  if (!lane.invitation_token) return q("locked.noLink");
+  return q("locked.closed");
 }
 
 /**
@@ -60,6 +63,7 @@ export function QuotePanel({
   /** Sends the carrier to Mensajes. */
   onAsk: () => void;
 }) {
+  useLang();
   const [form, setForm] = useState<OfferForm>(() => offerForm(lane));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +91,7 @@ export function QuotePanel({
   const revision = isRevision(lane);
   const editable = canQuote(lane);
   const lockedCommercialModel = isLockedBrokerage(lane);
-  const spec = modelSpec(form.commercial_model);
+  const spec = { ...modelSpec(form.commercial_model), ...modelCopy(form.commercial_model) };
   const problems = offerProblems(form);
   const warnings = offerWarnings(form);
   const gaps = offerGaps(form);
@@ -119,11 +123,11 @@ export function QuotePanel({
     sending.current = true;
     setBusy(true);
     try {
-      if (billing && !await confirmAsync(`${spec.label} · ${route(lane)}\n\n${billing}`, { ok: "Confirmar y enviar oferta", cancel: "Volver a revisar" })) return;
+      if (billing && !await confirmAsync(`${spec.label} · ${route(lane)}\n\n${billing}`, { ok: q("form.confirmSend"), cancel: q("form.backToReview") })) return;
       if (!active.current || scopeToken.current !== token) return;
       await run(
         () => submitBid(token, offerPayload(form, lane)),
-        `${form.best_final ? "Oferta final enviada" : revision ? "Oferta actualizada" : "Oferta enviada"} · ${route(lane)}.`,
+        q(form.best_final ? "form.sentFinal" : revision ? "form.sentUpdated" : "form.sent", route(lane)),
       );
     } finally {
       sending.current = false;
@@ -134,13 +138,13 @@ export function QuotePanel({
   const head = (
     <>
       <div className="croom-eyebrow">
-        Cotización{lane.lane_number != null ? ` · ruta ${String(lane.lane_number)}` : ""}
+        {lane.lane_number != null ? q("panel.eyebrowLane", String(lane.lane_number)) : q("panel.eyebrow")}
       </div>
       <h3 className="croom-panel-title">
-        {editable ? (revision ? "Revisar" : "Cotizar") : "Tu oferta"} · {route(lane)}
+        {editable ? (revision ? q("panel.review") : q("panel.quote")) : q("panel.yourOffer")} · {route(lane)}
       </h3>
       <div className="croom-panel-sub">
-        {[lane.equipment, lane.weekly_volume != null && lane.weekly_volume !== "" ? `${String(lane.weekly_volume)} cargas/sem` : ""]
+        {[lane.equipment, lane.weekly_volume != null && lane.weekly_volume !== "" ? q("panel.loadsPerWeek", String(lane.weekly_volume)) : ""]
           .filter(Boolean)
           .join(" · ")}
       </div>
@@ -155,19 +159,19 @@ export function QuotePanel({
         {revision && (
           <dl className="croom-facts">
             <div>
-              <dt>Tarifa all-in</dt>
+              <dt>{q("facts.rate")}</dt>
               <dd className="mono">{offerAmount(lane)}</dd>
             </div>
             <div>
-              <dt>Capacidad/sem</dt>
+              <dt>{q("facts.capacity")}</dt>
               <dd className="mono">{lane.weekly_capacity != null ? String(lane.weekly_capacity) : "—"}</dd>
             </div>
             <div>
-              <dt>Tránsito</dt>
-              <dd className="mono">{lane.transit_days != null ? `${String(lane.transit_days)} días` : "—"}</dd>
+              <dt>{q("facts.transit")}</dt>
+              <dd className="mono">{lane.transit_days != null ? q("facts.transitDays", String(lane.transit_days)) : "—"}</dd>
             </div>
             <div>
-              <dt>Vigente hasta</dt>
+              <dt>{q("facts.validThrough")}</dt>
               <dd className="mono">{lane.valid_through ? dateShort(String(lane.valid_through).slice(0, 10)) : "—"}</dd>
             </div>
           </dl>
@@ -175,7 +179,7 @@ export function QuotePanel({
         <div className="croom-actions">
           <div className="spacer" />
           <button type="button" onClick={onAsk}>
-            Escribir al equipo
+            {q("panel.askTeam")}
           </button>
         </div>
       </aside>
@@ -188,8 +192,8 @@ export function QuotePanel({
 
       {revision && (
         <div className="croom-note">
-          <b>Ya cotizaste:</b>
-          <span>{offerAmount(lane)}. Reenviar queda como revisión, no como oferta aparte.</span>
+          <b>{q("panel.alreadyQuoted")}</b>
+          <span>{q("panel.resendNote", offerAmount(lane))}</span>
         </div>
       )}
       {error && <ErrorBanner message={error} />}
@@ -197,7 +201,7 @@ export function QuotePanel({
       <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <div className="croom-fields">
         <label className="grow">
-          <span>Tarifa all-in *</span>
+          <span>{q("form.rate")}</span>
           <input
             className="mono"
             inputMode="decimal"
@@ -207,7 +211,7 @@ export function QuotePanel({
           />
         </label>
         <label className="w-currency">
-          <span>Moneda</span>
+          <span>{q("form.currency")}</span>
           <select value={form.currency} onChange={(e) => set({ currency: e.target.value })}>
             <option value="USD">USD</option>
             <option value="MXN">MXN</option>
@@ -218,35 +222,35 @@ export function QuotePanel({
 
       <div className="croom-fields">
         <label>
-          <span>Capacidad/sem</span>
+          <span>{q("form.capacity")}</span>
           <input className="mono" inputMode="numeric" value={form.weekly_capacity} onChange={(e) => set({ weekly_capacity: e.target.value })} />
         </label>
         <label>
-          <span>Tránsito (días)</span>
+          <span>{q("form.transitDays")}</span>
           <input className="mono" inputMode="numeric" value={form.transit_days} onChange={(e) => set({ transit_days: e.target.value })} />
         </label>
         <label>
-          <span>Vigente hasta</span>
+          <span>{q("form.validThrough")}</span>
           <input className="mono" type="date" value={form.valid_through} onChange={(e) => set({ valid_through: e.target.value })} />
         </label>
       </div>
 
       {lockedCommercialModel ? (
-        <div className="croom-note" aria-label="Modelo comercial fijo">
-          <b>XBF compra-venta · Modelo fijo</b>
-          <p>Captura tu tarifa de venta a XBF. Las demás modalidades no aplican en esta etapa.</p>
+        <div className="croom-note" aria-label={q("form.fixedModelLabel")}>
+          <b>{q("form.fixedModelTitle")}</b>
+          <p>{q("form.fixedModelText")}</p>
         </div>
       ) : (<>
       <div className="croom-fields">
         <label className="grow">
-          <span>Modelo comercial</span>
+          <span>{q("form.model")}</span>
           <select
             value={form.commercial_model}
             onChange={(e) => set({ commercial_model: e.target.value as OfferForm["commercial_model"], pct: "" })}
           >
             {COMMERCIAL_MODELS.map((m) => (
               <option key={m.key} value={m.key}>
-                {m.label}
+                {modelCopy(m.key).label}
               </option>
             ))}
           </select>
@@ -260,7 +264,7 @@ export function QuotePanel({
             inputMode="decimal"
             value={form.pct}
             onChange={(e) => set({ pct: e.target.value })}
-            placeholder={`vacío = ${spec.blank}`}
+            placeholder={q("form.blankPlaceholder", spec.blank)}
           />
         </label>
       </div>
@@ -272,32 +276,32 @@ export function QuotePanel({
 
       <details className="croom-extras" open={extras} onToggle={(e) => setExtras((e.target as HTMLDetailsElement).open)}>
         <summary>
-          Sumar puntos a tu oferta
+          {q("form.extrasSummary")}
           <span className="mono">
             {scored} de {SCORE_FACTORS.length}
           </span>
         </summary>
-        <p className="croom-hint ayuda">Equipo, ETA, GPS y vacío suben tu score; puedes completarlos después de enviar.</p>
+        <p className="croom-hint ayuda">{q("form.extrasHint")}</p>
         <div className="croom-fields">
           <label>
-            <span>Equipo disponible</span>
+            <span>{q("form.equipmentAvailable")}</span>
             <select
               value={form.equipment_available}
               onChange={(e) => set({ equipment_available: e.target.value as OfferForm["equipment_available"] })}
             >
-              <option value="">Sin decir</option>
-              <option value="yes">Sí</option>
-              <option value="no">No</option>
+              <option value="">{q("form.unsaid")}</option>
+              <option value="yes">{q("form.yes")}</option>
+              <option value="no">{q("form.no")}</option>
             </select>
           </label>
           <label className="grow">
-            <span>Ubicación actual de la unidad</span>
+            <span>{q("form.unitLocation")}</span>
             <input value={form.current_unit_location} onChange={(e) => set({ current_unit_location: e.target.value })} />
           </label>
         </div>
         <div className="croom-fields">
           <label>
-            <span>Vacío al origen</span>
+            <span>{q("form.deadhead")}</span>
             <input
               className="mono"
               inputMode="decimal"
@@ -306,24 +310,24 @@ export function QuotePanel({
             />
           </label>
           <label className="w-unit">
-            <span>Unidad</span>
+            <span>{q("form.unit")}</span>
             <select value={form.deadhead_unit} onChange={(e) => set({ deadhead_unit: e.target.value as "mi" | "km" })}>
               <option value="mi">mi</option>
               <option value="km">km</option>
             </select>
           </label>
           <label className="grow">
-            <span>Detalle de la unidad</span>
-            <input value={form.unit_details} placeholder="año, placas, equipo" onChange={(e) => set({ unit_details: e.target.value })} />
+            <span>{q("form.unitDetails")}</span>
+            <input value={form.unit_details} placeholder={q("form.unitDetailsHint")} onChange={(e) => set({ unit_details: e.target.value })} />
           </label>
         </div>
         <div className="croom-fields">
           <label className="grow">
-            <span>ETA de recolección</span>
+            <span>{q("form.etaPickup")}</span>
             <input type="datetime-local" value={form.eta_pickup} onChange={(e) => set({ eta_pickup: e.target.value })} />
           </label>
           <label className="grow">
-            <span>ETA de entrega</span>
+            <span>{q("form.etaDelivery")}</span>
             <input type="datetime-local" value={form.eta_delivery} onChange={(e) => set({ eta_delivery: e.target.value })} />
           </label>
         </div>
@@ -333,7 +337,7 @@ export function QuotePanel({
             checked={form.mirror_account_enabled}
             onChange={(e) => set({ mirror_account_enabled: e.target.checked })}
           />
-          <span>Doy cuenta espejo de GPS para validar la unidad.</span>
+          <span>{q("form.mirror")}</span>
         </label>
         <label className="croom-check">
           <input
@@ -341,16 +345,16 @@ export function QuotePanel({
             checked={form.best_alternative_offered}
             onChange={(e) => set({ best_alternative_offered: e.target.checked })}
           />
-          <span>Tengo una oferta alternativa (otro equipo o más unidades).</span>
+          <span>{q("form.alternative")}</span>
         </label>
         {form.best_alternative_offered && (
           <div className="croom-fields">
             <label className="grow">
-              <span>Equipo alterno</span>
+              <span>{q("form.altEquipment")}</span>
               <input value={form.alternative_equipment} onChange={(e) => set({ alternative_equipment: e.target.value })} />
             </label>
             <label>
-              <span>Unidades</span>
+              <span>{q("form.altUnits")}</span>
               <input
                 className="mono"
                 inputMode="numeric"
@@ -359,37 +363,37 @@ export function QuotePanel({
               />
             </label>
             <label className="grow">
-              <span>Condiciones</span>
+              <span>{q("form.altNotes")}</span>
               <input value={form.alternative_notes} onChange={(e) => set({ alternative_notes: e.target.value })} />
             </label>
           </div>
         )}
         <label className="croom-field">
-          <span>Notas para MARKSMAN</span>
-          <textarea rows={2} value={form.notes} placeholder="opcional" onChange={(e) => set({ notes: e.target.value })} />
+          <span>{q("form.notes")}</span>
+          <textarea rows={2} value={form.notes} placeholder={q("form.optional")} onChange={(e) => set({ notes: e.target.value })} />
         </label>
       </details>
 
       <label className="croom-final">
         <input type="checkbox" checked={form.best_final} onChange={(e) => set({ best_final: e.target.checked })} />
         <span>
-          Es mi oferta final — se registra como <b>best and final</b>.
+          {q("form.finalBefore")}<b>best and final</b>{q("form.finalAfter")}
         </span>
       </label>
 
       {tried && problems.length > 0 && <p className="croom-problems">{problems.join(" ")}</p>}
 
-      <section className="croom-gaps" aria-label="Revisión de información de la oferta" title={warnings.join(" ")}>
+      <section className="croom-gaps" aria-label={q("form.gapsAria")} title={warnings.join(" ")}>
         {gaps.length ? (
           <>
-            <b>Falta:</b> {gaps.join(", ")}. Puedes enviar así y completarlo después.
+            <b>{q("form.missing")}</b> {gaps.join(", ")}{q("form.missingTail")}
           </>
         ) : (
-          <b>Datos recomendados completos</b>
+          <b>{q("form.complete")}</b>
         )}
       </section>
 
-      {billing && <p className="croom-note" role="note" aria-label="Condición de facturación"><strong>{billing}</strong></p>}
+      {billing && <p className="croom-note" role="note" aria-label={q("form.billingAria")}><strong>{billing}</strong></p>}
 
       <div className="croom-actions">
         {revision && (
@@ -397,11 +401,11 @@ export function QuotePanel({
             type="button"
             disabled={busy}
             onClick={async () => {
-              if (await confirmAsync(`Retirar tu oferta de ${route(lane)}. ¿Continuar?`, { ok: "Retirar" }))
-                run(() => withdrawBid(token), `Oferta retirada · ${route(lane)}.`);
+              if (await confirmAsync(q("form.withdrawConfirm", route(lane)), { ok: q("form.withdrawOk") }))
+                run(() => withdrawBid(token), q("form.withdrawn", route(lane)));
             }}
           >
-            Retirar oferta
+            {q("form.withdraw")}
           </button>
         )}
         {laneState(lane) !== "declined" && (
@@ -409,12 +413,12 @@ export function QuotePanel({
             type="button"
             disabled={busy}
             onClick={async () => {
-              const reason = await promptAsync("Motivo (opcional) para no participar en esta ruta:");
+              const reason = await promptAsync(q("form.declinePrompt"));
               if (reason === null) return;
-              run(() => declineInvitation(token, reason), `Marcado como no participo · ${route(lane)}.`);
+              run(() => declineInvitation(token, reason), q("form.declined", route(lane)));
             }}
           >
-            No participo
+            {q("form.decline")}
           </button>
         )}
         <div className="spacer" />
@@ -424,7 +428,7 @@ export function QuotePanel({
           disabled={busy || (tried && problems.length > 0) || parseAmount(form.bid_rate) === null}
           onClick={send}
         >
-          {busy ? "Enviando…" : revision ? "Actualizar oferta" : "Enviar oferta"}
+          {busy ? q("form.sending") : revision ? q("form.update") : q("form.send")}
         </button>
       </div>
       </fieldset>
@@ -434,14 +438,12 @@ export function QuotePanel({
 
 /** What the panel shows before a lane is picked. */
 export function QuotePanelEmpty() {
+  useLang();
   return (
     <aside className="croom-panel">
-      <div className="croom-eyebrow">Cotización</div>
-      <h3 className="croom-panel-title">Elige una ruta de la tabla</h3>
-      <p className="croom-hint ayuda">
-        Cada ruta se cotiza por separado y se guarda sola: puedes parar y volver, y corregir mientras la ventana siga
-        abierta.
-      </p>
+      <div className="croom-eyebrow">{q("panel.eyebrow")}</div>
+      <h3 className="croom-panel-title">{q("panel.emptyTitle")}</h3>
+      <p className="croom-hint ayuda">{q("panel.emptyHint")}</p>
     </aside>
   );
 }

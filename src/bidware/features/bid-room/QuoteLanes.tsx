@@ -1,5 +1,7 @@
 import { useRef, useState } from "react";
 import { InfoBanner, Pill, money } from "@/components/ui";
+import { useLang } from "@/i18n/language";
+import { q } from "@/i18n/bid-room-quote";
 import { QuotePanel, QuotePanelEmpty } from "./QuotePanel";
 import { SegmentTerms } from "./SegmentTerms";
 import { QuoteExcel } from "./QuoteExcel";
@@ -7,25 +9,25 @@ import { canQuote, laneState, type Answer, type BookLane, type LaneState } from 
 
 type Tone = "" | "green" | "amber" | "red" | "blue";
 
-const STATE_PILL: Record<LaneState, { label: string; tone: Tone }> = {
-  quoted: { label: "COTIZADA", tone: "green" },
-  pending: { label: "PENDIENTE", tone: "amber" },
-  declined: { label: "NO PARTICIPO", tone: "" },
-  withdrawn: { label: "RETIRADA", tone: "" },
-  closed: { label: "VENTANA CERRADA", tone: "red" },
-  awarded: { label: "ADJUDICADA", tone: "green" },
-  backup: { label: "RESPALDO", tone: "blue" },
-  not_awarded: { label: "NO ADJUDICADA", tone: "" },
+const STATE_TONE: Record<LaneState, Tone> = {
+  quoted: "green",
+  pending: "amber",
+  declined: "",
+  withdrawn: "",
+  closed: "red",
+  awarded: "green",
+  backup: "blue",
+  not_awarded: "",
 };
 
 /** The row's one action: price it, revise it, or just look at it once it can't change. */
 function actionOf(lane: BookLane): { label: string; primary?: boolean } | null {
   const state = laneState(lane);
   if (canQuote(lane)) {
-    if (state === "quoted") return { label: "Revisar" };
-    return state === "pending" ? { label: "Cotizar", primary: true } : { label: "Cotizar" };
+    if (state === "quoted") return { label: q("action.review") };
+    return state === "pending" ? { label: q("action.quote"), primary: true } : { label: q("action.quote") };
   }
-  return lane.bid_rate != null || ["awarded", "backup", "not_awarded"].includes(state) ? { label: "Ver" } : null;
+  return lane.bid_rate != null || ["awarded", "backup", "not_awarded"].includes(state) ? { label: q("action.view") } : null;
 }
 
 /** Below this width the panel sits under the table instead of beside it. */
@@ -62,6 +64,7 @@ export function QuoteLanes({
   onDone: (lane: BookLane, message: string) => void;
   onAsk: () => void;
 }) {
+  useLang();
   const panel = useRef<HTMLDivElement>(null);
   const [excelBusy, setExcelBusy] = useState(false);
   const quoted = lanes.filter((l) => l.bid_rate != null).length;
@@ -84,10 +87,8 @@ export function QuoteLanes({
           onSettled={onReload}
           progress={
             <>
-              <b>
-                {quoted} de {lanes.length} rutas cotizadas.
-              </b>{" "}
-              <span className="ayuda">Cotiza en el orden que quieras; cada ruta va por separado.</span>
+              <b>{q("lanes.progress", quoted, lanes.length)}</b>{" "}
+              <span className="ayuda">{q("lanes.progressHint")}</span>
             </>
           }
         />
@@ -108,18 +109,18 @@ export function QuoteLanes({
             <thead>
               <tr>
                 <th>#</th>
-                <th>Origen</th>
-                <th>Destino</th>
-                <th>Equipo</th>
-                {volumes && <th>Vol/sem</th>}
-                <th>Tu oferta</th>
-                <th>Estado</th>
+                <th>{q("lanes.origin")}</th>
+                <th>{q("lanes.destination")}</th>
+                <th>{q("lanes.equipment")}</th>
+                {volumes && <th>{q("lanes.volume")}</th>}
+                <th>{q("lanes.yourOffer")}</th>
+                <th>{q("lanes.status")}</th>
                 <th />
               </tr>
             </thead>
             <tbody>
               {lanes.map((lane) => {
-                const pill = STATE_PILL[laneState(lane)];
+                const state = laneState(lane);
                 const action = actionOf(lane);
                 return (
                   <tr
@@ -142,7 +143,7 @@ export function QuoteLanes({
                       {lane.bid_rate != null ? money(lane.bid_rate, String(lane.currency || "USD")) : "—"}
                     </td>
                     <td className="c-state">
-                      <Pill tone={pill.tone}>{pill.label}</Pill>
+                      <Pill tone={STATE_TONE[state]}>{q(`state.${state}`)}</Pill>
                     </td>
                     <td className="c-action" style={{ textAlign: "right" }}>
                       {action ? (
