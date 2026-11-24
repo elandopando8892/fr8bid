@@ -15,6 +15,8 @@ import { paginaTarifario } from "../mcp/tarifario.js";
 import { claveCampana, esPlantillaInvitacion } from "../dominio/invitacion.js";
 import { esProtegido } from "../dominio/protegidos.js";
 import { bloqueoDesierta, bloqueoReabrirRuta } from "../dominio/acciones-mesa.js";
+import { textoModelosAceptados } from "../dominio/modelo.js";
+import { parseAcceptedCommercialModels, teamDefinedCommercialModel } from "../dominio/modelosAceptados.js";
 import { candadosAdjudicacion, hoyMexico, puedeAdjudicar } from "../dominio/recorrido.js";
 import { revisionesVigentes } from "../dominio/revision.js";
 import { MAX_REGISTROS } from "../dominio/contactos.js";
@@ -116,7 +118,10 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
     // «Cerrar sin adjudicar» y rutas desiertas desde la página del evento (bloque C).
     "set_rfx_lane_no_award",
     // Corregir una ruta (origen, destino, objetivo…) desde la página del evento.
-    "update_rfx_lane"
+    "update_rfx_lane",
+    // El equipo define el modelo comercial de una oferta «sin elegir» (rateware
+    // #229): solo modelo y porcentaje, sobre la versión que se mostró.
+    "set_rfx_bid_commercial_model"
   ]),
   "rfx-bid-api": new Set(["submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
@@ -269,6 +274,11 @@ export async function manejar(
       const bloqueo = await guardaRestaurar(body!, patch, autorizacion, op);
       if (bloqueo) return bloqueo;
     }
+    // Los modelos que acepta el evento: solo la lista de claves o null (todos).
+    // Rateware decide si todavía se pueden cambiar (bloqueo, adjudicaciones, estado).
+    if ("accepted_commercial_models" in patch && "code" in parseAcceptedCommercialModels(patch.accepted_commercial_models)) {
+      return error(400, "MODELOS_INVALIDOS", "Los modelos comerciales del evento son una lista de brokerage, cost_plus, sell_share o fee_plus (vacía o null = todos).");
+    }
   }
 
   if (action === "extend_rfx_due_date_if_unchanged") {
@@ -327,6 +337,11 @@ export async function manejar(
 
   if (action === "reject_rfx_bid") {
     const bloqueo = await guardaRechazo(body!, autorizacion, op);
+    if (bloqueo) return bloqueo;
+  }
+
+  if (action === "set_rfx_bid_commercial_model") {
+    const bloqueo = await guardaModelo(body!, autorizacion, op);
     if (bloqueo) return bloqueo;
   }
 
@@ -450,6 +465,45 @@ async function guardaRechazo(body: Record<string, unknown>, autorizacion: string
   const actual = Date.parse(String(fila.updated_at || ""));
   if (!Number.isFinite(vista) || !Number.isFinite(actual) || actual !== vista)
     return error(409, "OFERTA_CAMBIO", "La oferta cambió desde que la viste o no se pudo comprobar su versión. No se rechazó nada; revísala otra vez.");
+  return null;
+}
+
+// Definir el modelo comercial de una oferta: la participación tiene que ser de
+// este evento, tener oferta y no estar adjudicada; el modelo, uno que el evento
+// acepta; y la versión, la que se mostró. Solo viajan el modelo y su porcentaje:
+// la tarifa, la vigencia y la fuente de la oferta no se pueden tocar por aquí.
+// Rateware vuelve a comprobar todo al escribir (rateware #229).
+const CAMPOS_MODELO = new Set(["action", "event_id", "id", "commercial_model", "marksman_margin_pct", "carrier_share_pct", "expected_updated_at", "confirmed", "confirmation_action"]);
+
+async function guardaModelo(body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
+  if (!body.event_id) return error(400, "FALTA_EVENTO", "Esta acción necesita event_id.");
+  if (!body.id) return error(400, "FALTA_PARTICIPACION", "Indica la participación.");
+  if (Object.keys(body).some((k) => !CAMPOS_MODELO.has(k))) return error(400, "SOLO_MODELO", "Aquí solo se define el modelo comercial y su porcentaje.");
+  if (body.confirmed !== true || body.confirmation_action !== "set_rfx_bid_commercial_model") return error(400, "SIN_CONFIRMAR", "Definir el modelo comercial requiere confirmación explícita.");
+  for (const clave of ["marksman_margin_pct", "carrier_share_pct"]) {
+    const pct = body[clave];
+    if (pct !== null && pct !== undefined && !(typeof pct === "number" && Number.isFinite(pct) && pct >= 0 && pct <= 100))
+      return error(400, "PORCENTAJE_INVALIDO", "El porcentaje va de 0 a 100.");
+  }
+  const lectura = await leerDetalle(body.event_id, autorizacion, op);
+  if (lectura === "sin_respuesta") return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se escribió nada.");
+  if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
+  const estado = String(lectura.body?.event?.status || "").toLowerCase();
+  if (!["open", "live", "published"].includes(estado)) return error(409, "EVENTO_NO_PERMITE", "El modelo comercial de una oferta solo se define en un evento abierto o cerrado a ofertas.");
+  const fila = ((lectura.body?.lanes || []) as any[]).flatMap((l) => l.invitations || []).find((v: any) => v.id === body.id);
+  if (!fila) return error(404, "NOT_FOUND", "La participación no pertenece a este evento.");
+  if (fila.bid_rate === null || fila.bid_rate === undefined) return error(409, "SIN_OFERTA", "Esta participación no tiene oferta.");
+  if (["primary", "backup"].includes(String(fila.award_role || "").toLowerCase())) return error(409, "ADJUDICADA", "La oferta ya está adjudicada: quita la decisión antes de cambiar su modelo comercial.");
+  const definido = teamDefinedCommercialModel(body.commercial_model, lectura.body?.event);
+  if ("code" in definido) {
+    return definido.code === "COMMERCIAL_MODEL_NOT_ACCEPTED"
+      ? error(409, "MODELO_NO_ACEPTADO", `Este evento no acepta ese modelo comercial. Acepta: ${textoModelosAceptados(definido.accepted_models)}.`)
+      : error(400, "MODELO_INVALIDO", "El modelo comercial es brokerage, cost_plus, sell_share o fee_plus.");
+  }
+  const vista = Date.parse(String(body.expected_updated_at || ""));
+  const actual = Date.parse(String(fila.updated_at || ""));
+  if (!Number.isFinite(vista) || !Number.isFinite(actual) || actual !== vista)
+    return error(409, "OFERTA_CAMBIO", "La oferta cambió desde que la viste o no se pudo comprobar su versión. No se escribió nada; revísala otra vez.");
   return null;
 }
 

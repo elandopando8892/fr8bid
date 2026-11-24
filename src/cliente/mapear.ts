@@ -5,6 +5,7 @@
 
 import { conditionKeyFromRubric } from "../dominio/condiciones-r1.js";
 import { huellaAviso, huellaOferta } from "../dominio/huella.js";
+import { modeloEfectivo, modelosAceptados, modelosBloqueados } from "../dominio/modelo.js";
 import { esProtegido } from "../dominio/protegidos.js";
 import { hoyMexico } from "../dominio/recorrido.js";
 import { revisionesVigentes } from "../dominio/revision.js";
@@ -17,6 +18,7 @@ import type {
   EstadoAviso,
   EstadoEvento,
   EstadoParticipacion,
+  ModeloComercial,
   OfertaVersion,
   Participacion,
   Recibo,
@@ -90,11 +92,14 @@ const lugar = (ciudad: unknown, estado: unknown, libre: unknown) =>
 
 export const esPrueba = (nombre: unknown) => /PRUEBA CONTROLADA/i.test(String(nombre || ""));
 
-function version(r: Fila, numero: number): OfertaVersion {
+// Una oferta sin modelo ya no se lee como cost plus: cuenta con el único modelo
+// que acepta el evento o queda «sin elegir» (null). La huella lleva ese modelo.
+function version(r: Fila, numero: number, aceptados: ModeloComercial[] | null): OfertaVersion {
+  const propio = r.commercial_model ? String(r.commercial_model) : null;
   const base = {
     tarifaAllIn: Number(r.bid_rate),
     moneda: String(r.currency || "USD").toUpperCase(),
-    modeloComercial: String(r.commercial_model || "cost_plus"),
+    modeloComercial: propio ?? modeloEfectivo(null, aceptados),
     carrierSharePct: num(r.carrier_share_pct),
     margenPct: num(r.marksman_margin_pct),
     capacidadSemanal: num(r.weekly_capacity),
@@ -110,7 +115,8 @@ function version(r: Fila, numero: number): OfertaVersion {
     actor: String(r.actor || (fuente === "portal_carrier" ? "portal del carrier" : "equipo")),
     nota: r.notes || null,
     creadaEn: String(r.created_at || r.responded_at || ""),
-    huella: huellaOferta(base)
+    huella: huellaOferta(base),
+    ...(!propio && base.modeloComercial ? { modeloDelEvento: true } : {})
   };
 }
 
@@ -123,16 +129,16 @@ function instante(fecha: string): number {
   return Date.parse(fecha);
 }
 
-function participacion(lv: Fila, confirmaciones: Fila[]): Participacion {
+function participacion(lv: Fila, confirmaciones: Fila[], aceptados: ModeloComercial[] | null): Participacion {
   // Rateware real: solo la versión vigente (columnas de rfx_lane_vendors).
   // Simulado: además `bid_revisions`, el historial que Rateware no expone.
   // Sin tarifa vigente (p. ej., una oferta rechazada) no hay versión que mostrar.
   const conTarifa = lv.bid_rate !== null && lv.bid_rate !== undefined;
   const revisiones: Fila[] = conTarifa && Array.isArray(lv.bid_revisions) ? lv.bid_revisions : [];
   const versiones = revisiones.length
-    ? revisiones.map((r) => version(r, Number(r.revision)))
+    ? revisiones.map((r) => version(r, Number(r.revision), aceptados))
     : conTarifa
-      ? [version({ ...lv, created_at: lv.responded_at }, 1)]
+      ? [version({ ...lv, created_at: lv.responded_at }, 1, aceptados)]
       : [];
   const rol = lv.award_role === "primary" ? "primario" : lv.award_role === "backup" ? "respaldo" : null;
   let adjudicada: Participacion["adjudicada"] = null;
@@ -197,7 +203,7 @@ export function condicion(c: Fila): CondicionRuta {
   };
 }
 
-function ruta(l: Fila, confirmaciones: Fila[], condiciones: Fila[] = []): Ruta {
+function ruta(l: Fila, confirmaciones: Fila[], condiciones: Fila[] = [], aceptados: ModeloComercial[] | null = null): Ruta {
   return {
     id: l.id,
     numero: Number(l.lane_number || 1),
@@ -217,7 +223,7 @@ function ruta(l: Fila, confirmaciones: Fila[], condiciones: Fila[] = []): Ruta {
       estadoDestino: l.destination_state ? String(l.destination_state) : null
     },
     condiciones: condiciones.filter((c) => c.rfx_lane_id === l.id).map(condicion),
-    participaciones: (l.invitations || []).map((lv: Fila) => participacion(lv, confirmaciones)),
+    participaciones: (l.invitations || []).map((lv: Fila) => participacion(lv, confirmaciones, aceptados)),
     cruda: Object.fromEntries(Object.entries(l).filter(([k]) => k !== "invitations"))
   };
 }
@@ -288,6 +294,7 @@ export function detalle(
   const hoy = extra.hoy ?? hoyMexico();
   const e = crudo.event || {};
   if (esProtegido(e.id)) throw new Error("Evento protegido");
+  const aceptados = modelosAceptados(e.rfx_master_package);
   return {
     evento: {
       id: e.id,
@@ -300,10 +307,12 @@ export function detalle(
       // Si en Rateware se reabrió con otro plazo, la marca vieja no aplica.
       cierre: ["cerrado", "adjudicado", "archivado"].includes(estadoEvento(e, hoy)) ? leerCierre(e.notes) : null
     },
-    rutas: (crudo.lanes || []).map((l: Fila) => ruta(l, extra.rubros || [], extra.condiciones || [])).sort((a: Ruta, b: Ruta) => a.numero - b.numero),
+    rutas: (crudo.lanes || []).map((l: Fila) => ruta(l, extra.rubros || [], extra.condiciones || [], aceptados)).sort((a: Ruta, b: Ruta) => a.numero - b.numero),
     avisos: mensajes.filter((m) => !m.channel || m.channel === "email" || m.channel === "gmail").map((m) => aviso(m, abiertos)),
     recibo: reciboCrudo ? recibo(reciboCrudo) : null,
     paqueteMaestro: e.rfx_master_package ?? null,
+    modelosAceptados: aceptados,
+    modelosBloqueados: modelosBloqueados(e.rfx_master_package),
     revisiones: extra.revisiones ? revisionesVigentes(extra.revisiones) : null,
     ...(extra.respuestas === undefined ? {} : { respuestas: extra.respuestas === null ? null : respuestas(extra.respuestas) })
   };

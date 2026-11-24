@@ -52,6 +52,11 @@ export interface NewEventInput {
   /** When the operation is expected to start (arranque estimado); carriers see it. */
   operation_start_date?: string | null;
   notes?: string;
+  /**
+   * The commercial models the event accepts from its carriers: brokerage,
+   * cost_plus, sell_share, fee_plus. Left out, null or all four = all of them.
+   */
+  accepted_commercial_models?: string[] | null;
 }
 
 export async function createEvent(input: NewEventInput): Promise<RfxEvent> {
@@ -119,6 +124,8 @@ export interface DraftFields {
   bid_visibility_mode: string;
   due_date: string | null;
   operation_start_date: string | null;
+  /** null = the event accepts every commercial model. */
+  accepted_commercial_models?: string[] | null;
 }
 
 export async function updateDraft(eventId: string, patch: Partial<DraftFields>): Promise<RfxEvent> {

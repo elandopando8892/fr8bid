@@ -4,18 +4,22 @@ import { ErrorBanner, dateShort, money } from "@/components/ui";
 import { useLang } from "@/i18n/language";
 import { q } from "@/i18n/bid-room-quote";
 import {
-  COMMERCIAL_MODELS,
+  acceptedModelKeys,
   billingNotice,
+  droppedModelNotice,
+  eventModelKey,
   SCORE_FACTORS,
   canQuote,
   declineInvitation,
   explainBidError,
   isRevision,
   isLockedBrokerage,
+  modelIsOptional,
   laneState,
   modelCopy,
   modelSpec,
   offerForm,
+  offerDraft,
   offerPayload,
   offerProblems,
   offerGaps,
@@ -91,7 +95,11 @@ export function QuotePanel({
   const revision = isRevision(lane);
   const editable = canQuote(lane);
   const lockedCommercialModel = isLockedBrokerage(lane);
-  const spec = { ...modelSpec(form.commercial_model), ...modelCopy(form.commercial_model) };
+  // The event says which models it accepts; unless it settled on one, choosing is optional.
+  const acceptedModels = acceptedModelKeys(lane);
+  const eventModel = eventModelKey(lane);
+  const droppedModel = droppedModelNotice(lane);
+  const spec = form.commercial_model ? { ...modelSpec(form.commercial_model), ...modelCopy(form.commercial_model) } : null;
   const problems = offerProblems(form);
   const warnings = offerWarnings(form);
   const gaps = offerGaps(form);
@@ -100,7 +108,8 @@ export function QuotePanel({
 
   /** The score factors as the form stands now, before sending. */
   const scored = useMemo(() => {
-    const draft = offerPayload(form, lane) as unknown as BookLane;
+    // Right after the lane changes, this render still holds the previous lane's form: read it without judging it.
+    const draft = offerDraft(form, lane) as unknown as BookLane;
     return SCORE_FACTORS.filter((f) => f.done(draft)).length;
   }, [form, lane]);
 
@@ -123,7 +132,9 @@ export function QuotePanel({
     sending.current = true;
     setBusy(true);
     try {
-      if (billing && !await confirmAsync(`${spec.label} · ${route(lane)}\n\n${billing}`, { ok: q("form.confirmSend"), cancel: q("form.backToReview") })) return;
+      // Billing terms and a model the event dropped are confirmed before the offer goes.
+      const toConfirm = [droppedModel, billing].filter(Boolean).join("\n\n");
+      if (toConfirm && !await confirmAsync(`${spec?.label ?? q("model.none.label")} · ${route(lane)}\n\n${toConfirm}`, { ok: q("form.confirmSend"), cancel: q("form.backToReview") })) return;
       if (!active.current || scopeToken.current !== token) return;
       await run(
         () => submitBid(token, offerPayload(form, lane)),
@@ -235,42 +246,59 @@ export function QuotePanel({
         </label>
       </div>
 
-      {lockedCommercialModel ? (
+      {lockedCommercialModel ? (<>
         <div className="croom-note" aria-label={q("form.fixedModelLabel")}>
           <b>{q("form.fixedModelTitle")}</b>
           <p>{q("form.fixedModelText")}</p>
         </div>
-      ) : (<>
+        {/* The fixed model replaces whatever the offer had: said here too, before resending. */}
+        {droppedModel && <p className="croom-note warn" role="note">{droppedModel}</p>}
+      </>) : (<>
       <div className="croom-fields">
         <label className="grow">
-          <span>{q("form.model")}</span>
-          <select
-            value={form.commercial_model}
-            onChange={(e) => set({ commercial_model: e.target.value as OfferForm["commercial_model"], pct: "" })}
-          >
-            {COMMERCIAL_MODELS.map((m) => (
-              <option key={m.key} value={m.key}>
-                {modelCopy(m.key).label}
-              </option>
-            ))}
-          </select>
+          <span>{q(eventModel ? "form.model" : "form.modelOptional")}</span>
+          {eventModel ? (
+            // The event's only model is the event's, not a choice.
+            <input value={modelCopy(eventModel).label} readOnly disabled />
+          ) : (
+            <select
+              value={form.commercial_model}
+              onChange={(e) => set({ commercial_model: e.target.value as OfferForm["commercial_model"], pct: "" })}
+            >
+              {(modelIsOptional(lane) || !form.commercial_model) && <option value="">{q("model.none.label")}</option>}
+              {acceptedModels.map((key) => (
+                <option key={key} value={key}>
+                  {modelCopy(key).label}
+                </option>
+              ))}
+            </select>
+          )}
         </label>
-        <label className="grow">
-          <span>
-            {spec.pctLabel} ({spec.min}–{spec.max} %)
-          </span>
-          <input
-            className="mono"
-            inputMode="decimal"
-            value={form.pct}
-            onChange={(e) => set({ pct: e.target.value })}
-            placeholder={q("form.blankPlaceholder", spec.blank)}
-          />
-        </label>
+        {spec && (
+          <label className="grow">
+            <span>
+              {spec.pctLabel} ({spec.min}–{spec.max} %)
+            </span>
+            <input
+              className="mono"
+              inputMode="decimal"
+              value={form.pct}
+              onChange={(e) => set({ pct: e.target.value })}
+              placeholder={q("form.blankPlaceholder", spec.blank)}
+            />
+          </label>
+        )}
       </div>
-      <p className="croom-hint ayuda">
-        {spec.enter} {spec.effect}
-      </p>
+      {/* A model the event dropped is never swapped in silence. */}
+      {droppedModel && <p className="croom-note warn" role="note">{droppedModel}</p>}
+      {spec ? (
+        <p className="croom-hint ayuda">
+          {spec.enter} {spec.effect}
+        </p>
+      ) : (
+        // Always in sight: what happens when the carrier does not choose.
+        <p className="croom-hint" role="note">{q("form.modelNoneHint")}</p>
+      )}
 
       </>)}
 

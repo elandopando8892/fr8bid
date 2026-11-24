@@ -18,7 +18,7 @@ import { notasConCierre } from "../dominio/cierre.js";
 import { env } from "../bidware/config/env.js";
 import { hoyMexico, primario, versionMasReciente, versionVigente } from "../dominio/recorrido.js";
 import { ESPERA_ENTRE_TANDAS_MS, esCuota, leerResultado, operacionTanda, planearTandas, requiereAtencion, type ResultadoEnvio } from "../dominio/tandas.js";
-import type { Aviso, Detalle, EntregaLocal, Recibo, ResumenEvento } from "../dominio/tipos.js";
+import type { Aviso, Detalle, EntregaLocal, ModeloComercial, Recibo, ResumenEvento } from "../dominio/tipos.js";
 import { manejar, type Respuesta, type Servicio } from "../servidor/proxy.js";
 import type { RatewareSimulado } from "../simulado/rateware.js";
 import { manejarFr8Desk, type CasoFr8Desk, type Impacto } from "../servidor/fr8desk.js";
@@ -488,6 +488,27 @@ export class MesaApi {
   publicar(eventId: string) {
     return this.rw({ action: "update_rfx_event", event_id: eventId, patch: { status: "open" } });
   }
+  // Qué modelos comerciales acepta el evento de sus carriers; null = todos.
+  // Rateware lo guarda en el paquete del evento y lo niega con política
+  // bloqueada, con adjudicaciones o fuera de borrador/abierto (rateware #229).
+  fijarModelosAceptados(eventId: string, modelos: ModeloComercial[] | null) {
+    return this.rw({ action: "update_rfx_event", event_id: eventId, patch: { accepted_commercial_models: modelos } });
+  }
+  // El equipo define el modelo de una oferta que ya existe, sin reescribirla:
+  // solo cambian el modelo y su porcentaje, y solo sobre la versión que se mostró
+  // (409 si el carrier la cambió). La tarifa, la vigencia y la fuente no se tocan.
+  definirModelo(c: { eventId: string; participacionId: string; modelo: ModeloComercial; pct: number | null; version: string }) {
+    return this.rw({
+      action: "set_rfx_bid_commercial_model",
+      event_id: c.eventId,
+      id: c.participacionId,
+      commercial_model: c.modelo,
+      ...(c.modelo === "sell_share" ? { carrier_share_pct: c.pct } : { marksman_margin_pct: c.pct }),
+      expected_updated_at: c.version,
+      confirmed: true,
+      confirmation_action: "set_rfx_bid_commercial_model"
+    });
+  }
   // La invitación salió por otro canal (correo propio, WhatsApp, llamada): solo
   // cambia el estado en Rateware; Fr8Bid no envía nada.
   marcarInvitadas(eventId: string, ids: string[]) {
@@ -526,6 +547,10 @@ export class MesaApi {
     notas: string;
     // La propuso la IA a partir del texto del carrier y el equipo la confirmó.
     leidaConIA?: boolean;
+    // Modelo comercial que el carrier indicó. Sin él, Rateware usa el único que
+    // acepta el evento o deja la oferta «sin elegir».
+    modelo?: ModeloComercial | null;
+    pct?: number | null;
   }) {
     const etiqueta = { email: "Email", phone: "Phone", whatsapp: "WhatsApp", other: "Other" }[c.canal];
     const notas = c.notas.trim();
@@ -540,6 +565,7 @@ export class MesaApi {
         weekly_capacity: c.capacidadSemanal,
         transit_days: c.diasTransito,
         notes: notas || null,
+        ...(c.modelo ? { commercial_model: c.modelo, ...(c.modelo === "sell_share" ? { carrier_share_pct: c.pct ?? null } : { marksman_margin_pct: c.pct ?? null }) } : {}),
         capture_source: "manual_operator",
         manual_source_channel: c.canal,
         source_note: `Captured from ${etiqueta}${c.leidaConIA ? " (read by AI, confirmed by operator)" : ""}${notas ? `: ${notas}` : ""}`

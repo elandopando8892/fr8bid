@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ErrorApi } from "../cliente/api";
-import { describirModelo, nombreModelo } from "../dominio/modelo";
+import { describirModelo, eleccionModeloCarrier, modeloEfectivo, modelosAceptados, nombreModelo } from "../dominio/modelo";
 import { aCarga, Confirmar, dinero, EstadoVista, fecha, Prueba, type Carga } from "./comun";
 import { textoObjetivo } from "./condiciones";
 import { useSesion } from "./sesion";
@@ -22,7 +22,7 @@ const NOMBRE_RUBRO: Record<string, string> = {
 export function LigaCarrier({ token }: { token: string }) {
   const { api, listo } = useSesion();
   const [carga, setCarga] = useState<Carga<any>>({ tipo: "cargando" });
-  const [form, setForm] = useState({ bid_rate: "", currency: "USD", commercial_model: "fee_plus", weekly_capacity: "", transit_days: "", valid_through: "", notes: "" });
+  const [form, setForm] = useState({ bid_rate: "", currency: "USD", commercial_model: "", weekly_capacity: "", transit_days: "", valid_through: "", notes: "" });
   const [rubros, setRubros] = useState<Record<string, string>>({});
   // Condiciones de la ruta (R1): respuesta, dato y comentario por rubric_key.
   const [conds, setConds] = useState<Record<string, { answer: string; value: string; comment: string }>>({});
@@ -49,7 +49,7 @@ export function LigaCarrier({ token }: { token: string }) {
           setForm((f) => (f.bid_rate ? f : {
             bid_rate: String(v.bid_rate),
             currency: v.currency || "USD",
-            commercial_model: v.commercial_model || "fee_plus",
+            commercial_model: v.commercial_model || "",
             weekly_capacity: v.weekly_capacity == null ? "" : String(v.weekly_capacity),
             transit_days: v.transit_days == null ? "" : String(v.transit_days),
             valid_through: v.valid_through || "",
@@ -69,6 +69,9 @@ export function LigaCarrier({ token }: { token: string }) {
   const respuesta = (k: string) => conds[k] || { answer: "", value: "", comment: "" };
   const poner = (k: string, cambio: Partial<{ answer: string; value: string; comment: string }>) => setConds({ ...conds, [k]: { ...respuesta(k), ...cambio } });
   const prueba = /PRUEBA CONTROLADA/i.test(event?.name || "");
+  // Los modelos comerciales que acepta el evento; el carrier solo ve esos.
+  const aceptados = modelosAceptados(event?.rfx_master_package);
+  const { modelos, elegido, puedeNoElegir, retirado } = eleccionModeloCarrier(inv.commercial_model, form.commercial_model, aceptados);
 
   const hacer = async (f: () => Promise<unknown>, ok: string) => {
     if (enCurso.current || bid_window_closed || inv.invitation_status === "declined") return;
@@ -107,7 +110,7 @@ export function LigaCarrier({ token }: { token: string }) {
         <div className="tarjeta">
           <h2>Tu oferta vigente</h2>
           <p>
-            {dinero(inv.bid_rate, inv.currency)} all-in · {describirModelo({ modeloComercial: String(inv.commercial_model || "cost_plus"), carrierSharePct: inv.carrier_share_pct ?? null, margenPct: inv.marksman_margin_pct ?? null })} · {inv.valid_through ? `vigente hasta ${fecha(inv.valid_through)}` : "sin vigencia"}
+            {dinero(inv.bid_rate, inv.currency)} all-in · {describirModelo({ modeloComercial: inv.commercial_model ? String(inv.commercial_model) : modeloEfectivo(null, aceptados), carrierSharePct: inv.carrier_share_pct ?? null, margenPct: inv.marksman_margin_pct ?? null })} · {inv.valid_through ? `vigente hasta ${fecha(inv.valid_through)}` : "sin vigencia"}
           </p>
           {inv.award_role && <p><b>Adjudicada como {inv.award_role === "primary" ? "primario" : "respaldo"}.</b></p>}
         </div>
@@ -122,7 +125,8 @@ export function LigaCarrier({ token }: { token: string }) {
                 api.enviarOferta(token, {
                   bid_rate: n(form.bid_rate),
                   currency: form.currency,
-                  commercial_model: form.commercial_model,
+                  // Elegir modelo es opcional: sin elección, Rateware usa el único del evento o lo deja «sin elegir».
+                  commercial_model: elegido,
                   weekly_capacity: n(form.weekly_capacity),
                   transit_days: n(form.transit_days),
                   valid_through: form.valid_through || null,
@@ -137,11 +141,23 @@ export function LigaCarrier({ token }: { token: string }) {
           <div className="rejilla">
             <label className="campo"><span>Tarifa all-in</span><input required inputMode="decimal" value={form.bid_rate} onChange={(e) => setForm({ ...form, bid_rate: e.target.value })} /></label>
             <label className="campo"><span>Moneda</span><select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}><option>USD</option><option>MXN</option></select></label>
-            <label className="campo"><span>Modelo comercial</span><select value={form.commercial_model} onChange={(e) => setForm({ ...form, commercial_model: e.target.value })}>{["fee_plus", "cost_plus", "sell_share", "brokerage"].map((m) => <option key={m} value={m}>{nombreModelo(m)}</option>)}</select></label>
+            <label className="campo"><span>Modelo comercial{puedeNoElegir ? " (opcional)" : ""}</span>
+              {modelos.length === 1
+                ? <input value={nombreModelo(modelos[0])} disabled />
+                : <select value={elegido ?? ""} onChange={(e) => setForm({ ...form, commercial_model: e.target.value })}>
+                    {puedeNoElegir && <option value="">Sin elegir</option>}
+                    {modelos.map((m) => <option key={m} value={m}>{nombreModelo(m)}</option>)}
+                  </select>}
+            </label>
             <label className="campo"><span>Capacidad semanal</span><input inputMode="numeric" value={form.weekly_capacity} onChange={(e) => setForm({ ...form, weekly_capacity: e.target.value })} /></label>
             <label className="campo"><span>Tránsito (días)</span><input inputMode="numeric" value={form.transit_days} onChange={(e) => setForm({ ...form, transit_days: e.target.value })} /></label>
             <label className="campo"><span>Vigente hasta</span><input type="date" value={form.valid_through} onChange={(e) => setForm({ ...form, valid_through: e.target.value })} /></label>
           </div>
+          {retirado && (
+            <p className="estado estado-permiso">
+              Tu oferta tenía el modelo «{nombreModelo(retirado)}», que este evento ya no acepta. {modelos.length === 1 ? `Si la corriges, queda con «${nombreModelo(modelos[0])}», el modelo del evento.` : "Elige otro o déjalo sin elegir."}
+            </p>
+          )}
           <label className="campo"><span>Nota (sin valor comercial)</span><input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
           <div className="fila-botones">
             <button className="btn-primario" type="submit" disabled={enviando}>{enviando ? "Procesando…" : inv.bid_rate === null ? "Enviar oferta" : "Enviar corrección"}</button>

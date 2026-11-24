@@ -973,7 +973,7 @@ describe("modelo comercial visible", () => {
     expect(describirModelo({ modeloComercial: "brokerage", carrierSharePct: null, margenPct: 8 })).toBe("Brokerage (compra-venta) · markup 8 %");
     // Venta al shipper como el Board de Rateware: brokerage suma el markup (12 % por defecto).
     expect(tarifaVenta({ modeloComercial: "brokerage", carrierSharePct: null, margenPct: null, tarifaAllIn: 1000 })).toEqual({ venta: 1120, ingreso: 120, pct: 12, porDefecto: true });
-    expect(tarifaVenta({ modeloComercial: "brokerage", carrierSharePct: null, margenPct: 8, tarifaAllIn: 1000 }).venta).toBe(1080);
+    expect(tarifaVenta({ modeloComercial: "brokerage", carrierSharePct: null, margenPct: 8, tarifaAllIn: 1000 })?.venta).toBe(1080);
   });
 });
 

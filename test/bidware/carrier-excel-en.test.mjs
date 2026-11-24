@@ -106,7 +106,7 @@ test('el modelo se acepta por su nombre en cualquiera de los dos idiomas o por s
   }
   const book = await template('en');
   cell(book, 'Send lane', 'Yes'); cell(book, 'Carrier rate', 1200); cell(book, 'Commercial model', 'random');
-  await assert.rejects(parse(book), /Row 2: Commercial model: unknown model; use one of the three models in the Instructions and models sheet\./);
+  await assert.rejects(parse(book), /Row 2: Commercial model: unknown model; use one of the models in the Instructions and models sheet or leave the cell empty\./);
   cell(book, 'Commercial model', 'Cost + margin'); cell(book, 'Percentage', '');
   const [offer] = await parse(book);
   assert.equal(m.displayOfferValue('pct', offer.form), '3 % (default)');
@@ -136,7 +136,7 @@ test('las mismas protecciones valen para la plantilla en inglés', async () => {
   const alternative = await fill(); cell(alternative, 'Alternative equipment', 'Reefer'); await assert.rejects(parse(alternative), /write Yes in Alternative offered/);
   const stale = await fill(); await assert.rejects(parse(stale, [{ ...lane, bid_rate: 900 }]), /changed since the download/);
   const [offer] = await parse(await fill());
-  assert.throws(() => m.currentOfferForSend(offer, [{ ...lane, bid_rate: 500 }]), /Lane 1: the offer or its access changed/);
+  assert.throws(() => m.currentOfferForSend(offer, [{ ...lane, bid_rate: 500 }]), /Lane 1: the offer, its access or the event's models changed/);
   // Solo compra-venta fija: sin columnas de modelo ni porcentaje, también en inglés.
   const locked = { ...lane, event: { status: 'open', carrier_commercial_policy: { locked: true, model: 'brokerage' } } };
   const lockedBook = await template('en', locked);

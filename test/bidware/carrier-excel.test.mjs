@@ -51,7 +51,7 @@ test('foreign invitation and duplicate lanes blocked', async () => {
   await assert.rejects(parse(duplicate), /duplicada/);
 });
 test('stale and closed offers blocked during import and before sending', async () => {
-  const b = await filled(); await assert.rejects(parse(b, [{ ...lane, bid_rate: 900 }]), /cambió/);
+  const b = await filled(); await assert.rejects(parse(b, [{ ...lane, bid_rate: 900 }]), /cambiaron desde la descarga/);
   await assert.rejects(parse(b, [{ ...lane, due_state: { status: 'closed' } }]), /no admite/);
   const [o] = await parse(b); assert.throws(() => m.currentOfferForSend(o, [{ ...lane, bid_rate: 500 }]), /cambió/); assert.throws(() => m.currentOfferForSend(o, []), /acceso/);
 });

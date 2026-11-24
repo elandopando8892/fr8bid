@@ -4,7 +4,7 @@ import { useLang } from "@/i18n/language";
 import { q } from "@/i18n/bid-room-quote";
 import { xls } from "@/i18n/bid-room-excel";
 import { confirmAsync } from "@/components/confirm";
-import { billingNotice, eventLanes, getInvitation, modelCopy, isLockedBrokerage, offerPayload, submitBid, type BookLane } from "./bidroom.service";
+import { billingNotice, droppedModelNotice, eventLanes, getInvitation, modelCopy, isLockedBrokerage, offerPayload, submitBid, type BookLane } from "./bidroom.service";
 import { buildBidTemplate, currentOfferForSend, displayOfferValue, offerColumns, parseBidTemplate, type ImportedOffer } from "./bid-template";
 
 export function QuoteExcel({ token, eventId, onBusy, onSettled, progress }: {
@@ -132,15 +132,19 @@ export function QuoteExcel({ token, eventId, onBusy, onSettled, progress }: {
       <h4>{q("xl.reviewTitle", plan.length)}</h4>
       <p>{q("xl.reviewNote")}</p>
       {plan.map(offer => {
-        const model = modelCopy(offer.form.commercial_model);
+        // Without a model there is nothing to explain yet: MARKSMAN defines it before awarding.
+        const model = offer.form.commercial_model
+          ? modelCopy(offer.form.commercial_model)
+          : { label: q("model.none.label"), enter: q("form.modelNoneHint"), effect: "" };
         return <article key={offer.lane.rfx_lane_id} style={{ borderTop: "1px solid var(--border, #ddd)", padding: "12px 0" }}>
           <b>{q("xl.lane", offer.lane.lane_number ?? offer.row, String(offer.lane.origin ?? ""), String(offer.lane.destination ?? ""))}</b>
-          <p>{offer.form.bid_rate} {offer.form.currency} · {model.label}{!isLockedBrokerage(offer.lane) && <> · {displayOfferValue("pct", offer.form)}</>}</p>
-          <p>{isLockedBrokerage(offer.lane) ? q("xl.lockedModel") : `${model.enter} ${model.effect}`}</p>
+          <p>{offer.form.bid_rate} {offer.form.currency} · {model.label}{!isLockedBrokerage(offer.lane) && offer.form.commercial_model && <> · {displayOfferValue("pct", offer.form)}</>}</p>
+          <p>{isLockedBrokerage(offer.lane) ? q("xl.lockedModel") : `${model.enter} ${model.effect}`.trim()}</p>
+          {droppedModelNotice(offer.lane) && <p><strong>{droppedModelNotice(offer.lane)}</strong></p>}
           {billingNotice(offer.form) && <p><strong>{billingNotice(offer.form)}</strong></p>}
           {done.includes(offer.lane.rfx_lane_id) && <strong>{q("xl.sentOk")}</strong>}
           <details><summary>{q("xl.reviewAll", offer.lane.lane_number ?? offer.row)}</summary>
-            <dl>{offerColumns().filter(([key]) => !isLockedBrokerage(offer.lane) || key !== "pct").map(([key, label]) => <div key={key} style={{ margin: "6px 0", overflowWrap: "anywhere" }}>
+            <dl>{offerColumns().filter(([key]) => key !== "pct" || (!isLockedBrokerage(offer.lane) && offer.form.commercial_model)).map(([key, label]) => <div key={key} style={{ margin: "6px 0", overflowWrap: "anywhere" }}>
               <dt><b>{label}</b></dt><dd style={{ margin: 0 }}>{displayOfferValue(key, offer.form)}</dd>
             </div>)}</dl>
           </details>

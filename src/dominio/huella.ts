@@ -76,7 +76,8 @@ export function huellaOferta(t: TerminosOferta): string {
     "oferta.v1",
     numero(t.tarifaAllIn),
     (t.moneda || "").toUpperCase(),
-    t.modeloComercial,
+    // Sin modelo («sin elegir») viaja vacío; nunca como un modelo por defecto.
+    t.modeloComercial ?? "",
     numero(t.carrierSharePct),
     numero(t.margenPct),
     numero(t.capacidadSemanal),
