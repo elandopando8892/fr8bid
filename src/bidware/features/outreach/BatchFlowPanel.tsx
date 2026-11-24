@@ -82,7 +82,6 @@ function FlowReader({ scope, channel, templateId, refreshKey, enabled }: { scope
       <button type="button" disabled={loading || !enabled} onClick={() => void refresh()}>{loading ? t('loading') : t('read')}</button>
       {loading && <button type="button" onClick={clear}>{t('cancel')}</button>}
       <Link to={`/rfx/${scope.eventId}/review`}>{t('reviewLink')}</Link>
-      <Link to={`/carrier-fit?event=${scope.eventId}`}>{t('fitLink')}</Link>
       <Link to={`/rfx/${scope.eventId}/delivery`}>{t('queueLink')}</Link>
     </div>
     <div role="status" aria-live="polite">

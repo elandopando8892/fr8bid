@@ -25,7 +25,7 @@ import {
   memberCount,
 } from "@/features/carrier-templates/templates.service";
 import { listRfxEvents, fetchRfxDetail } from "@/features/rfx-admin/rfx.service";
-import { LaunchHeader, LaunchTabs, participantsOf } from "@/features/outreach/LaunchShell";
+import { LaunchHeader, participantsOf } from "@/features/outreach/LaunchShell";
 import { useAsync } from "@/components/useAsync";
 import { useAuth } from "@/auth/AuthContext";
 import { NEED_REASON } from "@/lib/roles";
@@ -329,7 +329,6 @@ function CarrierFitContent() {
       )}
 
       <main className="main launch-main">
-        {eventId && <LaunchTabs eventId={eventId} active="fit" />}
 
         <div className="fit-start">
           <b>{tr("text020")}</b>
