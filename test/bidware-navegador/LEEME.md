@@ -29,7 +29,7 @@ prueba como si fuera la función de Supabase. `FR8BID_TRAZA=1` muestra las llama
 
 ## Lo que no pasa, y por qué
 
-- Ya fallaban en el propio Bidware: offer-comparison-export, queue-delivery-labels,
+- Ya fallaban en el propio Bidware: queue-delivery-labels,
   queue-identity, queue-refresh, rate-review-acceptance, rfx-catalog-conflict, sprint1-recorrido.
 - `batch-flow.browser`: espera un botón «Conciliar lote» que Bidware quitó en 9880850 (la
   conciliación pasó a ser automática). La prueba quedó vieja en Bidware; la versión actual es

@@ -22,6 +22,7 @@ import type { Aviso, Detalle, EntregaLocal, ModeloComercial, Recibo, ResumenEven
 import { manejar, type Respuesta, type Servicio } from "../servidor/proxy.js";
 import type { RatewareSimulado } from "../simulado/rateware.js";
 import { manejarFr8Desk, type CasoFr8Desk, type Impacto } from "../servidor/fr8desk.js";
+import { mensajeDelServidor } from "../dominio/errores.js";
 import * as mapear from "./mapear.js";
 
 export type Transporte = (servicio: Servicio, body: Record<string, unknown>) => Promise<Respuesta>;
@@ -276,7 +277,8 @@ export class MesaApi {
   private async rw(body: Record<string, unknown>, servicio: Servicio = "rateware-api") {
     const r = await this.t(servicio, body);
     if (r.status >= 200 && r.status < 300) return r.body;
-    throw new ErrorApi(r.status, String(r.body?.code || r.status), String(r.body?.error || "Error de Rateware"), Boolean(r.body?.incierta));
+    const code = String(r.body?.code || r.status);
+    throw new ErrorApi(r.status, code, mensajeDelServidor(code, String(r.body?.error || "Error de Rateware"), r.body), Boolean(r.body?.incierta));
   }
 
   async eventos(): Promise<ResumenEvento[]> {
@@ -462,13 +464,7 @@ export class MesaApi {
   // borrador sin invitaciones enviadas ni ofertas (409 RFX_DELETE_NOT_DRAFT /
   // RFX_DELETE_HAS_ACTIVITY si no).
   async borrar(eventId: string) {
-    try {
-      return await this.rw({ action: "delete_rfx_event", id: eventId, confirmed: true, confirmation_action: "delete_rfx_event" });
-    } catch (e) {
-      if (e instanceof ErrorApi && e.code === "RFX_DELETE_NOT_DRAFT") throw new ErrorApi(409, e.code, "Solo se borra un evento en borrador: archívalo en lugar de borrarlo.");
-      if (e instanceof ErrorApi && e.code === "RFX_DELETE_HAS_ACTIVITY") throw new ErrorApi(409, e.code, "El evento ya tiene invitaciones u ofertas: archívalo en lugar de borrarlo.");
-      throw e;
-    }
+    return this.rw({ action: "delete_rfx_event", id: eventId, confirmed: true, confirmation_action: "delete_rfx_event" });
   }
   // Rateware quita la oferta y deja la participación como «declinó» (rateware
   // #164: el motivo no lo ve el carrier). Una adjudicada no se rechaza.
