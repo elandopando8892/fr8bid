@@ -187,8 +187,8 @@ export const copy = {
     "en": "no number"
   },
   "text045": {
-    "es": "En plantillas",
-    "en": "In templates"
+    "es": "En listas",
+    "en": "In lists"
   },
   "text046": {
     "es": "Participaciones RFx",
@@ -787,8 +787,8 @@ export const copy = {
     "en": "Why they are kept separate"
   },
   "text195": {
-    "es": "Una versión anterior de este guardarraíl agrupaba por correo. Sobre una plantilla activa marcaba 4 pares y habría sacado 3 carriers legítimos de un bid.",
-    "en": "An earlier guard grouped by email. On an active template it flagged 4 pairs and would have removed 3 legitimate carriers from a bid."
+    "es": "Una versión anterior de este guardarraíl agrupaba por correo. Sobre una lista activa marcaba 4 pares y habría sacado 3 carriers legítimos de un bid.",
+    "en": "An earlier guard grouped by email. On an active list it flagged 4 pairs and would have removed 3 legitimate carriers from a bid."
   },
   "text196": {
     "es": "La regla exacta —nombre normalizado Y dominio— encontraba 1. Esa es la diferencia entre limpiar la base y mutilarla.",
