@@ -3117,6 +3117,10 @@ a.btn:hover {
   line-height: 1.4;
   color: #828282;
 }
+/* The quote form stacks its rows with no gap, so a hint under a row needs its own air. */
+.croom-panel fieldset > .croom-hint {
+  margin: 4px 0 8px;
+}
 .croom-extras {
   border: 1px solid var(--croom-line);
   border-radius: var(--radius);

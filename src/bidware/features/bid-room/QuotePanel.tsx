@@ -4,7 +4,7 @@ import { ErrorBanner, dateShort, money } from "@/components/ui";
 import { useLang } from "@/i18n/language";
 import { q } from "@/i18n/bid-room-quote";
 import {
-  COMMERCIAL_MODELS,
+  acceptedModelKeys,
   billingNotice,
   SCORE_FACTORS,
   canQuote,
@@ -12,6 +12,7 @@ import {
   explainBidError,
   isRevision,
   isLockedBrokerage,
+  modelIsOptional,
   laneState,
   modelCopy,
   modelSpec,
@@ -91,7 +92,9 @@ export function QuotePanel({
   const revision = isRevision(lane);
   const editable = canQuote(lane);
   const lockedCommercialModel = isLockedBrokerage(lane);
-  const spec = { ...modelSpec(form.commercial_model), ...modelCopy(form.commercial_model) };
+  // The event says which models it accepts; with several, choosing one is optional.
+  const acceptedModels = acceptedModelKeys(lane);
+  const spec = form.commercial_model ? { ...modelSpec(form.commercial_model), ...modelCopy(form.commercial_model) } : null;
   const problems = offerProblems(form);
   const warnings = offerWarnings(form);
   const gaps = offerGaps(form);
@@ -123,7 +126,7 @@ export function QuotePanel({
     sending.current = true;
     setBusy(true);
     try {
-      if (billing && !await confirmAsync(`${spec.label} · ${route(lane)}\n\n${billing}`, { ok: q("form.confirmSend"), cancel: q("form.backToReview") })) return;
+      if (billing && !await confirmAsync(`${spec?.label ?? q("model.none.label")} · ${route(lane)}\n\n${billing}`, { ok: q("form.confirmSend"), cancel: q("form.backToReview") })) return;
       if (!active.current || scopeToken.current !== token) return;
       await run(
         () => submitBid(token, offerPayload(form, lane)),
@@ -243,34 +246,47 @@ export function QuotePanel({
       ) : (<>
       <div className="croom-fields">
         <label className="grow">
-          <span>{q("form.model")}</span>
-          <select
-            value={form.commercial_model}
-            onChange={(e) => set({ commercial_model: e.target.value as OfferForm["commercial_model"], pct: "" })}
-          >
-            {COMMERCIAL_MODELS.map((m) => (
-              <option key={m.key} value={m.key}>
-                {modelCopy(m.key).label}
-              </option>
-            ))}
-          </select>
+          <span>{q(acceptedModels.length > 1 ? "form.modelOptional" : "form.model")}</span>
+          {acceptedModels.length === 1 ? (
+            // One accepted model is the event's, not a choice.
+            <input value={modelCopy(acceptedModels[0]).label} readOnly disabled />
+          ) : (
+            <select
+              value={form.commercial_model}
+              onChange={(e) => set({ commercial_model: e.target.value as OfferForm["commercial_model"], pct: "" })}
+            >
+              {(modelIsOptional(lane) || !form.commercial_model) && <option value="">{q("model.none.label")}</option>}
+              {acceptedModels.map((key) => (
+                <option key={key} value={key}>
+                  {modelCopy(key).label}
+                </option>
+              ))}
+            </select>
+          )}
         </label>
-        <label className="grow">
-          <span>
-            {spec.pctLabel} ({spec.min}–{spec.max} %)
-          </span>
-          <input
-            className="mono"
-            inputMode="decimal"
-            value={form.pct}
-            onChange={(e) => set({ pct: e.target.value })}
-            placeholder={q("form.blankPlaceholder", spec.blank)}
-          />
-        </label>
+        {spec && (
+          <label className="grow">
+            <span>
+              {spec.pctLabel} ({spec.min}–{spec.max} %)
+            </span>
+            <input
+              className="mono"
+              inputMode="decimal"
+              value={form.pct}
+              onChange={(e) => set({ pct: e.target.value })}
+              placeholder={q("form.blankPlaceholder", spec.blank)}
+            />
+          </label>
+        )}
       </div>
-      <p className="croom-hint ayuda">
-        {spec.enter} {spec.effect}
-      </p>
+      {spec ? (
+        <p className="croom-hint ayuda">
+          {spec.enter} {spec.effect}
+        </p>
+      ) : (
+        // Always in sight: what happens when the carrier does not choose.
+        <p className="croom-hint" role="note">{q("form.modelNoneHint")}</p>
+      )}
 
       </>)}
 

@@ -1,6 +1,7 @@
 import { q } from "../../i18n/bid-room-quote";
 import { getLang } from "../../i18n/language";
 import { lockedBrokeragePolicy } from "../../../../packages/carrier-commercial/locked-policy.mjs";
+import { acceptedCommercialModels } from "../../../dominio/modelosAceptados";
 import { callRfxBidApi, ApiError } from "@/lib/api-client";
 
 /**
@@ -232,6 +233,12 @@ export const COMMERCIAL_MODELS = [
 
 export type ModelKey = (typeof COMMERCIAL_MODELS)[number]["key"];
 
+/**
+ * What the carrier picks in the form. "" is no model: choosing one is optional
+ * (decided 2026-11-23) and MARKSMAN defines it before awarding.
+ */
+export type ModelChoice = ModelKey | "";
+
 /** A stored model (cost_plus, fee_plus, sell_share, brokerage…) as one of the three above. */
 export function modelKeyOf(stored: unknown): ModelKey {
   const text = String(stored ?? "").toLowerCase().replace(/[\s-]+/g, "_");
@@ -262,7 +269,8 @@ export interface BidInput {
   weekly_capacity: number | null;
   transit_days: number | null;
   valid_through: string | null;
-  commercial_model: ModelKey;
+  /** null: the carrier did not choose; the server uses the event's only model or leaves it open. */
+  commercial_model: ModelKey | null;
   marksman_margin_pct?: number | null;
   carrier_share_pct?: number | null;
   notes: string;
@@ -295,7 +303,7 @@ export interface OfferForm {
   weekly_capacity: string;
   transit_days: string;
   valid_through: string;
-  commercial_model: ModelKey;
+  commercial_model: ModelChoice;
   pct: string;
   notes: string;
   equipment_available: "" | "yes" | "no";
@@ -326,10 +334,43 @@ function toLocalInput(value: unknown): string {
 
 export const isLockedBrokerage = (lane: BookLane) => Boolean(lockedBrokeragePolicy(lane));
 
+/**
+ * The models the lane's event accepts from its carriers, as the portal names
+ * them; an event that says nothing accepts all three. cost_plus and fee_plus
+ * are both "Costo + margen" here: the server keeps whichever the event accepts.
+ */
+export function acceptedModelKeys(lane: BookLane): ModelKey[] {
+  if (isLockedBrokerage(lane)) return ["xbf_buy_sell"];
+  const keys = COMMERCIAL_MODELS.map((m) => m.key);
+  const accepted = acceptedCommercialModels(lane);
+  return accepted ? keys.filter((key) => accepted.some((model) => modelKeyOf(model) === key)) : keys;
+}
+
+/** The lane's own model as a portal key, only while its event still accepts it. */
+function storedModelKey(lane: BookLane): ModelKey | null {
+  if (!str(lane.commercial_model).trim()) return null;
+  const key = modelKeyOf(lane.commercial_model);
+  return acceptedModelKeys(lane).includes(key) ? key : null;
+}
+
+/**
+ * Whether the offer may go without a model: the event accepts several and the
+ * lane has none of them yet. An offer that already has one keeps it (the server
+ * would keep it anyway), so "not chosen" would be a lie there.
+ */
+export function modelIsOptional(lane: BookLane): boolean {
+  return acceptedModelKeys(lane).length > 1 && !storedModelKey(lane);
+}
+
 export function offerForm(lane: BookLane): OfferForm {
   const locked = isLockedBrokerage(lane);
-  const model = locked ? "xbf_buy_sell" : modelKeyOf(lane.commercial_model);
-  const pct = model === "carrier_share" ? lane.carrier_share_pct : lane.marksman_margin_pct;
+  const accepted = acceptedModelKeys(lane);
+  const stored = storedModelKey(lane);
+  // One accepted model is the event's choice, not the carrier's; with several,
+  // the offer starts with its own model or with none.
+  const model: ModelChoice = accepted.length === 1 ? accepted[0] : stored ?? "";
+  // A percentage belongs to the model it was stored with.
+  const pct = !model || model !== stored ? null : model === "carrier_share" ? lane.carrier_share_pct : lane.marksman_margin_pct;
   const available = lane.equipment_available;
   return {
     bid_rate: str(lane.bid_rate),
@@ -366,7 +407,7 @@ export function parseAmount(value: string): number | null {
 
 /** Commercial notice supplied by the owner; informational, not an invoicing scheduler. */
 export function billingNotice(form: Pick<OfferForm, "commercial_model" | "pct">): string | null {
-  if (form.commercial_model === "xbf_buy_sell") return null;
+  if (!form.commercial_model || form.commercial_model === "xbf_buy_sell") return null;
   const pct = parseAmount(form.pct) ?? modelSpec(form.commercial_model).blank;
   const amount = Number.isFinite(pct) ? ` (${pct} %)` : "";
   return q("billing.notice", amount);
@@ -386,8 +427,13 @@ export function offerProblems(form: OfferForm): string[] {
     const n = parseAmount(value);
     if (n !== null && (Number.isNaN(n) || n < 0)) problems.push(q("problem.number", label));
   }
-  const spec = modelSpec(form.commercial_model);
   const pct = parseAmount(form.pct);
+  if (!form.commercial_model) {
+    // A percentage means nothing without the model it belongs to.
+    if (pct !== null) problems.push(q("problem.pctNoModel"));
+    return problems;
+  }
+  const spec = modelSpec(form.commercial_model);
   if (pct !== null && (Number.isNaN(pct) || pct < spec.min || pct > spec.max)) {
     problems.push(q("problem.pct", spec.min, spec.max));
   }
@@ -451,7 +497,12 @@ export function offerPayload(form: OfferForm, lane: BookLane): BidInput {
   if (locked && (form.commercial_model !== "xbf_buy_sell" || form.pct.trim())) {
     throw new Error(q("error.locked"));
   }
-  const spec = modelSpec(form.commercial_model);
+  const chosen = form.commercial_model;
+  const accepted = acceptedModelKeys(lane);
+  if (chosen && !accepted.includes(chosen)) {
+    throw new Error(q("error.modelNotAccepted", accepted.map((key) => modelCopy(key).label).join(", ")));
+  }
+  const spec = chosen ? modelSpec(chosen) : null;
   const pct = parseAmount(form.pct);
   const num = (v: string) => parseAmount(v);
   const instant = (v: string) => (v ? new Date(v).toISOString() : null);
@@ -461,11 +512,12 @@ export function offerPayload(form: OfferForm, lane: BookLane): BidInput {
     weekly_capacity: num(form.weekly_capacity),
     transit_days: num(form.transit_days),
     valid_through: form.valid_through || null,
-    commercial_model: form.commercial_model,
+    // Not chosen sends null: the server uses the event's only model or leaves it for MARKSMAN to define.
+    commercial_model: chosen || null,
     // Blank sends null and the server applies the model's default.
     ...(!locked ? {
-      marksman_margin_pct: spec.pctField === "marksman_margin_pct" ? pct : null,
-      carrier_share_pct: spec.pctField === "carrier_share_pct" ? pct : null,
+      marksman_margin_pct: spec?.pctField === "marksman_margin_pct" ? pct : null,
+      carrier_share_pct: spec?.pctField === "carrier_share_pct" ? pct : null,
     } : {}),
     notes: form.notes.trim(),
     equipment_available: form.equipment_available === "yes" ? true : form.equipment_available === "no" ? false : null,

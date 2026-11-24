@@ -47,7 +47,12 @@ export interface OfertaVersion {
   numero: number;
   tarifaAllIn: number;
   moneda: string;
-  modeloComercial: ModeloComercial | string;
+  // Modelo con el que cuenta la oferta: el suyo o, si nadie lo eligió, el único
+  // que acepta el evento. null = «sin elegir»: el equipo lo define antes de
+  // adjudicar (decisión de Jose, 23 y 24-nov-2026).
+  modeloComercial: ModeloComercial | string | null;
+  // La oferta no trae modelo propio: cuenta con el único que acepta el evento.
+  modeloDelEvento?: boolean;
   carrierSharePct: number | null;
   margenPct: number | null;
   capacidadSemanal: number | null;
@@ -191,6 +196,11 @@ export interface Detalle {
   recibo: Recibo | null;
   // rfx_master_package del evento (preselección de carriers, solo lectura).
   paqueteMaestro?: unknown;
+  // Modelos comerciales que el evento acepta de sus carriers
+  // (carrier_commercial_policy del paquete). null o sin el campo: todos.
+  modelosAceptados?: ModeloComercial[] | null;
+  // Política bloqueada (solo XBF compra-venta, puesta en Rateware): no se edita.
+  modelosBloqueados?: boolean;
   // Marca «Revisado» vigente por carrier (vendor_id). null: no se pudo
   // consultar, y entonces no se invita a nadie.
   revisiones?: Record<string, MarcaRevision> | null;

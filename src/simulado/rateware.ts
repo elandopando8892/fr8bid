@@ -17,6 +17,17 @@ import {
   sameRequirement
 } from "../dominio/condiciones-r1.js";
 import { UUID_RATEWARE } from "../dominio/operacion.js";
+import {
+  acceptedCommercialModels,
+  acceptedCommercialModelsChangeDenial,
+  capturedCommercialModel,
+  commercialTermsPatch,
+  effectiveCommercialModel,
+  parseAcceptedCommercialModels,
+  resolveCarrierCommercialModel,
+  teamDefinedCommercialModel,
+  withAcceptedCommercialModels
+} from "../dominio/modelosAceptados.js";
 
 export type Servicio = "rateware-api" | "rfx-bid-api";
 
@@ -64,7 +75,8 @@ const WRITE_ACTIONS = new Set([
   "mark_rfx_replied_if_empty",
   "extend_rfx_due_date_if_unchanged",
   "prepare_whatsapp_rfx_reminder",
-  "send_whatsapp_outreach_messages"
+  "send_whatsapp_outreach_messages",
+  "set_rfx_bid_commercial_model"
 ]);
 
 export class ErrorRed extends Error {
@@ -436,7 +448,13 @@ export class RatewareSimulado {
           due_date: datos.due_date || null,
           status: "draft",
           created_at: this.ahora()
-        };
+        } as Fila;
+        // rateware #229: el evento nace con los modelos comerciales que acepta.
+        if (datos.accepted_commercial_models !== undefined) {
+          const aceptados = parseAcceptedCommercialModels(datos.accepted_commercial_models);
+          if ("code" in aceptados) throw new Falla(400, aceptados.error, aceptados.code);
+          if (aceptados.models) e.rfx_master_package = withAcceptedCommercialModels({}, aceptados.models);
+        }
         this.events.push(e);
         this.bitacorar(u.email, "rfx.event.create", "rfx_events", e.id, null, "draft");
         return ok({ row: { ...e } });
@@ -706,6 +724,20 @@ export class RatewareSimulado {
           this.bitacorar(u.email, "rfx.event.due_date", "rfx_events", event.id, antes, event.due_date);
         }
         if (patch.notes !== undefined) event.notes = String(patch.notes ?? "").trim() || null;
+        // rateware #229: los modelos aceptados viven en el paquete maestro y solo
+        // cambian en borrador o abierto, sin adjudicaciones y sin política bloqueada.
+        if (patch.accepted_commercial_models !== undefined) {
+          const aceptados = parseAcceptedCommercialModels(patch.accepted_commercial_models);
+          if ("code" in aceptados) throw new Falla(400, aceptados.error, aceptados.code);
+          const antes = acceptedCommercialModels(event);
+          if (JSON.stringify(antes) !== JSON.stringify(aceptados.models)) {
+            const adjudicado = this.laneVendors.some((lv) => lv.rfx_event_id === event.id && lv.award_role);
+            const negativa = acceptedCommercialModelsChangeDenial(event, adjudicado);
+            if (negativa) throw new Falla(409, negativa.error, negativa.code);
+            event.rfx_master_package = withAcceptedCommercialModels(event.rfx_master_package, aceptados.models);
+            this.bitacorar(u.email, "rfx.event.accepted_commercial_models", "rfx_events", event.id, antes, aceptados.models);
+          }
+        }
         return ok({ row: { ...event } });
       }
       case "update_rfx_bid": {
@@ -751,6 +783,30 @@ export class RatewareSimulado {
         this.bitacorar(u.email, "rfx.vendor.status", "rfx_lane_vendors", lv.id, antes, lv.invitation_status, { canal: patch.channel ?? null, condicional: true });
         return ok({ row: this.invitacionCruda(lv) });
       }
+      // rateware #229: el equipo define el modelo de una oferta sin reescribirla,
+      // solo sobre la versión que se mostró.
+      case "set_rfx_bid_commercial_model": {
+        if (!body.id) throw new Falla(400, "RFx invitation id is required.", "BAD_REQUEST");
+        if (!Number.isFinite(Date.parse(String(body.expected_updated_at || "")))) throw new Falla(400, "expected_updated_at es obligatorio: la versión de la oferta que se mostró.", "VERSION_REQUERIDA");
+        const lv = this.laneVendor(u, body.id);
+        const e = this.events.find((x) => x.id === lv.rfx_event_id)!;
+        if (["awarded", "archived", "closed"].includes(e.status)) throw new Falla(409, `The event is ${e.status}; nothing was written.`, "CONDICION_NO_CUMPLIDA");
+        const definido = teamDefinedCommercialModel(body.commercial_model, { ...lv, rfx_events: e });
+        if ("code" in definido) throw new Falla(definido.status, definido.error, definido.code);
+        if (lv.bid_rate === null || lv.bid_rate === undefined) throw new Falla(409, "La participación no tiene oferta: no hay modelo comercial que definir.", "RFX_BID_REQUIRED");
+        if (lv.award_role) throw new Falla(409, "La oferta ya está adjudicada: anula la adjudicación antes de cambiar su modelo comercial.", "RFX_BID_AWARDED");
+        if (Date.parse(String(body.expected_updated_at)) !== Date.parse(this.versionLaneVendor(lv)))
+          throw new Falla(409, "La oferta cambió desde que se mostró; no se escribió nada. Vuelve a cargar el evento.", "RFX_BID_VERSION_CONFLICT");
+        const antes = lv.commercial_model ?? null;
+        const pct = (x: unknown) => (x === null || x === undefined || x === "" ? null : Number(x));
+        Object.assign(lv, commercialTermsPatch(definido.model, pct(body.marksman_margin_pct), pct(body.carrier_share_pct)), { updated_at: this.marca() });
+        // Solo simulado: el historial refleja el modelo en la versión vigente (Rateware real solo tiene la fila).
+        const historial = this.revisiones.get(lv.id) || [];
+        const ultima = historial.at(-1);
+        if (ultima) this.revisiones.set(lv.id, Object.freeze([...historial.slice(0, -1), Object.freeze({ ...ultima, commercial_model: lv.commercial_model, marksman_margin_pct: lv.marksman_margin_pct, carrier_share_pct: lv.carrier_share_pct })]) as Readonly<Fila>[]);
+        this.bitacorar(u.email, "rfx.bid.commercial_model", "rfx_lane_vendors", lv.id, antes, lv.commercial_model);
+        return ok({ row: this.invitacionCruda(lv) });
+      }
       case "extend_rfx_due_date_if_unchanged": {
         const event = this.evento(u, body.event_id || body.id);
         const patch: Fila = body.patch && typeof body.patch === "object" ? body.patch : {};
@@ -788,6 +844,9 @@ export class RatewareSimulado {
         const previa = this.bitacora.find((b) => b.accion === "rfx.award" && b.operation_id === op && op);
         if (previa) return ok({ row: this.invitacionCruda(lv), replayed: true });
         if (lv.bid_rate === null) throw new Falla(422, "La participación no tiene oferta.", "RFX_AWARD_REQUIRES_BID");
+        // rateware #229 (RFX_COMMERCIAL_MODEL_MISSING): sin modelo propio ni modelo único del evento no se adjudica.
+        if (!effectiveCommercialModel(lv.commercial_model, acceptedCommercialModels(this.events.find((x) => x.id === lv.rfx_event_id))))
+          throw new Falla(409, "La oferta no tiene modelo comercial: defínelo antes de adjudicar.", "RFX_AWARD_LOCKED");
         if (lane.no_award_reason) throw new Falla(409, "La ruta está desierta.", "RFX_LANE_NO_AWARD");
         const role = body.award_role === "backup" ? "backup" : "primary";
         const otros = this.laneVendors.filter((x) => x.rfx_lane_id === lane.id && x.id !== lv.id);
@@ -984,7 +1043,7 @@ export class RatewareSimulado {
           status: 200,
           body: {
             invitation: propia,
-            event: { rfx_id: event.rfx_id, name: event.name, customer: event.customer, status: event.status, due_date: event.due_date },
+            event: { rfx_id: event.rfx_id, name: event.name, customer: event.customer, status: event.status, due_date: event.due_date, rfx_master_package: event.rfx_master_package ?? {} },
             lane: { ...lane },
             segment_confirmations: [
               ...Object.entries(this.confirmaciones.get(lv.id) || {}).map(([rubric_key, answer]) => ({ segment_key: lane.rfx_segment_key || "general", rubric_key, answer })),
@@ -1049,7 +1108,23 @@ export class RatewareSimulado {
     }
   }
 
+  // El modelo de la oferta, como rateware #229. Carrier: su elección si el evento
+  // la acepta, el modelo del evento si acepta uno solo, o el que la oferta ya
+  // tenía; si no, ninguno («sin elegir»). Equipo: el que nombre, el que ya tenía
+  // o el único del evento.
+  private modeloDeOferta(lv: Fila, body: Fila, fuente: string): string | null {
+    const event = this.events.find((e) => e.id === lv.rfx_event_id)!;
+    if (fuente === "carrier_portal") {
+      const r = resolveCarrierCommercialModel(body.commercial_model, lv.commercial_model, acceptedCommercialModels(event), body.language);
+      if ("code" in r) throw new Falla(r.status, r.error, r.code);
+      return r.model;
+    }
+    if (body.commercial_model) return String(body.commercial_model);
+    return lv.commercial_model ?? capturedCommercialModel(undefined, { ...lv, rfx_events: event });
+  }
+
   private registrarOferta(lv: Fila, body: Fila, fuente: string, actor: string) {
+    const modelo = this.modeloDeOferta(lv, body, fuente);
     const ahora = this.ahora();
     const antes = lv.invitation_status;
     Object.assign(lv, {
@@ -1059,13 +1134,16 @@ export class RatewareSimulado {
       weekly_capacity: body.weekly_capacity ?? null,
       transit_days: body.transit_days ?? null,
       valid_through: body.valid_through ?? null,
-      commercial_model: body.commercial_model || lv.commercial_model || "cost_plus",
-      marksman_margin_pct: body.marksman_margin_pct ?? null,
-      carrier_share_pct: body.carrier_share_pct ?? null,
+      commercial_model: modelo,
+      // Sin modelo no hay porcentaje que guardar.
+      marksman_margin_pct: modelo ? body.marksman_margin_pct ?? null : null,
+      carrier_share_pct: modelo ? body.carrier_share_pct ?? null : null,
       best_final: body.best_final === true,
       notes: body.notes ?? null,
       response_source: fuente,
-      responded_at: ahora
+      responded_at: ahora,
+      // Cada oferta nueva cambia la versión de la fila, como en Rateware.
+      updated_at: this.marca()
     });
     const historial = this.revisiones.get(lv.id) || [];
     const revision = Object.freeze({

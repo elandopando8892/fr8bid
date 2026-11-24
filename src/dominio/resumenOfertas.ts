@@ -80,6 +80,8 @@ export function modelosMixtos(d: Detalle): ModeloMixto[] {
     for (const p of conOferta(ruta)) {
       const v = versionVigente(p)!;
       const x = porCarrier.get(p.carrierId) ?? { carrier: p.carrier, modelos: new Map<string, number[]>() };
+      // «Sin elegir» no es un modelo distinto: lo cuenta sinModelo().
+      if (!v.modeloComercial) continue;
       const modelo = String(v.modeloComercial);
       x.modelos.set(modelo, [...(x.modelos.get(modelo) ?? []), ruta.numero]);
       porCarrier.set(p.carrierId, x);
@@ -88,6 +90,32 @@ export function modelosMixtos(d: Detalle): ModeloMixto[] {
     .filter((x) => x.modelos.size > 1)
     .map((x) => ({ carrier: x.carrier, modelos: [...x.modelos].map(([modelo, rutas]) => ({ modelo: nombreModelo(modelo), rutas: rutas.sort((a, b) => a - b) })) }))
     .sort((a, b) => a.carrier.localeCompare(b.carrier));
+}
+
+// Ofertas «sin elegir»: el carrier no eligió modelo y el evento acepta varios.
+// El equipo lo define antes de adjudicar (decisión de Jose, 24-nov-2026).
+export interface OfertaSinModelo {
+  ruta: Ruta;
+  p: Participacion;
+}
+
+export function sinModelo(d: Detalle): OfertaSinModelo[] {
+  return d.rutas.flatMap((ruta) => conOferta(ruta).filter((p) => !versionVigente(p)!.modeloComercial).map((p) => ({ ruta, p })));
+}
+
+// Ofertas cuyo modelo ya no está entre los que acepta el evento (p. ej. el
+// ajuste cambió después de que cotizaron). No bloquea: se avisa.
+export function fueraDeAceptados(d: Detalle): OfertaSinModelo[] {
+  const aceptados = d.modelosAceptados;
+  if (!aceptados) return [];
+  return d.rutas.flatMap((ruta) =>
+    conOferta(ruta)
+      .filter((p) => {
+        const modelo = versionVigente(p)!.modeloComercial;
+        return Boolean(modelo) && !aceptados.includes(modelo as (typeof aceptados)[number]);
+      })
+      .map((p) => ({ ruta, p }))
+  );
 }
 
 // «1–6» o «7, 8»: rutas consecutivas como rango.

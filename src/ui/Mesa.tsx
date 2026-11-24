@@ -22,19 +22,19 @@ import {
 } from "../dominio/recorrido";
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
 import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
-import { cambiosComerciales, describirModelo, modeloCorto, tarifaVenta } from "../dominio/modelo";
+import { cambiosComerciales, describirModelo, modeloCorto, MODELOS, nombreModelo, porcentajeModelo, tarifaVenta, textoModelosAceptados } from "../dominio/modelo";
 import { bloqueoCerrarSinAdjudicar, bloqueoDesierta, bloqueoReabrirRuta, bloqueoReRevision, bloqueoRespondio, bloqueoRevision, candidatasCaptura, marcablesRespondio, rutasSinDecidir, sinActividad } from "../dominio/acciones-mesa";
 import { eventoSinAvisos } from "../dominio/protegidos.js";
 import { candidatosRecordatorio, claveIntento, esperaRespuesta, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
-import { dentroDeObjetivo, masBajaComparable, modelosMixtos, ofertasOrdenadas, rangoRutas, resumenPorRuta } from "../dominio/resumenOfertas";
+import { dentroDeObjetivo, fueraDeAceptados, masBajaComparable, modelosMixtos, ofertasOrdenadas, rangoRutas, resumenPorRuta, sinModelo, type OfertaSinModelo } from "../dominio/resumenOfertas";
 import type { CarrierFit } from "../dominio/carrierFit";
 import type { Telefono } from "../dominio/telefonos";
 import { ContactosDeMesa, contextoDeContactos } from "./ContactosDeMesa";
 import * as I from "./Iconos";
 import { NOMBRE_FAMILIA, type HistorialSegmento } from "../dominio/segmento";
 import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
-import type { Aviso, Detalle, EntregaLocal, Participacion, Recibo, Ruta } from "../dominio/tipos";
+import type { Aviso, Detalle, EntregaLocal, ModeloComercial, Participacion, Recibo, Ruta } from "../dominio/tipos";
 import { EditorCondiciones, ListaCondiciones, MatrizCondiciones } from "./condiciones";
 import { aCarga, Confirmar, Desactualizado, dinero, EstadoVista, fecha, Liga, plural, Prueba, type Carga } from "./comun";
 import { useSesion } from "./sesion";
@@ -398,6 +398,7 @@ function PanelEvento({ d, ctx, accion }: Props) {
     <div className="tarjeta">
       <h2>Necesidad y evento</h2>
       {d.paqueteMaestro != null && <Bw><Preseleccion eventId={d.evento.id} master={d.paqueteMaestro} /></Bw>}
+      <ModelosDelEvento d={d} ctx={ctx} accion={accion} />
       {editando?.cruda && <EditorRuta key={editando.id} eventoId={d.evento.id} ruta={editando} accion={accion} onCerrar={() => setEditando(null)} />}
       {d.evento.cierre && <p className="tenue">Cerrado a ofertas el {fecha(d.evento.cierre.el)} (plazo original {fecha(d.evento.cierre.plazoOriginal)}).</p>}
       <div className="tabla-envoltura">
@@ -443,6 +444,72 @@ function PanelEvento({ d, ctx, accion }: Props) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// Qué modelos comerciales acepta el evento de sus carriers (decisión 4 del
+// recorrido, 23-nov): el carrier solo ve esos en su Bid Room y elegir es
+// opcional. Con uno solo, toda oferta sin modelo cuenta con ese; con varios,
+// queda «sin elegir» y el equipo lo define antes de adjudicar.
+function ModelosDelEvento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion: Props["accion"] }) {
+  const s = useSesion();
+  const actuales: readonly ModeloComercial[] = d.modelosAceptados ?? MODELOS;
+  const adjudicado = d.rutas.some((r) => r.participaciones.some((p) => p.rol));
+  const editable = ctx.rol !== "viewer" && !d.modelosBloqueados && !adjudicado && ["borrador", "abierto", "cerrado"].includes(d.evento.estado);
+  const [abierto, setAbierto] = useState(false);
+  const [sel, setSel] = useState<ModeloComercial[]>([...actuales]);
+  const elegidos = MODELOS.filter((m) => sel.includes(m));
+  const sinCambios = elegidos.length === actuales.length && elegidos.every((m) => actuales.includes(m));
+  // Ofertas que ya tienen un modelo propio y quedarían fuera de la lista nueva.
+  const fuera = d.rutas.flatMap((r) => conOferta(r)).filter((p) => {
+    const v = versionVigente(p)!;
+    return Boolean(v.modeloComercial) && !v.modeloDelEvento && !elegidos.includes(v.modeloComercial as ModeloComercial);
+  }).length;
+  return (
+    <div className="modelos-evento">
+      <p className="fila-icono">
+        <span>Modelos comerciales que acepta: <b>{d.modelosAceptados?.length === 1 ? `solo ${nombreModelo(actuales[0])}` : textoModelosAceptados(d.modelosAceptados)}</b></span>
+        {editable && !abierto && <button className="btn-chico" onClick={() => { setSel([...actuales]); setAbierto(true); }}>Cambiar</button>}
+      </p>
+      <p className="tenue ayuda">
+        {d.modelosBloqueados
+          ? "Fijo: este evento opera únicamente en compra-venta."
+          : actuales.length === 1
+            ? "El carrier no elige: toda oferta cuenta con este modelo."
+            : "El carrier solo ve estos modelos y puede no elegir; en ese caso el equipo define el modelo antes de adjudicar."}
+        {!d.modelosBloqueados && adjudicado && " Ya hay adjudicaciones: la lista ya no cambia."}
+      </p>
+      {abierto && (
+        <div className="aviso-caja" role="group" aria-label="Modelos comerciales que acepta el evento">
+          <div className="fila-botones">
+            {MODELOS.map((m) => (
+              <label key={m} className="check">
+                <input type="checkbox" checked={sel.includes(m)} onChange={(e) => setSel((x) => (e.target.checked ? [...x, m] : x.filter((y) => y !== m)))} />
+                {nombreModelo(m)}
+              </label>
+            ))}
+          </div>
+          {!elegidos.length && <p className="error">Elige al menos un modelo.</p>}
+          <div className="fila-botones">
+            <Confirmar
+              etiqueta={sinCambios ? "Sin cambios" : "Guardar modelos"}
+              deshabilitado={sinCambios || !elegidos.length}
+              advertencia={<>
+                El evento aceptará {elegidos.length === MODELOS.length ? "todos los modelos" : elegidos.length === 1 ? `solo ${nombreModelo(elegidos[0])}` : textoModelosAceptados(elegidos)}.
+                {elegidos.length === 1 ? " Las ofertas sin modelo contarán con ese." : " Una oferta sin modelo queda «sin elegir» hasta que el equipo lo defina."}
+                {fuera > 0 && ` ${plural(fuera, "oferta ya recibida tiene", "ofertas ya recibidas tienen")} un modelo que queda fuera: se conserva y se avisa en Ofertas.`}
+                {" "}{ADVERTENCIA_REAL(s, d)}
+              </>}
+              onConfirmar={async () => {
+                await accion(() => s.api.fijarModelosAceptados(d.evento.id, elegidos.length === MODELOS.length ? null : elegidos), "Modelos comerciales del evento guardados.");
+                setAbierto(false);
+              }}
+            />
+            <button className="btn-texto" onClick={() => setAbierto(false)}>Cancelar</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1359,18 +1426,36 @@ function YaRespondio({ d, s: x, accion }: { d: Detalle; s: ReturnType<typeof seg
 
 // Captura del equipo: la oferta llegó por otro canal. Cada captura es una
 // versión nueva; las anteriores no se tocan.
+// El porcentaje de un modelo, como lo llama cada uno.
+const ETIQUETA_PCT = (modelo: string) => (modelo === "sell_share" ? "Share del carrier (%)" : modelo === "brokerage" ? "Markup (%)" : "Margen Marksman (%)");
+
+// Porcentaje escrito a mano: vacío = sin indicar (null); fuera de 0–100 = "mal".
+function leerPct(texto: string): number | null | "mal" {
+  const t = texto.trim().replace(",", ".");
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : "mal";
+}
+
 function CapturaEquipo({ d, ruta, accion }: { d: Detalle; ruta: Ruta; accion: Props["accion"] }) {
   const s = useSesion();
   const candidatas = candidatasCaptura(d, ruta);
-  const vacio = { id: "", tarifa: "", moneda: "USD", vigencia: "", capacidad: "", transito: "", canal: "email" as const, notas: "" };
-  const [f, setF] = useState<{ id: string; tarifa: string; moneda: string; vigencia: string; capacidad: string; transito: string; canal: "email" | "phone" | "whatsapp" | "other"; notas: string }>(vacio);
+  const vacio = { id: "", tarifa: "", moneda: "USD", vigencia: "", capacidad: "", transito: "", canal: "email" as const, notas: "", modelo: "" as const, pct: "" };
+  const [f, setF] = useState<{ id: string; tarifa: string; moneda: string; vigencia: string; capacidad: string; transito: string; canal: "email" | "phone" | "whatsapp" | "other"; notas: string; modelo: ModeloComercial | ""; pct: string }>(vacio);
+  // Solo los modelos que acepta el evento; con uno solo no hay nada que elegir.
+  const modelos: readonly ModeloComercial[] = d.modelosAceptados ?? MODELOS;
+  const modelo: ModeloComercial | "" = modelos.length === 1 ? modelos[0] : f.modelo;
+  const pct = leerPct(f.pct);
   const [abierto, setAbierto] = useState(false);
   if (s.rol === "viewer" || !candidatas.length) return null;
   if (!abierto) return <button className="btn-texto con-icono" onClick={() => setAbierto(true)}><I.Mas size={14} />Capturar oferta recibida por otro canal</button>;
   const tarifa = Number(f.tarifa.replace(/,/g, ""));
   const num = (x: string) => (x.trim() === "" ? null : Number(x));
-  const valido = f.id && tarifa > 0 && [f.capacidad, f.transito].every((x) => x.trim() === "" || Number.isFinite(Number(x)));
+  const valido = f.id && tarifa > 0 && [f.capacidad, f.transito].every((x) => x.trim() === "" || Number.isFinite(Number(x))) && pct !== "mal";
   const elegida = candidatas.find((x) => x.id === f.id);
+  // El modelo viaja solo si el equipo lo indicó (o escribió su porcentaje): sin
+  // indicar, la oferta conserva el suyo, toma el único del evento o queda «sin elegir».
+  const conModelo = modelo && (modelos.length > 1 || pct !== null) ? modelo : null;
   return (
     <div className="aviso-caja">
       <h3>Captura del equipo</h3>
@@ -1391,13 +1476,22 @@ function CapturaEquipo({ d, ruta, accion }: { d: Detalle; ruta: Ruta; accion: Pr
             <option value="email">Correo</option><option value="phone">Teléfono</option><option value="whatsapp">WhatsApp</option><option value="other">Otro</option>
           </select>
         </label>
+        <label className="campo"><span>Modelo comercial</span>
+          <select value={modelo} disabled={modelos.length === 1} onChange={(e) => setF({ ...f, modelo: e.target.value as ModeloComercial | "", pct: "" })}>
+            {modelos.length > 1 && <option value="">Sin indicar</option>}
+            {modelos.map((m) => <option key={m} value={m}>{nombreModelo(m)}</option>)}
+          </select>
+        </label>
+        {modelo && <label className="campo"><span>{ETIQUETA_PCT(modelo)}</span><input inputMode="decimal" placeholder="opcional" value={f.pct} onChange={(e) => setF({ ...f, pct: e.target.value })} /></label>}
       </div>
+      {pct === "mal" && <p className="error">El porcentaje va de 0 a 100.</p>}
+      {modelos.length > 1 && !modelo && <p className="tenue ayuda">Sin indicar: la oferta conserva su modelo o queda «sin elegir» hasta que el equipo lo defina.</p>}
       <label className="campo"><span>Nota</span><input value={f.notas} onChange={(e) => setF({ ...f, notas: e.target.value })} /></label>
       <div className="fila-botones">
         <Confirmar
           etiqueta="Guardar como nueva versión"
           deshabilitado={!valido}
-          advertencia={<>{elegida?.carrier}: {dinero(tarifa, f.moneda)}{f.vigencia ? `, vigente hasta ${fecha(f.vigencia)}` : ", sin vigencia"}. Queda como una versión más; las anteriores no cambian. {ADVERTENCIA_REAL(s, d)}</>}
+          advertencia={<>{elegida?.carrier}: {dinero(tarifa, f.moneda)}{f.vigencia ? `, vigente hasta ${fecha(f.vigencia)}` : ", sin vigencia"}{conModelo ? `, ${nombreModelo(conModelo)}${typeof pct === "number" ? ` ${pct} %` : ""}` : ""}. Queda como una versión más; las anteriores no cambian. {ADVERTENCIA_REAL(s, d)}</>}
           onConfirmar={async () => {
             await accion(
               () =>
@@ -1410,7 +1504,9 @@ function CapturaEquipo({ d, ruta, accion }: { d: Detalle; ruta: Ruta; accion: Pr
                   capacidadSemanal: num(f.capacidad),
                   diasTransito: num(f.transito),
                   canal: f.canal,
-                  notas: f.notas
+                  notas: f.notas,
+                  modelo: conModelo,
+                  pct: typeof pct === "number" ? pct : null
                 }),
               "Oferta capturada."
             );
@@ -1443,6 +1539,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
   const hayOfertas = d.rutas.some((r) => conOferta(r).length > 0);
   const abierto = d.evento.estado === "abierto";
   const pendientes = seguimiento(d, ctx.hoy).filter((x) => esperaRespuesta(x.estado)).length;
+  const fuera = new Set(fueraDeAceptados(d).map((x) => x.p.id));
 
   return (
     <>
@@ -1520,6 +1617,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
                         onHistorial={() => setHistorial(historial === p.id ? null : p.id)}
                         onPreguntar={ctx.rol !== "viewer" && p.correo && d.evento.estado !== "adjudicado" ? () => setPreguntaA(preguntaA === p.id ? null : p.id) : undefined}
                         preguntando={preguntaA === p.id}
+                        modeloFuera={fuera.has(p.id)}
                       />
                     ))}
                   </tbody>
@@ -1567,11 +1665,24 @@ function PanelComparar({ d, ctx, accion }: Props) {
   );
 }
 
+// «Carrier A (rutas 1–3), Carrier B (ruta 2)».
+function porCarrier(ofertas: OfertaSinModelo[]): string {
+  const rutas = new Map<string, { carrier: string; numeros: number[] }>();
+  for (const { ruta, p } of ofertas) {
+    const x = rutas.get(p.carrierId) ?? { carrier: p.carrier, numeros: [] };
+    x.numeros.push(ruta.numero);
+    rutas.set(p.carrierId, x);
+  }
+  return [...rutas.values()].map((x) => `${x.carrier} (${x.numeros.length === 1 ? "ruta" : "rutas"} ${rangoRutas(x.numeros)})`).join(", ");
+}
+
 // Arriba de las rutas: una fila por ruta (salta a su tarjeta), el Excel del
 // evento completo y lo que hay que ver antes de adjudicar, una sola vez.
 function ResumenOfertas({ d, ctx }: { d: Detalle; ctx: Contexto }) {
   const filas = resumenPorRuta(d, ctx.hoy);
   const mixtos = modelosMixtos(d);
+  const sinElegir = sinModelo(d);
+  const fuera = fueraDeAceptados(d);
   // Mismo criterio que el lote (propuestaPrimarios): con ofertas en otra
   // moneda la ruta va a mano por eso, no por la vigencia.
   const sinVigencia = filas.filter((x) => x.masBaja?.sinVigencia && !x.primario && !x.otraMoneda);
@@ -1613,8 +1724,18 @@ function ResumenOfertas({ d, ctx }: { d: Detalle; ctx: Contexto }) {
           </table>
         </div>
       )}
-      {(mixtos.length > 0 || sinVigencia.length > 0 || vencidas.length > 0 || conOtraMoneda.length > 0 || porArriba.length > 0) && (
+      {(sinElegir.length > 0 || fuera.length > 0 || mixtos.length > 0 || sinVigencia.length > 0 || vencidas.length > 0 || conOtraMoneda.length > 0 || porArriba.length > 0) && (
         <div className="aviso-caja">
+          {sinElegir.length > 0 && (
+            <p>
+              <b>{plural(sinElegir.length, "oferta")} sin modelo comercial</b>: {porCarrier(sinElegir)}. El carrier no eligió y el evento acepta {textoModelosAceptados(d.modelosAceptados)}. Define el modelo en el historial de cada oferta antes de adjudicar; mientras tanto no tiene tarifa de venta.
+            </p>
+          )}
+          {fuera.length > 0 && (
+            <p>
+              {plural(fuera.length, "oferta tiene", "ofertas tienen")} un modelo que el evento ya no acepta: {porCarrier(fuera)}. Se conserva su modelo; cámbialo en su historial si corresponde.
+            </p>
+          )}
           {mixtos.map((m) => (
             <p key={m.carrier}>
               <b>{m.carrier}</b> cotizó con modelos distintos: {m.modelos.map((x) => `${x.modelo} en ${x.rutas.length === 1 ? "la ruta" : "las rutas"} ${rangoRutas(x.rutas)}`).join(" y ")}. El precio de venta al shipper cambia según la ruta; confirma el modelo antes de adjudicar.
@@ -1762,7 +1883,7 @@ function Motivo({ opciones, m, etiqueta = "Motivo", placeholder }: { opciones: s
   );
 }
 
-function FilaOferta({ p, ruta, mejor = false, totalRubros, conCapacidad = true, conTransito = true, elegido, columnaElegir, elegible, onElegir, onHistorial, onPreguntar, preguntando = false }: { p: Participacion; ruta: Ruta; mejor?: boolean; totalRubros: number; conCapacidad?: boolean; conTransito?: boolean; elegido: boolean; columnaElegir: boolean; elegible: boolean; onElegir: () => void; onHistorial: () => void; onPreguntar?: () => void; preguntando?: boolean }) {
+function FilaOferta({ p, ruta, mejor = false, totalRubros, conCapacidad = true, conTransito = true, elegido, columnaElegir, elegible, onElegir, onHistorial, onPreguntar, preguntando = false, modeloFuera = false }: { p: Participacion; ruta: Ruta; mejor?: boolean; totalRubros: number; conCapacidad?: boolean; conTransito?: boolean; elegido: boolean; columnaElegir: boolean; elegible: boolean; onElegir: () => void; onHistorial: () => void; onPreguntar?: () => void; preguntando?: boolean; modeloFuera?: boolean }) {
   const v = versionVigente(p)!;
   const rubros = Object.values(p.rubros);
   const negativa = rubros.includes("no_puedo");
@@ -1792,11 +1913,14 @@ function FilaOferta({ p, ruta, mejor = false, totalRubros, conCapacidad = true, 
       <td data-etiqueta="All-in">
         <span className="cifra">{dinero(v.tarifaAllIn, v.moneda)}</span>
         {contraObjetivo !== null && <span className={`delta ${enObjetivo ? "bajo" : "sobre"}`} title="Contra el objetivo de la ruta">{!enObjetivo ? "+" : contraObjetivo < 0 ? "−" : "±"}{Math.abs(contraObjetivo)} %</span>}
-        <div className="tenue" title={describirModelo(v)}>{modeloCorto(v)}</div>
+        {v.modeloComercial
+          ? <div className="tenue" title={describirModelo(v)}>{modeloCorto(v)}{v.modeloDelEvento && " · del evento"}{modeloFuera && <span className="alerta" title="El evento ya no acepta este modelo comercial"> · fuera del evento</span>}</div>
+          : <div><button className="pill warn" title="El carrier no eligió modelo comercial: defínelo en el historial de la oferta" onClick={(e) => { e.stopPropagation(); onHistorial(); }}>Sin elegir</button></div>}
       </td>
       <td data-etiqueta="Venta">
-        <span className="cifra">{dinero(venta.venta, v.moneda)}</span>
-        {venta.porDefecto && <div className="tenue">% por defecto</div>}
+        {venta
+          ? <><span className="cifra">{dinero(venta.venta, v.moneda)}</span>{venta.porDefecto && <div className="tenue">% por defecto</div>}</>
+          : <span className="tenue" title="Sin modelo comercial no hay tarifa de venta: defínelo antes de adjudicar">Por definir</span>}
       </td>
       {conCapacidad && <td data-etiqueta="Cap./sem">{v.capacidadSemanal ?? "—"}</td>}
       {conTransito && <td data-etiqueta="Tránsito">{v.transitoDias !== null ? `${v.transitoDias} d` : "—"}</td>}
@@ -1952,6 +2076,7 @@ function RechazarOferta({ p, d, accion }: { p: Participacion; d: Detalle; accion
 
 function Historial({ p, d, ctx, accion }: { p: Participacion; d: Detalle; ctx: Contexto; accion: Props["accion"] }) {
   const rechazable = ctx.rol === "admin" && !p.rol && p.versiones.length > 0 && ["abierto", "cerrado"].includes(d.evento.estado);
+  const definible = puedeDefinirModelo(d, p, ctx);
   return (
     <div className="historial">
       <h3>Historial de la oferta · {p.carrier}</h3>
@@ -1970,7 +2095,64 @@ function Historial({ p, d, ctx, accion }: { p: Participacion; d: Detalle; ctx: C
         })}
       </ol>
       {p.versiones.length === 1 && <p className="nota">Con Rateware real solo llega la versión vigente: Rateware no expone el historial por acción (contrato C2 pendiente).</p>}
+      {definible && <DefinirModelo key={`${p.id}-${p.actualizadaEn}`} d={d} p={p} accion={accion} />}
       {rechazable && <RechazarOferta p={p} d={d} accion={accion} />}
+    </div>
+  );
+}
+
+// El equipo define o corrige el modelo de una oferta sin adjudicar, mientras el
+// evento sigue abierto o cerrado a ofertas (después ya no cambia).
+const puedeDefinirModelo = (d: Detalle, p: Participacion, ctx: Contexto) =>
+  ctx.rol !== "viewer" && !p.rol && p.versiones.length > 0 && ["abierto", "cerrado"].includes(d.evento.estado);
+
+// Solo cambian el modelo y su porcentaje: la tarifa, la vigencia y lo que envió
+// el carrier quedan igual. Rateware escribe solo si la oferta sigue siendo la que
+// se muestra aquí (rateware #229).
+function DefinirModelo({ d, p, accion }: { d: Detalle; p: Participacion; accion: Props["accion"] }) {
+  const s = useSesion();
+  const v = versionVigente(p)!;
+  const opciones: readonly ModeloComercial[] = d.modelosAceptados ?? MODELOS;
+  // El modelo guardado en la oferta; el que solo viene del evento no cuenta como propio.
+  const propio = v.modeloDelEvento ? null : v.modeloComercial;
+  const enLista = (m: unknown): m is ModeloComercial => opciones.includes(m as ModeloComercial);
+  const [abierto, setAbierto] = useState(!v.modeloComercial);
+  const [modelo, setModelo] = useState<ModeloComercial | "">(enLista(v.modeloComercial) ? v.modeloComercial : opciones.length === 1 ? opciones[0] : "");
+  const inicial = porcentajeModelo(v).valor;
+  const [texto, setTexto] = useState(inicial === null ? "" : String(inicial));
+  if (!abierto) return <p><button className="btn-chico" onClick={() => setAbierto(true)}>{propio ? "Cambiar modelo comercial" : "Definir modelo comercial"}</button></p>;
+  const pct = leerPct(texto);
+  const sinCambios = modelo === propio && pct === inicial;
+  const venta = modelo && pct !== "mal" ? tarifaVenta({ modeloComercial: modelo, tarifaAllIn: v.tarifaAllIn, margenPct: modelo === "sell_share" ? null : pct, carrierSharePct: modelo === "sell_share" ? pct : null }) : null;
+  return (
+    <div className="aviso-caja" role="group" aria-label={`Modelo comercial de la oferta de ${p.carrier}`}>
+      <h3>{propio ? "Cambiar" : "Definir"} modelo comercial</h3>
+      <div className="rejilla">
+        <label className="campo"><span>Modelo comercial</span>
+          <select value={modelo} onChange={(e) => { setModelo(e.target.value as ModeloComercial | ""); setTexto(""); }}>
+            {opciones.length > 1 && <option value="">Elige…</option>}
+            {opciones.map((m) => <option key={m} value={m}>{nombreModelo(m)}</option>)}
+          </select>
+        </label>
+        {modelo && <label className="campo"><span>{ETIQUETA_PCT(modelo)}</span><input inputMode="decimal" placeholder="opcional" value={texto} onChange={(e) => setTexto(e.target.value)} /></label>}
+      </div>
+      {pct === "mal" && <p className="error">El porcentaje va de 0 a 100.</p>}
+      {venta && <p className="tenue">Venta al shipper: {dinero(venta.venta, v.moneda)}{venta.porDefecto ? ` (con el ${venta.pct} % por defecto)` : ""}. El all-in de {dinero(v.tarifaAllIn, v.moneda)} no cambia.</p>}
+      {!p.actualizadaEn && <p className="error">No se pudo leer la versión de esta oferta: vuelve a cargar el evento.</p>}
+      <div className="fila-botones">
+        <Confirmar
+          etiqueta={sinCambios ? "Sin cambios" : "Guardar modelo"}
+          deshabilitado={!modelo || pct === "mal" || sinCambios || !p.actualizadaEn}
+          advertencia={<>{p.carrier}: {nombreModelo(modelo)}{typeof pct === "number" ? ` · ${pct} %` : " · porcentaje por defecto"}. Solo cambian el modelo y su porcentaje; la tarifa, la vigencia y lo que envió el carrier quedan igual. Si el carrier cambió su oferta mientras tanto, no se escribe nada. {ADVERTENCIA_REAL(s, d)}</>}
+          onConfirmar={() =>
+            accion(
+              () => s.api.definirModelo({ eventId: d.evento.id, participacionId: p.id, modelo: modelo as ModeloComercial, pct: typeof pct === "number" ? pct : null, version: p.actualizadaEn! }),
+              `Modelo comercial de ${p.carrier}: ${nombreModelo(modelo)}.`
+            )
+          }
+        />
+        {Boolean(v.modeloComercial) && <button className="btn-texto" onClick={() => setAbierto(false)}>Cancelar</button>}
+      </div>
     </div>
   );
 }
@@ -1989,6 +2171,7 @@ function FormAdjudicar({ d, ruta, sel, rol, ctx, accion }: { d: Detalle; ruta: R
         <b>{sel.carrier}</b> · {dinero(v?.tarifaAllIn, v?.moneda)} all-in · v{v?.numero}
       </p>
       {v && <p className="tenue ayuda">{describirModelo(v)}. Se adjudica el all-in; el porcentaje no lo modifica.</p>}
+      {v && !v.modeloComercial && puedeDefinirModelo(d, sel, ctx) && <DefinirModelo key={`${sel.id}-${sel.actualizadaEn}`} d={d} p={sel} accion={accion} />}
       {rol === "respaldo" && <p className="tenue">El respaldo cubre la ruta si el primario no tiene capacidad. Se entrega a Rateware junto con el primario.</p>}
       <Candados lista={candados} />
       {candados.some((c) => c.confirmable) && (

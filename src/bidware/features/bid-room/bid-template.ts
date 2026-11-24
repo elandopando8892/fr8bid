@@ -1,10 +1,10 @@
 import type { WorkBook } from "xlsx";
 import {
-  billingNotice, canQuote, COMMERCIAL_MODELS, isLockedBrokerage, modelCopy, modelSpec, offerForm, offerPayload, offerProblems,
-  offerWarnings, type BookLane, type OfferForm,
+  acceptedModelKeys, billingNotice, canQuote, COMMERCIAL_MODELS, isLockedBrokerage, modelCopy, modelSpec, offerForm, offerPayload, offerProblems,
+  offerWarnings, type BookLane, type ModelChoice, type OfferForm,
 } from "./bidroom.service";
 import { getLang, type Lang } from "../../i18n/language";
-import { quoteCopy } from "../../i18n/bid-room-quote";
+import { q, quoteCopy } from "../../i18n/bid-room-quote";
 import { excelText, xls } from "../../i18n/bid-room-excel";
 
 /**
@@ -38,11 +38,17 @@ const booleanFields = new Set<keyof OfferForm>(["mirror_account_enabled", "best_
 const dateFields = new Set(["valid_through", "eta_pickup", "eta_delivery"]);
 export const offerBaseline = (lane: BookLane) => JSON.stringify(offerForm(lane));
 
+/** The model as a cell or a line of the review: its label, or "not chosen" (blank in the file). */
+const modelLabel = (model: ModelChoice, blank = q("model.none.label")) => (model ? modelCopy(model).label : blank);
+
 /** A value of the offer as the review shows it, in the Bid Room's language. */
 export function displayOfferValue(key: keyof OfferForm, form: OfferForm): string {
   const value = form[key];
-  if (key === "commercial_model") return modelCopy(form.commercial_model).label;
-  if (key === "pct") return value === "" ? xls("val.pctDefault", modelSpec(form.commercial_model).blank) : xls("val.pct", value);
+  if (key === "commercial_model") return modelLabel(form.commercial_model);
+  if (key === "pct") {
+    if (!form.commercial_model) return xls("val.none");
+    return value === "" ? xls("val.pctDefault", modelSpec(form.commercial_model).blank) : xls("val.pct", value);
+  }
   if (typeof value === "boolean") return value ? xls("val.yes") : xls("val.no");
   if (key === "equipment_available") return value === "yes" ? xls("val.yes") : value === "no" ? xls("val.no") : xls("val.none");
   return value || xls("val.none");
@@ -61,7 +67,8 @@ export async function buildBidTemplate(lanes: BookLane[]): Promise<WorkBook> {
       lane.lane_number ?? "", lane.origin || "", lane.destination || "", lane.equipment || "",
       offerBaseline(lane), no, ...columns.map(([key]) => {
         const v = form[key];
-        if (key === "commercial_model") return modelCopy(form.commercial_model).label;
+        // Not chosen is an empty cell: the carrier may leave it that way.
+        if (key === "commercial_model") return modelLabel(form.commercial_model, "");
         if (typeof v === "boolean") return v ? yes : no;
         if (key === "equipment_available") return v === "yes" ? yes : v === "no" ? no : "";
         return v;
@@ -80,9 +87,11 @@ export async function buildBidTemplate(lanes: BookLane[]): Promise<WorkBook> {
     [xls("help.numbers")],
     [xls("help.values")],
     ...(lockedOnly ? [[xls("help.locked")]] : [
+      [xls("help.model")],
       [xls("help.pct")],
       [], [xls("help.colModel"), xls("help.colEnter"), xls("help.colEffect"), xls("help.colMin"), xls("help.colMax"), xls("help.colDefault"), xls("help.colBilling")],
-      ...COMMERCIAL_MODELS.map(m => {
+      // Only the models some lane of this file accepts.
+      ...COMMERCIAL_MODELS.filter(m => lanes.some(lane => acceptedModelKeys(lane).includes(m.key))).map(m => {
         const copy = modelCopy(m.key);
         return [copy.label, copy.enter, copy.effect, m.min, m.max, m.blank, billingNotice({ commercial_model: m.key, pct: "" }) || ""];
       }),
@@ -192,8 +201,14 @@ export async function parseBidTemplate(data: ArrayBuffer, lanes: BookLane[]): Pr
           const answer = yesNo(value, name, true);
           form.equipment_available = answer === null ? "" : answer ? "yes" : "no";
         } else if (key === "commercial_model") {
+          // An empty cell leaves the model as the lane has it: its own, the event's only one, or none.
+          if (norm(value) === "") continue;
           const model = COMMERCIAL_MODELS.find(m => modelNames(m).includes(norm(value)));
           if (!model) throw new Error(xls("err.model", name, excelText("sheet.help", lang)));
+          const accepted = acceptedModelKeys(lane);
+          if (!accepted.includes(model.key)) {
+            throw new Error(xls("err.modelNotAccepted", name, accepted.map(k => modelCopy(k).label).join(", ")));
+          }
           form.commercial_model = model.key;
         } else {
           Object.assign(form, { [key]: text(value) });

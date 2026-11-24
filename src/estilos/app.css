@@ -499,3 +499,10 @@ tr.mejor > td { background: #f6fbf7; }
 .fr8desk-casos li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 0; border-top: 1px solid var(--line); min-width: 0; }
 .fr8desk-asunto { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
 .fr8desk .campo textarea { resize: vertical; }
+
+/* Modelos comerciales que acepta el evento y la marca «sin elegir» de una oferta. */
+.modelos-evento { margin: 8px 0 12px; }
+.modelos-evento > p { margin: 0 0 4px; }
+.modelos-evento .check { margin: 0; }
+button.pill { border: 0; cursor: pointer; font-family: inherit; }
+button.pill:hover { filter: brightness(0.96); }

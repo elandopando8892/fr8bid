@@ -106,7 +106,7 @@ test('el modelo se acepta por su nombre en cualquiera de los dos idiomas o por s
   }
   const book = await template('en');
   cell(book, 'Send lane', 'Yes'); cell(book, 'Carrier rate', 1200); cell(book, 'Commercial model', 'random');
-  await assert.rejects(parse(book), /Row 2: Commercial model: unknown model; use one of the three models in the Instructions and models sheet\./);
+  await assert.rejects(parse(book), /Row 2: Commercial model: unknown model; use one of the models in the Instructions and models sheet or leave the cell empty\./);
   cell(book, 'Commercial model', 'Cost + margin'); cell(book, 'Percentage', '');
   const [offer] = await parse(book);
   assert.equal(m.displayOfferValue('pct', offer.form), '3 % (default)');

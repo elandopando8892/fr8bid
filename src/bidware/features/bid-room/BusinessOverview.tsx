@@ -4,6 +4,7 @@ import { ErrorBanner, Pill, dateShort } from "@/components/ui";
 import { useLang } from "@/i18n/language";
 import { o } from "@/i18n/bid-room-overview";
 import {
+  acceptedModelKeys,
   COMMERCIAL_MODELS,
   modelCopy,
   modelKeyOf,
@@ -72,9 +73,10 @@ export function BusinessOverview({
     { done: 0, total: 0 },
   );
   const visibility = modeCopy(mode);
-  // Solo los modelos de sus rutas (decisión de Jose, 6-nov); sin modelo guardado, los que el panel le deja elegir.
+  // Solo los modelos de sus rutas (decisión de Jose, 6-nov); sin modelo guardado, los que sus eventos aceptan.
   const ownModels = new Set(lanes.filter((l) => l.commercial_model).map((l) => modelKeyOf(l.commercial_model)));
-  const models = ownModels.size ? COMMERCIAL_MODELS.filter((m) => ownModels.has(m.key)) : COMMERCIAL_MODELS;
+  const acceptedModels = new Set(lanes.flatMap(acceptedModelKeys));
+  const models = COMMERCIAL_MODELS.filter((m) => (ownModels.size ? ownModels.has(m.key) : !lanes.length || acceptedModels.has(m.key)));
 
   async function askAccess(laneId: string) {
     setError(null);

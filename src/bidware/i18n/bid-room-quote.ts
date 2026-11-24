@@ -130,6 +130,11 @@ export const quoteCopy = {
     en: "Enter your sell rate to XBF. The other models do not apply at this stage.",
   },
   "form.model": { es: "Modelo comercial", en: "Commercial model" },
+  "form.modelOptional": { es: "Modelo comercial (opcional)", en: "Commercial model (optional)" },
+  "form.modelNoneHint": {
+    es: "Si no eliges, MARKSMAN define el modelo comercial antes de adjudicar.",
+    en: "If you don't choose, MARKSMAN sets the commercial model before awarding.",
+  },
   "form.blankPlaceholder": { es: "vacío = {0}", en: "blank = {0}" },
   "form.extrasSummary": { es: "Sumar puntos a tu oferta", en: "Add points to your offer" },
   "form.extrasCount": { es: "{0} de {1}", en: "{0} of {1}" },
@@ -188,6 +193,7 @@ export const quoteCopy = {
   "form.sent": { es: "Oferta enviada · {0}.", en: "Offer sent · {0}." },
 
   // Modelos comerciales
+  "model.none.label": { es: "Sin elegir", en: "Not chosen" },
   "model.direct_cost_plus.label": { es: "Costo + margen", en: "Cost + margin" },
   "model.direct_cost_plus.pct": { es: "Margen sugerido", en: "Suggested margin" },
   "model.direct_cost_plus.enter": { es: "Capturas tu costo directo como carrier.", en: "You enter your direct cost as a carrier." },
@@ -226,6 +232,7 @@ export const quoteCopy = {
   "problem.altUnits": { es: "Las unidades alternas", en: "Alternative units" },
   "problem.number": { es: "{0} debe ser un número.", en: "{0} must be a number." },
   "problem.pct": { es: "El porcentaje va de {0} a {1} %.", en: "The percentage must be between {0} and {1} %." },
+  "problem.pctNoModel": { es: "Elige un modelo comercial para indicar un porcentaje.", en: "Choose a commercial model to enter a percentage." },
   "warn.capacity": { es: "Indica la capacidad semanal que puedes comprometer.", en: "Enter the weekly capacity you can commit." },
   "warn.transit": { es: "Indica los días de tránsito para comparar el servicio.", en: "Enter the transit days so service can be compared." },
   "warn.valid": { es: "Indica la fecha de vigencia de tu oferta.", en: "Enter the date your offer is valid through." },
@@ -255,6 +262,10 @@ export const quoteCopy = {
   "error.locked": {
     es: "Este evento solo admite XBF compra-venta; el margen es interno.",
     en: "This event only accepts XBF buy-sell; the margin is internal.",
+  },
+  "error.modelNotAccepted": {
+    es: "Este evento no acepta ese modelo comercial. Acepta: {0}.",
+    en: "This event does not accept that commercial model. It accepts: {0}.",
   },
 
   // Términos del segmento

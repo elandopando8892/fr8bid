@@ -10,10 +10,14 @@ import type { Celda, Hoja } from "./xlsx.js";
 
 const letra = (i: number) => (i < 26 ? String.fromCharCode(65 + i) : `${String.fromCharCode(65 + Math.floor(i / 26) - 1)}${String.fromCharCode(65 + (i % 26))}`);
 
+// Una oferta «sin elegir» no tiene tarifa de venta todavía: va al final.
 function ordenadas(ruta: Ruta, porVenta: boolean): Participacion[] {
-  const clave = (p: Participacion) => (porVenta ? tarifaVenta(versionVigente(p)!).venta : versionVigente(p)!.tarifaAllIn);
-  return [...conOferta(ruta)].sort((a, b) => clave(a) - clave(b));
+  const clave = (p: Participacion) => (porVenta ? tarifaVenta(versionVigente(p)!)?.venta ?? Number.POSITIVE_INFINITY : versionVigente(p)!.tarifaAllIn);
+  return [...conOferta(ruta)].sort((a, b) => clave(a) - clave(b) || versionVigente(a)!.tarifaAllIn - versionVigente(b)!.tarifaAllIn);
 }
+
+// El shipper nunca ve el costo del carrier: sin modelo no hay venta que mostrar.
+const POR_DEFINIR = "Por definir (falta el modelo comercial)";
 
 function cumplimiento(ruta: Ruta, p: Participacion): string {
   if (ruta.condiciones.length) {
@@ -38,7 +42,7 @@ export function hojaComparativo(d: Detalle, anonimo: boolean): Hoja {
       const v = versionVigente(p)!;
       const venta = tarifaVenta(v);
       if (anonimo) {
-        filas.push([...base, `Opción ${letra(i)}`, venta.venta, v.moneda, modeloConFamilia(String(v.modeloComercial)), v.capacidadSemanal, v.transitoDias, v.vigenteHasta, cumplimiento(ruta, p)]);
+        filas.push([...base, `Opción ${letra(i)}`, venta ? venta.venta : POR_DEFINIR, v.moneda, modeloConFamilia(v.modeloComercial), v.capacidadSemanal, v.transitoDias, v.vigenteHasta, cumplimiento(ruta, p)]);
         return;
       }
       filas.push([
@@ -48,10 +52,10 @@ export function hojaComparativo(d: Detalle, anonimo: boolean): Hoja {
         p.carrier,
         v.tarifaAllIn,
         v.moneda,
-        modeloConFamilia(String(v.modeloComercial)),
-        porcentajeModelo(v).valor ?? `${venta.pct} (por defecto)`,
-        venta.venta,
-        venta.ingreso,
+        `${modeloConFamilia(v.modeloComercial)}${v.modeloDelEvento ? " (modelo del evento)" : ""}`,
+        venta ? porcentajeModelo(v).valor ?? `${venta.pct} (por defecto)` : null,
+        venta ? venta.venta : POR_DEFINIR,
+        venta ? venta.ingreso : null,
         v.capacidadSemanal,
         v.transitoDias,
         v.vigenteHasta,

@@ -12,7 +12,18 @@
 // vacío) y sell_share conserva el all-in, porque el share se le cobra al carrier
 // después del pago del cliente.
 
-import type { OfertaVersion } from "./tipos.js";
+//
+// El modelo es opcional para el carrier y el evento dice cuáles acepta (decisión
+// de Jose, 23 y 24-nov-2026). Una oferta sin modelo cuenta con el del evento
+// cuando el evento acepta uno solo; si acepta varios queda «sin elegir», sin
+// tarifa de venta, hasta que el equipo lo define. Las reglas son las del
+// servidor (./modelosAceptados.ts, el mismo módulo de Rateware con tipos).
+
+import { acceptedCommercialModels, COMMERCIAL_MODEL_KEYS, effectiveCommercialModel, lockedBrokerage } from "./modelosAceptados.js";
+import type { ModeloComercial, OfertaVersion } from "./tipos.js";
+
+// En el orden en que Rateware los guarda.
+export const MODELOS: readonly ModeloComercial[] = COMMERCIAL_MODEL_KEYS;
 
 const NOMBRE: Record<string, string> = {
   cost_plus: "Cost plus",
@@ -21,9 +32,39 @@ const NOMBRE: Record<string, string> = {
   brokerage: "Brokerage (buy/sell)"
 };
 
-type Comercial = Pick<OfertaVersion, "modeloComercial" | "carrierSharePct" | "margenPct">;
+export const SIN_ELEGIR = "Sin elegir";
 
-export function nombreModelo(modelo: string): string {
+type Comercial = Pick<OfertaVersion, "modeloComercial" | "carrierSharePct" | "margenPct"> & Pick<Partial<OfertaVersion>, "modeloDelEvento">;
+
+// Modelos que el evento acepta de sus carriers, a partir de su paquete maestro.
+// null: los acepta todos.
+export function modelosAceptados(paqueteMaestro: unknown): ModeloComercial[] | null {
+  return acceptedCommercialModels(paqueteMaestro);
+}
+
+// La política bloqueada (solo XBF compra-venta) se pone en Rateware y no se edita aquí.
+export function modelosBloqueados(paqueteMaestro: unknown): boolean {
+  return lockedBrokerage(paqueteMaestro);
+}
+
+// El modelo con el que cuenta una oferta: el suyo o el único que acepta el evento.
+export function modeloEfectivo(guardado: unknown, aceptados: readonly ModeloComercial[] | null | undefined): ModeloComercial | null {
+  return effectiveCommercialModel(guardado, aceptados ?? null);
+}
+
+export function aceptaModelo(aceptados: readonly string[] | null | undefined, modelo: string | null): boolean {
+  return !modelo || !aceptados || aceptados.includes(modelo);
+}
+
+// «Brokerage (buy/sell) y Cost plus», o «todos» cuando no hay ajuste.
+export function textoModelosAceptados(aceptados: readonly string[] | null | undefined): string {
+  if (!aceptados || !aceptados.length) return "todos";
+  const nombres = aceptados.map(nombreModelo);
+  return nombres.length === 1 ? nombres[0] : `${nombres.slice(0, -1).join(", ")} y ${nombres.at(-1)}`;
+}
+
+export function nombreModelo(modelo: string | null | undefined): string {
+  if (!modelo) return SIN_ELEGIR;
   return NOMBRE[modelo] ?? modelo;
 }
 
@@ -33,11 +74,13 @@ export function familiaModelo(modelo: string): "Brokerage" | "Managed Transporta
   return modelo === "brokerage" ? "Brokerage" : "Managed Transportation";
 }
 
-export function modeloConFamilia(modelo: string): string {
+export function modeloConFamilia(modelo: string | null | undefined): string {
+  if (!modelo) return SIN_ELEGIR;
   return modelo === "brokerage" ? "Brokerage (compra-venta)" : `Managed Transportation · ${nombreModelo(modelo)}`;
 }
 
 export function porcentajeModelo(v: Comercial): { etiqueta: string; valor: number | null } {
+  if (!v.modeloComercial) return { etiqueta: "porcentaje", valor: null };
   if (v.modeloComercial === "sell_share") return { etiqueta: "share del carrier", valor: v.carrierSharePct };
   if (v.modeloComercial === "brokerage") return { etiqueta: "markup", valor: v.margenPct };
   return { etiqueta: "margen Marksman", valor: v.margenPct };
@@ -46,8 +89,9 @@ export function porcentajeModelo(v: Comercial): { etiqueta: string; valor: numbe
 const pct = (n: number | null) => (n === null ? "sin indicar" : `${n.toLocaleString("es-MX", { maximumFractionDigits: 2 })} %`);
 
 export function describirModelo(v: Comercial): string {
+  if (!v.modeloComercial) return "Modelo comercial sin elegir";
   const p = porcentajeModelo(v);
-  return `${modeloConFamilia(String(v.modeloComercial))} · ${p.etiqueta} ${pct(p.valor)}`;
+  return `${modeloConFamilia(v.modeloComercial)} · ${p.etiqueta} ${pct(p.valor)}${v.modeloDelEvento ? " · modelo del evento" : ""}`;
 }
 
 // Qué cambió entre dos versiones, en palabras: all-in, modelo y porcentaje.
@@ -56,7 +100,7 @@ export function cambiosComerciales(antes: OfertaVersion, despues: OfertaVersion)
   if (antes.tarifaAllIn !== despues.tarifaAllIn || antes.moneda !== despues.moneda)
     cambios.push(`all-in ${antes.tarifaAllIn.toLocaleString("es-MX")} ${antes.moneda} → ${despues.tarifaAllIn.toLocaleString("es-MX")} ${despues.moneda}`);
   if (antes.modeloComercial !== despues.modeloComercial)
-    cambios.push(`modelo ${nombreModelo(String(antes.modeloComercial))} → ${nombreModelo(String(despues.modeloComercial))}`);
+    cambios.push(`modelo ${nombreModelo(antes.modeloComercial)} → ${nombreModelo(despues.modeloComercial)}`);
   const a = porcentajeModelo(antes);
   const d = porcentajeModelo(despues);
   if (a.valor !== d.valor || a.etiqueta !== d.etiqueta) cambios.push(`${d.etiqueta} ${pct(a.etiqueta === d.etiqueta ? a.valor : null)} → ${pct(d.valor)}`);
@@ -69,7 +113,10 @@ export type Venta = { venta: number; ingreso: number; pct: number; porDefecto: b
 
 const centavos = (n: number) => Math.round(n * 100) / 100;
 
-export function tarifaVenta(v: Comercial & Pick<OfertaVersion, "tarifaAllIn">): Venta {
+// null: la oferta no tiene modelo («sin elegir») y su venta no se puede calcular
+// todavía; nunca se inventa con un modelo por defecto.
+export function tarifaVenta(v: Comercial & Pick<OfertaVersion, "tarifaAllIn">): Venta | null {
+  if (!v.modeloComercial) return null;
   const modelo = String(v.modeloComercial);
   const declarado = porcentajeModelo(v).valor;
   const pct = declarado ?? POR_DEFECTO[modelo] ?? POR_DEFECTO.cost_plus;
@@ -80,6 +127,7 @@ export function tarifaVenta(v: Comercial & Pick<OfertaVersion, "tarifaAllIn">): 
 
 // Versión corta para la tabla: «Fee plus · 3 %»; la larga va en el title.
 export function modeloCorto(v: Comercial): string {
+  if (!v.modeloComercial) return SIN_ELEGIR;
   const p = porcentajeModelo(v);
-  return `${nombreModelo(String(v.modeloComercial))} · ${pct(p.valor)}`;
+  return `${nombreModelo(v.modeloComercial)} · ${pct(p.valor)}`;
 }

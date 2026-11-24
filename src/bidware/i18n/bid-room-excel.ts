@@ -82,6 +82,10 @@ export const excelCopy = {
     es: "XBF compra-venta es fijo. Captura tu tarifa de venta a XBF; no captures porcentajes.",
     en: "XBF buy-sell is fixed. Enter your sell rate to XBF; do not enter percentages.",
   },
+  "help.model": {
+    es: "Modelo comercial: opcional. Celda vacía = MARKSMAN lo define antes de adjudicar. Si lo indicas, usa uno de la tabla de abajo.",
+    en: "Commercial model: optional. Empty cell = MARKSMAN sets it before awarding. If you enter one, use a model from the table below.",
+  },
   "help.pct": {
     es: "Porcentaje vacío: se aplica el predeterminado del modelo. No escribas 0.03 para 3 %; escribe 3.",
     en: "Blank percentage: the model's default applies. Do not write 0.03 for 3 %; write 3.",
@@ -132,8 +136,12 @@ export const excelCopy = {
   "err.date": { es: "{0}: fecha inválida.", en: "{0}: invalid date." },
   // {0} es el nombre de la columna tal como viene en el archivo; {1}, el de su hoja de instrucciones.
   "err.model": {
-    es: "{0} desconocido; usa uno de los tres modelos de la hoja {1}.",
-    en: "{0}: unknown model; use one of the three models in the {1} sheet.",
+    es: "{0} desconocido; usa uno de los modelos de la hoja {1} o deja la celda vacía.",
+    en: "{0}: unknown model; use one of the models in the {1} sheet or leave the cell empty.",
+  },
+  "err.modelNotAccepted": {
+    es: "{0}: este evento no acepta ese modelo. Acepta: {1}.",
+    en: "{0}: this event does not accept that model. It accepts: {1}.",
   },
   "err.currency": {
     es: "{0}: usa tres letras, por ejemplo USD o MXN.",

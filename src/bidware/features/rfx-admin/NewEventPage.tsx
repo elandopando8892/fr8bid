@@ -15,6 +15,8 @@ import { SEGMENTS } from "@/features/shipper-request/rubric";
 import { getShipper } from "@/features/shippers/shippers.service";
 import type { ShipperOption } from "@/features/quotedesk/quotedesk.service";
 import type { RfxEvent } from "@/types/domain";
+import { MODELOS, modelosAceptados, modelosBloqueados, nombreModelo, textoModelosAceptados } from "../../../dominio/modelo";
+import type { ModeloComercial } from "../../../dominio/tipos";
 import {
   createEvent,
   EVENT_TYPES,
@@ -110,6 +112,8 @@ export function NewEventPage() {
   const [rfxId, setRfxId] = useState("");
   const [segment, setSegment] = useState("crossborder");
   const [visibility, setVisibility] = useState<string>("anonymous_rank");
+  // Los modelos comerciales que el evento acepta de sus carriers; todos por omisión.
+  const [modelos, setModelos] = useState<ModeloComercial[]>([...MODELOS]);
   // Paso 2
   const [rubrics, setRubrics] = useState<LaneRubrics>({});
   const [hydrated, setHydrated] = useState(!id);
@@ -154,6 +158,7 @@ export function NewEventPage() {
     setStartDate(text(loaded.operation_start_date).slice(0, 10));
     setVisibility(text(loaded.bid_visibility_mode) || "anonymous_rank");
     setRfxId(text(loaded.rfx_id));
+    setModelos([...(modelosAceptados(loaded) ?? MODELOS)]);
     setSegment(settings.segment ?? mostCommon(rows.map((lane) => lane.rfx_segment_key)) ?? "crossborder");
     setCurrency(settings.currency ?? mostCommon(rows.map((lane) => lane.currency)) ?? "USD");
     setRubrics(
@@ -171,9 +176,14 @@ export function NewEventPage() {
   }, [id, hydrated, detail.data]);
 
   const nombreFinal = (nombreManual && name.trim()) || nombrePropuesto(shipperName, draftLanes.length);
-  const missingDetails = [!shipper && tr("text393"), !dueDate && tr("text489")].filter(
+  const missingDetails = [!shipper && tr("text393"), !dueDate && tr("text489"), !modelos.length && tr("text796")].filter(
     Boolean,
   ) as string[];
+  // En el orden de Rateware; los cuatro (o ninguno guardado) es «todos» y se guarda como null.
+  const modelosElegidos = MODELOS.filter((m) => modelos.includes(m));
+  const modelosDelEvento = modelosElegidos.length === MODELOS.length ? null : modelosElegidos;
+  // La política «solo compra-venta» se pone en Rateware y no se edita aquí.
+  const modelosFijos = modelosBloqueados(event);
 
   /** Creates the draft, or saves what changed; the cédula goes on every lane already loaded. */
   async function saveDetails(): Promise<string | null> {
@@ -197,7 +207,11 @@ export function NewEventPage() {
       };
       let draftId = id ?? null;
       if (!draftId) {
-        const row = await createEvent({ ...fields, customer: fields.customer ?? undefined });
+        const row = await createEvent({
+          ...fields,
+          customer: fields.customer ?? undefined,
+          ...(modelosDelEvento ? { accepted_commercial_models: modelosDelEvento } : {}),
+        });
         draftId = row.id;
       } else if (event) {
         const patch: Partial<DraftFields> = {};
@@ -212,6 +226,9 @@ export function NewEventPage() {
         if ((fields.due_date ?? "") !== text(event.due_date).slice(0, 10)) patch.due_date = fields.due_date;
         if ((fields.operation_start_date ?? "") !== text(event.operation_start_date).slice(0, 10)) {
           patch.operation_start_date = fields.operation_start_date;
+        }
+        if (!modelosFijos && JSON.stringify(modelosDelEvento) !== JSON.stringify(modelosAceptados(event))) {
+          patch.accepted_commercial_models = modelosDelEvento;
         }
         if (Object.keys(patch).length) await updateDraft(draftId, patch);
         const stale = draftLanes.filter((lane) => Object.keys(rubricPatch(lane, rubrics)).length);
@@ -460,7 +477,7 @@ export function NewEventPage() {
                 <button type="button" className="nev-opciones" onClick={() => setMasOpciones(true)}>
                   <I.Lapiz size={15} />
                   <span>
-                    {[VISIBILITY_MODES.find((m) => m.key === visibility)?.label, SEGMENTS.find((x) => x.value === segment)?.[getLang()], currency, rfxId || null].filter(Boolean).join(" · ")}
+                    {[VISIBILITY_MODES.find((m) => m.key === visibility)?.label, SEGMENTS.find((x) => x.value === segment)?.[getLang()], currency, rfxId || null, modelosDelEvento ? tr("text797", textoModelosAceptados(modelosDelEvento)) : null].filter(Boolean).join(" · ")}
                   </span>
                   <em>Cambiar</em>
                 </button>
@@ -503,6 +520,27 @@ export function NewEventPage() {
                   <span>RFx ID</span>
                   <input className="mono" value={rfxId} onChange={(e) => setRfxId(e.target.value)} placeholder={tr("text409")} />
                 </label>
+              </div>
+              <div className="nev-field">
+                <span>{tr("text794")}</span>
+                <div className="nev-types" role="group" aria-label={tr("text794")}>
+                  {MODELOS.map((m) => {
+                    const on = modelos.includes(m);
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        className={on ? "on" : ""}
+                        aria-pressed={on}
+                        disabled={modelosFijos}
+                        onClick={() => setModelos((x) => (on ? x.filter((y) => y !== m) : [...x, m]))}
+                      >
+                        {nombreModelo(m)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <small className="tenue">{modelosFijos ? tr("text798") : tr("text795")}</small>
               </div>
                 </>
               )}

@@ -2,6 +2,7 @@
 // el siguiente paso con su responsable. La Mesa del evento solo pinta lo que
 // esta función decide; las pruebas del §9 se escriben contra ella.
 
+import { nombreModelo } from "./modelo.js";
 import { audienciaInvitacion } from "./revision.js";
 import type { Aviso, Detalle, EntregaLocal, OfertaVersion, Participacion, Rol, Ruta } from "./tipos.js";
 
@@ -142,6 +143,19 @@ export function candadosAdjudicacion(
   const candados: Candado[] = [
     { regla: "I3", ok: cerrado, texto: cerrado ? "Evento cerrado a ofertas" : "El evento debe estar cerrado a ofertas" },
     { regla: "I3", ok: Boolean(v), texto: v ? `Versión vigente v${v.numero}` : "Sin oferta vigente" },
+    // El modelo es opcional para el carrier (23-nov-2026): sin modelo propio y
+    // sin un modelo único del evento, el equipo lo define antes de adjudicar.
+    ...(v
+      ? [
+          {
+            regla: "I3",
+            ok: Boolean(v.modeloComercial),
+            texto: v.modeloComercial
+              ? `Modelo comercial: ${nombreModelo(v.modeloComercial)}${v.modeloDelEvento ? " (el del evento)" : ""}`
+              : "Sin modelo comercial: defínelo antes de adjudicar"
+          }
+        ]
+      : []),
     {
       regla: "I3",
       ok: negativas.length === 0,

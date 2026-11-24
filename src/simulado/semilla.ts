@@ -137,7 +137,8 @@ export async function sembrarDemoAmplia() {
     const v = k % 6;
     if (v >= 4) continue;
     await liga(f.id)({ action: "get_invitation" });
-    await liga(f.id)({ action: "submit_bid", bid_rate: Math.round((rutasAcero[f.lane][4] * ajuste[v]) / 5) * 5, currency: "USD", commercial_model: v % 2 ? "cost_plus" : "fee_plus", weekly_capacity: 2 + v, transit_days: 1 + f.lane, valid_through: "2026-12-31" });
+    // El cuarto carrier no elige modelo comercial: su oferta entra «sin elegir».
+    await liga(f.id)({ action: "submit_bid", bid_rate: Math.round((rutasAcero[f.lane][4] * ajuste[v]) / 5) * 5, currency: "USD", ...(v === 3 ? {} : { commercial_model: v % 2 ? "cost_plus" : "fee_plus" }), weekly_capacity: 2 + v, transit_days: 1 + f.lane, valid_through: "2026-12-31" });
   }
   return demo;
 }
