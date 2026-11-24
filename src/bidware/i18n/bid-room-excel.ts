@@ -162,8 +162,8 @@ export const excelCopy = {
     en: "Write Yes in {0} for at least one offer.",
   },
   "err.changed": {
-    es: "Ruta {0}: cambió la oferta o su acceso. Recarga y descarga una nueva plantilla.",
-    en: "Lane {0}: the offer or its access changed. Reload and download a new template.",
+    es: "Ruta {0}: cambió la oferta, su acceso o los modelos del evento. Recarga y descarga una nueva plantilla.",
+    en: "Lane {0}: the offer, its access or the event's models changed. Reload and download a new template.",
   },
 } as const;
 

@@ -19,6 +19,7 @@ import {
   modelCopy,
   modelSpec,
   offerForm,
+  offerDraft,
   offerPayload,
   offerProblems,
   offerGaps,
@@ -107,7 +108,8 @@ export function QuotePanel({
 
   /** The score factors as the form stands now, before sending. */
   const scored = useMemo(() => {
-    const draft = offerPayload(form, lane) as unknown as BookLane;
+    // Right after the lane changes, this render still holds the previous lane's form: read it without judging it.
+    const draft = offerDraft(form, lane) as unknown as BookLane;
     return SCORE_FACTORS.filter((f) => f.done(draft)).length;
   }, [form, lane]);
 

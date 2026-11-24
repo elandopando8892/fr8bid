@@ -6,7 +6,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { MesaApi, transporteSimulado } from "../src/cliente/api";
 import { hojaComparativo } from "../src/dominio/exportar";
-import { describirModelo, eleccionModeloCarrier, modeloCorto, tarifaVenta, textoModelosAceptados } from "../src/dominio/modelo";
+import { cambiosComerciales, describirModelo, eleccionModeloCarrier, modeloCorto, modeloDeCaptura, tarifaVenta, textoModelosAceptados } from "../src/dominio/modelo";
 import { operacionAdjudicacion } from "../src/dominio/operacion";
 import { candadosAdjudicacion, propuestaPrimarios, puedeAdjudicar, versionVigente, type Contexto } from "../src/dominio/recorrido";
 import { fueraDeAceptados, modelosMixtos, sinModelo } from "../src/dominio/resumenOfertas";
@@ -336,5 +336,50 @@ describe("captura del equipo", () => {
     await preparar(["fee_plus"]);
     await captura(A);
     expect(cruda(A).commercial_model).toBe("fee_plus");
+  });
+
+  // Segunda pasada de la revisión escéptica (24-nov).
+  it("evento de un solo modelo y oferta con otro: la captura guarda el modelo que el formulario muestra, y lo avisa", async () => {
+    await preparar();
+    await oferta(A, { commercial_model: "sell_share", carrier_share_pct: 4 });
+    await operador.fijarModelosAceptados(eventId, ["brokerage"]);
+    const captura = (modelo: ModeloComercial | null) =>
+      operador.capturarOferta({ eventId, participacionId: A, tarifa: 1650, moneda: "USD", vigencia: "2026-11-30", capacidadSemanal: null, diasTransito: null, canal: "email", notas: "", modelo, pct: null });
+    // Sin nombrar modelo, Rateware conserva el anterior: por eso la captura no puede callarlo.
+    await captura(null);
+    expect(cruda(A).commercial_model).toBe("sell_share");
+    const v = await vigente(A);
+    const decision = modeloDeCaptura((await admin.detalle(eventId)).modelosAceptados, "", false, v.modeloDelEvento ? null : v.modeloComercial);
+    expect(decision).toEqual({ modelo: "brokerage", reemplaza: "sell_share" });
+    await captura(decision.modelo);
+    expect(cruda(A)).toMatchObject({ commercial_model: "brokerage", carrier_share_pct: null });
+    // Ya con el modelo del evento no hay nada que reemplazar ni que enviar.
+    const despues = await vigente(A);
+    expect(modeloDeCaptura(["brokerage"], "", false, despues.modeloDelEvento ? null : despues.modeloComercial)).toEqual({ modelo: null, reemplaza: null });
+  });
+
+  it("la captura solo nombra un modelo cuando el equipo lo indicó o hay algo que reemplazar", () => {
+    expect(modeloDeCaptura(null, "", false, "sell_share")).toEqual({ modelo: null, reemplaza: null });
+    expect(modeloDeCaptura(["brokerage", "cost_plus"], "cost_plus", false, "sell_share")).toEqual({ modelo: "cost_plus", reemplaza: null });
+    expect(modeloDeCaptura(["brokerage"], "", false, null)).toEqual({ modelo: null, reemplaza: null });
+    expect(modeloDeCaptura(["brokerage"], "", true, null)).toEqual({ modelo: "brokerage", reemplaza: null });
+    expect(modeloDeCaptura(["brokerage"], "", false, "brokerage")).toEqual({ modelo: null, reemplaza: null });
+  });
+});
+
+// Segunda pasada: cost plus y fee plus son el mismo modelo para el carrier («Costo + margen»).
+describe("cost plus y fee plus ante el carrier", () => {
+  it("una oferta fee plus en un evento que queda solo con cost plus se reenvía como cost plus, con su porcentaje, y el historial lo dice", async () => {
+    await preparar();
+    await oferta(A, { commercial_model: "fee_plus", marksman_margin_pct: 4 });
+    await operador.fijarModelosAceptados(eventId, ["cost_plus"]);
+    const antes = await vigente(A);
+    // El carrier reenvía «costo + margen», la única etiqueta que conoce para los dos.
+    await oferta(A, { bid_rate: 1580, commercial_model: "direct_cost_plus", marksman_margin_pct: 4 });
+    expect(cruda(A)).toMatchObject({ commercial_model: "cost_plus", marksman_margin_pct: 4 });
+    const ahora = await vigente(A);
+    expect(tarifaVenta(ahora)?.pct).toBe(4);
+    // Para el equipo el cambio no es silencioso: queda en el historial de versiones.
+    expect(cambiosComerciales(antes, ahora).join(" ")).toMatch(/modelo/i);
   });
 });

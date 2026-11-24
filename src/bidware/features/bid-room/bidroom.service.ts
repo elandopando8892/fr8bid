@@ -523,9 +523,17 @@ function validationStatus(current: unknown, mirror: boolean): string {
   return mirror ? "mirror_requested" : "not_requested";
 }
 
+/**
+ * The commercial policy an offer was prepared under: Rateware's accepted models
+ * (null = all) and the lock. Two lanes with the same key resolve an offer the same way.
+ */
+export function commercialPolicyKey(lane: BookLane): string {
+  return JSON.stringify({ locked: isLockedBrokerage(lane), accepted: acceptedCommercialModels(lane) });
+}
+
+/** The offer ready to send. Throws, in the carrier's words, when the event would not take its model. */
 export function offerPayload(form: OfferForm, lane: BookLane): BidInput {
-  const locked = isLockedBrokerage(lane);
-  if (locked && (form.commercial_model !== "xbf_buy_sell" || form.pct.trim())) {
+  if (isLockedBrokerage(lane) && (form.commercial_model !== "xbf_buy_sell" || form.pct.trim())) {
     throw new Error(q("error.locked"));
   }
   const chosen = form.commercial_model;
@@ -533,6 +541,17 @@ export function offerPayload(form: OfferForm, lane: BookLane): BidInput {
   if (chosen && !accepted.includes(chosen)) {
     throw new Error(q("error.modelNotAccepted", accepted.map((key) => modelCopy(key).label).join(", ")));
   }
+  return offerDraft(form, lane);
+}
+
+/**
+ * The offer as the form stands, without judging it. The panel reads it on every
+ * render to preview the score, and a render may still hold another lane's form,
+ * so it never throws; only offerPayload decides what may be sent.
+ */
+export function offerDraft(form: OfferForm, lane: BookLane): BidInput {
+  const locked = isLockedBrokerage(lane);
+  const chosen = form.commercial_model;
   const spec = chosen ? modelSpec(chosen) : null;
   const pct = parseAmount(form.pct);
   const num = (v: string) => parseAmount(v);

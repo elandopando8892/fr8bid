@@ -73,6 +73,25 @@ export function eleccionModeloCarrier(
   };
 }
 
+// Captura del equipo: qué modelo viaja con la versión nueva. Solo el que el
+// equipo indicó (o al que le escribió porcentaje): sin indicar, Rateware deja
+// la oferta con el suyo, le pone el único del evento o la deja «sin elegir».
+// La excepción es el evento de un solo modelo con una oferta que tiene otro:
+// el formulario muestra el del evento, así que viaja ese y `reemplaza` nombra
+// el que se va, para avisarlo antes de guardar.
+export function modeloDeCaptura(
+  aceptados: readonly ModeloComercial[] | null | undefined,
+  indicado: ModeloComercial | "",
+  conPorcentaje: boolean,
+  propio: string | null
+): { modelo: ModeloComercial | null; reemplaza: string | null } {
+  const modelos = aceptados && aceptados.length ? aceptados : MODELOS;
+  if (modelos.length > 1) return { modelo: indicado || null, reemplaza: null };
+  const unico = modelos[0];
+  const reemplaza = propio && propio !== unico ? propio : null;
+  return { modelo: conPorcentaje || reemplaza ? unico : null, reemplaza };
+}
+
 export function aceptaModelo(aceptados: readonly string[] | null | undefined, modelo: string | null): boolean {
   return !modelo || !aceptados || aceptados.includes(modelo);
 }

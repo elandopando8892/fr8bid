@@ -1,6 +1,6 @@
 import type { WorkBook } from "xlsx";
 import {
-  acceptedModelKeys, billingNotice, canQuote, COMMERCIAL_MODELS, isLockedBrokerage, modelCopy, modelSpec, offerForm, offerPayload, offerProblems,
+  acceptedModelKeys, billingNotice, canQuote, COMMERCIAL_MODELS, commercialPolicyKey, isLockedBrokerage, modelCopy, modelSpec, offerForm, offerPayload, offerProblems,
   offerWarnings, type BookLane, type ModelChoice, type OfferForm,
 } from "./bidroom.service";
 import { getLang, type Lang } from "../../i18n/language";
@@ -240,7 +240,9 @@ export async function parseBidTemplate(data: ArrayBuffer, lanes: BookLane[]): Pr
 export function currentOfferForSend(offer: ImportedOffer, lanes: BookLane[]): BookLane {
   const lane = lanes.find(l => l.rfx_lane_id === offer.lane.rfx_lane_id &&
     l.invitation_id === offer.lane.invitation_id && l.rfx_event_id === offer.lane.rfx_event_id);
-  if (!lane || !canQuote(lane) || offerBaseline(lane) !== offer.baseline) {
+  // The plan was reviewed under the event's commercial policy of that moment: if the
+  // event now accepts other models, the same offer could be stored with another one.
+  if (!lane || !canQuote(lane) || offerBaseline(lane) !== offer.baseline || commercialPolicyKey(lane) !== commercialPolicyKey(offer.lane)) {
     throw new Error(xls("err.changed", offer.lane.lane_number ?? offer.row));
   }
   return lane;

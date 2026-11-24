@@ -100,7 +100,7 @@ async function run(browser, scenario, mobile = false) {
         await region.getByRole('button', { name: 'Recargar y comprobar ofertas' }).waitFor();
         await page.waitForLoadState('networkidle');
         assert.equal(await review.getByRole('button', { name: /Confirmar y enviar/ }).count(), 0);
-        if (['stale', 'closed'].includes(scenario)) { assert.equal(writes().length, 0); await region.getByText(/cambió la oferta o su acceso/).waitFor(); }
+        if (['stale', 'closed'].includes(scenario)) { assert.equal(writes().length, 0); await region.getByText(/cambió la oferta, su acceso o los modelos del evento/).waitFor(); }
         else if (scenario === 'partial') { assert.equal(writes().length, 2); await region.getByText(/podría haberse guardado/).waitFor(); assert.equal(lanes[2].bid_rate, undefined); }
         else if (['malformed', 'wrong-invitation', 'wrong-lane'].includes(scenario)) { assert.equal(writes().length, 1); await region.getByText(/no confirmó la ruta esperada/).waitFor(); }
         else {

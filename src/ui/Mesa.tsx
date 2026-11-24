@@ -22,7 +22,7 @@ import {
 } from "../dominio/recorrido";
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
 import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
-import { cambiosComerciales, describirModelo, modeloCorto, MODELOS, nombreModelo, porcentajeModelo, tarifaVenta, textoModelosAceptados } from "../dominio/modelo";
+import { cambiosComerciales, describirModelo, modeloCorto, modeloDeCaptura, MODELOS, nombreModelo, porcentajeModelo, tarifaVenta, textoModelosAceptados } from "../dominio/modelo";
 import { bloqueoCerrarSinAdjudicar, bloqueoDesierta, bloqueoReabrirRuta, bloqueoReRevision, bloqueoRespondio, bloqueoRevision, candidatasCaptura, marcablesRespondio, rutasSinDecidir, sinActividad } from "../dominio/acciones-mesa";
 import { eventoSinAvisos } from "../dominio/protegidos.js";
 import { candidatosRecordatorio, claveIntento, esperaRespuesta, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
@@ -1453,9 +1453,12 @@ function CapturaEquipo({ d, ruta, accion }: { d: Detalle; ruta: Ruta; accion: Pr
   const num = (x: string) => (x.trim() === "" ? null : Number(x));
   const valido = f.id && tarifa > 0 && [f.capacidad, f.transito].every((x) => x.trim() === "" || Number.isFinite(Number(x))) && pct !== "mal";
   const elegida = candidatas.find((x) => x.id === f.id);
-  // El modelo viaja solo si el equipo lo indicó (o escribió su porcentaje): sin
-  // indicar, la oferta conserva el suyo, toma el único del evento o queda «sin elegir».
-  const conModelo = modelo && (modelos.length > 1 || pct !== null) ? modelo : null;
+  // El modelo propio de la oferta que ese carrier ya tiene; el que solo viene del evento no cuenta.
+  const vigente = elegida ? versionVigente(elegida) : null;
+  const propio = vigente && !vigente.modeloDelEvento ? vigente.modeloComercial : null;
+  // El modelo viaja solo si el equipo lo indicó (o escribió su porcentaje), o si el
+  // evento acepta uno solo y la oferta tenía otro: se guarda el que aquí se muestra.
+  const { modelo: conModelo, reemplaza } = modeloDeCaptura(d.modelosAceptados, f.modelo, pct !== null, propio);
   return (
     <div className="aviso-caja">
       <h3>Captura del equipo</h3>
@@ -1486,6 +1489,7 @@ function CapturaEquipo({ d, ruta, accion }: { d: Detalle; ruta: Ruta; accion: Pr
       </div>
       {pct === "mal" && <p className="error">El porcentaje va de 0 a 100.</p>}
       {modelos.length > 1 && !modelo && <p className="tenue ayuda">Sin indicar: la oferta conserva su modelo o queda «sin elegir» hasta que el equipo lo defina.</p>}
+      {reemplaza && <p className="tenue" role="note">La oferta de {elegida?.carrier} tenía «{nombreModelo(reemplaza)}», que el evento ya no acepta: esta versión queda con «{nombreModelo(conModelo)}».</p>}
       <label className="campo"><span>Nota</span><input value={f.notas} onChange={(e) => setF({ ...f, notas: e.target.value })} /></label>
       <div className="fila-botones">
         <Confirmar

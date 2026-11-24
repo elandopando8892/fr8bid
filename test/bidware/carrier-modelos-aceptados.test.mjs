@@ -188,3 +188,36 @@ test('sin modelo retirado no hay aviso: oferta nueva, modelo vigente, misma etiq
   const fijo = ruta({ status: 'open', rfx_master_package: { carrier_commercial_policy: { locked: true, model: 'brokerage' } } }, { commercial_model: 'sell_share', bid_rate: 1000 });
   assert.equal(m.droppedModelNotice(fijo), null);
 });
+
+// Segunda pasada de la revisión escéptica (24-nov).
+test('la vista previa del panel lee el formulario sin juzgarlo: nunca lanza, aunque traiga el modelo de otra ruta', () => {
+  const lane = ruta(acepta('brokerage', 'cost_plus'));
+  const ajeno = { ...m.offerForm(lane), bid_rate: '1200', commercial_model: 'carrier_share', pct: '4' };
+  assert.throws(() => m.offerPayload(ajeno, lane), /Este evento no acepta ese modelo comercial/);
+  assert.deepEqual([m.offerDraft(ajeno, lane).commercial_model, m.offerDraft(ajeno, lane).carrier_share_pct], ['carrier_share', 4]);
+  const fijo = ruta({ status: 'open', rfx_master_package: { carrier_commercial_policy: { locked: true, model: 'brokerage' } } });
+  assert.throws(() => m.offerPayload(ajeno, fijo));
+  assert.doesNotThrow(() => m.offerDraft(ajeno, fijo));
+  // Lo que sí se puede enviar sale igual por los dos caminos.
+  const propio = { ...m.offerForm(lane), bid_rate: '1200', commercial_model: 'xbf_buy_sell', pct: '10' };
+  assert.deepEqual(m.offerDraft(propio, lane), m.offerPayload(propio, lane));
+});
+
+test('Excel: un plan revisado bajo otros modelos del evento no se envía, aunque el formulario de la ruta no haya cambiado', async () => {
+  const lane = ruta(acepta('brokerage', 'cost_plus'));
+  const book = await m.buildBidTemplate([lane]);
+  cell(book, 'Enviar ruta', 'Sí'); cell(book, 'Tarifa carrier', 1200); cell(book, 'Modelo comercial', 'Costo + margen');
+  const [offer] = await m.parseBidTemplate(bytes(book), [lane]);
+  assert.equal(m.currentOfferForSend(offer, [lane]), lane);
+  // Misma ruta, mismo formulario inicial («sin elegir»), otra lista: «Costo + margen» ya sería fee plus.
+  const otra = ruta(acepta('brokerage', 'fee_plus'));
+  assert.equal(m.offerBaseline(otra), m.offerBaseline(lane));
+  assert.notEqual(m.commercialPolicyKey(otra), m.commercialPolicyKey(lane));
+  assert.throws(() => m.currentOfferForSend(offer, [otra]), /Ruta 1: cambió la oferta, su acceso o los modelos del evento/);
+  // El candado también cuenta como cambio de política.
+  const fijo = ruta({ status: 'open', rfx_master_package: { carrier_commercial_policy: { locked: true, model: 'brokerage', accepted_models: ['brokerage', 'cost_plus'] } } });
+  assert.notEqual(m.commercialPolicyKey(fijo), m.commercialPolicyKey(lane));
+  // La misma lista escrita en otro orden o con los cuatro modelos es la misma política.
+  assert.equal(m.commercialPolicyKey(ruta(acepta('cost_plus', 'brokerage'))), m.commercialPolicyKey(lane));
+  assert.equal(m.commercialPolicyKey(ruta(acepta('brokerage', 'cost_plus', 'sell_share', 'fee_plus'))), m.commercialPolicyKey(ruta()));
+});
