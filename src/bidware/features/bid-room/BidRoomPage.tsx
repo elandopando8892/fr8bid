@@ -15,7 +15,7 @@ import {
   type PrivateWorkspace,
 } from "./bidroom.service";
 import { QuoteLanes, wide } from "./QuoteLanes";
-import { BusinessOverview, MODE_COPY } from "./BusinessOverview";
+import { BusinessOverview, modeCopy } from "./BusinessOverview";
 import { BidRoomChat } from "./BidRoomChat";
 import { BidSupportAssistant } from "./BidSupportAssistant";
 import { MyRanking } from "./MyRanking";
@@ -24,6 +24,7 @@ import { Spinner, ErrorBanner, Empty, InfoBanner, Pill, dateShort } from "@/comp
 import { BotonAyudas } from "../../../ui/BotonAyudas";
 import { setLang, useLang, type Lang } from "@/i18n/language";
 import { q } from "@/i18n/bid-room-quote";
+import { o } from "@/i18n/bid-room-overview";
 
 /**
  * Carrier private Bid Room (wireframes 11, 24 and 27). The token is the
@@ -41,20 +42,11 @@ import { q } from "@/i18n/bid-room-quote";
 const PHASES: PrivateWorkspace[] = ["master", "bids", "award", "chat"];
 
 /** What the carrier never sees of the others, per the event's mode (wireframe 27). */
-const BAND: Record<string, { tag: string; text: string }> = {
-  anonymous_rank: {
-    tag: "LO QUE NUNCA VERÁS",
-    text: "Ni quién más cotizó ni sus tarifas. Solo tu lugar, tu score y tu distancia a la mejor oferta, en rango.",
-  },
-  private: {
-    tag: "EVENTO PRIVADO",
-    text: "Solo ves tu propia oferta. MARKSMAN ve todas, pero no se comparte ninguna posición.",
-  },
-  open_leaderboard: {
-    tag: "TABLERO ABIERTO",
-    text: "Ves la posición, el nombre y la oferta de los carriers de cada ruta, y ellos ven la tuya.",
-  },
-};
+const BANDS = ["anonymous_rank", "private", "open_leaderboard"] as const;
+function bandOf(mode: string): { tag: string; text: string } {
+  const key = BANDS.find((m) => m === mode) ?? "anonymous_rank";
+  return { tag: o(`band.${key}.tag`), text: o(`band.${key}.text`) };
+}
 
 /** "cierra en 8 días": days_remaining counts the deadline's own day, so today is 1. */
 function deadlineText(due: DueState): string {
@@ -167,7 +159,7 @@ function BidRoomContent({ token }: { token: string }) {
   const due = dueOf(lanes, event.due_date);
   const deadline = deadlineText(due);
   const picked = lanes.find((l) => l.rfx_lane_id === pickedId) ?? null;
-  const band = BAND[mode] ?? BAND.anonymous_rank;
+  const band = bandOf(mode);
   /** The link's own lane, for the assistant's "details of this route" prompt. */
   const linkLane = (invitation.rfx_lanes ?? {}) as Record<string, unknown>;
   const linkRoute =
@@ -192,7 +184,7 @@ function BidRoomContent({ token }: { token: string }) {
         {/* Una línea, sin chips (decisión de Jose, 6-nov). */}
         <div className="croom-meta">
           <span>
-            {[carrier, (MODE_COPY[mode] ?? MODE_COPY.anonymous_rank).label.toLowerCase(), event.rfx_id]
+            {[carrier, modeCopy(mode).label.toLowerCase(), event.rfx_id]
               .filter(Boolean)
               .join(" · ")}
             {" · "}

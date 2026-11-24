@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ErrorBanner, Pill, dateShort } from "@/components/ui";
+import { useLang } from "@/i18n/language";
+import { o } from "@/i18n/bid-room-overview";
 import {
   COMMERCIAL_MODELS,
+  modelCopy,
   modelKeyOf,
   isLockedBrokerage,
   explainBidError,
@@ -14,14 +17,12 @@ import {
   type BookLane,
 } from "./bidroom.service";
 
-export const MODE_COPY: Record<string, { label: string; text: string }> = {
-  private: { label: "Privado", text: "solo ves tu propia oferta; MARKSMAN compara todas." },
-  anonymous_rank: {
-    label: "Ranking anónimo",
-    text: "ves tu lugar, tu score y tu distancia a la mejor oferta; nunca quién cotizó ni a cuánto.",
-  },
-  open_leaderboard: { label: "Tablero abierto", text: "ves la posición y la oferta de todos los carriers de cada ruta." },
-};
+const MODES = ["private", "anonymous_rank", "open_leaderboard"] as const;
+/** The event's visibility mode in the carrier's language; an unknown mode reads as the anonymous ranking. */
+export function modeCopy(mode: string): { label: string; text: string } {
+  const key = MODES.find((m) => m === mode) ?? "anonymous_rank";
+  return { label: o(`mode.${key}.label`), text: o(`mode.${key}.text`) };
+}
 
 const route = (lane: BookLane) => `${String(lane.origin ?? "—")} → ${String(lane.destination ?? "—")}`;
 
@@ -57,6 +58,7 @@ export function BusinessOverview({
   mode: string;
   onQuote: () => void;
 }) {
+  useLang();
   const [requested, setRequested] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const lockedCommercialModel = lanes.length > 0 && lanes.every(isLockedBrokerage);
@@ -69,7 +71,7 @@ export function BusinessOverview({
     },
     { done: 0, total: 0 },
   );
-  const modeCopy = MODE_COPY[mode] ?? MODE_COPY.anonymous_rank;
+  const visibility = modeCopy(mode);
   // Solo los modelos de sus rutas (decisión de Jose, 6-nov); sin modelo guardado, los que el panel le deja elegir.
   const ownModels = new Set(lanes.filter((l) => l.commercial_model).map((l) => modelKeyOf(l.commercial_model)));
   const models = ownModels.size ? COMMERCIAL_MODELS.filter((m) => ownModels.has(m.key)) : COMMERCIAL_MODELS;
@@ -91,11 +93,11 @@ export function BusinessOverview({
 
         <section className="croom-card">
           <header className="croom-card-head">
-            <b className="grow">Tu invitación</b>
+            <b className="grow">{o("biz.invitation")}</b>
           </header>
           <dl className="croom-facts pad">
             <div>
-              <dt>Cierre</dt>
+              <dt>{o("biz.close")}</dt>
               <dd>
                 {event.due_date ? `${dateShort(event.due_date)} · ` : ""}
                 {deadline}
@@ -103,20 +105,18 @@ export function BusinessOverview({
             </div>
             {event.operation_start_date && (
               <div>
-                <dt>Arranque</dt>
-                <dd>{dateShort(event.operation_start_date)} · inicio estimado de la operación</dd>
+                <dt>{o("biz.start")}</dt>
+                <dd>{o("biz.startText", dateShort(event.operation_start_date))}</dd>
               </div>
             )}
             <div>
-              <dt>Rutas</dt>
-              <dd>
-                {lanes.length} en tu invitación · {segments.length} segmento{segments.length === 1 ? "" : "s"}
-              </dd>
+              <dt>{o("biz.lanes")}</dt>
+              <dd>{o("biz.lanesText", lanes.length, segments.length)}</dd>
             </div>
             <div>
-              <dt>Qué ves de los demás</dt>
+              <dt>{o("biz.visibility")}</dt>
               <dd>
-                <b>{modeCopy.label}:</b> {modeCopy.text}
+                <b>{visibility.label}:</b> {visibility.text}
               </dd>
             </div>
           </dl>
@@ -124,29 +124,30 @@ export function BusinessOverview({
 
         <section className="croom-card ayuda">
           <header className="croom-card-head">
-            <b className="grow">Cómo se cotiza</b>
+            <b className="grow">{o("biz.howTitle")}</b>
           </header>
           <ol className="croom-steps">
             <li>
-              <b>Cotiza cada ruta</b> con su tarifa all-in, en el orden que quieras. Cada ruta se guarda sola y la
-              puedes corregir mientras la ventana siga abierta; cotizar una no te compromete con las demás.
+              <b>{o("biz.step1Bold")}</b>
+              {o("biz.step1Text")}
             </li>
             <li>
-              <b>Confirma los términos</b> de cada segmento, debajo de tus rutas. Decir «con excepción» o «no puedo» no
-              te saca del bid: nos dice dónde negociar.
+              <b>{o("biz.step2Bold")}</b>
+              {o("biz.step2Text")}
             </li>
             <li>
-              <b>Sigue tu posición</b> en Mi ranking: se actualiza sola mientras otros cotizan.
+              <b>{o("biz.step3Bold")}</b>
+              {o("biz.step3Text")}
             </li>
           </ol>
         </section>
 
         {lockedCommercialModel ? <section className="croom-card">
-          <header className="croom-card-head"><b>XBF compra-venta · Modelo fijo</b></header>
-          <p className="pad">Cotiza tu tarifa de venta a XBF. Las demás modalidades no aplican en esta etapa.</p>
+          <header className="croom-card-head"><b>{o("biz.fixedTitle")}</b></header>
+          <p className="pad">{o("biz.fixedText")}</p>
         </section> : (        <section className="croom-card">
           <header className="croom-card-head">
-            <b className="grow">{models.length === 1 ? "Tu modelo comercial" : "Modelos comerciales"}</b>
+            <b className="grow">{models.length === 1 ? o("biz.modelOne") : o("biz.modelMany")}</b>
           </header>
           <div className="croom-table flat">
             <table className="data fixed">
@@ -157,25 +158,26 @@ export function BusinessOverview({
               </colgroup>
               <thead>
                 <tr>
-                  <th>Modelo</th>
-                  <th className="ayuda">Qué capturas y qué pasa</th>
-                  <th>Porcentaje</th>
+                  <th>{o("biz.colModel")}</th>
+                  <th className="ayuda">{o("biz.colWhat")}</th>
+                  <th>{o("biz.colPct")}</th>
                 </tr>
               </thead>
               <tbody>
-                {models.map((m) => (
-                  <tr key={m.key}>
-                    <td>
-                      <b>{m.label}</b>
-                    </td>
-                    <td className="croom-wrap ayuda">
-                      {m.enter} {m.effect}
-                    </td>
-                    <td className="mono">
-                      {m.min}–{m.max} % · vacío {m.blank} %
-                    </td>
-                  </tr>
-                ))}
+                {models.map((m) => {
+                  const text = modelCopy(m.key);
+                  return (
+                    <tr key={m.key}>
+                      <td>
+                        <b>{text.label}</b>
+                      </td>
+                      <td className="croom-wrap ayuda">
+                        {text.enter} {text.effect}
+                      </td>
+                      <td className="mono">{o("biz.pctRange", m.min, m.max, m.blank)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -184,7 +186,7 @@ export function BusinessOverview({
         {others.length > 0 && (
           <section className="croom-card">
             <header className="croom-card-head">
-              <b className="grow">Tus otras invitaciones abiertas</b>
+              <b className="grow">{o("biz.others")}</b>
               <Pill tone="blue">{others.length}</Pill>
             </header>
             <div className="croom-table flat">
@@ -200,15 +202,13 @@ export function BusinessOverview({
                     <tr key={String(other.id ?? rows[0]?.rfx_event_id)}>
                       <td className="ellipsis" title={String(other.name ?? "")}>
                         <span className="croom-num">{String(other.rfx_id ?? "")}</span>
-                        {String(other.name ?? "Evento")}
+                        {String(other.name ?? o("biz.event"))}
                       </td>
-                      <td className="mono">
-                        {rows.length} ruta{rows.length === 1 ? "" : "s"}
-                      </td>
+                      <td className="mono">{o("biz.laneCount", rows.length)}</td>
                       <td className="mono">{other.due_date ? dateShort(other.due_date) : "—"}</td>
                       <td style={{ textAlign: "right" }}>
                         <Link className="btn" to={`/bid/${encodeURIComponent(String(rows[0].invitation_token))}`}>
-                          Abrir
+                          {o("biz.open")}
                         </Link>
                       </td>
                     </tr>
@@ -222,17 +222,17 @@ export function BusinessOverview({
         {openLanes.length > 0 && (
           <section className="croom-card">
             <header className="croom-card-head">
-              <b className="grow">Rutas abiertas a las que no te invitaron</b>
+              <b className="grow">{o("biz.notInvited")}</b>
               <Pill>{openLanes.length}</Pill>
             </header>
-            <p className="croom-card-note">Si los cubres, pide acceso: el equipo revisa y te invita.</p>
+            <p className="croom-card-note">{o("biz.notInvitedNote")}</p>
             <div className="croom-table flat">
               <table className="data fixed">
                 <colgroup>
                   <col style={{ width: 110 }} />
                   <col />
                   <col style={{ width: 150 }} />
-                  <col style={{ width: 120 }} />
+                  <col style={{ width: 150 }} />
                 </colgroup>
                 <tbody>
                   {openLanes.slice(0, OPEN_LIMIT).map((lane) => {
@@ -246,10 +246,10 @@ export function BusinessOverview({
                         <td className="ellipsis croom-soft">{String(lane.equipment ?? "—")}</td>
                         <td style={{ textAlign: "right" }}>
                           {requested.has(id) ? (
-                            <Pill tone="green">SOLICITADO</Pill>
+                            <Pill tone="green">{o("biz.requested")}</Pill>
                           ) : (
                             <button type="button" onClick={() => askAccess(id)}>
-                              Pedir acceso
+                              {o("biz.askAccess")}
                             </button>
                           )}
                         </td>
@@ -261,7 +261,7 @@ export function BusinessOverview({
             </div>
             {openLanes.length > OPEN_LIMIT && (
               <p className="croom-card-note">
-                Y {openLanes.length - OPEN_LIMIT} más. Pregunta al equipo en Mensajes si buscas una ruta en particular.
+                {o("biz.more", openLanes.length - OPEN_LIMIT)}
               </p>
             )}
           </section>
@@ -269,13 +269,10 @@ export function BusinessOverview({
       </div>
 
       <aside className="croom-side">
-        <div className="croom-eyebrow">Tu avance</div>
+        <div className="croom-eyebrow">{o("biz.progress")}</div>
         <div className="croom-meter">
           <div>
-            <b>
-              {quoted} de {lanes.length}
-            </b>{" "}
-            rutas cotizadas
+            <b>{o("biz.count", quoted, lanes.length)}</b> {o("biz.lanesQuoted")}
           </div>
           <span>
             <i style={{ width: `${lanes.length ? (quoted / lanes.length) * 100 : 0}%` }} />
@@ -283,10 +280,7 @@ export function BusinessOverview({
         </div>
         <div className="croom-meter">
           <div>
-            <b>
-              {terms.done} de {terms.total}
-            </b>{" "}
-            rubros confirmados
+            <b>{o("biz.count", terms.done, terms.total)}</b> {o("biz.termsConfirmed")}
           </div>
           <span>
             <i style={{ width: `${terms.total ? (terms.done / terms.total) * 100 : 0}%` }} />
@@ -296,12 +290,12 @@ export function BusinessOverview({
           <b>{deadline.charAt(0).toUpperCase() + deadline.slice(1)}</b>
           <p>
             {event.due_date
-              ? `La ventana cierra el ${dateShort(event.due_date)} a las 23:59, hora del centro de México.`
-              : "Este evento no tiene fecha de cierre."}
+              ? o("biz.windowCloses", dateShort(event.due_date))
+              : o("biz.noDeadline")}
           </p>
         </div>
         <button type="button" className="primary" onClick={onQuote}>
-          Ir a cotizar
+          {o("biz.goQuote")}
         </button>
       </aside>
     </div>

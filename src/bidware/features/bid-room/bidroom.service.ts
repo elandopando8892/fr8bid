@@ -702,19 +702,21 @@ export async function getLaneBoard(laneToken: string) {
  * liveBoardRowScore), in the order of what each is worth. Confirming the
  * segment terms is NOT among them: the server keeps it as advisory context.
  */
-export const SCORE_FACTORS: { label: string; hint: string; done: (lane: BookLane) => boolean }[] = [
-  { label: "Capacidad semanal", hint: "cuántas cargas sostienes de verdad", done: (l) => l.weekly_capacity != null },
-  { label: "Equipo disponible", hint: "decir que no resta; no decirlo casi no suma", done: (l) => l.equipment_available === true },
-  { label: "Tránsito en días", hint: "menos días, más puntos", done: (l) => l.transit_days != null },
+export type ScoreFactorKey = "capacity" | "equipment" | "transit" | "mirror" | "deadhead" | "eta";
+export const SCORE_FACTORS: { key: ScoreFactorKey; label: string; hint: string; done: (lane: BookLane) => boolean }[] = [
+  { key: "capacity", label: "Capacidad semanal", hint: "cuántas cargas sostienes de verdad", done: (l) => l.weekly_capacity != null },
+  { key: "equipment", label: "Equipo disponible", hint: "decir que no resta; no decirlo casi no suma", done: (l) => l.equipment_available === true },
+  { key: "transit", label: "Tránsito en días", hint: "menos días, más puntos", done: (l) => l.transit_days != null },
   {
+    key: "mirror",
     label: "Cuenta espejo de GPS",
     hint: "valida tu unidad sin llamadas",
     done: (l) =>
       l.mirror_account_enabled === true ||
       ["mirror_requested", "mirror_enabled", "validated"].includes(String(l.availability_validation_status ?? "")),
   },
-  { label: "Distancia en vacío", hint: "qué tan cerca está tu unidad", done: (l) => l.deadhead_distance != null },
-  { label: "ETA de recolección", hint: "el cliente planea con esto", done: (l) => Boolean(l.eta_pickup) },
+  { key: "deadhead", label: "Distancia en vacío", hint: "qué tan cerca está tu unidad", done: (l) => l.deadhead_distance != null },
+  { key: "eta", label: "ETA de recolección", hint: "el cliente planea con esto", done: (l) => Boolean(l.eta_pickup) },
 ];
 
 /** What `bid_support_reply` answers (rfx-bid-api, verified against main). */
