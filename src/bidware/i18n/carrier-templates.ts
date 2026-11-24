@@ -549,8 +549,8 @@ const extraCopy={
     "en": "The complete library could not be loaded. The catalog changed during the read or returned an incomplete page. Click Refresh."
   },
   "catalogTooLarge": {
-    "es": "La biblioteca supera el límite de carga de 10,000 plantillas. No se mostrará un resultado parcial.",
-    "en": "The library exceeds the 10,000-template loading limit. A partial result will not be shown."
+    "es": "La biblioteca supera el límite de carga de 10,000 listas. No se mostrará un resultado parcial.",
+    "en": "The library exceeds the 10,000-list loading limit. A partial result will not be shown."
   },
   "extra0": {
     "es": "(sin nombre)",

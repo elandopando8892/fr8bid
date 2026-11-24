@@ -26,6 +26,19 @@ export const LANGUAGE_LABEL = { get es() { return tr("text245"); }, get en() { r
 const sameName = (a: OutreachTemplate, b: OutreachTemplate) =>
   a.name.trim().toLowerCase() === b.name.trim().toLowerCase();
 
+/**
+ * Una sola plantilla por nombre e idioma, y una sola predeterminada por idioma
+ * (recorrido 3.6): la del sistema se esconde cuando el equipo ya tiene su
+ * versión, y su marca de predeterminada cede ante la del equipo.
+ */
+export function shownTemplates(all: OutreachTemplate[]) {
+  const team = all.filter((t) => !isSystem(t));
+  const rows = all.filter((t) => !isSystem(t) || !team.some((r) => sameName(r, t)));
+  const teamDefault = new Set(team.filter((t) => t.is_default).map((t) => languageOf(t)));
+  const isDefault = (t: OutreachTemplate) => !!t.is_default && (!isSystem(t) || !teamDefault.has(languageOf(t)));
+  return { rows, isDefault };
+}
+
 /** Where the template stands with WhatsApp: its link to the invitation Meta approved. */
 export function WhatsappStatus({ template }: { template: OutreachTemplate }) {
   useLang();
@@ -55,6 +68,8 @@ export function TemplatesPage() {
   const rows = [...(data ?? [])].sort(
     (a, b) => Number(isSystem(a)) - Number(isSystem(b)) || a.name.localeCompare(b.name),
   );
+
+  const shown = shownTemplates(rows);
 
   async function run(work: () => Promise<void>) {
     setBusy(true);
@@ -179,7 +194,7 @@ export function TemplatesPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((t) => {
+                {shown.rows.map((t) => {
                   const system = isSystem(t);
                   return (
                     <tr key={t.id}>
@@ -189,7 +204,7 @@ export function TemplatesPage() {
                         </Link>
                         <div className="cell-sub">
                           {system ? tr("text266") : tr("text225")}
-                          {t.is_default ? words("word9") : ""}
+                          {shown.isDefault(t) ? words("word9") : ""}
                         </div>
                       </td>
                       <td>{channelLabel(t.channel)}</td>
@@ -227,7 +242,7 @@ export function TemplatesPage() {
               </tbody>
             </table>
             </div>
-            {rows.some(isSystem) && <p className="nota-plantillas">{tr("text263")}</p>}
+            {shown.rows.some(isSystem) && <p className="nota-plantillas">{tr("text263")}</p>}
             </>
           ) : (
             <Empty title={tr("text271")} hint={tr("text272")} />

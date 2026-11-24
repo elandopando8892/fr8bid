@@ -21,15 +21,28 @@ import { NEED_REASON } from "@/lib/roles";
 import { Spinner, ErrorBanner, InfoBanner, Empty, dateShort } from "@/components/ui";
 import type { CarrierListTemplate } from "@/types/domain";
 
-type Lifecycle = "current" | "all" | "active" | "draft" | "archived";
+type Lifecycle = "active" | "draft" | "archived";
 
+// Tres pestañas que no se pisan (recorrido 3.7): cada lista está en una sola.
 const FILTERS = (): [Lifecycle, string][] => [
-  ["current", tr("current")],
-  ["all", tr("text001")],
   ["active", tr("text002")],
   ["draft", tr("text003")],
   ["archived", tr("text004")],
 ];
+
+/**
+ * La descripción de una lista en una línea; lo demás (bitácora de auditoría)
+ * va en «Historial» (recorrido 3.11).
+ */
+export function splitDescription(text: string | null | undefined): { head: string; rest: string } {
+  const all = String(text ?? "").trim();
+  if (!all) return { head: "", rest: "" };
+  const firstLine = all.split(/\r?\n/)[0].trim();
+  const sentence = firstLine.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? firstLine;
+  const head = sentence.length > 140 ? `${sentence.slice(0, 139).trimEnd()}…` : sentence;
+  const rest = sentence.length > 140 ? all : all.slice(sentence.length).trim();
+  return { head, rest };
+}
 
 const STATE_LABEL: Record<string, string> = { get active() { return tr("text005"); }, get draft() { return tr("text006"); }, get archived() { return tr("text007"); } };
 
@@ -61,7 +74,7 @@ function CarrierTemplatesContent() {
   // Archiving and restoring a template are an Administrador's.
   const adminOnly = can("admin") ? undefined : NEED_REASON.admin;
   const locked = can("operate") ? undefined : NEED_REASON.operate;
-  const [filter, setFilter] = useState<Lifecycle>("current");
+  const [filter, setFilter] = useState<Lifecycle>("active");
   const [search, setSearch] = useState("");
   const [focusId, setFocusId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -69,9 +82,8 @@ function CarrierTemplatesContent() {
 
   const all = error ? [] : data?.rows ?? [];
   const counts = useMemo(() => {
-    const map = new Map<Lifecycle, number>([["all", all.length]]);
+    const map = new Map<Lifecycle, number>();
     for (const t of all) map.set(lifecycleOf(t) as Lifecycle, (map.get(lifecycleOf(t) as Lifecycle) ?? 0) + 1);
-    map.set("current", (map.get("active") ?? 0) + (map.get("draft") ?? 0));
     return map;
   }, [all]);
 
@@ -79,7 +91,7 @@ function CarrierTemplatesContent() {
     const q = search.trim().toLowerCase();
     return all.filter(
       (t) =>
-        (filter === "all" || (filter === "current" ? ["active", "draft"].includes(lifecycleOf(t)) : lifecycleOf(t) === filter)) &&
+        lifecycleOf(t) === filter &&
         (!q || `${templateName(t)} ${t.description ?? ""}`.toLowerCase().includes(q)),
     );
   }, [all, filter, search]);
@@ -193,8 +205,8 @@ function CarrierTemplatesContent() {
                               {templateName(t)}
                             </div>
                             {t.description && (
-                              <div className="tpl-desc ellipsis" title={t.description}>
-                                {t.description}
+                              <div className="tpl-desc ellipsis" title={splitDescription(t.description).head}>
+                                {splitDescription(t.description).head}
                               </div>
                             )}
                           </td>
@@ -277,6 +289,7 @@ function TemplateSide({
   }
 
   const lc = lifecycleOf(t);
+  const description = splitDescription(t.description);
   const total = memberCount(t);
   const names = new Map((members.data ?? []).map((v) => [v.id, vendorLabel(v)]));
 
@@ -287,7 +300,13 @@ function TemplateSide({
 
       <div className="tpl-field">
         <span>{tr("text032")}</span>
-        <p>{t.description || "—"}</p>
+        <p>{description.head || "—"}</p>
+        {description.rest && (
+          <details className="tpl-historial">
+            <summary>{getLang() === "es" ? "Historial" : "History"}</summary>
+            <p style={{ whiteSpace: "pre-wrap" }}>{description.rest}</p>
+          </details>
+        )}
       </div>
       <div className="tpl-field">
         <span>{tr("text020")}</span>

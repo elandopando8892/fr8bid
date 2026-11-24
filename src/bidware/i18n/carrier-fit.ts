@@ -71,8 +71,8 @@ export const copy = {
     "en": "The template is the starting point: eligibility is recalculated for this RFx without changing it."
   },
   "text018": {
-    "es": "La plantilla no cambia",
-    "en": "The template does not change"
+    "es": "La lista no cambia",
+    "en": "The list does not change"
   },
   "text019": {
     "es": "Nada se envía hasta la Cola de envío",
@@ -83,8 +83,8 @@ export const copy = {
     "en": "Starting point"
   },
   "text021": {
-    "es": "Plantilla guardada",
-    "en": "Saved template"
+    "es": "Lista guardada",
+    "en": "Saved list"
   },
   "text022": {
     "es": "Evento RFx",
@@ -348,7 +348,7 @@ const reeferCopy: Record<string, {es:string;en:string}> = {
   lane:{es:"Ruta",en:"Lane"},
   rfqOnly:{es:"Antecedente histórico. Confirmar condiciones y disponibilidad en la cotización.",en:"Historical evidence. Confirm conditions and availability in the quote."},
   workspace:{es:"La política no corresponde a este espacio.",en:"The policy does not belong to this workspace."},
-  member:{es:"Carrier sin regla aprobada en esta plantilla.",en:"No approved rule for this template member."},
+  member:{es:"Carrier sin regla aprobada en esta lista.",en:"No approved rule for this list member."},
   innovativos_history:{es:"Innovativos · oferta del 27/jul/2026: Querétaro → Laredo, Reefer, Mercancía: Arbolitos; Temperatura: 10 °C; Peso: 18,000 kg. Es el caso documentado, no una capacidad máxima ni evidencia para jitomate. Confirmar condiciones actuales al cotizar.",en:"Innovativos · July 27, 2026 quote: Querétaro → Laredo, Reefer, Product: Arbolitos (source wording); Temperature: 10 °C; Weight: 18,000 kg. This is the documented case, not maximum capacity or evidence for tomatoes. Confirm current conditions when quoting."},
   temperature_innovativos:{es:"Innovativos: esta temperatura difiere de los 10 °C documentados.",en:"Innovativos: this temperature differs from the documented 10 °C."},
   weight_innovativos:{es:"Innovativos: este peso difiere de los 18,000 kg documentados. El antecedente no acredita un rango de pesos.",en:"Innovativos: this weight differs from the documented 18,000 kg. The historical case does not establish a weight range."},
