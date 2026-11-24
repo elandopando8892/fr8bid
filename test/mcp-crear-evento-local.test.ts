@@ -4,19 +4,21 @@ import { it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { crearServidor } from '../src/mcp/servidor';
-import { manejar, ESCRITURAS } from '../src/servidor/proxy';
+import { manejar, ESCRITURAS, type Respuesta } from '../src/servidor/proxy';
+import { postgresReapertura } from './soporte/postgres-reapertura';
 import { MesaApi } from '../src/cliente/api';
 import { bloqueoBorradoresInvitacion, bloqueoCaptura } from '../src/dominio/acciones-mesa';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/server';
 const container=process.env.RFX_TEST_CONTAINER, root=process.env.RFX_TEST_RATEWARE;
 const reopen = process.env.RFX_TEST_MODE === 'reopen';
-function localMcp(role: 'admin' | 'operator') {
+function localMcp(role: 'admin' | 'operator', escribirReapertura?: (body: Record<string, unknown>) => Promise<Respuesta>) {
   expect(container).toMatch(/^[a-f0-9]{64}$/);
   const env=Object.fromEntries(Object.entries(process.env).filter(([key])=>/^(PATH|SYSTEMROOT|WINDIR|TEMP|TMP|USERPROFILE|DENO_DIR|LOCALAPPDATA|APPDATA)$/i.test(key))) as Record<string,string>;
   const actions:string[]=[];
   const docker=process.platform==='win32'?resolve(process.env.ProgramFiles || 'C:/Program Files','Docker/Docker/resources/bin/docker.exe'):'docker';
   const send=async(_s:any,body:Record<string,unknown>,authorization:string|null)=>{
     expect(authorization).toBe('Bearer synthetic-user');actions.push(String(body.action));
+    if (escribirReapertura && body.action === 'reopen_rfx_event_if_unchanged') return escribirReapertura(body);
     const output=execFileSync('deno',['run','--cached-only','--no-check','--allow-env','--allow-read',`--allow-run=${docker}`,'--node-modules-dir=none','--no-lock',resolve(root!,'tools/rfx-event-draft-local-handler.ts'),container!,docker,reopen?'reopen':'draft'],{input:JSON.stringify(body),encoding:'utf8',env,timeout:45000,maxBuffer:2**20});
     const line=output.split(/\r?\n/).find(x=>x.startsWith('__RFX_RESULT__'));expect(line,output).toBeTruthy();return JSON.parse(line!.slice('__RFX_RESULT__'.length));
   };
@@ -100,3 +102,36 @@ it.skipIf(!container || !root || !reopen)('reapertura por MCP → proxy → Rate
     'reopen_rfx_event_if_unchanged', 'reopen_rfx_event_if_unchanged',
   ]);
 }, 240000);
+
+it.skipIf(!container || !root || !reopen)('dos confirmaciones distintas compiten por la misma versión y el MCP informa la espera vencida', async () => {
+  const pg = await postgresReapertura(container!, root!);
+  const { call, enable, actions } = localMcp('admin', pg.send);
+  enable();
+  async function preparar(fecha: string) {
+    const vista = await call('preparar_reapertura_evento', { event_id: pg.eventId, nueva_fecha: fecha, motivo: 'Prueba de concurrencia' });
+    expect(vista.structuredContent, JSON.stringify(vista)).toMatchObject({ estado: 'vista_previa' });
+    return { confirmacion_id: vista.structuredContent.confirmacion_id, frase_ok: 'Sí, confirmo' };
+  }
+  const agotada = await preparar('2099-01-10');
+  const fechas = ['2099-01-11', '2099-01-12'];
+  const opciones = [await preparar(fechas[0]), await preparar(fechas[1])];
+  const { resultados } = await pg.withRowLock(async () => {
+    const timeout = (await call('confirmar', agotada)).structuredContent;
+    expect(timeout).toMatchObject({ estado: 'rechazada', codigo: 'EVENTO_CAMBIO', reintentar: false });
+    expect(pg.failures.get(timeout.operation_id)).toBe('55P03');
+    expect(await pg.state()).toEqual({ status: 'closed', due: '2000-01-01', receipts: [] });
+    const resultados = Promise.all(opciones.map(args => call('confirmar', args)));
+    await expect.poll(pg.waiters, { interval: 50, timeout: 4000 }).toBe(2);
+    return { resultados };
+  });
+  const respuestas = (await resultados).map(r => r.structuredContent);
+  expect(respuestas.map(r => r.estado).sort()).toEqual(['aplicada', 'rechazada']);
+  const aplicada = respuestas.find(r => r.estado === 'aplicada');
+  const rechazada = respuestas.find(r => r.estado === 'rechazada');
+  expect(aplicada.lectura_verificada).toBe(true);
+  expect(aplicada.operation_id).not.toBe(rechazada.operation_id);
+  expect(rechazada).toMatchObject({ codigo: 'EVENTO_CAMBIO', reintentar: false });
+  expect(pg.failures.get(rechazada.operation_id)).toBe('40001');
+  expect(await pg.state()).toEqual({ status: 'open', due: fechas[respuestas.indexOf(aplicada)], receipts: [aplicada.operation_id] });
+  expect(actions.filter(a => ESCRITURAS['rateware-api'].has(a))).toHaveLength(3);
+}, 90000);

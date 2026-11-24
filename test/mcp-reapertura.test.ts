@@ -51,6 +51,43 @@ function escenario() {
 }
 
 describe("Reapertura y extensión RFx", () => {
+  it.each(["envíalo", "sí, envíalos", "envíala", "envíalas", "sí, pero espera", "sí ".repeat(35)])(
+    "rechaza localmente la frase de reapertura %s", async (frase_ok) => {
+      const s = escenario();
+      const v = await s.run("preparar_reapertura_evento", input);
+      await expect(s.run("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok }))
+        .rejects.toMatchObject({ codigo: "SIN_SI" });
+      expect(s.calls.map(b => b.action)).toEqual(["preview_rfx_event_reopen"]);
+    });
+
+  it("un aprobador de envíos puede preparar pero no confirmar la reapertura", async () => {
+    const s = escenario();
+    const email = "otro@example.test";
+    const run = s.make({ email, aprobadores: [email] });
+    const v = await run("preparar_reapertura_evento", input);
+    await expect(run("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "Sí" }))
+      .rejects.toMatchObject({ codigo: "SOLO_PROPIETARIO" });
+    expect(s.calls.map(b => b.action)).toEqual(["preview_rfx_event_reopen"]);
+  });
+
+  it("la lista local puede restringir al propietario de Rateware", async () => {
+    const s = escenario();
+    const run = s.make({ aprobadores: ["otro@example.test"] });
+    const v = await run("preparar_reapertura_evento", input);
+    await expect(run("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "Sí" }))
+      .rejects.toMatchObject({ codigo: "SOLO_PROPIETARIO" });
+    expect(s.calls.map(b => b.action)).toEqual(["preview_rfx_event_reopen"]);
+  });
+
+  it.each(["¡Sí, CONFIRMO! ok okay adelante dale hazlo autorizo yes confirm procede", "Sí".padEnd(100, "!")])(
+    "firma el texto literal aceptado por Rateware", async (frase_ok) => {
+      const s = escenario();
+      const v = await s.run("preparar_reapertura_evento", input);
+      const r = await s.run("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok });
+      expect(r.estado).toBe("aplicada");
+      expect(s.calls.find(b => b.action === "reopen_rfx_event_if_unchanged")?.approval_text).toBe(frase_ok);
+    });
+
   it("prepara sin escribir, devuelve la evidencia aprobada y relee el estado persistido", async () => {
     const s = escenario();
     const v = await s.run("preparar_reapertura_evento", input);
@@ -124,6 +161,7 @@ describe("Reapertura y extensión RFx", () => {
     s.fail(code);
     const r = await s.run("confirmar", { confirmacion_id: v.confirmacion_id, frase_ok: "Sí" });
     expect(r).toMatchObject({ estado, reintentar: false });
+    if (code === 409) expect(r.instruccion).toMatch(/bloqueo.*plazo/i);
     expect(s.calls.filter(b => b.action === "reopen_rfx_event_if_unchanged")).toHaveLength(1);
     expect(s.writes()).toBe(0);
   });

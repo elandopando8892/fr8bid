@@ -44,7 +44,9 @@ const YA_CONTESTADA = new Set(["responded", "quoted", "bid_submitted", "declined
 // AGENTS.md regla 6: aprobación del PROPIETARIO por acción. Toda escritura real (intentos,
 // «Revisado», campaña y borradores, tanda) solo la confirma un correo de FR8BID_MCP_APROBADORES,
 // sobre una vista previa que él mismo preparó (el token es de su sesión). Los demás solo preparan.
-export const APROBADORES_POR_OMISION = ["sales@heymarksman.com"];
+// Rateware comprueba este propietario en la Edge Function y en el RPC de reapertura.
+const PROPIETARIO_REAPERTURA = "sales@heymarksman.com";
+export const APROBADORES_POR_OMISION = [PROPIETARIO_REAPERTURA];
 export function aprobadoresDe(env: NodeJS.ProcessEnv): string[] {
   const lista = String(env.FR8BID_MCP_APROBADORES || "").split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
   return lista.length ? lista : APROBADORES_POR_OMISION;
@@ -98,12 +100,13 @@ const PENDIENTE = () => new Rechazo("CONFIRMACIONES_PENDIENTES", "Confirmaciones
 // frase_ok: lista blanca de afirmaciones explícitas. Cualquier negación o duda
 // la invalida aunque también diga «sí».
 const normalizar = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9ñ]+/g, " ").trim().replace(/\s+/g, " ");
-const AFIRMATIVAS = new Set(["si", "confirmo", "ok", "okay", "adelante", "dale", "hazlo", "envialo", "enviala", "envialos", "envialas", "autorizo", "yes", "confirm", "procede"]);
+const AFIRMATIVAS_REAPERTURA = new Set(["si", "confirmo", "ok", "okay", "adelante", "dale", "hazlo", "autorizo", "yes", "confirm", "procede"]);
+const AFIRMATIVAS = new Set([...AFIRMATIVAS_REAPERTURA, "envialo", "enviala", "envialos", "envialas"]);
 const DUDAS = /\b(no|nel|espera|esperar|esperemos|quiza|quizas|tal vez|duda|dudas|dudo|luego|despues|por ahora|todavia|aun|cancela|cancelar|alto|detente|pero)\b/;
-export function esAfirmacion(frase: string): boolean {
+export function esAfirmacion(frase: string, permitidas = AFIRMATIVAS): boolean {
   const n = normalizar(frase);
   if (!n || DUDAS.test(n)) return false;
-  return n.split(" ").every(p => AFIRMATIVAS.has(p));
+  return n.split(" ").every(p => permitidas.has(p));
 }
 
 // Vista segura de un correo: el HTML se muestra como texto (sin scripts ni estilos), truncado
@@ -299,6 +302,7 @@ const contextoReapertura = z.object({
 
 const estadoReapertura = { draft: "borrador", open: "abierto", closed: "cerrado", awarded: "adjudicado", archived: "archivado" };
 const bloqueoReapertura: Record<string, string> = {
+  EVENTO_CAMBIO: "El evento cambió o hubo un conflicto de bloqueo. Consulta el estado y el plazo en la página del evento antes de preparar otra reapertura.",
   EVENTO_NO_REABRIBLE: "Solo se reabren eventos cerrados a ofertas. Revisa el estado en Fr8Bid.",
   PLAZO_INVALIDO: "El nuevo plazo debe ser posterior al plazo guardado y a hoy en Ciudad de México.",
   CON_ADJUDICACIONES: "El administrador debe conciliar las adjudicaciones antes de decidir si procede una reapertura.",
@@ -675,7 +679,9 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
     const firma = await firmarPlan(plan);
     if (firma.token.length <= limite)
       return { estado: "vista_previa", escrito: false, accion: act, evento: plan.evento, vista_previa: plan.vista, confirmacion_id: firma.token, vence_en: firma.vence, mesa_url: ligaMesa(plan.ev),
-        instruccion: "Nada se escribió. Muestra esta vista previa completa (destinatarios, canal y texto) y pide un «sí» explícito. Solo después llama a confirmar con este confirmacion_id y frase_ok = el texto literal de esa respuesta." };
+        instruccion: act === "reapertura_evento"
+          ? "Muestra el evento y el nuevo plazo. Pide al propietario una respuesta breve como «Sí, confirmo» y usa su texto literal en frase_ok."
+          : "Nada se escribió. Muestra esta vista previa completa (destinatarios, canal y texto) y pide un «sí» explícito. Solo después llama a confirmar con este confirmacion_id y frase_ok = el texto literal de esa respuesta." };
     // No cabe en un confirmacion_id: se parte por carrier (nunca dentro de un carrier, para que
     // confirmar una parte no deje a las demás bloqueadas), cada parte con su vista previa.
     const ids = plan.arg.participacion_ids as string[] | undefined;
@@ -719,8 +725,6 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       if (!ctx.secreto) throw PENDIENTE();
       const frase = (a.frase_ok ?? "").trim();
       if (!frase) throw new Rechazo("SIN_SI", "Falta la confirmación explícita del usuario (frase_ok). Muestra la vista previa y espera su «sí».", 400);
-      if (!esAfirmacion(frase)) throw new Rechazo("NO_CONFIRMADO", "La respuesta del usuario no es un «sí» explícito (sí, confirmo, adelante, hazlo…). No se escribió nada.", 400);
-      log.frase_ok = frase.slice(0, 100);
       let c;
       try { c = await verificar(a.confirmacion_id, ctx.secreto, ahora()); }
       catch { throw new Rechazo("CONFIRMACION_INVALIDA", "La confirmación no es válida o venció (15 min). Vuelve a preparar la vista previa.", 400); }
@@ -729,8 +733,17 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
       const minimo = ROL_ACCION[c.act];
       if (!minimo || !planes[c.act]) throw new Rechazo("ACCION", "Acción no disponible en el MCP.", 400);
       if (!permite(ctx.rol, minimo)) throw new Rechazo("SIN_PERMISO", "Tu rol ya no permite esta acción.", 403);
-      if (!(ctx.aprobadores ?? APROBADORES_POR_OMISION).includes(String(ctx.email ?? "").trim().toLowerCase()))
+      const email = String(ctx.email ?? "").toLowerCase();
+      if (!(ctx.aprobadores ?? APROBADORES_POR_OMISION).includes(email.trim()) ||
+          (c.act === "reapertura_evento" && email !== PROPIETARIO_REAPERTURA))
         throw new Rechazo("SOLO_PROPIETARIO", "Solo el propietario puede confirmar esto. El propietario debe preparar y confirmar su propia vista previa.", 403);
+      if (c.act === "reapertura_evento") {
+        if (frase.length > 100 || !esAfirmacion(frase, AFIRMATIVAS_REAPERTURA))
+          throw new Rechazo("SIN_SI", "Para reabrir hace falta una afirmación como «Sí, confirmo», de hasta 100 caracteres.", 400);
+      } else if (!esAfirmacion(frase)) {
+        throw new Rechazo("NO_CONFIRMADO", "La respuesta del usuario no es un «sí» explícito (sí, confirmo, adelante, hazlo…). No se escribió nada.", 400);
+      }
+      log.frase_ok = frase.slice(0, 100);
       if (huellaCuerpos(c.cuerpos, c.fijo) !== c.h) throw new Rechazo("ALTERADA", "La confirmación no coincide con su vista previa.", 400);
       if (esProtegido(c.ev) || c.cuerpos.some(b => !ESCRITURAS_MCP.has(String(b.action)) || ![b.event_id, b.rfx_event_id].includes(c.ev))) throw new Rechazo("ALTERADA", "La confirmación no coincide con su vista previa.", 400);
       if (c.act === "reapertura_evento") {
@@ -745,7 +758,6 @@ export function crearEscrituras(t: Transporte, ctx: ContextoEscrituras) {
         if ((c.fijo as { organizacion_id?: string } | undefined)?.organizacion_id !== organizacionId) {
           throw new Rechazo("OTRA_SESION", "La organización cambió desde la vista previa.", 403);
         }
-        if (frase.length > 100) throw new Rechazo("SIN_SI", "La aprobación supera el máximo de 100 caracteres.", 400);
         // Este contrato se verifica en Rateware con el actor del acceso OAuth.
         const approval_signature = createHmac("sha256", secretoReapertura).update(JSON.stringify([
           "fr8bid.rfx.reopen.approval.v1", body.action, ctx.userId, organizacionId, body.event_id,
