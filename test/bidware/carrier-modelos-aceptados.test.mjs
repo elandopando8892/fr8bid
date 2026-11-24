@@ -180,13 +180,27 @@ test('un modelo que el evento retiró no se cambia en silencio: el carrier lo le
   assert.equal(m.droppedModelNotice(varios), 'Your offer had the “Carrier shares billing” model, which this event no longer accepts. Choose another one or leave it not chosen.');
 });
 
-test('sin modelo retirado no hay aviso: oferta nueva, modelo vigente, misma etiqueta o evento bloqueado', () => {
+test('sin modelo retirado no hay aviso: oferta nueva, modelo vigente o misma etiqueta', () => {
   assert.equal(m.droppedModelNotice(ruta(acepta('brokerage', 'cost_plus'))), null);
   assert.equal(m.droppedModelNotice(ruta(acepta('brokerage', 'sell_share'), { commercial_model: 'sell_share', bid_rate: 1000 })), null);
   // fee plus guardado y evento que acepta cost plus: para el carrier sigue siendo «Costo + margen».
   assert.equal(m.droppedModelNotice(ruta(acepta('cost_plus'), { commercial_model: 'fee_plus', bid_rate: 1000 })), null);
-  const fijo = ruta({ status: 'open', rfx_master_package: { carrier_commercial_policy: { locked: true, model: 'brokerage' } } }, { commercial_model: 'sell_share', bid_rate: 1000 });
-  assert.equal(m.droppedModelNotice(fijo), null);
+  // Bajo candado, la oferta que ya es compra-venta o que no tiene modelo tampoco tiene nada que avisar.
+  const candado = { status: 'open', rfx_master_package: { carrier_commercial_policy: { locked: true, model: 'brokerage' } } };
+  assert.equal(m.droppedModelNotice(ruta(candado, { commercial_model: 'brokerage', bid_rate: 1000 })), null);
+  assert.equal(m.droppedModelNotice(ruta(candado, { bid_rate: 1000 })), null);
+});
+
+// Pasada final de la revisión escéptica (24-nov).
+test('el candado de compra-venta también avisa: la oferta que tenía otro modelo lo lee antes de reenviar', () => {
+  const fijo = ruta({ status: 'open', rfx_master_package: { carrier_commercial_policy: { locked: true, model: 'brokerage' } } }, { commercial_model: 'sell_share', carrier_share_pct: 4, bid_rate: 1000 });
+  assert.equal(m.droppedModelKey(fijo), 'carrier_share');
+  // El formulario ya sale con compra-venta y sin porcentaje, que es lo único que el candado deja enviar.
+  assert.deepEqual([m.offerForm(fijo).commercial_model, m.offerForm(fijo).pct], ['xbf_buy_sell', '']);
+  assert.doesNotThrow(() => m.offerPayload(m.offerForm(fijo), fijo));
+  assert.equal(m.droppedModelNotice(fijo), 'Tu oferta tenía el modelo «Carrier comparte facturación», que este evento ya no acepta. Si la reenvías, queda con «XBF compra-venta», el modelo del evento.');
+  m.setLang('en');
+  assert.equal(m.droppedModelNotice(fijo), "Your offer had the “Carrier shares billing” model, which this event no longer accepts. If you resend it, it will carry “XBF buy-sell”, the event's model.");
 });
 
 // Segunda pasada de la revisión escéptica (24-nov).
@@ -211,8 +225,9 @@ test('Excel: un plan revisado bajo otros modelos del evento no se envía, aunque
   assert.equal(m.currentOfferForSend(offer, [lane]), lane);
   // Misma ruta, mismo formulario inicial («sin elegir»), otra lista: «Costo + margen» ya sería fee plus.
   const otra = ruta(acepta('brokerage', 'fee_plus'));
-  assert.equal(m.offerBaseline(otra), m.offerBaseline(lane));
+  assert.deepEqual(m.offerForm(otra), m.offerForm(lane));
   assert.notEqual(m.commercialPolicyKey(otra), m.commercialPolicyKey(lane));
+  assert.notEqual(m.offerBaseline(otra), m.offerBaseline(lane));
   assert.throws(() => m.currentOfferForSend(offer, [otra]), /Ruta 1: cambió la oferta, su acceso o los modelos del evento/);
   // El candado también cuenta como cambio de política.
   const fijo = ruta({ status: 'open', rfx_master_package: { carrier_commercial_policy: { locked: true, model: 'brokerage', accepted_models: ['brokerage', 'cost_plus'] } } });
@@ -220,4 +235,32 @@ test('Excel: un plan revisado bajo otros modelos del evento no se envía, aunque
   // La misma lista escrita en otro orden o con los cuatro modelos es la misma política.
   assert.equal(m.commercialPolicyKey(ruta(acepta('cost_plus', 'brokerage'))), m.commercialPolicyKey(lane));
   assert.equal(m.commercialPolicyKey(ruta(acepta('brokerage', 'cost_plus', 'sell_share', 'fee_plus'))), m.commercialPolicyKey(ruta()));
+});
+
+test('Excel: una plantilla descargada bajo otros modelos del evento no se importa, aunque la oferta no haya cambiado', async () => {
+  const lane = ruta(acepta('brokerage', 'cost_plus'));
+  const llena = async () => {
+    const book = await m.buildBidTemplate([lane]);
+    cell(book, 'Enviar ruta', 'Sí'); cell(book, 'Tarifa carrier', 1200); cell(book, 'Modelo comercial', 'Costo + margen');
+    return book;
+  };
+  const book = await llena();
+  // Sin cambio de política la plantilla entra.
+  const [offer] = await m.parseBidTemplate(bytes(book), [lane]);
+  assert.equal(offer.form.commercial_model, 'direct_cost_plus');
+  assert.equal(offer.baseline, m.offerBaseline(lane));
+  // Entre la descarga y la importación el evento cambia cost plus por fee plus:
+  // la misma etiqueta para el carrier, otro modelo en Rateware.
+  const vieja = /La oferta o los modelos del evento cambiaron desde la descarga; descarga una nueva plantilla/;
+  await assert.rejects(m.parseBidTemplate(bytes(book), [ruta(acepta('brokerage', 'fee_plus'))]), vieja);
+  // Lo mismo si el evento suma un modelo, se queda con uno o pasa a candado.
+  await assert.rejects(m.parseBidTemplate(bytes(book), [ruta(acepta('brokerage', 'cost_plus', 'sell_share'))]), vieja);
+  await assert.rejects(m.parseBidTemplate(bytes(book), [ruta(acepta('cost_plus'))]), vieja);
+  await assert.rejects(m.parseBidTemplate(bytes(book), [ruta({ status: 'open', rfx_master_package: { carrier_commercial_policy: { locked: true, model: 'brokerage' } } })]), vieja);
+  // Una plantilla anterior a este dato (su base era solo la oferta) también se descarga otra vez.
+  const anterior = await llena();
+  cell(anterior, 'Base de oferta', JSON.stringify(m.offerForm(lane)));
+  await assert.rejects(m.parseBidTemplate(bytes(anterior), [lane]), vieja);
+  m.setLang('en');
+  await assert.rejects(m.parseBidTemplate(bytes(book), [ruta(acepta('brokerage', 'fee_plus'))]), /The offer or the event's models changed since the download; download a new template/);
 });

@@ -246,12 +246,14 @@ export function QuotePanel({
         </label>
       </div>
 
-      {lockedCommercialModel ? (
+      {lockedCommercialModel ? (<>
         <div className="croom-note" aria-label={q("form.fixedModelLabel")}>
           <b>{q("form.fixedModelTitle")}</b>
           <p>{q("form.fixedModelText")}</p>
         </div>
-      ) : (<>
+        {/* The fixed model replaces whatever the offer had: said here too, before resending. */}
+        {droppedModel && <p className="croom-note warn" role="note">{droppedModel}</p>}
+      </>) : (<>
       <div className="croom-fields">
         <label className="grow">
           <span>{q(eventModel ? "form.model" : "form.modelOptional")}</span>

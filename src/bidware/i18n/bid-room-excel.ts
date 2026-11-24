@@ -129,8 +129,8 @@ export const excelCopy = {
   "err.duplicate": { es: "La ruta está duplicada.", en: "The lane is duplicated." },
   "err.closed": { es: "La ruta ya no admite ofertas.", en: "The lane no longer accepts offers." },
   "err.stale": {
-    es: "La oferta cambió desde la descarga; descarga una nueva plantilla.",
-    en: "The offer changed since the download; download a new template.",
+    es: "La oferta o los modelos del evento cambiaron desde la descarga; descarga una nueva plantilla.",
+    en: "The offer or the event's models changed since the download; download a new template.",
   },
   "err.missing": { es: "La plantilla omite datos requeridos.", en: "The template is missing required data." },
   "err.date": { es: "{0}: fecha inválida.", en: "{0}: invalid date." },

@@ -36,7 +36,12 @@ const text = (v: unknown) => v == null ? "" : String(v).trim();
 const norm = (v: unknown) => text(v).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const booleanFields = new Set<keyof OfferForm>(["mirror_account_enabled", "best_alternative_offered", "best_final"]);
 const dateFields = new Set(["valid_through", "eta_pickup", "eta_delivery"]);
-export const offerBaseline = (lane: BookLane) => JSON.stringify(offerForm(lane));
+/**
+ * What a template was downloaded against: the lane's offer and its event's
+ * commercial policy. A file prepared under other accepted models is out of
+ * date even when the offer itself has not changed.
+ */
+export const offerBaseline = (lane: BookLane) => JSON.stringify({ ...offerForm(lane), policy: commercialPolicyKey(lane) });
 
 /** The model as a cell or a line of the review: its label, or "not chosen" (blank in the file). */
 const modelLabel = (model: ModelChoice, blank = q("model.none.label")) => (model ? modelCopy(model).label : blank);
@@ -240,9 +245,9 @@ export async function parseBidTemplate(data: ArrayBuffer, lanes: BookLane[]): Pr
 export function currentOfferForSend(offer: ImportedOffer, lanes: BookLane[]): BookLane {
   const lane = lanes.find(l => l.rfx_lane_id === offer.lane.rfx_lane_id &&
     l.invitation_id === offer.lane.invitation_id && l.rfx_event_id === offer.lane.rfx_event_id);
-  // The plan was reviewed under the event's commercial policy of that moment: if the
-  // event now accepts other models, the same offer could be stored with another one.
-  if (!lane || !canQuote(lane) || offerBaseline(lane) !== offer.baseline || commercialPolicyKey(lane) !== commercialPolicyKey(offer.lane)) {
+  // The baseline carries the event's commercial policy too: a plan reviewed under
+  // other accepted models is not sent, because the same offer could be stored with another one.
+  if (!lane || !canQuote(lane) || offerBaseline(lane) !== offer.baseline) {
     throw new Error(xls("err.changed", offer.lane.lane_number ?? offer.row));
   }
   return lane;

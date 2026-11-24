@@ -384,8 +384,9 @@ export function modelIsOptional(lane: BookLane): boolean {
  * history on the event page, where the team tells the two apart.
  */
 export function droppedModelKey(lane: BookLane): ModelKey | null {
-  if (isLockedBrokerage(lane) || !str(lane.commercial_model).trim()) return null;
+  if (!str(lane.commercial_model).trim()) return null;
   const key = modelKeyOf(lane.commercial_model);
+  // A locked event accepts buy-sell alone, so an offer stored with another model is told as well.
   return acceptedModelKeys(lane).includes(key) ? null : key;
 }
 
