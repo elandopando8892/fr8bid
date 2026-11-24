@@ -26,7 +26,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { NEED_REASON } from "@/lib/roles";
 import { Spinner, ErrorBanner, InfoBanner, Empty, Pill } from "@/components/ui";
 import type { Vendor } from "@/types/domain";
-import { LegalName } from "./LegalName";
+import { LegalNameUnder } from "./LegalName";
 
 type Column = BaseStage | FunnelStage;
 type Row = Vendor & { effective_funnel_stage?: string; funnel_stage?: string; stage_days?: number | null };
@@ -309,7 +309,6 @@ export function CarrierCrmPage() {
                       />
                     </th>
                     <th>Carrier</th>
-                    <th>{tr("text087")}</th>
                     <th>{tr("text088")}</th>
                     <th className="crm-col-status">{tr("text043")}</th>
                     <th className="crm-col-stage">{tr("text040")}</th>
@@ -337,9 +336,7 @@ export function CarrierCrmPage() {
                         </td>
                         <td className="ellipsis crm-name" title={vendorLabel(v)}>
                           {vendorLabel(v)}
-                        </td>
-                        <td className="ellipsis crm-legal">
-                          <LegalName vendor={v} />
+                          <LegalNameUnder vendor={v} label={vendorLabel(v)} />
                         </td>
                         <td className="mono ellipsis crm-contact" title={v.primary_email || v.whatsapp_phone || undefined}>
                           {v.primary_email || v.whatsapp_phone || <span className="crm-none">{tr("text091")}</span>}

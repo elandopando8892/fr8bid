@@ -28,3 +28,25 @@ export function LegalName({ vendor }: { vendor: Vendor }) {
     </>
   );
 }
+
+/**
+ * La razón social debajo del nombre del carrier, solo cuando dice otra cosa:
+ * dos columnas con el mismo texto en casi todas las filas eran ruido (recorrido 3.10).
+ */
+export function legalNameIfDifferent(v: Vendor, label: string) {
+  const name = legalNameOf(v);
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  return name && !same(name.text, label) ? name : null;
+}
+
+export function LegalNameUnder({ vendor, label }: { vendor: Vendor; label: string }) {
+  useLang();
+  const name = legalNameIfDifferent(vendor, label);
+  if (!name) return null;
+  return (
+    <div className="cell-sub" title={name.fromProfile ? tr("text201") : undefined}>
+      {name.text}
+      {name.fromProfile ? ` · ${tr("text202")}` : ""}
+    </div>
+  );
+}
