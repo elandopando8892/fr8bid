@@ -30,6 +30,14 @@ const TOOLS = [
 ] as const;
 type View = (typeof VIEWS)[number][0] | (typeof TOOLS)[number][0];
 
+/** Directorio siempre a la vista; las demás vistas, solo la abierta (el resto en «Más vistas…»). */
+export function shipperViews(view: string) {
+  return {
+    visibleViews: VIEWS.filter(([key]) => key === "directorio" || key === view),
+    hiddenViews: VIEWS.filter(([key]) => key !== "directorio" && key !== view),
+  };
+}
+
 const FILTERS = [
   { key: "", label: "Todos" },
   { key: "active", label: "Activos" },
@@ -90,6 +98,11 @@ export function ShippersPage() {
     if (view === "directorio") load(0);
   }, [load, view]);
 
+  // Decisión de Jose (23-nov): Directorio es la única pestaña de trabajo. Pipeline,
+  // RFIs y oportunidades, Cola de acciones e Inteligencia casi no tienen datos reales:
+  // se abren desde «Más vistas…», y la que está abierta se queda a la vista.
+  const { visibleViews, hiddenViews } = shipperViews(view);
+
   // The CRM's totals ride on the directory filters instead of a separate KPI band.
   const filterCount = (key: string) =>
     key === "" ? summary.data?.total : key === "active" ? summary.data?.active : key === "prospect" ? summary.data?.prospects : undefined;
@@ -115,7 +128,7 @@ export function ShippersPage() {
       <main className="main">
         <div style={{ display: "grid", gap: 14 }}>
           <div className="tabs" role="tablist" aria-label="Vistas del CRM de shippers">
-            {VIEWS.map(([key, label]) => (
+            {visibleViews.map(([key, label]) => (
               <button
                 key={key}
                 role="tab"
@@ -128,6 +141,14 @@ export function ShippersPage() {
                 {key === "comercial" && summary.data?.open_opportunities ? <span className="tab-count">{summary.data.open_opportunities}</span> : null}
               </button>
             ))}
+            {hiddenViews.length > 0 && (
+              <select aria-label="Más vistas del CRM" value="" style={{ width: "auto" }} onChange={(e) => e.target.value && go(e.target.value as View)}>
+                <option value="">Más vistas…</option>
+                {hiddenViews.map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+            )}
           </div>
           {view === "pipeline" && <PipelineView />}
           {view === "comercial" && <CommercialView />}
