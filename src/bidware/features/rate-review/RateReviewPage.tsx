@@ -4,6 +4,7 @@ import { useLang, getLang } from "@/i18n/language";
 import { useEffect, useMemo, useState } from "react";
 import { confirmAsync } from "@/components/confirm";
 import { useAsync } from "@/components/useAsync";
+import { RateTabs } from "@/components/RateTabs";
 import { Empty, ErrorBanner, InfoBanner, Pill, Spinner, TopBar, dateShort, money } from "@/components/ui";
 import * as I from "../../../ui/Iconos";
 import { useAuth } from "@/auth/AuthContext";
@@ -231,6 +232,7 @@ function RateReviewContent() {
       <TopBar title={tr("text038")} sub={tr("text039")} actions={<button className="btn-icono" title={tr("text040")} aria-label={tr("text040")} onClick={pending.reload}><I.Recargar /></button>} />
       <main className="main">
         <div style={{ display: "grid", gap: 14 }}>
+          <RateTabs active="review" />
           {pending.error && <ErrorBanner message={pending.error} />}
           {catalog.error && <ErrorBanner message={tr("text041", catalog.error)} />}
           {notice && <InfoBanner>{notice}</InfoBanner>}

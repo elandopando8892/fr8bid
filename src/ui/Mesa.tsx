@@ -2330,7 +2330,7 @@ function PanelEntrega({ d, ctx, accion, entrega, setEntrega, recibo, setRecibo }
                 advertencia={
                   <>
                     {respaldoPendiente && <b>Abriste el respaldo de {respaldoPendiente.carrier} y no lo adjudicaste: si entregas ahora, va sin ese respaldo y ya no se puede agregar. </b>}
-                    Rateware guarda {plural(prims.length, "tarifa")} en Revisión de tarifas y devuelve el recibo. {ADVERTENCIA_REAL(s, d)}
+                    Rateware guarda {plural(prims.length, "tarifa")} en Tarifas (Por revisar) y devuelve el recibo. {ADVERTENCIA_REAL(s, d)}
                   </>
                 }
                 onConfirmar={() => {

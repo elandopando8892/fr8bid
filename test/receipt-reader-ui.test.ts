@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseHTML } from "linkedom";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
 import { ReceiptEvidenceDialog } from "../src/bidware/features/rate-review/ReceiptEvidenceDialog";
 import { RateReviewPage } from "../src/bidware/features/rate-review/RateReviewPage";
 import { getStagingReceipt } from "../src/bidware/features/rate-review/rateReview.service";
@@ -154,7 +155,7 @@ describe("diálogo real con transporte simulado", () => {
       if (action === "get_staging_receipt") return dto();
       throw new Error("Unexpected action: " + action);
     });
-    await act(async () => root.render(createElement(RateReviewPage)));
+    await act(async () => root.render(createElement(MemoryRouter, null, createElement(RateReviewPage))));
     const buttons = [...container.querySelectorAll("button")];
     const view = buttons.find((b) => b.textContent === "Ver recibo");
     expect(view).toBeTruthy(); expect(view!.disabled).toBe(false);
