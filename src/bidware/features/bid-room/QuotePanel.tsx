@@ -16,6 +16,7 @@ import {
   isLockedBrokerage,
   modelIsOptional,
   laneState,
+  offerForm,
   modelCopy,
   modelSpec,
   offerDraft,
@@ -99,14 +100,16 @@ export function QuotePanel({
   scopeToken.current = lane.invitation_token;
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
 
-  // Another lane, or this one after a reload, starts from its own values.
+  // Another lane, or this lane once the server's copy of its offer changed, starts from its own values.
+  // A reload that brings the same lane back unchanged (another lane was just sent) keeps what is being typed.
+  const laneVersion = `${lane.rfx_lane_id}|${lane.invitation_token}|${laneState(lane)}|${JSON.stringify(offerForm(lane))}`;
   useEffect(() => {
     const start = startForm(lane, shared);
     setForm(start.form);
     setFilled(start.filled);
     setError(null);
     setTried(false);
-  }, [lane]); // eslint-disable-line react-hooks/exhaustive-deps -- shared values only seed a lane when it opens
+  }, [laneVersion]); // eslint-disable-line react-hooks/exhaustive-deps -- shared values only seed a lane when it opens
   useEffect(() => {
     if (extrasOpen) setExtras(true);
   }, [extrasOpen, lane]);

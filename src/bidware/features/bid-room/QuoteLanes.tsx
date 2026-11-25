@@ -101,6 +101,11 @@ export function QuoteLanes({
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
+      // A confirmation opened over the sheet handles its own keys.
+      const above = [...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]')].some(
+        (d) => d !== panel.current && !panel.current?.contains(d),
+      );
+      if (above) return;
       if (e.key === "Escape") return onClose();
       // Tab stays inside the sheet.
       if (e.key !== "Tab" || !panel.current) return;
@@ -113,10 +118,11 @@ export function QuoteLanes({
       else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     };
-    window.addEventListener("keydown", onKey);
+    // Capture phase: runs while a confirmation on top is still open, so its Escape never closes the sheet.
+    window.addEventListener("keydown", onKey, true);
     return () => {
       document.body.style.overflow = overflow;
-      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKey, true);
       if (previous && document.contains(previous)) previous.focus();
     };
   }, [sheet]); // eslint-disable-line react-hooks/exhaustive-deps
