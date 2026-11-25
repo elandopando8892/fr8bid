@@ -1,5 +1,5 @@
 import { callRfxBidApi } from "@/lib/api-client";
-import { toRfiPayload, type Lang, type Place, type RequestDraft, type RequestResponse } from "./request.model";
+import { toRfiPayload, type Lang, type Place, type RequestDraft, type RequestProposal, type RequestResponse } from "./request.model";
 
 /** The shipper's link: the token is the only credential. */
 export const loadRequest = (token: string) => callRfxBidApi<RequestResponse>("get_customer_rfi", { token });
@@ -22,6 +22,10 @@ export async function submitRequest(token: string, draft: RequestDraft, base: Re
   requireCurrent();
   return await callRfxBidApi("submit_customer_rfi", { token, rfi: toRfiPayload(draft, base) });
 }
+
+/** Accepts lanes of the published proposal; accepting one twice changes nothing. */
+export const acceptProposal = (token: string, proposalId: string, laneIds: string[]) =>
+  callRfxBidApi<{ proposal: RequestProposal | null }>("accept_customer_rfi_proposal", { token, proposal_id: proposalId, lane_ids: laneIds });
 
 export async function searchPlaces(token: string, search: string, country?: string): Promise<Place[]> {
   if (search.trim().length < 2) return [];
@@ -50,6 +54,22 @@ function explainIn(message: string, lang: Lang) {
     return lang === "es"
       ? "Esta liga no está activa. Pide una nueva a tu contacto en MARKSMAN."
       : "This link isn't active. Ask your MARKSMAN contact for a new one.";
+  }
+  if (/proposal was updated|newer proposal|rfx_proposal_replaced/.test(text)) {
+    return lang === "es"
+      ? "La propuesta se actualizó. Vuelve a cargar la página para ver la vigente."
+      : "The proposal was updated. Reload the page to see the current one.";
+  }
+  if (/past its validity/.test(text)) {
+    return lang === "es"
+      ? "Esta propuesta ya venció. Pide una actualización a tu contacto en MARKSMAN."
+      : "This proposal has expired. Ask your MARKSMAN contact for an update.";
+  }
+  // Fr8Bid with real writes locked (FR8BID_ESCRITURAS_REALES not «si»): the acceptance is not recorded.
+  if (/aprobación del propietario|solo borradores/.test(text)) {
+    return lang === "es"
+      ? "Por ahora no podemos registrar tu aceptación en línea. Avísale a tu contacto en MARKSMAN qué rutas aceptas."
+      : "We can't record your acceptance online right now. Tell your MARKSMAN contact which lanes you accept.";
   }
   if (/already been submitted/.test(text)) {
     return lang === "es"

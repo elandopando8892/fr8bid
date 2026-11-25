@@ -30,7 +30,7 @@ const READS: Record<string, Set<string>> = {
     "list_outreach_audience_segments", "list_outreach_campaigns", "list_outreach_messages",
     "list_outreach_templates", "list_ratebook_carriers", "list_ratebooks", "list_rateware",
     "list_rateware_audit", "list_rateware_filter_values", "list_rateware_rows_by_ids",
-    "list_rateware_versions", "list_rfx_detail", "list_rfx_event_context", "list_rfx_events",
+    "list_rateware_versions", "get_rfx_shipper_proposal", "list_rfx_detail", "list_rfx_event_context", "list_rfx_events",
     // The carrier contact reviews; the contract declares them in an extension file (added 2026-09-29).
     "list_rfx_invitation_wave_reviews", "list_rfx_segment_confirmations",
     "list_rfx_process_projects", "list_rfx_response_vendor_ids", "list_saas_audit_log",
@@ -65,6 +65,8 @@ const ADMIN: Record<string, Set<string>> = {
     "generate_rfx_award_notices", "mark_rfx_award_package_implementation_ready", "publish_ratebook",
     // Declaring a lane void or reopening it (decided 2026-09-29)
     "set_rfx_lane_no_award",
+    // Publishing the sell rates of an awarded event to the shipper (decided 2026-11-25)
+    "publish_rfx_shipper_proposal",
     // Archiving, restoring and deleting records
     "archive_rfx_event", "delete_rfx_event", "archive_carrier_list_template", "restore_carrier_list_template",
     "delete_vendor_segment", "remove_vendors", "archive_shippers", "delete_shipper_record", "archive_ratebook",

@@ -16,6 +16,8 @@ import {
 } from "./request.model";
 import { explainRequestError, isAlreadySubmitted, loadRequest, saveRequest, submitRequest } from "./request.service";
 import { RequestForm, routeText, unitText } from "./RequestForm";
+import { ProposalTable, RequestSteps } from "./ShipperProposal";
+import { progressAfter } from "./proposal.flow";
 import { useAutosave, useSecondsSince, type SaveState } from "./useAutosave";
 import { BotonAyudas } from "../../../ui/BotonAyudas";
 
@@ -163,6 +165,7 @@ function ShipperRequestContent({ token, prefs }: { token: string; prefs: LinkPre
   const [showProblems, setShowProblems] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [proposalNotice, setProposalNotice] = useState<string | null>(null);
 
   const draftRef = useRef(draft);
   draftRef.current = draft;
@@ -298,7 +301,29 @@ function ShipperRequestContent({ token, prefs }: { token: string; prefs: LinkPre
       aside={!done && !sending && <SaveStatus state={autosave.state} copy={copy} lang={lang} brand={brand} onRetry={() => void autosave.retry()} />}
     >
       {done ? (
-        <Thanks kind={kind} draft={draft} copy={copy} lang={lang} submittedAt={submittedAt} readOnly={alreadySent} />
+        <>
+          {response.progress && response.progress.stage !== "draft" && <RequestSteps progress={response.progress} copy={copy} lang={lang} />}
+          {response.proposal && (
+            <ProposalTable
+              token={token}
+              proposal={response.proposal}
+              copy={copy}
+              lang={lang}
+              brand={brand}
+              title={project.title || customer}
+              onChange={(proposal, notice) => {
+                setProposalNotice(notice);
+                setResponse((current) => (current ? { ...current, proposal, progress: progressAfter(current.progress, proposal) } : current));
+              }}
+            />
+          )}
+          {!response.proposal && proposalNotice && (
+            <section className="card sr-proposal" role="alert" data-prueba="propuesta-no-disponible">
+              <ErrorBanner message={proposalNotice} />
+            </section>
+          )}
+          <Thanks kind={kind} draft={draft} copy={copy} lang={lang} submittedAt={submittedAt} readOnly={alreadySent} />
+        </>
       ) : (
         // Nothing can be edited while the request is on its way.
         <fieldset className="sr-fieldset" disabled={sending}>

@@ -16,6 +16,7 @@ import { claveCampana, esPlantillaInvitacion } from "../dominio/invitacion.js";
 import { esProtegido } from "../dominio/protegidos.js";
 import { bloqueoDesierta, bloqueoReabrirRuta } from "../dominio/acciones-mesa.js";
 import { textoModelosAceptados } from "../dominio/modelo.js";
+import { huellaPropuesta, lanesParaRateware, propuestaDelEvento, rutasDelEvento, textoFaltan } from "../dominio/propuesta.js";
 import { parseAcceptedCommercialModels, teamDefinedCommercialModel } from "../dominio/modelosAceptados.js";
 import { candadosAdjudicacion, hoyMexico, puedeAdjudicar } from "../dominio/recorrido.js";
 import { revisionesVigentes } from "../dominio/revision.js";
@@ -69,7 +70,7 @@ export interface Respuesta {
 export type Enviar = (servicio: Servicio, body: Record<string, unknown>, autorizacion: string | null) => Promise<Respuesta>;
 
 export const LECTURAS: Record<Servicio, Set<string>> = {
-  "rateware-api": new Set(["list_carrier_tariff_candidates", "preview_rfx_event_creation", "preview_rfx_event_reopen", "list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware", "list_rfx_carrier_replies", "get_rfx_carrier_reply", "list_rfx_reply_readings", "list_outreach_campaigns", "list_outreach_templates", "list_vendors", "list_contact_history", "list_carrier_list_templates", "get_carrier_list_template"]),
+  "rateware-api": new Set(["list_carrier_tariff_candidates", "preview_rfx_event_creation", "preview_rfx_event_reopen", "list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware", "list_rfx_carrier_replies", "get_rfx_carrier_reply", "list_rfx_reply_readings", "list_outreach_campaigns", "list_outreach_templates", "list_vendors", "list_contact_history", "list_carrier_list_templates", "get_carrier_list_template", "get_rfx_shipper_proposal"]),
   "rfx-bid-api": new Set(["get_invitation"])
 };
 
@@ -122,7 +123,10 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
     "update_rfx_lane",
     // El equipo define el modelo comercial de una oferta «sin elegir» (rateware
     // #229): solo modelo y porcentaje, sobre la versión que se mostró.
-    "set_rfx_bid_commercial_model"
+    "set_rfx_bid_commercial_model",
+    // Propuesta al shipper (rateware #234): tras adjudicar, la tarifa de venta por
+    // ruta va a la liga del shipper. La calcula guardaPropuesta con una lectura fresca.
+    "publish_rfx_shipper_proposal"
   ]),
   "rfx-bid-api": new Set(["submit_bid", "save_segment_confirmations", "decline_invitation"])
 };
@@ -389,6 +393,10 @@ export async function manejar(
     const bloqueo = await guardaAvisos(action, body!, autorizacion, op);
     if (bloqueo) return bloqueo;
   }
+  if (action === "publish_rfx_shipper_proposal") {
+    const bloqueo = await guardaPropuesta(body!, autorizacion, op);
+    if (bloqueo) return bloqueo;
+  }
   if (action === "prepare_whatsapp_rfx_reminder" || action === "send_whatsapp_outreach_messages") {
     const bloqueo = await guardaWhatsapp(action, body!, autorizacion, op);
     if (bloqueo) return bloqueo;
@@ -514,6 +522,44 @@ async function guardaModelo(body: Record<string, unknown>, autorizacion: string 
   const actual = Date.parse(String(fila.updated_at || ""));
   if (!Number.isFinite(vista) || !Number.isFinite(actual) || actual !== vista)
     return error(409, "OFERTA_CAMBIO", "La oferta cambió desde que la viste o no se pudo comprobar su versión. No se escribió nada; revísala otra vez.");
+  return null;
+}
+
+// Propuesta al shipper: la pantalla solo dice qué evento y la vigencia. Las rutas y
+// la tarifa de venta salen de una lectura fresca (versión adjudicada al primario y su
+// modelo comercial), así lo publicado no depende de lo que mande el navegador.
+// Sin notas: la liga del shipper no las muestra, así que no se publican.
+const CAMPOS_PROPUESTA = new Set(["action", "event_id", "valid_through", "confirmed", "confirmation_action", "proposal_fingerprint", "base_proposal_id"]);
+async function guardaPropuesta(body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
+  if (typeof body.event_id !== "string" || !UUID.test(body.event_id)) return error(400, "FALTA_EVENTO", "Indica el evento.");
+  if (Object.keys(body).some((k) => !CAMPOS_PROPUESTA.has(k))) return error(400, "SOLO_PROPUESTA", "La propuesta se calcula en el servidor: solo se indica el evento y la vigencia.");
+  if (body.confirmed !== true || body.confirmation_action !== "publish_rfx_shipper_proposal") return error(400, "SIN_CONFIRMAR", "Publicar la propuesta requiere confirmación explícita.");
+  if (body.valid_through != null && body.valid_through !== "" && !(typeof body.valid_through === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.valid_through)))
+    return error(400, "VIGENCIA_INVALIDA", "La vigencia es una fecha.");
+  if (typeof body.valid_through === "string" && body.valid_through && body.valid_through < (op.hoy?.() ?? hoyMexico()))
+    return error(400, "VIGENCIA_PASADA", "La vigencia ya pasó.");
+  // La versión publicada que el Administrador tenía a la vista (null si no había). Rateware
+  // solo publica si sigue siendo la vigente: un envío viejo que llega tarde, o uno que
+  // salió antes de ver otra publicación, no sustituye lo publicado después.
+  if (!("base_proposal_id" in body) || !(body.base_proposal_id === null || (typeof body.base_proposal_id === "string" && body.base_proposal_id.length > 0 && body.base_proposal_id.length <= 100)))
+    return error(400, "FALTA_BASE", "Indica qué propuesta publicada tenías a la vista (o ninguna).");
+  const lectura = await leerDetalle(body.event_id, autorizacion, op);
+  if (lectura === "sin_respuesta") return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se publicó nada.");
+  if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
+  const d = detalle(lectura.body, [], null, { hoy: op.hoy?.() ?? hoyMexico() });
+  const propuesta = propuestaDelEvento(d);
+  if (propuesta.faltan.length) return error(409, "PROPUESTA_INCOMPLETA", `Antes de publicar: ${textoFaltan(propuesta.faltan)}.`);
+  if (!propuesta.lineas.length) return error(409, "PROPUESTA_VACIA", "No hay rutas adjudicadas que publicar.");
+  // Lo que se publica es lo que el Administrador revisó: si la adjudicación o sus
+  // términos cambiaron desde que abrió la confirmación, no se publica.
+  if (body.proposal_fingerprint !== huellaPropuesta(propuesta))
+    return error(409, "PROPUESTA_CAMBIO", "La propuesta cambió desde que la revisaste. Vuelve a cargar la página y revísala antes de publicar.");
+  body.lanes = lanesParaRateware(propuesta, lectura.body);
+  body.event_lanes = rutasDelEvento(lectura.body);
+  body.currency = propuesta.moneda;
+  delete body.confirmed;
+  delete body.confirmation_action;
+  delete body.proposal_fingerprint;
   return null;
 }
 

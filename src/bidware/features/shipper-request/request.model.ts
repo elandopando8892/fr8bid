@@ -160,6 +160,43 @@ export interface RequestResponse {
   link: { id: string; status: string; expires_at: string | null; submitted_at: string | null };
   submission: RequestSubmission | null;
   lanes: Record<string, unknown>[];
+  /** Absent until rateware #234 is deployed. */
+  progress?: RequestProgress | null;
+  proposal?: RequestProposal | null;
+}
+
+/** Where the request is, as the shipper sees it: only counts, never a carrier. */
+export interface RequestProgress {
+  stage: "draft" | "received" | "bidding" | "evaluating" | "proposal" | "accepted";
+  submitted_at: string | null;
+  bidding: { status: string | null; due_date: string | null; lanes: number; carriers_quoted: number } | null;
+  proposal_published_at: string | null;
+}
+
+export interface ProposalLane {
+  rfx_lane_id: string;
+  lane_number: number | null;
+  origin: string | null;
+  destination: string | null;
+  equipment: string | null;
+  /** Trailer (rfx_lanes.trailer, e.g. 53 ft): shown with the equipment. */
+  trailer?: string | null;
+  service: string | null;
+  weekly_volume: number | null;
+  sell_rate: number | null;
+}
+
+/** The sell rate per lane, published by the team after awarding. */
+export interface RequestProposal {
+  id: string;
+  version: number;
+  currency: string;
+  valid_through: string | null;
+  expired: boolean;
+  notes: string | null;
+  published_at: string;
+  lanes: ProposalLane[];
+  accepted: { rfx_lane_id: string; accepted_at: string; accepted_by_name: string | null }[];
 }
 
 export const requestKind = (opportunityType: string | null | undefined): RequestKind =>
