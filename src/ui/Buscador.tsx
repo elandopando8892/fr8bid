@@ -66,6 +66,10 @@ export function Buscador({ abierto, cerrar, ir }: { abierto: boolean; cerrar: ()
   }, [abierto]);
   // Si la lista cambia (llegan los eventos o cambia el texto), el cursor vuelve al primero.
   useEffect(() => setCursor(0), [q, resultados.length]);
+  // El resultado activo siempre a la vista, también con la lista desplazada.
+  useEffect(() => {
+    if (abierto) document.getElementById(`buscador-r${cursor}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [cursor, abierto]);
 
   if (!abierto) return null;
   const elegir = (r: Resultado | undefined) => {
