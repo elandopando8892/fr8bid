@@ -322,7 +322,7 @@ function CarrierFitContent() {
       ) : (
         <header className="identity crm-head">
           <div className="crm-head-main">
-            <h1>Carrier fit</h1>
+            <h1>{getLang() === "es" ? "A quién invitar" : "Who to invite"}</h1>
             <p className="sub ayuda">{tr("text015")}</p>
           </div>
         </header>

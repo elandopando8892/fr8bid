@@ -208,7 +208,7 @@ export function CarrierCrmPage() {
       <header className="identity crm-head">
         <div className="crm-head-main">
           <div className="crumb">{tr("text241")}</div>
-          <h1>Carrier CRM</h1>
+          <h1>{getLang() === "es" ? "Directorio de carriers" : "Carrier directory"}</h1>
         </div>
         <div className="crm-head-actions">
           <Link to="/crm/higiene" className="btn">

@@ -94,3 +94,38 @@ export function shipperAparte(e: Pick<ResumenEvento, "nombre" | "shipper" | "fol
 export function cuantasRutas(e: ResumenEvento): number {
   return e.rutas.length || e.numRutas || 0;
 }
+
+// Fila de Eventos (rediseño 25-nov): una frase de qué pasa y un solo botón.
+export function quePasa(e: ResumenEvento, fecha: (iso: string | null) => string): string {
+  const ofertas = `${e.ofertas.toLocaleString("es-MX")} ${e.ofertas === 1 ? "oferta" : "ofertas"}`;
+  switch (e.estado) {
+    case "borrador":
+      return e.plazo ? `Sin publicar. Plazo ${fecha(e.plazo)}.` : "Sin publicar.";
+    case "abierto":
+      if (e.participaciones > 0 && e.ofertas >= e.participaciones) return `Llegaron las ${ofertas}. Ya puedes cerrar.`;
+      return `${e.ofertas.toLocaleString("es-MX")} de ${e.participaciones.toLocaleString("es-MX")} ofertas · cierra ${fecha(e.plazo)}.`;
+    case "cerrado":
+      return e.ofertas ? `${ofertas} · cerró ${fecha(e.plazo)}. Elige primario y respaldo.` : `Cerró ${fecha(e.plazo)} sin ofertas.`;
+    case "adjudicado":
+      return "Entregado a Rateware. Falta avisar a los carriers.";
+    default:
+      return "Archivado.";
+  }
+}
+
+export function botonFila(e: ResumenEvento): string {
+  switch (siguiente(e).accion) {
+    case "Publicar e invitar":
+      return "Invitar";
+    case "Cerrar a ofertas":
+      return "Cerrar a ofertas";
+    case "Esperar ofertas":
+      return "Ver ofertas";
+    case "Adjudicar y entregar":
+      return "Adjudicar";
+    case "Avisar a los carriers":
+      return "Avisar";
+    default:
+      return "Abrir";
+  }
+}

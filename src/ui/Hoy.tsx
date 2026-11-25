@@ -50,7 +50,7 @@ const fechaDeHoy = (ahora = new Date()) =>
 
 const detalleRutas = (e: ResumenEvento) => {
   const n = cuantasRutas(e);
-  return [resumenRutas(e.rutas) || null, n > 1 || (!e.rutas.length && n) ? plural(n, "ruta") : null].filter(Boolean).join(" · ");
+  return [resumenRutas(e.rutas) || null, (n > 1 || (!e.rutas.length && n)) && !/\bruta/i.test(nombreEvento(e)) ? plural(n, "ruta") : null].filter(Boolean).join(" · ");
 };
 
 function porQue(e: ResumenEvento): string {
@@ -161,10 +161,10 @@ export function Hoy() {
               </Liga>
             )}
             <Liga a="/quotedesk" className="chip-liga" title="Cotiza un spot con tarifario y margen">
-              <I.Calculadora size={15} />QuoteDesk
+              <I.Calculadora size={15} />Cotizar un spot
             </Liga>
             <Liga a="/crm" className="chip-liga" title="Ficha, etapa y contacto de cada carrier">
-              <I.Camion size={15} />Carrier CRM
+              <I.Camion size={15} />Carriers
             </Liga>
           </div>
           {(viejos > 0 || pruebas > 0) && (
