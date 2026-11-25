@@ -27,6 +27,10 @@ prueba como si fuera la función de Supabase. `FR8BID_TRAZA=1` muestra las llama
 - `cotizacion-rapida-escritorio.browser.cjs` (25-nov): en escritorio, la última ruta no se envía dos veces mientras
   llega la recarga, «No participo» se ve como tal y una recarga fallida se explica y se reintenta.
 
+- `listas-largas.browser.cjs` (25-nov): el Directorio con la búsqueda antes de las etapas, 25 por página, «Seleccionar
+  los N» y «También en» otras etapas; Listas agrupadas por familia, sin la nota de bitácora repetida, en escritorio y
+  teléfono. `FR8BID_FOTOS=<carpeta>` guarda las capturas.
+
 Córrelas antes de abrir un PR que toque `src/bidware/features/bid-room/`:
 `test/bidware-navegador/correr.sh test/bidware-navegador/cotizacion-rapida*.browser.cjs`.
 
