@@ -36,14 +36,19 @@ const FILTERS: { key: string; label: string }[] = [
 export function QuoteDeskPage() {
   useLang();
   const navigate = useNavigate();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const [filter, setFilter] = useState("active");
   const [search, setSearch] = useState("");
   // ?new=1 opens the new-quote dialog (the Dashboard's search links here).
   const [creating, setCreating] = useState(() => params.get("new") === "1");
   // También al llegar con ?new=1 estando ya en esta pantalla (búsqueda global).
+  // El parámetro se consume al abrir, para que repetir la acción vuelva a abrirlo.
   const nueva = params.get("new") === "1";
-  useEffect(() => { if (nueva) setCreating(true); }, [nueva, params]);
+  useEffect(() => {
+    if (!nueva) return;
+    setCreating(true);
+    setParams((p) => { const n = new URLSearchParams(p); n.delete("new"); return n; }, { replace: true });
+  }, [nueva, setParams]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panelDirty, setPanelDirty] = useState(false);
   const { data, loading, error, reload } = useAsync(

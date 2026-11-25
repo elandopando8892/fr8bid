@@ -64,7 +64,8 @@ export function Buscador({ abierto, cerrar, ir }: { abierto: boolean; cerrar: ()
     const t = setTimeout(() => campo.current?.focus(), 0);
     return () => clearTimeout(t);
   }, [abierto]);
-  useEffect(() => setCursor(0), [q]);
+  // Si la lista cambia (llegan los eventos o cambia el texto), el cursor vuelve al primero.
+  useEffect(() => setCursor(0), [q, resultados.length]);
 
   if (!abierto) return null;
   const elegir = (r: Resultado | undefined) => {
@@ -104,7 +105,7 @@ export function Buscador({ abierto, cerrar, ir }: { abierto: boolean; cerrar: ()
             aria-activedescendant={resultados[cursor] ? `buscador-r${cursor}` : undefined}
             onChange={(ev) => setQ(ev.target.value)}
             onKeyDown={(ev) => {
-              if (ev.key === "ArrowDown") { ev.preventDefault(); setCursor((c) => Math.min(c + 1, resultados.length - 1)); }
+              if (ev.key === "ArrowDown") { ev.preventDefault(); setCursor((c) => Math.max(0, Math.min(c + 1, resultados.length - 1))); }
               else if (ev.key === "ArrowUp") { ev.preventDefault(); setCursor((c) => Math.max(c - 1, 0)); }
               else if (ev.key === "Enter") { ev.preventDefault(); elegir(resultados[cursor]); }
             }}
