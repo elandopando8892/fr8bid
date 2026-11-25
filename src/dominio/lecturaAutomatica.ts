@@ -3,6 +3,7 @@
 // deja su propuesta como borrador. Nada se guarda como oferta sin confirmar.
 // Lo leído se recuerda en este navegador para no pagar dos veces la misma lectura.
 
+import type { Desenlace } from "./bandeja.js";
 import type { Lectura } from "./lectura.js";
 import type { CorreoRespuesta, Detalle } from "./tipos.js";
 
@@ -20,6 +21,14 @@ export interface LecturaGuardada {
   lectura: (Lectura & { recortado: boolean }) | null;
   fallo: string | null;
   revisado: boolean; // ya se guardó o se descartó: no se vuelve a mostrar
+  // Quedó lista aquí, pero el aviso al equipo (marca en el servidor) falló: se reintenta al abrir el evento.
+  marcaPendiente?: Desenlace;
+  // Quién la dejó lista: el reintento solo lo hace esa misma cuenta.
+  marcaDe?: string | null;
+  // Rutas que ya entraron como oferta desde este correo: un reintento o reabrir el borrador no las repite.
+  rutasGuardadas?: string[];
+  // Importe enviado por ruta antes de saber si entró: si la respuesta se pierde, sirve para reconocerla.
+  intentos?: Record<string, { tarifa: number; moneda: string }>;
 }
 
 export interface Pendiente {
@@ -74,7 +83,8 @@ export function correosPendientes(
         if (vistos.has(c.id)) continue;
         vistos.add(c.id);
         const previa = leidas[c.id];
-        if (previa && !(previa.fallo && ahora - Date.parse(previa.leidoEn) >= REINTENTO_MS)) continue;
+        // Un fallo se reintenta al día siguiente, salvo que el equipo ya lo haya dado por atendido.
+        if (previa && (previa.revisado || !(previa.fallo && ahora - Date.parse(previa.leidoEn) >= REINTENTO_MS))) continue;
         salida.push({ correo: c, carrierId: p.carrierId, carrier });
       }
     }
@@ -98,10 +108,14 @@ export interface LecturaServidor {
   reading: { lectura?: Lectura; recortado?: boolean } | null;
   error: string | null;
   created_at: string;
+  // Bandeja (rateware #235): ya quedó lista para todo el equipo.
+  reviewed_at?: string | null;
+  review_outcome?: string | null;
 }
 
-// Une lo leído en el servidor con lo de este navegador. Lo local gana (ahí vive «revisado»), así que
-// un correo ya guardado o descartado aquí no regresa. Lo del servidor evita pagar dos veces la lectura.
+// Une lo leído en el servidor con lo de este navegador. Lo local gana en la lectura, así que un correo
+// ya guardado o descartado aquí no regresa; lo que alguien del equipo dejó listo en el servidor tampoco
+// (bandeja, 25-nov). Lo del servidor evita pagar dos veces la lectura.
 export function combinarLecturas(
   locales: Record<string, LecturaGuardada>,
   servidor: LecturaServidor[],
@@ -109,9 +123,16 @@ export function combinarLecturas(
 ): Record<string, LecturaGuardada> {
   const salida = { ...locales };
   for (const f of servidor) {
-    if (!f?.gmail_message_id || salida[f.gmail_message_id]) continue;
+    if (!f?.gmail_message_id) continue;
+    const listo = Boolean(f.reviewed_at);
     const carrierId = f.vendor_id || "";
     const lectura = f.status === "proposed" && f.reading?.lectura ? { ...f.reading.lectura, recortado: Boolean(f.reading.recortado) } : null;
+    const local = salida[f.gmail_message_id];
+    if (local) {
+      // Lo local guarda la revisión y los intentos; la propuesta del servidor gana a un fallo leído aquí.
+      salida[f.gmail_message_id] = { ...local, ...(!local.lectura && lectura ? { lectura, fallo: null } : {}), revisado: local.revisado || listo };
+      continue;
+    }
     salida[f.gmail_message_id] = {
       correoId: f.gmail_message_id,
       carrierId,
@@ -120,7 +141,7 @@ export function combinarLecturas(
       leidoEn: f.created_at,
       lectura,
       fallo: lectura ? null : f.error || "La IA no pudo leer este correo.",
-      revisado: false
+      revisado: listo
     };
   }
   return salida;

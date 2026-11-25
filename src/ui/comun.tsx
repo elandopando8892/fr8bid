@@ -99,7 +99,7 @@ function Menu({ ruta, teToca }: { ruta: string; teToca: number }) {
 // Pestañas de la entrada activa (Carriers: directorio, listas, a quién invitar y plantillas).
 export function Secciones({ ruta }: { ruta: string }) {
   const m = moduloDe(ruta);
-  if (!m?.secciones) return null;
+  if (!m?.secciones || (m.pestanasEn && !m.pestanasEn(ruta))) return null;
   const actual = seccionActiva(m, ruta);
   return (
     <nav className="secciones" aria-label={`Secciones de ${m.etiqueta}`}>

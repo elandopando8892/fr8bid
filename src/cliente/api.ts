@@ -8,6 +8,7 @@ import { leerRespuesta } from "../servidor/lectura.js";
 import { correoParaLectura, type AdjuntoLectura, type AnexoTexto, type CanalLectura, type CorreoTraido, type Lectura, type RutaLectura } from "../dominio/lectura.js";
 import type { CorreoRevelado, PersonaApollo } from "../dominio/apollo.js";
 import type { LecturaServidor } from "../dominio/lecturaAutomatica.js";
+import { aBandeja, type Desenlace, type RespuestaBandeja } from "../dominio/bandeja.js";
 import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier } from "../dominio/contactos.js";
 import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit.js";
 import type { EntradaCatalogo } from "../dominio/condiciones-r1.js";
@@ -249,15 +250,34 @@ export class MesaApi {
     }
   }
 
-  // Borradores que dejó la revisión programada de Rateware (solo lectura). Si Rateware aún no tiene
-  // la acción o no responde, se sigue con la lectura al abrir la página.
+  // Borradores que dejó la revisión programada de Rateware (solo lectura). Si Rateware no responde se
+  // lanza el error: con una lista vacía se volverían a pagar lecturas y la bandeja daría avisos falsos.
   async lecturasServidor(eventId: string): Promise<LecturaServidor[]> {
+    const r: any = await this.rw({ action: "list_rfx_reply_readings", event_id: eventId });
+    if (!Array.isArray(r?.readings)) throw new ErrorApi(502, "RESPUESTA_INCOMPLETA", "Rateware no devolvió los borradores de la IA.");
+    return r.readings;
+  }
+
+  // Bandeja de respuestas con IA (rateware #235): lo pendiente de todos los eventos abiertos.
+  async bandejaRespuestas(): Promise<{ respuestas: RespuestaBandeja[]; hayMas: boolean; incompletas: number }> {
     try {
-      const r: any = await this.rw({ action: "list_rfx_reply_readings", event_id: eventId });
-      return Array.isArray(r?.readings) ? r.readings : [];
-    } catch {
-      return [];
+      const cuerpo: any = await this.rw({ action: "list_rfx_reply_inbox" });
+      if (!Array.isArray(cuerpo?.readings)) throw new ErrorApi(502, "RESPUESTA_INCOMPLETA", "Rateware no devolvió la lista de respuestas. Intenta de nuevo.");
+      return aBandeja(cuerpo);
+    } catch (e) {
+      // Sin desplegar, Rateware responde 400 «Unknown action.»: la acción no lleva parámetros que puedan fallar.
+      if (e instanceof ErrorApi && e.status === 400)
+        throw new ErrorApi(400, "BANDEJA_NO_DISPONIBLE", "Rateware todavía no tiene la bandeja. Las respuestas siguen en la página de cada evento.");
+      throw e;
     }
+  }
+
+  // Deja un borrador de la IA «listo» para todo el equipo (una sola vez: repetirla devuelve la primera marca).
+  // false solo cuando Rateware dice que no tiene esa lectura (la leyó solo un navegador): no hay nada que
+  // marcar. Cualquier otro error, 404 incluido, se lanza para que la marca quede pendiente.
+  async marcarLectura(eventId: string, gmailMessageId: string, desenlace: Desenlace): Promise<boolean> {
+    const r: any = await this.rw({ action: "mark_rfx_reply_reading", event_id: eventId, gmail_message_id: gmailMessageId, outcome: desenlace });
+    return r?.missing !== true;
   }
 
   private async pedirApollo(body: Record<string, unknown>) {

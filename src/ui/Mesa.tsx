@@ -73,7 +73,9 @@ const FocoContactos = createContext<(id: string) => void>(() => {});
 export function Mesa({ id }: { id: string }) {
   const s = useSesion();
   const location = useLocation();
-  const [, setParametros] = useSearchParams();
+  const [parametros, setParametros] = useSearchParams();
+  // Llegó desde la bandeja de Respuestas: se abre en Ofertas con ese borrador.
+  const respuesta = parametros.get("respuesta");
   const [carga, setCarga] = useState<Carga<Detalle>>({ tipo: "cargando" });
   const [entrega, setEntrega] = useState<EntregaLocal>(SIN_ENTREGA);
   const [recibo, setRecibo] = useState<Recibo | null>(null);
@@ -127,6 +129,11 @@ export function Mesa({ id }: { id: string }) {
     actualPrevio.current = claveActual;
   }, [claveActual]);
 
+  // Desde la bandeja: la etapa de Ofertas queda elegida aunque luego se quite ?respuesta de la dirección.
+  useEffect(() => {
+    if (respuesta) setVista("ofertas");
+  }, [respuesta, id]);
+
   // En móvil el riel es una tira horizontal: que la etapa a la vista no quede fuera.
   useEffect(() => {
     if (window.matchMedia("(max-width: 860px)").matches) document.querySelector(".riel .visto")?.scrollIntoView({ block: "nearest", inline: "center" });
@@ -135,7 +142,7 @@ export function Mesa({ id }: { id: string }) {
   if (carga.tipo !== "ok" || !r) return <EstadoVista carga={carga} reintentar={leer} />;
   const d = carga.datos;
   const etapaActual: ClaveEtapa = r.actual ? etapaDe(r.actual.clave) : "aviso";
-  const actual = vista ?? etapaActual;
+  const actual = vista ?? (respuesta ? "ofertas" : etapaActual);
   // Falta profundidad (o hay carriers sumados por invitar): en Ofertas también
   // se ven los sugeridos y la invitación, para sumar sin cambiar de etapa.
   const audiencia = audienciaInvitacion(d);
@@ -1534,6 +1541,11 @@ function CapturaEquipo({ d, ruta, accion }: { d: Detalle; ruta: Ruta; accion: Pr
 }
 
 function PanelComparar({ d, ctx, accion }: Props) {
+  // Borrador que se abrió desde la bandeja de Respuestas (?respuesta=…). Se quita de la dirección
+  // una vez atendido para que recargar la página no lo vuelva a abrir.
+  const [parametros, setParametros] = useSearchParams();
+  const respuesta = parametros.get("respuesta");
+  const quitarRespuesta = () => setParametros((p) => { const next = new URLSearchParams(p); next.delete("respuesta"); return next; }, { replace: true });
   const s = useSesion();
   // Con una sola ruta cerrada y sin primario, la mejor oferta llega ya elegida:
   // el formulario de adjudicar aparece sin buscarlo (se puede elegir otra).
@@ -1584,7 +1596,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
           />
         </div>
       )}
-      <LecturaIA d={d} accion={accion} advertenciaReal={ADVERTENCIA_REAL(s, d)} />
+      <LecturaIA d={d} accion={accion} advertenciaReal={ADVERTENCIA_REAL(s, d)} abrir={respuesta} alAbrir={quitarRespuesta} />
       {hayOfertas && <ResumenOfertas d={d} ctx={ctx} onVerRuta={verRuta} />}
       {d.evento.estado === "cerrado" && ctx.rol === "admin" && <AdjudicarEnLote d={d} ctx={ctx} accion={accion} />}
       {d.evento.estado === "cerrado" && ctx.rol === "admin" && <CerrarSinAdjudicar d={d} accion={accion} />}

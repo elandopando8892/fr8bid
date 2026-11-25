@@ -7,6 +7,7 @@ import { useEventosCompartidos } from "./Eventos";
 import { cuantasRutas, folioCorto, grupoDe, nombreEvento, porUrgencia, resumenRutas, shipperAparte, siguiente } from "./eventosVista";
 import * as I from "./Iconos";
 import { useSesion } from "./sesion";
+import { useBandeja } from "./Respuestas";
 import { useAsync } from "../bidware/components/useAsync";
 import { awaitsTeam, listShipperProjects } from "../bidware/features/shipper-intake/intake.service";
 import { listPendingRates } from "../bidware/features/rate-review/rateReview.service";
@@ -35,6 +36,19 @@ function Indicadores() {
       {tarifas > 0 && (
         <Liga a="/tarifas" className="chip-liga acento"><I.Etiqueta size={15} />{plural(tarifas, "tarifa")} por revisar</Liga>
       )}
+    </div>
+  );
+}
+
+// Bandeja de respuestas (prioridad 6): cuántas contestaciones de carriers, ya leídas por la IA,
+// esperan a alguien del equipo. Solo si hay alguna.
+function RespuestasPorAtender() {
+  const { carga } = useBandeja();
+  const n = carga.tipo === "ok" ? carga.datos.respuestas.length + carga.datos.incompletas : 0;
+  if (carga.tipo !== "ok" || !n) return null;
+  return (
+    <div className="atajos-chips indicadores">
+      <Liga a="/respuestas" className="chip-liga acento"><I.Sobre size={15} />{carga.datos.hayMas ? "Más de " : ""}{plural(n, "respuesta")} de carriers por atender</Liga>
     </div>
   );
 }
@@ -152,6 +166,7 @@ export function Hoy() {
           </div>
           )}
 
+          {rol !== "viewer" && <RespuestasPorAtender />}
           {modo === "rateware" && <Indicadores />}
           <div className="atajos-chips">
             {/* Sin nada pendiente, la tarjeta ya trae «Nuevo evento»: no se repite. */}
