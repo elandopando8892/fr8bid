@@ -1556,7 +1556,6 @@ function PanelComparar({ d, ctx, accion }: Props) {
   const varias = d.rutas.length > 1;
   const [vista, setVista] = useState<string>(() => (d.rutas.find((r) => !rutaDecidida(r) && conOferta(r).length > 0) ?? d.rutas[0])?.id ?? "todas");
   const rutaVista = varias ? d.rutas.find((r) => r.id === vista) : undefined;
-  const visibles = rutaVista ? [rutaVista] : d.rutas;
   const verRuta = (numero: number) => {
     const r = d.rutas.find((x) => x.numero === numero);
     if (!r) return;
@@ -1588,7 +1587,8 @@ function PanelComparar({ d, ctx, accion }: Props) {
       {d.evento.estado === "cerrado" && ctx.rol === "admin" && <AdjudicarEnLote d={d} ctx={ctx} accion={accion} />}
       {d.evento.estado === "cerrado" && ctx.rol === "admin" && <CerrarSinAdjudicar d={d} accion={accion} />}
       {varias && <SelectorRutas d={d} vista={rutaVista?.id ?? null} onVista={(id) => setVista(id)} />}
-      {visibles.map((ruta) => {
+      {/* Las demás rutas siguen montadas y solo se ocultan: lo que escribiste (motivo, pregunta) no se pierde al cambiar de ruta. */}
+      {d.rutas.map((ruta) => {
         const filas = ofertasOrdenadas(ruta);
         const laMejor = masBajaComparable(ruta);
         // Una oferta rechazada deja de tener versión: ya no se puede elegir.
@@ -1603,7 +1603,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
         const conTransito = filas.some((x) => versionVigente(x)!.transitoDias !== null);
         const declinaron = ruta.participaciones.filter((p) => p.estado === "declino").map((p) => p.carrier);
         const tabla = (
-          <div className="tarjeta" id={`ruta-${ruta.numero}`}>
+          <div className="tarjeta" id={`ruta-${ruta.numero}`} hidden={!!rutaVista && rutaVista.id !== ruta.id}>
             <div className="fila">
               <h2>Ruta {ruta.numero}{d.rutas.length > 1 ? ` · ${ruta.origen} → ${ruta.destino}` : ""}</h2>
               <span className="tenue">Objetivo {dinero(ruta.objetivo, ruta.moneda)}</span>

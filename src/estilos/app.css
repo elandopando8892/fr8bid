@@ -578,3 +578,4 @@ button.pill:hover { filter: brightness(0.96); }
 .chip-ruta[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
 .pasar-ruta { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 4px 0 16px; }
 .pasar-ruta .btn-primario { background: var(--accent); }
+.tarjeta[hidden] { display: none !important; }
