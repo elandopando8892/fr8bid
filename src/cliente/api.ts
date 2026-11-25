@@ -250,15 +250,11 @@ export class MesaApi {
     }
   }
 
-  // Borradores que dejó la revisión programada de Rateware (solo lectura). Si Rateware aún no tiene
-  // la acción o no responde, se sigue con la lectura al abrir la página.
+  // Borradores que dejó la revisión programada de Rateware (solo lectura). Si Rateware no responde se
+  // lanza el error: con una lista vacía se volverían a pagar lecturas y la bandeja daría avisos falsos.
   async lecturasServidor(eventId: string): Promise<LecturaServidor[]> {
-    try {
-      const r: any = await this.rw({ action: "list_rfx_reply_readings", event_id: eventId });
-      return Array.isArray(r?.readings) ? r.readings : [];
-    } catch {
-      return [];
-    }
+    const r: any = await this.rw({ action: "list_rfx_reply_readings", event_id: eventId });
+    return Array.isArray(r?.readings) ? r.readings : [];
   }
 
   // Bandeja de respuestas con IA (rateware #235): lo pendiente de todos los eventos abiertos.
@@ -275,14 +271,11 @@ export class MesaApi {
 
   // Deja un borrador de la IA «listo» para todo el equipo. Si el borrador no vino del servidor
   // (lo leyó este navegador) no hay nada que marcar allá: se recuerda solo aquí.
+  // false solo cuando Rateware dice que no tiene esa lectura (la leyó solo un navegador): no hay nada que
+  // marcar. Cualquier otro error, 404 incluido, se lanza para que la marca quede pendiente.
   async marcarLectura(eventId: string, gmailMessageId: string, desenlace: Desenlace): Promise<boolean> {
-    try {
-      await this.rw({ action: "mark_rfx_reply_reading", event_id: eventId, gmail_message_id: gmailMessageId, outcome: desenlace });
-      return true;
-    } catch (e) {
-      if (e instanceof ErrorApi && e.status === 404) return false;
-      throw e;
-    }
+    const r: any = await this.rw({ action: "mark_rfx_reply_reading", event_id: eventId, gmail_message_id: gmailMessageId, outcome: desenlace });
+    return r?.missing !== true;
   }
 
   private async pedirApollo(body: Record<string, unknown>) {

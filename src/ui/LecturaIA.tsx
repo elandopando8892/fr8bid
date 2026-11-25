@@ -49,7 +49,8 @@ const rutasLectura = (d: Detalle) => d.rutas.map((r) => ({ id: r.id, numero: r.n
 const fecha = (en: string) => new Date(en).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Monterrey" });
 
 // Propuesta de la IA convertida en filas editables, solo en rutas donde ese carrier admite captura.
-function aFilas(d: Detalle, l: Lectura, carrierId: string): Fila[] {
+// guardadas: rutas que ya entraron desde este correo (un intento anterior que falló a la mitad).
+function aFilas(d: Detalle, l: Lectura, carrierId: string, guardadas: string[] = []): Fila[] {
   return l.ofertas.flatMap((o) => {
     const ruta = d.rutas.find((r) => r.id === o.rutaId);
     if (!ruta) return [];
@@ -58,7 +59,7 @@ function aFilas(d: Detalle, l: Lectura, carrierId: string): Fila[] {
     return [{
       ruta,
       p: sirve,
-      incluir: Boolean(sirve) && o.tarifa !== null,
+      incluir: Boolean(sirve) && o.tarifa !== null && !guardadas.includes(ruta.id),
       tarifa: o.tarifa === null ? "" : String(o.tarifa),
       moneda: o.moneda || "",
       vigencia: o.vigencia || "",
@@ -67,7 +68,7 @@ function aFilas(d: Detalle, l: Lectura, carrierId: string): Fila[] {
       notas: o.notas,
       cita: o.cita,
       dudas: o.dudas,
-      guardada: false
+      guardada: guardadas.includes(ruta.id)
     }];
   });
 }
@@ -92,6 +93,9 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
   const [revisando, setRevisando] = useState<LecturaGuardada | null>(null);
   // Ya se sumó lo que leyó el servidor: hasta entonces no se sabe si el correo de la bandeja está aquí.
   const [conServidor, setConServidor] = useState(false);
+  // Rateware no contestó la lista de borradores: no se lee nada nuevo (se pagaría dos veces) hasta reintentar.
+  const [servidorFallo, setServidorFallo] = useState(false);
+  const [intento, setIntento] = useState(0);
   // Aviso al llegar de la bandeja; con «quitar», la respuesta se puede retirar de Respuestas sin capturarla.
   const [nota, setNota] = useState<{ texto: string; quitar?: LecturaGuardada } | null>(null);
   const enCurso = useRef(false);
@@ -130,7 +134,16 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     enCurso.current = true;
     void (async () => {
       // Primero lo que ya leyó la revisión programada de Rateware: no se paga dos veces.
-      const delServidor = combinarLecturas(cargarLecturas(d.evento.id), await s.api.lecturasServidor(d.evento.id), carriers);
+      let servidor;
+      try {
+        servidor = await s.api.lecturasServidor(d.evento.id);
+      } catch {
+        setServidorFallo(true);
+        enCurso.current = false;
+        return;
+      }
+      setServidorFallo(false);
+      const delServidor = combinarLecturas(cargarLecturas(d.evento.id), servidor, carriers);
       guardarLecturas(d.evento.id, delServidor);
       setLeidas(delServidor);
       setConServidor(true);
@@ -156,7 +169,7 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
       enCurso.current = false;
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [d.evento.id, d.evento.estado, d.respuestas, s.rol]);
+  }, [d.evento.id, d.evento.estado, d.respuestas, s.rol, intento]);
 
   // Llegó desde la bandeja: abre ese borrador (o el correo, si la IA no pudo leerlo) una sola vez.
   useEffect(() => {
@@ -177,7 +190,7 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     }
     alAbrir?.();
     // Que se vea sin buscarlo: la etapa de Ofertas es larga.
-    requestAnimationFrame(() => document.getElementById("lectura-ia")?.scrollIntoView({ block: "start", behavior: "smooth" }));
+    requestAnimationFrame(() => document.getElementById("lectura-ia")?.scrollIntoView?.({ block: "start", behavior: "smooth" }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abrir, conServidor]);
 
@@ -189,6 +202,12 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     const ok = await avisarEquipo(g.correoId, "dismissed");
     setNota(ok ? null : { texto: "No se pudo quitar de la bandeja del equipo. Se reintenta la próxima vez que abras este evento." });
   };
+  const avisoServidor = servidorFallo && (
+    <div id={nota ? undefined : "lectura-ia"} className="estado estado-error" role="alert">
+      No se pudieron consultar las respuestas que ya leyó la IA{abrir ? ", así que esa respuesta de la bandeja aún no se abre" : ""}.{" "}
+      <button className="btn-texto" onClick={() => setIntento((n) => n + 1)}>Reintentar</button>
+    </div>
+  );
   const avisoNota = nota && (
     <div id="lectura-ia" className="estado" role="status">
       {nota.texto}{" "}
@@ -197,7 +216,8 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     </div>
   );
 
-  if (s.rol === "viewer" || !carriers.size || d.evento.estado === "adjudicado" || d.evento.estado === "archivado") return avisoNota || null;
+  if (s.rol === "viewer" || !carriers.size || d.evento.estado === "adjudicado" || d.evento.estado === "archivado")
+    return avisoNota || avisoServidor ? <>{avisoServidor}{avisoNota}</> : null;
 
   const porRevisar = lecturasPorRevisar(leidas, carriers);
   const revisar = (g: LecturaGuardada) => {
@@ -209,13 +229,14 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     setTraido(null);
     setError(null);
     setLectura(g.lectura);
-    setFilas(aFilas(d, g.lectura!, g.carrierId));
+    setFilas(aFilas(d, g.lectura!, g.carrierId, cargarLecturas(d.evento.id)[g.correoId]?.rutasGuardadas));
     setRevisando(g);
     setAbierto(true);
   };
   if (!abierto)
     return (
       <>
+        {avisoServidor}
         {avisoNota}
         {(porRevisar.length > 0 || leyendoAuto) && (
           <div className="aviso-caja">
@@ -281,11 +302,12 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
 
   const traer = async (c: CorreoRespuesta) => {
     limpiar();
-    // Desde aquí se atiende el correo traído, no el borrador con que se abrió el formulario.
-    setRevisando(null);
     setTrayendo(c.id);
     try {
       const t = await s.api.traerCorreo(d.evento.id, c.id);
+      // Desde aquí se atiende el correo traído, no el borrador con que se abrió el formulario.
+      // Si Gmail falla se conserva el borrador: lo que se capture a mano lo deja listo.
+      setRevisando(null);
       setTraido({ ...t, id: c.id });
       setCanal("email");
       setTexto(t.texto);
@@ -317,7 +339,8 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     try {
       const l = await s.api.leerRespuesta({ texto, canal, carrier, adjuntos, anexos, rutas: rutasLectura(d) });
       setLectura(l);
-      setFilas(aFilas(d, l, carrierId));
+      const correoId = traido?.id ?? revisando?.correoId;
+      setFilas(aFilas(d, l, carrierId, correoId ? cargarLecturas(d.evento.id)[correoId]?.rutasGuardadas : []));
     } catch (e) {
       setError(e instanceof ErrorApi ? e.message : "La IA no pudo leer esta respuesta. Captúrala a mano.");
     } finally {
@@ -325,6 +348,16 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     }
   };
 
+  // Se recuerda en este navegador qué rutas de este correo ya entraron, para que reabrir el borrador no las repita.
+  const recordarGuardada = (rutaId: string) => {
+    const correoId = traido?.id ?? revisando?.correoId;
+    if (!correoId) return;
+    const previa = cargarLecturas(d.evento.id);
+    const base: LecturaGuardada = previa[correoId] ?? (revisando?.correoId === correoId ? revisando : null) ?? { correoId, carrierId, carrier, en: new Date().toISOString(), leidoEn: new Date().toISOString(), lectura: null, fallo: null, revisado: false };
+    const todas = { ...previa, [correoId]: { ...base, rutasGuardadas: [...new Set([...(base.rutasGuardadas ?? []), rutaId])] } };
+    guardarLecturas(d.evento.id, todas);
+    setLeidas(todas);
+  };
   const cambiar = (i: number, c: Partial<Fila>) => setFilas(filas.map((f, j) => (j === i ? { ...f, ...c } : f)));
   const numero = (x: string) => (x.trim() === "" ? null : Number(x));
   const valida = (f: Fila) => Number(f.tarifa.replace(/,/g, "")) > 0 && Boolean(f.moneda) && [f.capacidad, f.transito].every((x) => x.trim() === "" || Number.isFinite(Number(x)));
@@ -454,6 +487,7 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
                         leidaConIA: true
                       });
                       setFilas((xs) => xs.map((x) => (x.ruta.id === f.ruta.id ? { ...x, guardada: true, incluir: false } : x)));
+                      recordarGuardada(f.ruta.id);
                     }
                     hecho = true;
                     return elegidas.length;

@@ -415,7 +415,7 @@ export class RatewareSimulado {
         const outcome = String(body.outcome || "");
         if (!["captured", "declined", "answered", "dismissed"].includes(outcome)) throw new Falla(400, "outcome must be captured, declined, answered or dismissed.", "400");
         const l = this.lecturasIA.find((x) => x.rfx_event_id === event.id && x.gmail_message_id === id);
-        if (!l) throw new Falla(404, "This reply has no AI reading in this event.", "404");
+        if (!l) return ok({ event_id: event.id, reading: null, already: false, missing: true });
         const ya = Boolean(l.reviewed_at);
         if (!ya) Object.assign(l, { reviewed_at: this.ahora(), reviewed_by: u.ownerEmail, review_outcome: outcome });
         return ok({ event_id: event.id, reading: { gmail_message_id: id, reviewed_at: l.reviewed_at, reviewed_by: l.reviewed_by, review_outcome: l.review_outcome }, already: ya });
