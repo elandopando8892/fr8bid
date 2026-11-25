@@ -44,7 +44,7 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
   const puedePublicar = ctx.rol === "admin" && estado.conSolicitud && cmp.puedePublicar;
   // Siempre lo publicado (con lo aceptado); antes de publicar, lo calculado.
   const filas: Fila[] = propuesta
-    ? propuesta.lineas.map((l) => ({ rutaId: l.rutaId, numero: l.numero, origen: l.origen, destino: l.destino, equipo: l.equipo, volumenSemanal: l.volumenSemanal, venta: l.venta, moneda: propuesta.moneda }))
+    ? propuesta.lineas.map((l) => ({ rutaId: l.rutaId, numero: l.numero, origen: l.origen, destino: l.destino, equipo: l.equipo, servicio: l.servicio, volumenSemanal: l.volumenSemanal, venta: l.venta, moneda: propuesta.moneda }))
     : calculada.lineas;
 
   return (
@@ -80,8 +80,8 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
                 {cmp.cambios.map((c) => (
                   <li key={c.rutaId}>
                     {c.numero ? `${c.numero} · ` : ""}{c.origen} → {c.destino}:{" "}
-                    {c.antes === null ? "no estaba publicada" : c.antes === c.ahora ? "cambiaron ruta, equipo o volumen" : `${dinero(c.antes, propuesta!.moneda)} → ${dinero(c.ahora, c.moneda)}`}
-                    {c.antes !== null && c.antes !== c.ahora && c.terminos ? " (y cambiaron ruta, equipo o volumen)" : ""}
+                    {c.antes === null ? "no estaba publicada" : c.antes === c.ahora ? "cambiaron ruta, equipo, servicio o volumen" : `${dinero(c.antes, propuesta!.moneda)} → ${dinero(c.ahora, c.moneda)}`}
+                    {c.antes !== null && c.antes !== c.ahora && c.terminos ? " (y cambiaron ruta, equipo, servicio o volumen)" : ""}
                     {c.aceptada ? " · ya aceptada" : ""}
                   </li>
                 ))}
@@ -123,7 +123,7 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
   );
 }
 
-type Fila = { rutaId: string; numero: number | null; origen: string; destino: string; equipo: string; volumenSemanal: number | null; venta: number; moneda: string };
+type Fila = { rutaId: string; numero: number | null; origen: string; destino: string; equipo: string; servicio: string; volumenSemanal: number | null; venta: number; moneda: string };
 
 // Ruta, equipo, volumen y venta: lo que el shipper ve (sin carrier ni costo).
 function TablaPropuesta({ filas, aceptadas }: { filas: Fila[]; aceptadas: Map<string, { en: string; por: string | null }> | null }) {
@@ -138,7 +138,7 @@ function TablaPropuesta({ filas, aceptadas }: { filas: Fila[]; aceptadas: Map<st
           return (
             <tr key={l.rutaId}>
               <td>{l.numero ? `${l.numero} · ` : ""}{l.origen} → {l.destino}</td>
-              <td>{l.equipo || "—"}</td>
+              <td>{[l.equipo, l.servicio].filter(Boolean).join(" · ") || "—"}</td>
               <td>{l.volumenSemanal ?? "—"}</td>
               <td className="mono">{dinero(l.venta, l.moneda)}</td>
               {aceptadas && <td>{a ? <span className="pill ok">aceptó {fecha(a.en)}{a.por ? ` · ${a.por}` : ""}</span> : <span className="tenue">pendiente</span>}</td>}

@@ -16,6 +16,8 @@ export interface LineaPropuesta {
   origen: string;
   destino: string;
   equipo: string;
+  /** Servicio de la ruta (rfx_lanes.service): el shipper lo ve junto al equipo. */
+  servicio: string;
   volumenSemanal: number | null;
   venta: number;
   moneda: string;
@@ -65,7 +67,9 @@ export function propuestaDelEvento(d: Detalle): Propuesta {
       numero: ruta.numero,
       origen: ruta.origen,
       destino: ruta.destino,
-      equipo: ruta.equipo,
+      // Equipo como lo guarda Rateware en la propuesta (rfx_lanes.equipment), sin la caja.
+      equipo: String(ruta.cruda?.equipment ?? ruta.equipo ?? "").trim(),
+      servicio: String(ruta.cruda?.service ?? "").trim(),
       volumenSemanal: ruta.volumenSemanal,
       venta: venta.venta,
       moneda: (v.moneda || ruta.moneda || "USD").toUpperCase(),
@@ -110,7 +114,7 @@ export function lanesParaRateware(p: Propuesta, crudo: any) {
 export function huellaPropuesta(p: Propuesta): string {
   const texto = JSON.stringify([
     p.moneda,
-    [...p.lineas].sort((a, b) => a.rutaId.localeCompare(b.rutaId)).map((l) => [l.rutaId, l.venta, l.origen, l.destino, l.equipo, l.volumenSemanal])
+    [...p.lineas].sort((a, b) => a.rutaId.localeCompare(b.rutaId)).map((l) => [l.rutaId, l.venta, l.origen, l.destino, l.equipo, l.servicio, l.volumenSemanal])
   ]);
   let h1 = 0x811c9dc5, h2 = 0x01000193;
   for (let i = 0; i < texto.length; i++) {
@@ -132,7 +136,7 @@ export interface PropuestaPublicada {
   moneda: string;
   vigenteHasta: string | null;
   publicadaEn: string | null;
-  lineas: { rutaId: string; numero: number | null; origen: string; destino: string; equipo: string; volumenSemanal: number | null; venta: number }[];
+  lineas: { rutaId: string; numero: number | null; origen: string; destino: string; equipo: string; servicio: string; volumenSemanal: number | null; venta: number }[];
   aceptadas: { rutaId: string; en: string; por: string | null }[];
 }
 
@@ -153,6 +157,7 @@ export function leerPropuestaPublicada(crudo: any): { conSolicitud: boolean; pro
             origen: String(l.origin ?? ""),
             destino: String(l.destination ?? ""),
             equipo: String(l.equipment ?? ""),
+            servicio: String(l.service ?? "").trim(),
             volumenSemanal: l.weekly_volume == null ? null : Number(l.weekly_volume),
             venta: Number(l.sell_rate)
           })),
@@ -170,7 +175,7 @@ export function leerPropuestaPublicada(crudo: any): { conSolicitud: boolean; pro
 // lo publicado con lo aceptado; lo que cambió se muestra aparte. Cuenta como cambio
 // cualquier dato que el shipper ve: ruta, equipo, volumen, venta o moneda.
 export interface Comparacion {
-  /** Rutas cuya venta o términos de hoy no son los publicados (o que no estaban publicadas). */
+  /** Rutas cuya venta o términos de hoy (ruta, equipo, servicio, volumen) no son los publicados (o que no estaban publicadas). */
   cambios: { rutaId: string; numero: number; origen: string; destino: string; antes: number | null; ahora: number; moneda: string; terminos: boolean; aceptada: boolean }[];
   /** Rutas publicadas que hoy ya no van (desiertas o sin primario). */
   quitadas: { numero: number; aceptada: boolean }[];
@@ -189,7 +194,7 @@ export function compararPropuesta(calculada: Propuesta, publicada: PropuestaPubl
   const cambios = publicada
     ? calculada.lineas.flatMap((l) => {
         const a = antes.get(l.rutaId);
-        const terminos = Boolean(a) && (a!.origen !== l.origen || a!.destino !== l.destino || (a!.equipo || "") !== (l.equipo || "") || (a!.volumenSemanal ?? null) !== (l.volumenSemanal ?? null));
+        const terminos = Boolean(a) && (a!.origen !== l.origen || a!.destino !== l.destino || (a!.equipo || "") !== (l.equipo || "") || (a!.servicio || "") !== (l.servicio || "") || (a!.volumenSemanal ?? null) !== (l.volumenSemanal ?? null));
         if (a && a.venta === l.venta && !terminos) return [];
         return [{ rutaId: l.rutaId, numero: l.numero, origen: l.origen, destino: l.destino, antes: a ? a.venta : null, ahora: l.venta, moneda: l.moneda, terminos, aceptada: aceptadas.has(l.rutaId) }];
       })

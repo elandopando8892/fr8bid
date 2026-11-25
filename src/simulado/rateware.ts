@@ -198,6 +198,21 @@ export class RatewareSimulado {
     return e;
   }
 
+  // Como accept_rfx_shipper_proposal (rateware #234), detrás de la liga del shipper:
+  // solo la propuesta publicada y vigente, solo sus rutas, idempotente por ruta.
+  aceptarPropuesta(proposalId: string, laneIds: string[], nombre: string | null = null) {
+    const p = this.propuestas.find((x) => x.id === proposalId);
+    if (!p) throw new Falla(404, "Proposal not found.", "NOT_FOUND");
+    if (p.status !== "published") throw new Falla(409, "A newer proposal replaced this one.", "RFX_PROPOSAL_REPLACED");
+    if (p.valid_through && String(p.valid_through) < this.hoy()) throw new Falla(409, "The proposal is past its validity.", "RFX_PROPOSAL_EXPIRED");
+    const suyas = new Set((p.lanes as Fila[]).map((l) => l.rfx_lane_id));
+    if (!laneIds.length || laneIds.some((id) => !suyas.has(id))) throw new Falla(400, "One of the lanes is not part of this proposal.", "RFX_PROPOSAL_LANE_INVALID");
+    for (const id of new Set(laneIds))
+      if (!this.aceptaciones.some((a) => a.proposal_id === p.id && a.rfx_lane_id === id))
+        this.aceptaciones.push({ proposal_id: p.id, rfx_lane_id: id, created_at: this.ahora(), accepted_by_name: nombre });
+    return this.propuestaVigente(String(p.rfx_event_id));
+  }
+
   private propuestaVigente(eventId: string) {
     const p = this.propuestas.find((x) => x.rfx_event_id === eventId && x.status === "published");
     if (!p) return null;
@@ -914,7 +929,7 @@ export class RatewareSimulado {
             ["origin", "destination", "origin_city", "origin_state", "origin_country", "destination_city", "destination_state", "destination_country", "equipment", "trailer", "service", "weekly_volume"].every((k) => esp.lane && k in esp.lane && mismo(esp.lane[k], lane[k])) &&
             "master_package" in esp && JSON.stringify(esp.master_package ?? null) === JSON.stringify(event.rfx_master_package ?? null);
           if (!vigenteIgual) throw new Falla(409, "The award or the lanes changed after the proposal was reviewed.", "RFX_PROPOSAL_STALE");
-          return { rfx_lane_id: lane.id, lane_number: lane.lane_number, origin: lane.origin, destination: lane.destination, equipment: lane.equipment, weekly_volume: lane.weekly_volume ?? null, sell_rate: Math.round(venta * 100) / 100 };
+          return { rfx_lane_id: lane.id, lane_number: lane.lane_number, origin: lane.origin, destination: lane.destination, equipment: lane.equipment, service: lane.service ?? null, weekly_volume: lane.weekly_volume ?? null, sell_rate: Math.round(venta * 100) / 100 };
         });
         const vigente = this.propuestas.find((x) => x.rfx_event_id === event.id && x.status === "published");
         const moneda = String(body.currency || "USD");

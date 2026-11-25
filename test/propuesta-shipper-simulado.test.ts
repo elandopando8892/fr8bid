@@ -55,7 +55,8 @@ describe("propuesta al shipper contra el simulado", () => {
   for (const [que, cambiar] of [
     ["la oferta adjudicada", () => { sim.laneVendors.find((x) => x.id === A)!.bid_rate = 1700; }],
     ["la caja de la ruta", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.trailer = "48"; }],
-    ["el estado de destino", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.destination_state = "CA"; }]
+    ["el estado de destino", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.destination_state = "CA"; }],
+    ["el servicio de la ruta", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.service = "D2D"; }]
   ] as const) {
     it(`si cambia ${que} entre la lectura del servidor y la escritura, Rateware rechaza (STALE)`, async () => {
       const p = propuestaDelEvento(await admin.detalle(eventId));
@@ -79,13 +80,33 @@ describe("propuesta al shipper contra el simulado", () => {
     });
   }
 
-  it("con aceptación parcial vencida se renueva la vigencia y lo aceptado se queda aceptado", async () => {
+  it("con aceptación parcial (2 rutas, el shipper acepta 1 por su contrato) se renueva la vigencia: la aceptada sigue aceptada y la otra pendiente", async () => {
+    // Segunda ruta adjudicada al mismo carrier.
+    const l1 = sim.lanes.find((l) => l.rfx_event_id === eventId)!;
+    const l2 = { ...l1, id: "22222222-2222-4222-8222-2222222222a2", lane_number: 2, origin: "Saltillo", origin_city: "Saltillo" };
+    sim.lanes.push(l2);
+    const lv1 = sim.laneVendors.find((x) => x.id === A)!;
+    sim.laneVendors.push({ ...lv1, id: "33333333-3333-4333-8333-3333333333a2", rfx_lane_id: l2.id });
+
     const p = propuestaDelEvento(await admin.detalle(eventId));
+    expect(p.faltan).toEqual([]);
+    expect(p.lineas).toHaveLength(2);
     const v1 = await admin.publicarPropuesta(eventId, "2026-11-02", huellaPropuesta(p));
-    sim.aceptaciones.push({ proposal_id: v1.propuesta!.id, rfx_lane_id: p.lineas[0].rutaId, created_at: "2026-11-01T16:00:00Z", accepted_by_name: "Ana" });
+    // El shipper acepta solo la ruta 1, por el contrato de aceptación (idempotente).
+    sim.aceptarPropuesta(v1.propuesta!.id, [l1.id], "Ana");
+    sim.aceptarPropuesta(v1.propuesta!.id, [l1.id], "Ana");
+    expect(sim.aceptaciones).toHaveLength(1);
+
+    // Vence; la ruta pendiente ya no se puede aceptar.
     sim.hoy = () => "2026-11-05";
+    expect(() => sim.aceptarPropuesta(v1.propuesta!.id, [l2.id])).toThrow(/validity/);
+
     const v2 = await admin.publicarPropuesta(eventId, "2026-12-01", huellaPropuesta(p));
     expect(v2.propuesta?.version).toBe(2);
-    expect(v2.propuesta?.aceptadas).toEqual([expect.objectContaining({ rutaId: p.lineas[0].rutaId, por: "Ana" })]);
+    expect(v2.propuesta?.aceptadas.map((a) => [a.rutaId, a.por])).toEqual([[l1.id, "Ana"]]);
+    // La versión vieja ya no se acepta; la nueva sí, y la ruta 2 queda aceptada también.
+    expect(() => sim.aceptarPropuesta(v1.propuesta!.id, [l2.id])).toThrow(/replaced/);
+    const fin = sim.aceptarPropuesta(v2.propuesta!.id, [l2.id], "Ana")!;
+    expect((fin.accepted as any[]).map((a) => a.rfx_lane_id).sort()).toEqual([l1.id, l2.id].sort());
   });
 });

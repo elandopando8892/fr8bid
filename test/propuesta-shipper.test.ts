@@ -121,6 +121,7 @@ describe("proxy: publicar la propuesta", () => {
     for (const cambiado of [
       crudo([lane(L1, 1, [inv({ bid_rate: 1200 })])]),
       crudo([lane(L1, 1, [inv({})], { weekly_volume: 9 })]),
+      crudo([lane(L1, 1, [inv({})], { service: "D2D" })]),
       crudo([lane(L1, 1, [inv({})]), lane(L2, 2, [inv({ id: "lv-3" })])])
     ]) {
       const env: Record<string, unknown>[] = [];
@@ -189,7 +190,7 @@ describe("paso de los módulos (/api/funcion)", () => {
 
 describe("lo publicado frente a la adjudicación de hoy", () => {
   const calc = propuestaDelEvento(detalle(crudo([lane(L1, 1, [inv({})]), lane(L2, 2, [inv({ id: "lv-3" })])]) as any));
-  const linea = (rutaId: string, numero: number, venta: number, x: Record<string, unknown> = {}) => ({ rutaId, numero, origen: `Origen ${numero}`, destino: `Destino ${numero}`, equipo: "Dry Van", volumenSemanal: 3, venta, ...x });
+  const linea = (rutaId: string, numero: number, venta: number, x: Record<string, unknown> = {}) => ({ rutaId, numero, origen: `Origen ${numero}`, destino: `Destino ${numero}`, equipo: "Dry Van", servicio: "", volumenSemanal: 3, venta, ...x });
   const pub = (x: Partial<PropuestaPublicada> = {}): PropuestaPublicada => ({
     id: "p", version: 1, moneda: "USD", vigenteHasta: "2026-12-25", publicadaEn: "2026-11-25T10:00:00Z",
     lineas: [linea(L1, 1, 1100), linea(L2, 2, 1100)],
@@ -209,7 +210,7 @@ describe("lo publicado frente a la adjudicación de hoy", () => {
   });
 
   it("un cambio de ruta, equipo o volumen sin cambio de precio también cuenta", () => {
-    for (const x of [{ volumenSemanal: 5 }, { equipo: "Flatbed" }, { destino: "Otro" }]) {
+    for (const x of [{ volumenSemanal: 5 }, { equipo: "Flatbed" }, { destino: "Otro" }, { servicio: "D2D" }]) {
       const c = compararPropuesta(calc, pub({ lineas: [linea(L1, 1, 1100, x), linea(L2, 2, 1100)] }), "2026-11-25");
       expect(c.distinta).toBe(true);
       expect(c.cambios).toEqual([expect.objectContaining({ numero: 1, antes: 1100, ahora: 1100, terminos: true })]);
@@ -230,8 +231,14 @@ describe("lo publicado frente a la adjudicación de hoy", () => {
     expect(compararPropuesta(calc, parcial, "2026-11-25")).toMatchObject({ distinta: true, tocaAceptadas: false, puedePublicar: true });
   });
 
+  it("un cambio de servicio en una ruta aceptada impide volver a publicar", () => {
+    const c = compararPropuesta(calc, pub({ lineas: [linea(L1, 1, 1100, { servicio: "D2D" }), linea(L2, 2, 1100)], aceptadas: aceptoL1 }), "2026-11-25");
+    expect(c).toMatchObject({ distinta: true, tocaAceptadas: true, puedePublicar: false });
+  });
+
   it("la huella cambia con la venta, los términos o la moneda, y no con el orden", () => {
     const h = huellaPropuesta(calc);
+    expect(huellaPropuesta({ ...calc, lineas: [{ ...calc.lineas[0], servicio: "D2D" }, calc.lineas[1]] })).not.toBe(h);
     expect(huellaPropuesta({ ...calc, lineas: [...calc.lineas].reverse() })).toBe(h);
     expect(huellaPropuesta({ ...calc, lineas: [{ ...calc.lineas[0], venta: 1101 }, calc.lineas[1]] })).not.toBe(h);
     expect(huellaPropuesta({ ...calc, lineas: [{ ...calc.lineas[0], volumenSemanal: 9 }, calc.lineas[1]] })).not.toBe(h);
