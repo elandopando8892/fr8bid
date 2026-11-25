@@ -8,6 +8,7 @@ import { ErrorApi } from "../cliente/api";
 import type { AdjuntoLectura, AnexoTexto, CanalLectura, CorreoTraido, Lectura, TipoAdjunto } from "../dominio/lectura";
 import { bytesBase64, MAX_ADJUNTOS_LECTURA, MAX_BYTES_ADJUNTOS, MAX_TEXTO_LECTURA, TIPOS_ADJUNTO } from "../dominio/lectura";
 import { cargarLecturas, combinarLecturas, correosPendientes, guardarLecturas, lecturasPorRevisar, type LecturaGuardada } from "../dominio/lecturaAutomatica";
+import type { Desenlace } from "../dominio/bandeja";
 import type { CorreoRespuesta, Detalle, Participacion, Ruta } from "../dominio/tipos";
 import { Confirmar, dinero, plural } from "./comun";
 import * as I from "./Iconos";
@@ -69,7 +70,8 @@ function aFilas(d: Detalle, l: Lectura, carrierId: string): Fila[] {
   });
 }
 
-export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: Accion; advertenciaReal: string }) {
+// abrir: correo que llega de la bandeja (?respuesta=…); alAbrir lo quita de la dirección una vez atendido.
+export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }: { d: Detalle; accion: Accion; advertenciaReal: string; abrir?: string | null; alAbrir?: () => void }) {
   const s = useSesion();
   const [abierto, setAbierto] = useState(false);
   const [carrierId, setCarrierId] = useState("");
@@ -86,6 +88,9 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
   const [leidas, setLeidas] = useState<Record<string, LecturaGuardada>>(() => cargarLecturas(d.evento.id));
   const [leyendoAuto, setLeyendoAuto] = useState<string | null>(null);
   const [revisando, setRevisando] = useState<LecturaGuardada | null>(null);
+  // Ya se sumó lo que leyó el servidor: hasta entonces no se sabe si el correo de la bandeja está aquí.
+  const [conServidor, setConServidor] = useState(false);
+  const [nota, setNota] = useState<string | null>(null);
   const enCurso = useRef(false);
 
   const carriers = new Map<string, string>();
@@ -95,14 +100,17 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
   // lee aquí solo los correos que falten (hasta 5 por apertura).
   // Solo deja borradores; guardar una oferta sigue pidiendo confirmación.
   useEffect(() => {
-    if (enCurso.current || s.rol === "viewer" || d.evento.estado !== "abierto" || !carriers.size) return;
+    // Cerrado a ofertas (plazo vencido) sigue admitiendo captura: se suman los borradores del servidor,
+    // pero la IA solo lee aquí correos nuevos mientras el evento está abierto.
+    if (enCurso.current || s.rol === "viewer" || !["abierto", "cerrado"].includes(d.evento.estado) || !carriers.size) return;
     enCurso.current = true;
     void (async () => {
       // Primero lo que ya leyó la revisión programada de Rateware: no se paga dos veces.
-      const conServidor = combinarLecturas(cargarLecturas(d.evento.id), await s.api.lecturasServidor(d.evento.id), carriers);
-      guardarLecturas(d.evento.id, conServidor);
-      setLeidas(conServidor);
-      const pendientes = correosPendientes(d, carriers, conServidor);
+      const delServidor = combinarLecturas(cargarLecturas(d.evento.id), await s.api.lecturasServidor(d.evento.id), carriers);
+      guardarLecturas(d.evento.id, delServidor);
+      setLeidas(delServidor);
+      setConServidor(true);
+      const pendientes = d.evento.estado === "abierto" ? correosPendientes(d, carriers, delServidor) : [];
       for (const x of pendientes) {
         setLeyendoAuto(x.carrier);
         const base = { correoId: x.correo.id, carrierId: x.carrierId, carrier: x.carrier, en: x.correo.en, leidoEn: new Date().toISOString(), revisado: false };
@@ -124,6 +132,26 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [d.evento.id, d.evento.estado, d.respuestas, s.rol]);
 
+  // Llegó desde la bandeja: abre ese borrador (o el correo, si la IA no pudo leerlo) una sola vez.
+  useEffect(() => {
+    if (!abrir || !conServidor) return;
+    const g = leidas[abrir];
+    if (!g) setNota("Esa respuesta no está entre los borradores de este evento. Puede que el carrier ya no admita captura.");
+    else if (g.revisado) setNota(`La respuesta de ${g.carrier} ya quedó lista.`);
+    else if (!carriers.has(g.carrierId)) setNota(`${g.carrier} ya no admite captura en este evento (tiene primario, declinó o no está invitado).`);
+    else if (g.lectura) revisar(g);
+    else {
+      setCarrierId(g.carrierId);
+      setRevisando(g);
+      setError(`${g.fallo || "La IA no pudo leer este correo."} Tráelo de nuevo o pega el texto.`);
+      setAbierto(true);
+    }
+    alAbrir?.();
+    // Que se vea sin buscarlo: la etapa de Ofertas es larga.
+    requestAnimationFrame(() => document.getElementById("lectura-ia")?.scrollIntoView({ block: "start", behavior: "smooth" }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abrir, conServidor]);
+
   if (s.rol === "viewer" || !carriers.size || d.evento.estado === "adjudicado" || d.evento.estado === "archivado") return null;
 
   const porRevisar = lecturasPorRevisar(leidas, carriers);
@@ -140,9 +168,11 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
     setRevisando(g);
     setAbierto(true);
   };
+  const avisoNota = nota && <div id="lectura-ia" className="estado" role="status">{nota} <button className="btn-texto" onClick={() => setNota(null)}>Entendido</button></div>;
   if (!abierto)
     return (
       <>
+        {avisoNota}
         {(porRevisar.length > 0 || leyendoAuto) && (
           <div className="aviso-caja">
             <h3>Respuestas por correo leídas por la IA</h3>
@@ -171,17 +201,22 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
     setFilas([]);
     setError(null);
   };
-  // Descartar (o terminar) marca el borrador como revisado; «Volver» solo
-  // lo cierra y lo deja en la lista para después (recorrido 24-nov-2026).
-  const cerrar = (revisado = true) => {
-    if (revisando) {
-      if (revisado) {
-        const todas = { ...cargarLecturas(d.evento.id), [revisando.correoId]: { ...revisando, revisado: true } };
-        guardarLecturas(d.evento.id, todas);
-        setLeidas(todas);
-      }
-      setRevisando(null);
+  // Guardar, marcar o descartar deja el borrador listo, aquí y para todo el equipo (bandeja, 25-nov);
+  // «Volver» o «Cancelar» solo lo cierran y lo dejan en la lista para después (recorrido 24-nov-2026).
+  const cerrar = (desenlace: Desenlace | null = null) => {
+    // El correo que se atendió: el borrador abierto o el que se trajo de Gmail para leerlo aquí.
+    const correoId = revisando?.correoId ?? traido?.id ?? null;
+    if (desenlace && correoId) {
+      const previa = cargarLecturas(d.evento.id);
+      const base: LecturaGuardada = revisando ?? previa[correoId] ?? { correoId, carrierId, carrier: carriers.get(carrierId) || "Carrier", en: new Date().toISOString(), leidoEn: new Date().toISOString(), lectura: null, fallo: null, revisado: false };
+      const todas = { ...previa, [correoId]: { ...base, revisado: true } };
+      guardarLecturas(d.evento.id, todas);
+      setLeidas(todas);
+      s.api.marcarLectura(d.evento.id, correoId, desenlace).catch(() =>
+        setNota("Quedó listo en este navegador, pero no se pudo avisar al equipo: puede volver a salir en la bandeja de Respuestas.")
+      );
     }
+    setRevisando(null);
     limpiar();
     setTexto("");
     setAdjuntos([]);
@@ -251,7 +286,7 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
   const sinOferta = d.rutas.flatMap((r) => r.participaciones.filter((p) => p.carrierId === carrierId && !p.versiones.length && ["invitada", "vista"].includes(p.estado)));
 
   return (
-    <div className="tarjeta">
+    <div id="lectura-ia" className="tarjeta">
       <h2>Leer respuesta con IA</h2>
       <div className="rejilla">
         <label className="campo"><span>Carrier</span>
@@ -350,6 +385,8 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
                 deshabilitado={!elegidas.length || !elegidas.every(valida)}
                 advertencia={<>{carrier}: {elegidas.map((f) => `ruta ${f.ruta.numero}, ${dinero(Number(f.tarifa.replace(/,/g, "")), f.moneda)}`).join("; ")}. Cada una queda como una versión más; las anteriores no cambian. {advertenciaReal}</>}
                 onConfirmar={async () => {
+                  // Solo queda lista si todo se guardó: con un error el borrador sigue a la vista.
+                  let hecho = false;
                   await accion(async () => {
                     for (const f of elegidas)
                       await s.api.capturarOferta({
@@ -364,9 +401,10 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
                         notas: f.notas,
                         leidaConIA: true
                       });
+                    hecho = true;
                     return elegidas.length;
                   }, (n) => `${plural(n, "oferta capturada", "ofertas capturadas")}.`);
-                  cerrar();
+                  if (hecho) cerrar("captured");
                 }}
               />
             )}
@@ -376,16 +414,18 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
                 clase="btn-secundario"
                 advertencia={`${carrier} queda como ${lectura.tipo === "rechazo" ? "«declinó»" : "«respondió»"} en ${plural(sinOferta.length, "ruta")} y ya no recibe intentos. No se envía nada. ${advertenciaReal}`}
                 onConfirmar={async () => {
+                  let hecho = false;
                   await accion(async () => {
                     for (const p of sinOferta) await s.api.marcarRespondio({ eventId: d.evento.id, participacionId: p.id, rechazo: lectura.tipo === "rechazo", canal, nota: lectura.resumen.slice(0, 300) });
+                    hecho = true;
                     return sinOferta.length;
                   }, () => `${carrier} ya no recibe intentos.`);
-                  cerrar();
+                  if (hecho) cerrar(lectura.tipo === "rechazo" ? "declined" : "answered");
                 }}
               />
             )}
-            {revisando && <button className="btn-texto" onClick={() => cerrar(false)}>Volver a la lista</button>}
-            <button className="btn-texto" onClick={() => cerrar()}>Descartar</button>
+            {revisando && <button className="btn-texto" onClick={() => cerrar()}>Volver a la lista</button>}
+            <button className="btn-texto" onClick={() => cerrar("dismissed")}>Descartar</button>
           </div>
         </div>
       )}

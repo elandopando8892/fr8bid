@@ -19,8 +19,9 @@ describe("cascarón de cinco entradas", () => {
   it("cada pantalla vieja cae en su entrada y su pestaña", () => {
     const casos: [string, string, string | undefined][] = [
       ["/", "Hoy", undefined],
-      ["/eventos/abc", "Eventos", undefined],
-      ["/rfx/new", "Eventos", undefined],
+      ["/eventos/abc", "Eventos", "Eventos"],
+      ["/rfx/new", "Eventos", "Eventos"],
+      ["/respuestas", "Eventos", "Respuestas"],
       ["/quotedesk/9", "Cotizaciones", "Cotizaciones"],
       ["/intake", "Cotizaciones", "Solicitudes de shippers"],
       ["/crm/rebotes", "Carriers", "Directorio"],

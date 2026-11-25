@@ -98,10 +98,14 @@ export interface LecturaServidor {
   reading: { lectura?: Lectura; recortado?: boolean } | null;
   error: string | null;
   created_at: string;
+  // Bandeja (rateware #235): ya quedó lista para todo el equipo.
+  reviewed_at?: string | null;
+  review_outcome?: string | null;
 }
 
-// Une lo leído en el servidor con lo de este navegador. Lo local gana (ahí vive «revisado»), así que
-// un correo ya guardado o descartado aquí no regresa. Lo del servidor evita pagar dos veces la lectura.
+// Une lo leído en el servidor con lo de este navegador. Lo local gana en la lectura, así que un correo
+// ya guardado o descartado aquí no regresa; lo que alguien del equipo dejó listo en el servidor tampoco
+// (bandeja, 25-nov). Lo del servidor evita pagar dos veces la lectura.
 export function combinarLecturas(
   locales: Record<string, LecturaGuardada>,
   servidor: LecturaServidor[],
@@ -109,7 +113,12 @@ export function combinarLecturas(
 ): Record<string, LecturaGuardada> {
   const salida = { ...locales };
   for (const f of servidor) {
-    if (!f?.gmail_message_id || salida[f.gmail_message_id]) continue;
+    if (!f?.gmail_message_id) continue;
+    const listo = Boolean(f.reviewed_at);
+    if (salida[f.gmail_message_id]) {
+      if (listo && !salida[f.gmail_message_id].revisado) salida[f.gmail_message_id] = { ...salida[f.gmail_message_id], revisado: true };
+      continue;
+    }
     const carrierId = f.vendor_id || "";
     const lectura = f.status === "proposed" && f.reading?.lectura ? { ...f.reading.lectura, recortado: Boolean(f.reading.recortado) } : null;
     salida[f.gmail_message_id] = {
@@ -120,7 +129,7 @@ export function combinarLecturas(
       leidoEn: f.created_at,
       lectura,
       fallo: lectura ? null : f.error || "La IA no pudo leer este correo.",
-      revisado: false
+      revisado: listo
     };
   }
   return salida;

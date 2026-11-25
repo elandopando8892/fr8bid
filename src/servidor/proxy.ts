@@ -70,7 +70,7 @@ export interface Respuesta {
 export type Enviar = (servicio: Servicio, body: Record<string, unknown>, autorizacion: string | null) => Promise<Respuesta>;
 
 export const LECTURAS: Record<Servicio, Set<string>> = {
-  "rateware-api": new Set(["list_carrier_tariff_candidates", "preview_rfx_event_creation", "preview_rfx_event_reopen", "list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware", "list_rfx_carrier_replies", "get_rfx_carrier_reply", "list_rfx_reply_readings", "list_outreach_campaigns", "list_outreach_templates", "list_vendors", "list_contact_history", "list_carrier_list_templates", "get_carrier_list_template", "get_rfx_shipper_proposal"]),
+  "rateware-api": new Set(["list_carrier_tariff_candidates", "preview_rfx_event_creation", "preview_rfx_event_reopen", "list_rfx_events", "list_rfx_detail", "list_rfx_segment_confirmations", "list_outreach_messages", "list_rfx_condition_catalog", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "carrier_recommendations", "list_rateware", "list_rfx_carrier_replies", "get_rfx_carrier_reply", "list_rfx_reply_readings", "list_rfx_reply_inbox", "list_outreach_campaigns", "list_outreach_templates", "list_vendors", "list_contact_history", "list_carrier_list_templates", "get_carrier_list_template", "get_rfx_shipper_proposal"]),
   "rfx-bid-api": new Set(["get_invitation"])
 };
 
@@ -126,7 +126,10 @@ export const ESCRITURAS: Record<Servicio, Set<string>> = {
     "set_rfx_bid_commercial_model",
     // Propuesta al shipper (rateware #234): tras adjudicar, la tarifa de venta por
     // ruta va a la liga del shipper. La calcula guardaPropuesta con una lectura fresca.
-    "publish_rfx_shipper_proposal"
+    "publish_rfx_shipper_proposal",
+    // Bandeja de respuestas con IA (rateware #235): marca un borrador de la IA como
+    // revisado para todo el equipo. No guarda ofertas ni toca invitaciones.
+    "mark_rfx_reply_reading"
   ]),
   "rfx-bid-api": new Set(["submit_bid", "save_segment_confirmations", "decline_invitation"])
 };

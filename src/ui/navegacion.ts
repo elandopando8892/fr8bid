@@ -14,6 +14,8 @@ export type Modulo = {
   activo?: (ruta: string) => boolean;
   /** Pestañas de la entrada; la primera es la pantalla a la que lleva. */
   secciones?: Seccion[];
+  /** Dónde se ven las pestañas; sin esto, en toda la entrada. */
+  pestanasEn?: (ruta: string) => boolean;
   /** Palabras que también la encuentran en la búsqueda (nombres viejos incluidos). */
   palabras?: string;
 };
@@ -36,6 +38,12 @@ const SHIPPERS: Seccion[] = [
   // Tarifas ya tiene sus tres pestañas (por revisar, tarifario y archivos).
   { etiqueta: "Tarifas", a: "/tarifas", activo: alguno("/tarifas", "/tarifario", "/archivos") }
 ];
+// Eventos y la bandeja de lo que contestaron los carriers (rediseño, prioridad 6). En la página
+// de un evento no se repiten las pestañas: ahí manda el riel de etapas.
+const EVENTOS: Seccion[] = [
+  { etiqueta: "Eventos", a: "/eventos", activo: alguno("/eventos", "/rfx") },
+  { etiqueta: "Respuestas", a: "/respuestas" }
+];
 const deSecciones = (xs: Seccion[]) => (ruta: string) => xs.some((s) => (s.activo ?? bajo(s.a))(ruta));
 
 export const MENU: { grupo: string; plegado?: boolean; modulos: Modulo[] }[] = [
@@ -43,7 +51,7 @@ export const MENU: { grupo: string; plegado?: boolean; modulos: Modulo[] }[] = [
     grupo: "",
     modulos: [
       { etiqueta: "Hoy", a: "/", icono: I.Casa, activo: (r) => r === "/", palabras: "inicio pendientes" },
-      { etiqueta: "Eventos", a: "/eventos", icono: I.Martillo, activo: alguno("/eventos", "/rfx"), palabras: "rfx licitaciones concursos" },
+      { etiqueta: "Eventos", a: "/eventos", icono: I.Martillo, secciones: EVENTOS, activo: deSecciones(EVENTOS), pestanasEn: (r) => r === "/eventos" || bajo("/respuestas")(r), palabras: "rfx licitaciones concursos respuestas bandeja" },
       { etiqueta: "Cotizaciones", a: "/quotedesk", icono: I.Calculadora, secciones: COTIZACIONES, activo: deSecciones(COTIZACIONES), palabras: "quotedesk spot intake" },
       { etiqueta: "Carriers", a: "/crm", icono: I.Camion, secciones: CARRIERS, activo: deSecciones(CARRIERS), palabras: "crm transportistas carrier fit" },
       { etiqueta: "Shippers y tarifas", a: "/shippers", icono: I.Edificio, secciones: SHIPPERS, activo: deSecciones(SHIPPERS), palabras: "clientes tarifario" }
@@ -74,6 +82,7 @@ const ACCIONES: Resultado[] = [
   { etiqueta: "Nueva cotización", detalle: "Acción", a: "/quotedesk?new=1", tipo: "accion", palabras: "spot quote" },
   { etiqueta: "Enviar liga a un shipper", detalle: "Acción", a: "/intake", tipo: "accion", palabras: "solicitud intake" },
   { etiqueta: "Nueva lista de carriers", detalle: "Acción", a: "/templates/new", tipo: "accion", palabras: "template" },
+  { etiqueta: "Respuestas de carriers", detalle: "Acción", a: "/respuestas", tipo: "accion", palabras: "bandeja correos ofertas ia leer" },
   { etiqueta: "Aprobar tarifas", detalle: "Acción", a: "/tarifas", tipo: "accion", palabras: "revisar rates" },
   { etiqueta: "Subir archivo de tarifas", detalle: "Acción", a: "/archivos", tipo: "accion", palabras: "excel upload" },
   { etiqueta: "Duplicados del directorio de carriers", detalle: "Acción", a: "/crm/higiene", tipo: "accion", palabras: "crm higiene" },

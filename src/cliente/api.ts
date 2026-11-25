@@ -8,6 +8,7 @@ import { leerRespuesta } from "../servidor/lectura.js";
 import { correoParaLectura, type AdjuntoLectura, type AnexoTexto, type CanalLectura, type CorreoTraido, type Lectura, type RutaLectura } from "../dominio/lectura.js";
 import type { CorreoRevelado, PersonaApollo } from "../dominio/apollo.js";
 import type { LecturaServidor } from "../dominio/lecturaAutomatica.js";
+import { aBandeja, type Desenlace, type RespuestaBandeja } from "../dominio/bandeja.js";
 import { MAX_REGISTROS, dominioBuscable, sugerirContactos, type ContactosCarrier } from "../dominio/contactos.js";
 import { configCarrierFit, leerCarrierFit, type CarrierFit } from "../dominio/carrierFit.js";
 import type { EntradaCatalogo } from "../dominio/condiciones-r1.js";
@@ -257,6 +258,30 @@ export class MesaApi {
       return Array.isArray(r?.readings) ? r.readings : [];
     } catch {
       return [];
+    }
+  }
+
+  // Bandeja de respuestas con IA (rateware #235): lo pendiente de todos los eventos abiertos.
+  async bandejaRespuestas(): Promise<{ respuestas: RespuestaBandeja[]; hayMas: boolean }> {
+    try {
+      return aBandeja(await this.rw({ action: "list_rfx_reply_inbox" }));
+    } catch (e) {
+      // Sin desplegar, Rateware responde 400 «Unknown action.»: la acción no lleva parámetros que puedan fallar.
+      if (e instanceof ErrorApi && e.status === 400)
+        throw new ErrorApi(400, "BANDEJA_NO_DISPONIBLE", "Rateware todavía no tiene la bandeja. Las respuestas siguen en la página de cada evento.");
+      throw e;
+    }
+  }
+
+  // Deja un borrador de la IA «listo» para todo el equipo. Si el borrador no vino del servidor
+  // (lo leyó este navegador) no hay nada que marcar allá: se recuerda solo aquí.
+  async marcarLectura(eventId: string, gmailMessageId: string, desenlace: Desenlace): Promise<boolean> {
+    try {
+      await this.rw({ action: "mark_rfx_reply_reading", event_id: eventId, gmail_message_id: gmailMessageId, outcome: desenlace });
+      return true;
+    } catch (e) {
+      if (e instanceof ErrorApi && e.status === 404) return false;
+      throw e;
     }
   }
 

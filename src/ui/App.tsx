@@ -4,6 +4,7 @@ import { ConfirmHost } from "@/components/confirm";
 import { AIntegraciones, AMesa, Bw, P } from "./bidware";
 import { ConsentimientoOAuth, esDominioDeAcceso } from "./ConsentimientoOAuth";
 import { Eventos } from "./Eventos";
+import { Respuestas } from "./Respuestas";
 import { Hoy } from "./Hoy";
 import { LigaCarrier } from "./LigaCarrier";
 import { Mesa } from "./Mesa";
@@ -65,6 +66,7 @@ function Rutas() {
         <Route path="/" element={<Hoy />} />
         <Route path="/eventos" element={<Eventos />} />
         <Route path="/eventos/:id" element={<MesaDelEvento />} />
+        <Route path="/respuestas" element={<Respuestas />} />
         <Route path="/rfx" element={<Navigate to="/eventos" replace />} />
         <Route path="/rfx/new" element={modulo(<P.NuevoEvento />)} />
         <Route path="/rfx/new/:id" element={modulo(<P.NuevoEvento />)} />

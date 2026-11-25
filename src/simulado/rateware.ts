@@ -60,6 +60,7 @@ const ADMIN_ACTIONS = new Set([
 ]);
 const WRITE_ACTIONS = new Set([
   ...ADMIN_ACTIONS,
+  "mark_rfx_reply_reading",
   "create_rfx_event",
   "import_rfx_lanes",
   "shortlist_rfx_lane_vendors",
@@ -130,6 +131,8 @@ export class RatewareSimulado {
   respuestasCarrier: Fila[] = [];
   // Contenido de cada correo de respuesta (get_rfx_carrier_reply) por gmail_message_id.
   correosCarrier = new Map<string, Fila>();
+  // Borradores de la lectura automática (rfx_carrier_reply_readings, rateware #216 y la bandeja).
+  lecturasIA: Fila[] = [];
   // outreach_email_opens: aperturas del píxel por mensaje (7-nov-2026).
   aperturasCorreo: Fila[] = [];
   // Resultado de send_outreach_messages por operation_id (repetirlo no reenvía).
@@ -381,6 +384,41 @@ export class RatewareSimulado {
           opens_status: "checked",
           opens: this.aperturasCorreo.filter((a) => mensajes.has(a.outreach_message_id)).map((a) => ({ ...a }))
         });
+      }
+      case "list_rfx_reply_readings": {
+        const event = this.evento(u, body.event_id);
+        const filas = this.lecturasIA.filter((l) => l.rfx_event_id === event.id).sort((a, b) => String(b.received_at).localeCompare(String(a.received_at)));
+        return ok({
+          event_id: event.id,
+          readings: filas.slice(0, 200).map(({ gmail_message_id, vendor_id, received_at, status, reading, error, created_at, reviewed_at, review_outcome }) => ({ gmail_message_id, vendor_id, received_at, status, reading, error, created_at, reviewed_at: reviewed_at ?? null, review_outcome: review_outcome ?? null }))
+        });
+      }
+      // Bandeja (rateware #235): lo pendiente de los eventos abiertos de la cuenta, lo más reciente primero.
+      case "list_rfx_reply_inbox": {
+        const abiertos = new Map(this.events.filter((e) => e.owner_email === u.ownerEmail && e.status === "open").map((e) => [e.id, e]));
+        const filas = this.lecturasIA
+          .filter((l) => !l.reviewed_at && abiertos.has(l.rfx_event_id))
+          .sort((a, b) => String(b.received_at ?? "").localeCompare(String(a.received_at ?? "")));
+        return ok({
+          readings: filas.slice(0, 200).map((l) => {
+            const e = abiertos.get(l.rfx_event_id)!;
+            const v = this.vendors.find((x) => x.id === l.vendor_id);
+            return { rfx_event_id: l.rfx_event_id, event_name: e.name ?? null, event_rfx_id: e.rfx_id ?? null, event_due_date: e.due_date ?? null, gmail_message_id: l.gmail_message_id, vendor_id: l.vendor_id ?? null, vendor_name: v?.vendor_name ?? null, received_at: l.received_at ?? null, status: l.status, reading: l.reading ?? null, error: l.error ?? null, created_at: l.created_at };
+          }),
+          has_more: filas.length > 200
+        });
+      }
+      case "mark_rfx_reply_reading": {
+        const event = this.evento(u, body.event_id);
+        const id = String(body.gmail_message_id || "");
+        if (!/^[A-Za-z0-9_-]{6,64}$/.test(id)) throw new Falla(400, "gmail_message_id is required.", "400");
+        const outcome = String(body.outcome || "");
+        if (!["captured", "declined", "answered", "dismissed"].includes(outcome)) throw new Falla(400, "outcome must be captured, declined, answered or dismissed.", "400");
+        const l = this.lecturasIA.find((x) => x.rfx_event_id === event.id && x.gmail_message_id === id);
+        if (!l) throw new Falla(404, "This reply has no AI reading in this event.", "404");
+        const ya = Boolean(l.reviewed_at);
+        if (!ya) Object.assign(l, { reviewed_at: this.ahora(), reviewed_by: u.ownerEmail, review_outcome: outcome });
+        return ok({ event_id: event.id, reading: { gmail_message_id: id, reviewed_at: l.reviewed_at, reviewed_by: l.reviewed_by, review_outcome: l.review_outcome }, already: ya });
       }
       case "get_rfx_carrier_reply": {
         const event = this.evento(u, body.event_id);

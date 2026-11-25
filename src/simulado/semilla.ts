@@ -140,5 +140,13 @@ export async function sembrarDemoAmplia() {
     // El cuarto carrier no elige modelo comercial: su oferta entra «sin elegir».
     await liga(f.id)({ action: "submit_bid", bid_rate: Math.round((rutasAcero[f.lane][4] * ajuste[v]) / 5) * 5, currency: "USD", ...(v === 3 ? {} : { commercial_model: v % 2 ? "cost_plus" : "fee_plus" }), weekly_capacity: 2 + v, transit_days: 1 + f.lane, valid_through: "2026-12-31" });
   }
+  // Los dos que no cotizaron en la liga contestaron por correo: la lectura automática dejó sus
+  // borradores para la bandeja de Respuestas (uno con oferta, uno que no cotiza y uno ilegible).
+  const leido = (id: string, vendor: string, en: string, reading: unknown, error: string | null = null) =>
+    sim.lecturasIA.push({ rfx_event_id: acero.id, gmail_message_id: id, vendor_id: vendor, received_at: en, status: reading ? "proposed" : "failed", reading, error, created_at: en });
+  const oferta = (i: number) => ({ rutaId: lanesAcero[i].id, tarifa: Math.round((rutasAcero[i][4] * 1.01) / 5) * 5, moneda: "USD", vigencia: "2026-12-31", capacidadSemanal: 2, diasTransito: 2, notas: "", cita: `Ruta ${i + 1}: ${Math.round((rutasAcero[i][4] * 1.01) / 5) * 5} USD all-in`, dudas: [] });
+  leido("demo-correo-0001", seis[4].id, "2026-10-24T16:20:00Z", { lectura: { tipo: "oferta", resumen: "Cotiza las primeras dos rutas en USD, vigentes al 31 de diciembre.", ofertas: [oferta(0), oferta(1)], dudas: [] }, recortado: true });
+  leido("demo-correo-0002", seis[5].id, "2026-10-24T18:05:00Z", { lectura: { tipo: "rechazo", resumen: "No tiene plataformas disponibles este trimestre.", ofertas: [], dudas: [] }, recortado: false });
+  leido("demo-correo-0003", seis[5].id, "2026-10-23T09:40:00Z", null, "El adjunto es un Excel; la IA solo lee PDF e imágenes.");
   return demo;
 }
