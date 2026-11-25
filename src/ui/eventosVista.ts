@@ -32,13 +32,16 @@ export const ESTADO_EVENTO: Record<EstadoEvento, { texto: string; tono: "" | "ok
 // Un borrador cuyo plazo ya pasó no es trabajo de hoy: queda aparte.
 export const borradorVencido = (e: ResumenEvento, hoy: string) => e.estado === "borrador" && !!e.plazo && e.plazo.slice(0, 10) < hoy;
 
-// Lo urgente primero: adjudicar, cerrar, avisar y al final publicar; dentro de
-// cada grupo, el plazo más cercano.
+// Lo urgente primero: adjudicar, cerrar, avisar y al final publicar. Dentro de
+// cada grupo, el plazo más cercano; al adjudicar, el que cerró más reciente
+// (sus ofertas siguen vigentes; uno cerrado hace meses no tapa al de esta
+// semana, recorrido como Administrador 24-nov-2026).
 const PRIORIDAD: Record<string, number> = { "Adjudicar y entregar": 0, "Cerrar a ofertas": 1, "Avisar a los carriers": 2, "Publicar e invitar": 3 };
 export function porUrgencia(a: ResumenEvento, b: ResumenEvento) {
   const pa = PRIORIDAD[siguiente(a).accion] ?? 9;
   const pb = PRIORIDAD[siguiente(b).accion] ?? 9;
   if (pa !== pb) return pa - pb;
+  if (pa === PRIORIDAD["Adjudicar y entregar"]) return (b.plazo || "").localeCompare(a.plazo || "");
   return (a.plazo || "9999").localeCompare(b.plazo || "9999");
 }
 

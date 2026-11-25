@@ -171,11 +171,15 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
     setFilas([]);
     setError(null);
   };
-  const cerrar = () => {
+  // Descartar (o terminar) marca el borrador como revisado; «Volver» solo
+  // lo cierra y lo deja en la lista para después (recorrido 24-nov-2026).
+  const cerrar = (revisado = true) => {
     if (revisando) {
-      const todas = { ...cargarLecturas(d.evento.id), [revisando.correoId]: { ...revisando, revisado: true } };
-      guardarLecturas(d.evento.id, todas);
-      setLeidas(todas);
+      if (revisado) {
+        const todas = { ...cargarLecturas(d.evento.id), [revisando.correoId]: { ...revisando, revisado: true } };
+        guardarLecturas(d.evento.id, todas);
+        setLeidas(todas);
+      }
       setRevisando(null);
     }
     limpiar();
@@ -300,7 +304,7 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
       {!lectura && (
         <div className="fila-botones">
           <button className="btn-primario" disabled={!carrierId || (texto.trim().length < 3 && !adjuntos.length && !anexos.length) || leyendo} onClick={leer}>{leyendo ? "Leyendo…" : "Leer con IA"}</button>
-          <button className="btn-texto" onClick={cerrar}>Cancelar</button>
+          <button className="btn-texto" onClick={() => cerrar()}>Cancelar</button>
         </div>
       )}
       {error && <div className="estado estado-error" role="alert">{error}</div>}
@@ -380,7 +384,8 @@ export function LecturaIA({ d, accion, advertenciaReal }: { d: Detalle; accion: 
                 }}
               />
             )}
-            <button className="btn-texto" onClick={cerrar}>Descartar</button>
+            {revisando && <button className="btn-texto" onClick={() => cerrar(false)}>Volver a la lista</button>}
+            <button className="btn-texto" onClick={() => cerrar()}>Descartar</button>
           </div>
         </div>
       )}
