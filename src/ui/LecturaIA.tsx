@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { ErrorApi } from "../cliente/api";
 import type { AdjuntoLectura, AnexoTexto, CanalLectura, CorreoTraido, Lectura, TipoAdjunto } from "../dominio/lectura";
 import { bytesBase64, MAX_ADJUNTOS_LECTURA, MAX_BYTES_ADJUNTOS, MAX_TEXTO_LECTURA, TIPOS_ADJUNTO } from "../dominio/lectura";
-import { cargarLecturas, combinarLecturas, correosPendientes, guardarLecturas, lecturasPorRevisar, type LecturaGuardada } from "../dominio/lecturaAutomatica";
+import { cargarLecturas, combinarLecturas, correosPendientes, guardarLecturas, lecturasPorRevisar, textoFallo, type LecturaGuardada } from "../dominio/lecturaAutomatica";
 import type { Desenlace } from "../dominio/bandeja";
 import type { CorreoRespuesta, Detalle, Participacion, Ruta } from "../dominio/tipos";
 import { Confirmar, dinero, plural } from "./comun";
@@ -244,7 +244,7 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     else {
       setCarrierId(g.carrierId);
       setRevisando(g);
-      setError(`${g.fallo || "La IA no pudo leer este correo."} Tráelo de nuevo o pega el texto.`);
+      setError(`${textoFallo(g.fallo)} Tráelo de nuevo o pega el texto.`);
       setAbierto(true);
     }
     alAbrir?.();
