@@ -33,6 +33,9 @@ const lanes=['Albany','Fort Worth','Houston','Trenton','Ridgeway','Windsor'].map
   assert.equal(await sheet.count(),0,'sin ruta elegida no hay hoja en el teléfono');
   await page.getByRole('button',{name:'Cotizar',exact:true}).first().click();
   await sheet.getByText('Ruta 2 de 6').waitFor();
+  // El foco empieza en el título; Shift+Tab no sale de la hoja.
+  await page.keyboard.press('Shift+Tab');
+  assert.ok(await page.evaluate(()=>document.querySelector('.croom-hoja').contains(document.activeElement)),'Shift+Tab desde el título se queda en la hoja');
   // Tarifa, y capacidad que se copia a las demás rutas.
   await sheet.getByLabel('Tarifa all-in *').fill('2380');
   await sheet.locator('summary').click();
@@ -44,6 +47,9 @@ const lanes=['Albany','Fort Worth','Houston','Trenton','Ridgeway','Windsor'].map
   await sheet.getByText('Ruta 3 de 6').waitFor();
   await sheet.getByLabel('Tarifa all-in *').fill('3590');
   assert.equal(served,before,'la recarga sigue en camino mientras se escribe');
+  const enviada=page.getByRole('row').filter({hasText:'Fort Worth'});
+  assert.ok((await enviada.innerText()).includes('ENVIADA'),'la ruta enviada se ve enviada antes de la recarga');
+  assert.equal(await enviada.getByRole('button').count(),0,'y no se puede volver a abrir mientras tanto');
   await page.waitForFunction(()=>true);for(let i=0;i<50&&served===before;i++)await page.waitForTimeout(100);
   assert.ok(served>before,'la recarga llegó');await page.waitForTimeout(400);
   assert.equal(await sheet.getByLabel('Tarifa all-in *').inputValue(),'3590','la recarga no borra la tarifa a medio escribir');

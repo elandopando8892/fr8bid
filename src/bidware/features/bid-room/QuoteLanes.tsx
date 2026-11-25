@@ -124,7 +124,11 @@ export function QuoteLanes({
       );
       if (!all.length) return;
       const first = all[0], last = all[all.length - 1];
-      if (!panel.current.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+      const inside = panel.current.contains(document.activeElement);
+      const listed = all.includes(document.activeElement as HTMLElement);
+      if (!inside) { e.preventDefault(); first.focus(); }
+      // From the title (focused on open, not a control): Shift+Tab wraps to the last control instead of leaving.
+      else if (!listed) { if (e.shiftKey) { e.preventDefault(); last.focus(); } }
       else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     };
@@ -194,13 +198,15 @@ export function QuoteLanes({
             </thead>
             <tbody>
               {lanes.map((lane) => {
+                // Sent here and waiting for the reload: shown as sent, and not opened again until the server confirms it.
+                const sentHere = answered.has(lane.rfx_lane_id);
                 const state = laneState(lane);
-                const action = actionOf(lane);
+                const action = sentHere ? null : actionOf(lane);
                 return (
                   <tr
                     key={lane.rfx_lane_id}
-                    className={`clickable${picked?.rfx_lane_id === lane.rfx_lane_id ? " picked" : ""}`}
-                    onClick={() => pick(lane)}
+                    className={`${sentHere ? "" : "clickable"}${picked?.rfx_lane_id === lane.rfx_lane_id ? " picked" : ""}`}
+                    onClick={() => !sentHere && pick(lane)}
                   >
                     <td className="c-num mono croom-soft">{lane.lane_number != null ? String(lane.lane_number) : "—"}</td>
                     <td className="c-origin ellipsis" title={String(lane.origin ?? "")}>
@@ -217,7 +223,7 @@ export function QuoteLanes({
                       {lane.bid_rate != null ? money(lane.bid_rate, String(lane.currency || "USD")) : "—"}
                     </td>
                     <td className="c-state">
-                      <Pill tone={STATE_TONE[state]}>{q(`state.${state}`)}</Pill>
+                      {sentHere ? <Pill tone="green">{q("state.sent")}</Pill> : <Pill tone={STATE_TONE[state]}>{q(`state.${state}`)}</Pill>}
                     </td>
                     <td className="c-action" style={{ textAlign: "right" }}>
                       {action ? (

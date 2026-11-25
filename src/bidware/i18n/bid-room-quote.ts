@@ -57,6 +57,7 @@ export const quoteCopy = {
 
   // Tabla de rutas
   "state.quoted": { es: "COTIZADA", en: "QUOTED" },
+  "state.sent": { es: "ENVIADA", en: "SENT" },
   "state.pending": { es: "PENDIENTE", en: "PENDING" },
   "state.declined": { es: "NO PARTICIPO", en: "NOT BIDDING" },
   "state.withdrawn": { es: "RETIRADA", en: "WITHDRAWN" },
