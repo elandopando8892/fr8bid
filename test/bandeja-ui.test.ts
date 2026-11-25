@@ -6,18 +6,24 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { cargarLecturas } from "../src/dominio/lecturaAutomatica";
 
-const { sesion } = vi.hoisted(() => ({ sesion: { rol: "operator", api: {} as Record<string, any> } }));
+const { sesion } = vi.hoisted(() => ({ sesion: { rol: "operator", correo: "operador@equipo.mx" as string | null, api: {} as Record<string, any> } }));
 vi.mock("../src/ui/sesion", () => ({ useSesion: () => sesion }));
 import { LecturaIA } from "../src/ui/LecturaIA";
 
 const EV = "ev-bandeja";
 const part = (id: string, carrierId: string, carrier: string) => ({ id, carrierId, carrier, estado: "vista", rol: null, versiones: [] });
 const ruta = (n: number, parts: unknown[]) => ({ id: `r${n}`, numero: n, origen: `Origen ${n}`, destino: `Destino ${n}`, equipo: "Dry Van", objetivo: 1000, participaciones: parts });
-const detalle: any = {
+const detalleBase = (versiones: Record<string, unknown[]> = {}): any => ({
   evento: { id: EV, estado: "abierto" },
-  rutas: [ruta(1, [part("p1", "c1", "Grupo Omega")]), ruta(2, [part("p2", "c1", "Grupo Omega")])],
+  rutas: [
+    ruta(1, [{ ...part("p1", "c1", "Grupo Omega"), versiones: versiones.p1 ?? [] }]),
+    ruta(2, [{ ...part("p2", "c1", "Grupo Omega"), versiones: versiones.p2 ?? [] }])
+  ],
   respuestas: { p1: { correos: [{ id: "msgotro01", en: "2026-11-25T12:00:00Z", de: "omega" }] } }
-};
+});
+// Versión que el equipo capturó desde el correo (llegó 10:00): la que Rateware devuelve al releer el evento.
+const capturada = (tarifaAllIn: number, creadaEn = "2026-11-25T11:00:00Z") => ({ numero: 1, tarifaAllIn, moneda: "USD", fuente: "captura_equipo", creadaEn });
+let detalle: any = detalleBase();
 const oferta = (rutaId: string, tarifa: number) => ({ rutaId, tarifa, moneda: "USD", vigencia: "", capacidadSemanal: null, diasTransito: null, notas: "", cita: "", dudas: [] });
 const servidor = (x: Record<string, unknown> = {}) => ({
   gmail_message_id: "msgoferta1", vendor_id: "c1", received_at: "2026-11-25T10:00:00Z", status: "proposed",
@@ -55,6 +61,8 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("requestAnimationFrame", (f: () => void) => setTimeout(f, 0));
   almacen.clear();
+  detalle = detalleBase();
+  sesion.correo = "operador@equipo.mx";
   vi.stubGlobal("localStorage", { getItem: (k: string) => almacen.get(k) ?? null, setItem: (k: string, v: string) => void almacen.set(k, v), removeItem: (k: string) => void almacen.delete(k) });
   container = document.getElementById("root")!;
   root = createRoot(container);
@@ -97,6 +105,27 @@ describe("borrador abierto desde la bandeja", () => {
     expect(sesion.api.marcarLectura).toHaveBeenCalledWith(EV, "msgoferta1", "captured");
   });
 
+  it("una captura cuya respuesta se perdió pero sí entró no se vuelve a ofrecer al releer el evento", async () => {
+    sesion.api.capturarOferta = vi.fn(async (o: any) => { if (o.participacionId === "p2") throw new Error("504"); return {}; });
+    await render("msgoferta1");
+    await clic(/Guardar 2 ofertas/);
+    await clic("Sí, confirmar");
+    // La página relee el evento tras el intento: Rateware sí tiene la de la ruta 2.
+    detalle = detalleBase({ p1: [capturada(1100)], p2: [capturada(1200)] });
+    await render(null);
+    expect(boton(/Guardar \d+ oferta/)?.disabled).toBe(true);
+    expect(container.textContent?.match(/Ya guardada como nueva versión/g)).toHaveLength(2);
+  });
+
+  it("en otro equipo (sin nada guardado en el navegador) lo ya capturado sale marcado", async () => {
+    detalle = detalleBase({ p1: [capturada(1100)], p2: [capturada(1200, "2026-11-24T09:00:00Z")] });
+    await render("msgoferta1");
+    // La ruta 2 tiene una versión de antes del correo: esa no cuenta, sigue pendiente.
+    await clic(/Guardar 1 oferta/);
+    await clic("Sí, confirmar");
+    expect(sesion.api.capturarOferta.mock.calls.map((c: any[]) => c[0].participacionId)).toEqual(["p2"]);
+  });
+
   it("si Rateware no da los borradores, la liga se conserva, no se lee nada nuevo y se puede reintentar", async () => {
     sesion.api.lecturasServidor = vi.fn(async () => { throw new Error("503"); });
     await render("msgoferta1");
@@ -121,6 +150,30 @@ describe("borrador abierto desde la bandeja", () => {
     sesion.api.marcarLectura = vi.fn(async () => true);
     await render(null);
     expect(sesion.api.marcarLectura).toHaveBeenCalledWith(EV, "msgoferta1", "dismissed");
+    expect(cargarLecturas(EV).msgoferta1.marcaPendiente).toBeUndefined();
+  });
+
+  it("la marca pendiente no se reescribe si Rateware ya la tiene, ni la repite otra cuenta", async () => {
+    sesion.api.marcarLectura = vi.fn(async () => { throw new Error("504"); });
+    await render("msgoferta1");
+    await clic("Descartar");
+    expect(cargarLecturas(EV).msgoferta1).toMatchObject({ marcaPendiente: "dismissed", marcaDe: "operador@equipo.mx" });
+
+    // Otra cuenta en el mismo navegador: no escribe por la primera.
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    sesion.correo = "otra@equipo.mx";
+    sesion.api.marcarLectura = vi.fn(async () => true);
+    await render(null);
+    expect(sesion.api.marcarLectura).not.toHaveBeenCalled();
+
+    // La marca sí había entrado (la respuesta se perdió): se limpia sin escribir.
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    sesion.correo = "operador@equipo.mx";
+    sesion.api.lecturasServidor = vi.fn(async () => [servidor({ reviewed_at: "2026-11-25T12:00:00Z", review_outcome: "dismissed" })]);
+    await render(null);
+    expect(sesion.api.marcarLectura).not.toHaveBeenCalled();
     expect(cargarLecturas(EV).msgoferta1.marcaPendiente).toBeUndefined();
   });
 

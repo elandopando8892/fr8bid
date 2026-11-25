@@ -158,6 +158,15 @@ describe("contra el simulado", () => {
     expect(sim.lecturasIA.find((l) => l.gmail_message_id === "msg000001")?.reviewed_at).toBeUndefined();
   });
 
+  it("una respuesta sin la lista no se toma como «nada pendiente» ni como «nada leído»", async () => {
+    for (const cuerpo of [null, {}, { readings: "x" }]) {
+      const m = new MesaApi(async () => ({ status: 200, body: cuerpo, headers: {} }) as any, () => "2026-10-21");
+      await expect(m.bandejaRespuestas()).rejects.toMatchObject({ code: "RESPUESTA_INCOMPLETA" });
+      await expect(m.lecturasServidor(abierto)).rejects.toMatchObject({ code: "RESPUESTA_INCOMPLETA" });
+    }
+    expect(() => aBandeja({})).toThrow();
+  });
+
   it("sin la acción desplegada, avisa que la bandeja aún no está", async () => {
     sim.sinDesplegar.add("list_rfx_reply_inbox");
     await expect(api("admin").bandejaRespuestas()).rejects.toMatchObject({ code: "BANDEJA_NO_DISPONIBLE" });

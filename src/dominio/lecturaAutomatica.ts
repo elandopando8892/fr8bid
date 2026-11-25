@@ -23,6 +23,8 @@ export interface LecturaGuardada {
   revisado: boolean; // ya se guardó o se descartó: no se vuelve a mostrar
   // Quedó lista aquí, pero el aviso al equipo (marca en el servidor) falló: se reintenta al abrir el evento.
   marcaPendiente?: Desenlace;
+  // Quién la dejó lista: el reintento solo lo hace esa misma cuenta.
+  marcaDe?: string | null;
   // Rutas que ya entraron como oferta desde este correo: un reintento o reabrir el borrador no las repite.
   rutasGuardadas?: string[];
 }

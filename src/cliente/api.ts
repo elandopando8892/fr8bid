@@ -254,13 +254,16 @@ export class MesaApi {
   // lanza el error: con una lista vacía se volverían a pagar lecturas y la bandeja daría avisos falsos.
   async lecturasServidor(eventId: string): Promise<LecturaServidor[]> {
     const r: any = await this.rw({ action: "list_rfx_reply_readings", event_id: eventId });
-    return Array.isArray(r?.readings) ? r.readings : [];
+    if (!Array.isArray(r?.readings)) throw new ErrorApi(502, "RESPUESTA_INCOMPLETA", "Rateware no devolvió los borradores de la IA.");
+    return r.readings;
   }
 
   // Bandeja de respuestas con IA (rateware #235): lo pendiente de todos los eventos abiertos.
   async bandejaRespuestas(): Promise<{ respuestas: RespuestaBandeja[]; hayMas: boolean }> {
     try {
-      return aBandeja(await this.rw({ action: "list_rfx_reply_inbox" }));
+      const cuerpo: any = await this.rw({ action: "list_rfx_reply_inbox" });
+      if (!Array.isArray(cuerpo?.readings)) throw new ErrorApi(502, "RESPUESTA_INCOMPLETA", "Rateware no devolvió la lista de respuestas. Intenta de nuevo.");
+      return aBandeja(cuerpo);
     } catch (e) {
       // Sin desplegar, Rateware responde 400 «Unknown action.»: la acción no lleva parámetros que puedan fallar.
       if (e instanceof ErrorApi && e.status === 400)
@@ -269,8 +272,7 @@ export class MesaApi {
     }
   }
 
-  // Deja un borrador de la IA «listo» para todo el equipo. Si el borrador no vino del servidor
-  // (lo leyó este navegador) no hay nada que marcar allá: se recuerda solo aquí.
+  // Deja un borrador de la IA «listo» para todo el equipo (una sola vez: repetirla devuelve la primera marca).
   // false solo cuando Rateware dice que no tiene esa lectura (la leyó solo un navegador): no hay nada que
   // marcar. Cualquier otro error, 404 incluido, se lanza para que la marca quede pendiente.
   async marcarLectura(eventId: string, gmailMessageId: string, desenlace: Desenlace): Promise<boolean> {

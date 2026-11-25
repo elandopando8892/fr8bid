@@ -66,8 +66,10 @@ export function aRespuestaBandeja(f: any): RespuestaBandeja | null {
   };
 }
 
+// Una respuesta sin la lista no se toma como «no hay pendientes»: se avisa que no se pudo leer.
 export function aBandeja(cuerpo: any): { respuestas: RespuestaBandeja[]; hayMas: boolean } {
-  const filas = Array.isArray(cuerpo?.readings) ? cuerpo.readings : [];
+  if (!Array.isArray(cuerpo?.readings)) throw new Error("RESPUESTA_INCOMPLETA");
+  const filas = cuerpo.readings;
   const vistos = new Set<string>();
   const respuestas: RespuestaBandeja[] = [];
   for (const f of filas) {

@@ -49,17 +49,23 @@ const rutasLectura = (d: Detalle) => d.rutas.map((r) => ({ id: r.id, numero: r.n
 const fecha = (en: string) => new Date(en).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Monterrey" });
 
 // Propuesta de la IA convertida en filas editables, solo en rutas donde ese carrier admite captura.
+// Ya entró a Rateware una oferta igual capturada por el equipo después de que llegó el correo: es la de
+// este borrador (un intento anterior, otra persona u otro equipo, o una respuesta que se perdió en la red).
+const yaEnRateware = (p: Participacion | null, tarifa: string, moneda: string, desde: string) =>
+  Boolean(p && p.versiones.some((v) => v.fuente === "captura_equipo" && v.creadaEn >= desde && v.tarifaAllIn === Number(tarifa.replace(/,/g, "")) && v.moneda === moneda));
+
 // guardadas: rutas que ya entraron desde este correo (un intento anterior que falló a la mitad).
-function aFilas(d: Detalle, l: Lectura, carrierId: string, guardadas: string[] = []): Fila[] {
+function aFilas(d: Detalle, l: Lectura, carrierId: string, guardadas: string[] = [], desde = ""): Fila[] {
   return l.ofertas.flatMap((o) => {
     const ruta = d.rutas.find((r) => r.id === o.rutaId);
     if (!ruta) return [];
     const p = ruta.participaciones.find((x) => x.carrierId === carrierId) ?? null;
     const sirve = p && capturable(ruta, p) ? p : null;
+    const ya = guardadas.includes(ruta.id) || (desde !== "" && o.tarifa !== null && yaEnRateware(p, String(o.tarifa), o.moneda || "", desde));
     return [{
       ruta,
       p: sirve,
-      incluir: Boolean(sirve) && o.tarifa !== null && !guardadas.includes(ruta.id),
+      incluir: Boolean(sirve) && o.tarifa !== null && !ya,
       tarifa: o.tarifa === null ? "" : String(o.tarifa),
       moneda: o.moneda || "",
       vigencia: o.vigencia || "",
@@ -68,7 +74,7 @@ function aFilas(d: Detalle, l: Lectura, carrierId: string, guardadas: string[] =
       notas: o.notas,
       cita: o.cita,
       dudas: o.dudas,
-      guardada: guardadas.includes(ruta.id)
+      guardada: ya
     }];
   });
 }
@@ -96,6 +102,8 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
   // Rateware no contestó la lista de borradores: no se lee nada nuevo (se pagaría dos veces) hasta reintentar.
   const [servidorFallo, setServidorFallo] = useState(false);
   const [intento, setIntento] = useState(0);
+  // Fecha del correo que se está atendiendo: una oferta igual capturada después ya cuenta como guardada.
+  const [desde, setDesde] = useState("");
   // Aviso al llegar de la bandeja; con «quitar», la respuesta se puede retirar de Respuestas sin capturarla.
   const [nota, setNota] = useState<{ texto: string; quitar?: LecturaGuardada } | null>(null);
   const enCurso = useRef(false);
@@ -107,17 +115,18 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
   // Deja la respuesta lista para todo el equipo. Si el servidor no contesta, queda pendiente en este
   // navegador y se reintenta al volver a abrir el evento. false = el servidor no la tiene (la leyó
   // solo este navegador): no está en la bandeja y no hay nada que avisar.
-  const avisarEquipo = async (correoId: string, desenlace: Desenlace) => {
+  // desenlace null: Rateware ya la tiene marcada; solo se limpia lo pendiente aquí.
+  const avisarEquipo = async (correoId: string, desenlace: Desenlace | null) => {
     let ok = true;
     try {
-      await s.api.marcarLectura(d.evento.id, correoId, desenlace);
+      if (desenlace) await s.api.marcarLectura(d.evento.id, correoId, desenlace);
     } catch {
       ok = false;
     }
     const previa = cargarLecturas(d.evento.id);
     if (!previa[correoId]) return ok;
-    const { marcaPendiente: _, ...sin } = previa[correoId];
-    const todas = { ...previa, [correoId]: ok ? sin : { ...sin, marcaPendiente: desenlace } };
+    const { marcaPendiente: _, marcaDe: __, ...sin } = previa[correoId];
+    const todas = { ...previa, [correoId]: ok || !desenlace ? sin : { ...sin, marcaPendiente: desenlace, marcaDe: s.correo ?? null } };
     guardarLecturas(d.evento.id, todas);
     setLeidas(todas);
     return ok;
@@ -147,8 +156,13 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
       guardarLecturas(d.evento.id, delServidor);
       setLeidas(delServidor);
       setConServidor(true);
-      // Marcas que no llegaron al equipo la vez pasada.
-      for (const g of Object.values(delServidor)) if (g.marcaPendiente) await avisarEquipo(g.correoId, g.marcaPendiente);
+      // Marcas que no llegaron al equipo la vez pasada. Si Rateware ya la tiene (la respuesta se perdió pero la
+      // marca entró) no se escribe nada; si no, la misma cuenta la repite: la marca entra una sola vez.
+      for (const g of Object.values(delServidor)) {
+        if (!g.marcaPendiente) continue;
+        if (servidor.some((f) => f.gmail_message_id === g.correoId && f.reviewed_at)) await avisarEquipo(g.correoId, null);
+        else if (g.marcaDe === (s.correo ?? null)) await avisarEquipo(g.correoId, g.marcaPendiente);
+      }
       const pendientes = d.evento.estado === "abierto" && carriers.size ? correosPendientes(d, carriers, delServidor) : [];
       for (const x of pendientes) {
         setLeyendoAuto(x.carrier);
@@ -170,6 +184,20 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [d.evento.id, d.evento.estado, d.respuestas, s.rol, intento]);
+
+  // Después de cada intento la página relee el evento: lo que Rateware ya tiene (aunque la respuesta se haya
+  // perdido) se marca como guardado y no se vuelve a ofrecer.
+  useEffect(() => {
+    if (!desde) return;
+    setFilas((xs) => {
+      const nuevas = xs.map((x) => {
+        if (x.guardada || !x.p) return x;
+        const fresca = d.rutas.find((r) => r.id === x.ruta.id)?.participaciones.find((p) => p.id === x.p!.id) ?? null;
+        return yaEnRateware(fresca, x.tarifa, x.moneda, desde) ? { ...x, guardada: true, incluir: false } : x;
+      });
+      return nuevas.some((x, i) => x !== xs[i]) ? nuevas : xs;
+    });
+  }, [d, desde]);
 
   // Llegó desde la bandeja: abre ese borrador (o el correo, si la IA no pudo leerlo) una sola vez.
   useEffect(() => {
@@ -229,7 +257,8 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     setTraido(null);
     setError(null);
     setLectura(g.lectura);
-    setFilas(aFilas(d, g.lectura!, g.carrierId, cargarLecturas(d.evento.id)[g.correoId]?.rutasGuardadas));
+    setDesde(g.en);
+    setFilas(aFilas(d, g.lectura!, g.carrierId, cargarLecturas(d.evento.id)[g.correoId]?.rutasGuardadas, g.en));
     setRevisando(g);
     setAbierto(true);
   };
@@ -275,7 +304,7 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     if (desenlace && correoId) {
       const previa = cargarLecturas(d.evento.id);
       const base: LecturaGuardada = previa[correoId] ?? (revisando?.correoId === correoId ? revisando : null) ?? { correoId, carrierId, carrier: carriers.get(carrierId) || "Carrier", en: new Date().toISOString(), leidoEn: new Date().toISOString(), lectura: null, fallo: null, revisado: false };
-      const todas = { ...previa, [correoId]: { ...base, revisado: true, marcaPendiente: desenlace } };
+      const todas = { ...previa, [correoId]: { ...base, revisado: true, marcaPendiente: desenlace, marcaDe: s.correo ?? null } };
       guardarLecturas(d.evento.id, todas);
       setLeidas(todas);
       void avisarEquipo(correoId, desenlace).then((ok) => {
@@ -289,6 +318,7 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     setTraido(null);
     setAnexos([]);
     setCarrierId("");
+    setDesde("");
     setAbierto(false);
   };
 
@@ -308,6 +338,7 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
       // Desde aquí se atiende el correo traído, no el borrador con que se abrió el formulario.
       // Si Gmail falla se conserva el borrador: lo que se capture a mano lo deja listo.
       setRevisando(null);
+      setDesde(c.en);
       setTraido({ ...t, id: c.id });
       setCanal("email");
       setTexto(t.texto);
@@ -340,7 +371,7 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
       const l = await s.api.leerRespuesta({ texto, canal, carrier, adjuntos, anexos, rutas: rutasLectura(d) });
       setLectura(l);
       const correoId = traido?.id ?? revisando?.correoId;
-      setFilas(aFilas(d, l, carrierId, correoId ? cargarLecturas(d.evento.id)[correoId]?.rutasGuardadas : []));
+      setFilas(aFilas(d, l, carrierId, correoId ? cargarLecturas(d.evento.id)[correoId]?.rutasGuardadas : [], desde));
     } catch (e) {
       setError(e instanceof ErrorApi ? e.message : "La IA no pudo leer esta respuesta. Captúrala a mano.");
     } finally {
@@ -371,7 +402,7 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
       <h2>Leer respuesta con IA</h2>
       <div className="rejilla">
         <label className="campo"><span>Carrier</span>
-          <select value={carrierId} onChange={(e) => { setCarrierId(e.target.value); setTraido(null); setAnexos([]); setRevisando(null); limpiar(); }}>
+          <select value={carrierId} onChange={(e) => { setCarrierId(e.target.value); setTraido(null); setAnexos([]); setRevisando(null); setDesde(""); limpiar(); }}>
             <option value="">Elige…</option>
             {[...carriers].sort((a, b) => a[1].localeCompare(b[1])).map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
           </select>
