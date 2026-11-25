@@ -3,7 +3,7 @@ import { confirmAsync } from "@/components/confirm";
 import { ErrorBanner } from "@/components/ui";
 import type { Copy } from "./request.copy";
 import type { Lang, ProposalLane, RequestProgress, RequestProposal } from "./request.model";
-import { acceptLanes, canAccept, pendingLanes, reconcile } from "./proposal.flow";
+import { acceptLanes, afterAccept, canAccept, pendingLanes, reconcile } from "./proposal.flow";
 import { acceptProposal, explainRequestError, loadRequest } from "./request.service";
 
 const money = (value: number | null, currency: string, lang: Lang) =>
@@ -92,7 +92,8 @@ export function ProposalTable({
   lang: Lang;
   brand: string;
   title: string;
-  onChange: (proposal: RequestProposal | null) => void;
+  /** `notice`: why the proposal went away (shown by the page in the table's place). */
+  onChange: (proposal: RequestProposal | null, notice: string | null) => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,11 +108,12 @@ export function ProposalTable({
     setBusy("reload");
     const result = await reconcile(proposal, null, { reload });
     setUnresolved(result.unresolved);
+    setBusy(null);
     if (!result.unresolved) {
       setError(null);
-      onChange(result.proposal);
+      const next = afterAccept(result, (e) => explainRequestError(e, lang, brand), copy.proposalGone);
+      onChange(next.proposal, next.notice);
     }
-    setBusy(null);
   }
 
   async function accept(lanes: ProposalLane[], key: string) {
@@ -126,9 +128,10 @@ export function ProposalTable({
       reload,
     });
     setUnresolved(result.unresolved);
-    onChange(result.proposal);
-    if (result.error) setError(explainRequestError(result.error, lang, brand));
     setBusy(null);
+    const next = afterAccept(result, (e) => explainRequestError(e, lang, brand), copy.proposalGone);
+    if (next.proposal && result.error) setError(explainRequestError(result.error, lang, brand));
+    onChange(next.proposal, next.notice);
   }
 
   return (

@@ -8,6 +8,7 @@ import { huellaPropuesta, propuestaDelEvento } from "../src/dominio/propuesta";
 import { versionVigente } from "../src/dominio/recorrido";
 import type { Detalle, Participacion } from "../src/dominio/tipos";
 import { manejar } from "../src/servidor/proxy";
+import { recargarAlVolver } from "../src/ui/recargaAlVolver";
 import type { RatewareSimulado } from "../src/simulado/rateware";
 import { crearSimulado } from "../src/simulado/semilla";
 
@@ -57,6 +58,8 @@ describe("propuesta al shipper contra el simulado", () => {
     ["el número de la ruta", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.lane_number = 9; }],
     ["la caja de la ruta", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.trailer = "48"; }],
     ["el estado de destino", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.destination_state = "CA"; }],
+    ["las rutas del evento (una ruta nueva)", () => { const l = sim.lanes.find((x) => x.rfx_event_id === eventId)!; sim.lanes.push({ ...l, id: "44444444-4444-4444-8444-4444444444a4", lane_number: 2 }); }],
+    ["una ruta que se declara desierta", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.no_award_reason = "sin ofertas"; }],
     ["el servicio de la ruta", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.service = "D2D"; }]
   ] as const) {
     it(`si cambia ${que} entre la lectura del servidor y la escritura, Rateware rechaza (STALE)`, async () => {
@@ -132,6 +135,21 @@ describe("propuesta al shipper contra el simulado", () => {
     const otra = await admin.publicarPropuesta(eventId, "2026-11-20", huellaPropuesta(p), null);
     expect(otra.propuesta?.version).toBe(1);
     expect(sim.propuestas).toHaveLength(1);
+  });
+
+  it("una aceptación del shipper con el panel abierto aparece al volver a leer", async () => {
+    const p = propuestaDelEvento(await admin.detalle(eventId));
+    const v1 = await admin.publicarPropuesta(eventId, "2026-11-20", huellaPropuesta(p), null);
+    expect(v1.propuesta?.aceptadas).toEqual([]);
+    let vista = v1.propuesta;
+    const ventana = new EventTarget();
+    const documento = Object.assign(new EventTarget(), { visibilityState: "visible" });
+    const lecturas: Promise<void>[] = [];
+    recargarAlVolver(() => { lecturas.push(admin.propuestaShipper(eventId).then((r) => { vista = r.propuesta; })); }, ventana, documento);
+    sim.aceptarPropuesta(v1.propuesta!.id, [p.lineas[0].rutaId], "Ana");
+    ventana.dispatchEvent(new Event("focus"));
+    await Promise.all(lecturas);
+    expect(vista?.aceptadas.map((a) => [a.rutaId, a.por])).toEqual([[p.lineas[0].rutaId, "Ana"]]);
   });
 
   it("fuera de orden: la lectura llega antes que el envío perdido y se publica otra vigencia; el envío viejo que llega después no sustituye la nueva", async () => {

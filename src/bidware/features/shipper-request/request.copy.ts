@@ -206,6 +206,7 @@ export const COPY = {
     downloadExcel: "Descargar en Excel",
     unresolved: "No pudimos confirmar si tu aceptación quedó registrada. Vuelve a cargar para revisarla antes de aceptar otra vez.",
     reload: "Volver a cargar",
+    proposalGone: "La propuesta ya no está disponible en esta liga. Escríbenos y te mandamos la vigente.",
     questions: "¿Dudas o algo que ajustar? Contesta al correo de tu contacto en MARKSMAN.",
     // Spot: one load, the short form
     spotTitle: "Tu carga",
@@ -404,6 +405,7 @@ export const COPY = {
     downloadExcel: "Download in Excel",
     unresolved: "We couldn't confirm whether your acceptance was recorded. Reload to check before accepting again.",
     reload: "Reload",
+    proposalGone: "The proposal is no longer available on this link. Write to us and we'll send you the current one.",
     questions: "Questions or something to adjust? Reply to your MARKSMAN contact's email.",
     spotTitle: "Your load",
     spotNotesHint: "Anything the carrier should know: appointments, handling, restrictions…",

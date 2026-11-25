@@ -11,6 +11,7 @@ import type { Detalle } from "../dominio/tipos";
 import { Confirmar, dinero, fecha } from "./comun";
 import { useSesion } from "./sesion";
 import * as I from "./Iconos";
+import { recargarAlVolver } from "./recargaAlVolver";
 
 type Estado = { cargando: true } | { cargando: false; error: string | null; conSolicitud: boolean; propuesta: PropuestaPublicada | null };
 
@@ -35,6 +36,9 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
     }
   }, [s.api, d.evento.id]);
   useEffect(() => { void cargar(); }, [cargar]);
+  // Lo que el shipper acepta mientras el panel está abierto aparece al volver a la pestaña
+  // (o con «Actualizar»): el equipo no trabaja sobre aceptaciones viejas.
+  useEffect(() => recargarAlVolver(() => void cargar(), window, document), [cargar]);
 
   const calculada = propuestaDelEvento(d);
   if (estado.cargando) return null;
@@ -52,6 +56,7 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
       <div className="fila">
         <h2 className="fila-icono"><I.Sobre size={17} />Propuesta al shipper</h2>
         {propuesta && <span className="pill">{aceptadas.size ? `aceptó ${aceptadas.size} de ${propuesta.lineas.length}` : `publicada v${propuesta.version}`}</span>}
+        {estado.conSolicitud && <button type="button" className="btn-texto" onClick={() => void cargar()}>Actualizar</button>}
       </div>
       {estado.error && <div className="estado estado-error">{estado.error}</div>}
       {!estado.error && !estado.conSolicitud && (

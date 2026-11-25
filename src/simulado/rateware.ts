@@ -909,6 +909,12 @@ export class RatewareSimulado {
         if (["draft", "archived"].includes(String(event.status))) throw new Falla(409, "A draft or archived RFx event cannot publish a proposal.", "RFX_PROPOSAL_EVENT_NOT_READY");
         const pedidas = Array.isArray(body.lanes) ? body.lanes : [];
         if (!pedidas.length) throw new Falla(400, "Add at least one lane with its sell rate.", "RFX_PROPOSAL_LANES_REQUIRED");
+        // Como Rateware: todas las rutas del evento y cuáles son desiertas, como se revisaron.
+        const clave = (xs: { id: string; no_award: boolean }[]) => JSON.stringify([...xs].sort((a, b) => a.id.localeCompare(b.id)));
+        const revisadas = Array.isArray(body.event_lanes) ? body.event_lanes.map((x: Fila) => ({ id: String(x?.id), no_award: x?.no_award })) : null;
+        const hoyRutas = this.lanes.filter((l) => l.rfx_event_id === event.id).map((l) => ({ id: l.id, no_award: Boolean(l.no_award_reason || l.no_award_at) }));
+        if (!revisadas || clave(revisadas) !== clave(hoyRutas))
+          throw new Falla(409, "The event lanes changed after the proposal was reviewed.", "RFX_PROPOSAL_STALE");
         const vistas = new Set<string>();
         const lineas = pedidas.map((x: Fila) => {
           const lane = this.lanes.find((l) => l.id === x.rfx_lane_id && l.rfx_event_id === event.id);

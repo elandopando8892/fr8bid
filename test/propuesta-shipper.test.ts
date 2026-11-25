@@ -6,7 +6,8 @@ import { detalle } from "../src/cliente/mapear";
 import { compararPropuesta, huellaPropuesta, leerPropuestaPublicada, propuestaDelEvento, type PropuestaPublicada } from "../src/dominio/propuesta";
 import { manejar } from "../src/servidor/proxy";
 import { MesaApi } from "../src/cliente/api";
-import { acceptLanes, canAccept, pendingLanes, progressAfter, reconcile } from "../src/bidware/features/shipper-request/proposal.flow";
+import { recargarAlVolver } from "../src/ui/recargaAlVolver";
+import { acceptLanes, afterAccept, canAccept, pendingLanes, progressAfter, reconcile } from "../src/bidware/features/shipper-request/proposal.flow";
 import { mensajeDelServidor } from "../src/dominio/errores";
 import { revisar } from "../src/servidor/paso";
 import { explainRequestError } from "../src/bidware/features/shipper-request/request.service";
@@ -108,6 +109,8 @@ describe("proxy: publicar la propuesta", () => {
     expect(enviado).not.toHaveProperty("proposal_fingerprint");
     // La versión que se tenía a la vista pasa a Rateware, que publica solo si sigue vigente.
     expect(enviado).toHaveProperty("base_proposal_id", null);
+    // Todas las rutas del evento y cuáles son desiertas: Rateware las compara bajo candado.
+    expect(enviado.event_lanes).toEqual([{ id: L1, no_award: false }]);
     expect(JSON.stringify(enviado)).not.toMatch(/Carrier Secreto|vendor_id|vendors/);
   });
 
@@ -357,5 +360,36 @@ describe("página del shipper: aceptar y recuperarse", () => {
     expect(r.proposal).toBe(antes);
     expect(r.error).toMatch(/fetch/);
     expect(r.unresolved).toBe(true);
+  });
+});
+
+describe("la propuesta deja de existir o cambia mientras se ve", () => {
+  const prop: any = { id: "p", version: 1, currency: "USD", lanes: [], accepted: [], expired: false };
+  it("si al aceptar ya no hay propuesta, la explicación viaja con el cambio y se muestra en su lugar", () => {
+    expect(afterAccept({ proposal: null, error: "RFX_PROPOSAL_REPLACED", unresolved: false }, () => "Hay una versión más nueva.", "Ya no está disponible.")).toEqual({ proposal: null, notice: "Hay una versión más nueva. Ya no está disponible." });
+    expect(afterAccept({ proposal: null, error: null, unresolved: false }, (e) => e, "Ya no está disponible.")).toEqual({ proposal: null, notice: "Ya no está disponible." });
+    expect(afterAccept({ proposal: prop, error: "X", unresolved: false }, (e) => e, "Ya no está disponible.")).toEqual({ proposal: prop, notice: null });
+  });
+
+  it("el panel del equipo vuelve a leer al regresar a la pestaña, una vez por regreso", () => {
+    const ventana = new EventTarget();
+    const documento = Object.assign(new EventTarget(), { visibilityState: "visible" });
+    let t = 0;
+    let lecturas = 0;
+    const dejar = recargarAlVolver(() => { lecturas += 1; }, ventana, documento, () => t);
+    ventana.dispatchEvent(new Event("focus"));
+    documento.dispatchEvent(new Event("visibilitychange"));
+    expect(lecturas).toBe(1);
+    t = 5000;
+    documento.visibilityState = "hidden";
+    documento.dispatchEvent(new Event("visibilitychange"));
+    expect(lecturas).toBe(1);
+    documento.visibilityState = "visible";
+    documento.dispatchEvent(new Event("visibilitychange"));
+    expect(lecturas).toBe(2);
+    dejar();
+    t = 10000;
+    ventana.dispatchEvent(new Event("focus"));
+    expect(lecturas).toBe(2);
   });
 });

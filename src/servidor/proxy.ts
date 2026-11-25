@@ -16,7 +16,7 @@ import { claveCampana, esPlantillaInvitacion } from "../dominio/invitacion.js";
 import { esProtegido } from "../dominio/protegidos.js";
 import { bloqueoDesierta, bloqueoReabrirRuta } from "../dominio/acciones-mesa.js";
 import { textoModelosAceptados } from "../dominio/modelo.js";
-import { huellaPropuesta, lanesParaRateware, propuestaDelEvento, textoFaltan } from "../dominio/propuesta.js";
+import { huellaPropuesta, lanesParaRateware, propuestaDelEvento, rutasDelEvento, textoFaltan } from "../dominio/propuesta.js";
 import { parseAcceptedCommercialModels, teamDefinedCommercialModel } from "../dominio/modelosAceptados.js";
 import { candadosAdjudicacion, hoyMexico, puedeAdjudicar } from "../dominio/recorrido.js";
 import { revisionesVigentes } from "../dominio/revision.js";
@@ -555,6 +555,7 @@ async function guardaPropuesta(body: Record<string, unknown>, autorizacion: stri
   if (body.proposal_fingerprint !== huellaPropuesta(propuesta))
     return error(409, "PROPUESTA_CAMBIO", "La propuesta cambió desde que la revisaste. Vuelve a cargar la página y revísala antes de publicar.");
   body.lanes = lanesParaRateware(propuesta, lectura.body);
+  body.event_lanes = rutasDelEvento(lectura.body);
   body.currency = propuesta.moneda;
   delete body.confirmed;
   delete body.confirmation_action;

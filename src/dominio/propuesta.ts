@@ -114,6 +114,14 @@ export function lanesParaRateware(p: Propuesta, crudo: any) {
   });
 }
 
+// Todas las rutas del evento y cuáles son desiertas, como se leyeron: Rateware las bloquea
+// y compara al publicar, así una ruta agregada, quitada, declarada desierta o reabierta
+// después de la revisión no deja la propuesta incompleta (RFX_PROPOSAL_STALE).
+export function rutasDelEvento(crudo: any): { id: string; no_award: boolean }[] {
+  const rutas: any[] = Array.isArray(crudo?.lanes) ? crudo.lanes : [];
+  return rutas.map((r) => ({ id: String(r?.id), no_award: Boolean(r?.no_award_reason || r?.no_award_at) }));
+}
+
 // Huella de lo que el Administrador revisó: rutas (con su número), términos, venta y moneda. Al publicar,
 // el servidor la recalcula con una lectura fresca y rechaza si no coincide.
 export function huellaPropuesta(p: Propuesta): string {

@@ -62,3 +62,14 @@ export async function reconcile(current: RequestProposal, error: string | null, 
 
 /** Accept buttons are live only with a current, unexpired proposal and nothing in doubt. */
 export const canAccept = (proposal: RequestProposal, busy: boolean, unresolved: boolean) => !proposal.expired && !busy && !unresolved;
+
+/**
+ * What the page keeps after accepting or reading again. When no proposal comes back,
+ * the table goes away, so the explanation travels with the change and the page shows it
+ * in its place (the shipper never loses what happened).
+ */
+export function afterAccept(result: AcceptResult, explain: (error: string) => string, gone: string): { proposal: RequestProposal | null; notice: string | null } {
+  const message = result.error ? explain(result.error) : null;
+  if (!result.proposal) return { proposal: null, notice: message ? `${message} ${gone}` : gone };
+  return { proposal: result.proposal, notice: null };
+}
