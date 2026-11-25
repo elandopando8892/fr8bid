@@ -25,6 +25,10 @@ describe("la siguiente ruta por cotizar", () => {
   it("al llegar al final regresa a las pendientes del principio", () => {
     expect(nextPending(rutas, rutas[3])?.lane_number).toBe(2);
   });
+  it("no vuelve a ofrecer una ruta recién enviada cuya recarga no ha llegado", () => {
+    expect(nextPending(rutas, rutas[1], new Set(["l4"]))).toBeNull();
+    expect(nextPending([...rutas, ruta(5)], rutas[1], new Set(["l4"]))?.lane_number).toBe(5);
+  });
   it("sin pendientes no promete una ruta siguiente", () => {
     expect(nextPending([ruta(1), ruta(2, { bid_rate: 1, business_status: "quoted" })], ruta(1))).toBeNull();
   });

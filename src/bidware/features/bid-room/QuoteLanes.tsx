@@ -67,6 +67,7 @@ export function QuoteLanes({
   onClose,
   shared,
   onShare,
+  answered,
 }: {
   token: string;
   eventId: string;
@@ -84,6 +85,8 @@ export function QuoteLanes({
   onClose: () => void;
   shared: SharedFields | null;
   onShare: (fields: SharedFields | null) => void;
+  /** Lanes answered here whose reload has not arrived yet. */
+  answered: ReadonlySet<string>;
 }) {
   useLang();
   const panel = useRef<HTMLDivElement>(null);
@@ -91,8 +94,8 @@ export function QuoteLanes({
   // On a phone the quote opens as a sheet over the list, one lane at a time.
   const sheet = !isWide && Boolean(picked);
   const position = picked ? lanes.findIndex((l) => l.rfx_lane_id === picked.rfx_lane_id) + 1 : 0;
-  const next = picked && picked.bid_rate == null ? nextPending(lanes, picked) : null;
-  const others = lanes.filter((l) => l.bid_rate == null && canQuote(l) && l.rfx_lane_id !== picked?.rfx_lane_id).length;
+  const next = picked && picked.bid_rate == null ? nextPending(lanes, picked, answered) : null;
+  const others = lanes.filter((l) => l.bid_rate == null && canQuote(l) && !answered.has(l.rfx_lane_id) && l.rfx_lane_id !== picked?.rfx_lane_id).length;
 
   // The sheet takes the focus to its title, closes with Escape, and the list behind it does not scroll.
   useEffect(() => {

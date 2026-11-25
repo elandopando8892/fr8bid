@@ -27,8 +27,16 @@ export function startForm(lane: BookLane, shared: SharedFields | null | undefine
 }
 
 /** The next lane still waiting for a quote after this one (wrapping to the start). */
-export function nextPending(lanes: BookLane[], from: BookLane): BookLane | null {
+/**
+ * `answered` holds the lanes answered here whose reload has not arrived yet:
+ * the list still shows them pending, but they are never offered again.
+ */
+export function nextPending(lanes: BookLane[], from: BookLane, answered: ReadonlySet<string> = new Set()): BookLane | null {
   const i = lanes.findIndex((l) => l.rfx_lane_id === from.rfx_lane_id);
   const order = [...lanes.slice(i + 1), ...lanes.slice(0, Math.max(i, 0))];
-  return order.find((l) => l.rfx_lane_id !== from.rfx_lane_id && laneState(l) === "pending" && canQuote(l)) ?? null;
+  return (
+    order.find(
+      (l) => l.rfx_lane_id !== from.rfx_lane_id && !answered.has(l.rfx_lane_id) && laneState(l) === "pending" && canQuote(l),
+    ) ?? null
+  );
 }

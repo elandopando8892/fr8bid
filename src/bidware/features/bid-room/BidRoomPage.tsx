@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import {
   answersOf,
@@ -107,6 +107,12 @@ function BidRoomContent({ token }: { token: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   // Capacity, transit and validity the carrier chose to reuse on the lanes not quoted yet.
   const [shared, setShared] = useState<SharedFields | null>(null);
+  // Lanes answered here whose reload is still on its way: never offered again as "next".
+  const [answered, setAnswered] = useState<Set<string>>(new Set());
+  const answeredRef = useRef(answered);
+  answeredRef.current = answered;
+  const pickedRef = useRef<string | null>(null);
+  const lanesRef = useRef<BookLane[]>([]);
 
   const invitation = (data?.invitation ?? {}) as Record<string, unknown>;
   const event = (invitation.rfx_events ?? {}) as BookEvent;
@@ -125,6 +131,7 @@ function BidRoomContent({ token }: { token: string }) {
     setNotice(null);
     setPicks(new Map());
     setShared(null);
+    setAnswered(new Set());
   }, [token]);
 
   // On a wide screen the panel opens on the first lane still waiting for a quote
@@ -174,6 +181,9 @@ function BidRoomContent({ token }: { token: string }) {
   const due = dueOf(lanes, event.due_date);
   const deadline = deadlineText(due);
   const picked = lanes.find((l) => l.rfx_lane_id === pickedId) ?? null;
+  // Read by a send that finishes later: the selection and lanes as they are then, not as they were when it started.
+  pickedRef.current = pickedId;
+  lanesRef.current = lanes;
   const canQuoteAny = lanes.some(canQuote);
   const quotedCount = lanes.filter((l) => l.bid_rate != null).length;
   const band = bandOf(mode);
@@ -188,9 +198,15 @@ function BidRoomContent({ token }: { token: string }) {
     // A first answer on a lane moves on to the next one still waiting (the button said so); a revision stays put.
     // On a phone, with nothing left to quote, the sheet closes and the list shows the progress.
     if (lane.bid_rate == null) {
-      const next = nextPending(lanes, lane);
-      if (next) setPickedId(next.rfx_lane_id);
-      else if (!wide()) setPickedId(null);
+      const done = new Set(answeredRef.current).add(lane.rfx_lane_id);
+      answeredRef.current = done;
+      setAnswered(done);
+      // If the carrier closed the sheet or moved to another lane while this one was sending, the late answer leaves the choice alone.
+      if (pickedRef.current === lane.rfx_lane_id) {
+        const next = nextPending(lanesRef.current, lane, done);
+        if (next) setPickedId(next.rfx_lane_id);
+        else if (!wide()) setPickedId(null);
+      }
     }
     reload();
   }
@@ -282,6 +298,7 @@ function BidRoomContent({ token }: { token: string }) {
               onClose={() => setPickedId(null)}
               shared={shared}
               onShare={setShared}
+              answered={answered}
             />
           ) : (
             <Empty
