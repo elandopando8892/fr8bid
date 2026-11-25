@@ -36,13 +36,26 @@ const FILTERS: { key: string; label: string }[] = [
 export function QuoteDeskPage() {
   useLang();
   const navigate = useNavigate();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const [filter, setFilter] = useState("active");
   const [search, setSearch] = useState("");
   // ?new=1 opens the new-quote dialog (the Dashboard's search links here).
   const [creating, setCreating] = useState(() => params.get("new") === "1");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panelDirty, setPanelDirty] = useState(false);
+  // También al llegar con ?new=1 estando ya en esta pantalla (búsqueda global).
+  // El parámetro se consume al abrir, para que repetir la acción vuelva a abrirlo.
+  const nueva = params.get("new") === "1";
+  useEffect(() => {
+    if (!nueva) return;
+    setParams((p) => { const n = new URLSearchParams(p); n.delete("new"); return n; }, { replace: true });
+    // Con cambios sin guardar en el panel, la misma confirmación que al cambiar de cotización.
+    void (async () => {
+      if (panelDirty && !(await confirmAsync(tr("text188")))) return;
+      setCreating(true);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al llegar el parámetro
+  }, [nueva, setParams]);
   const { data, loading, error, reload } = useAsync(
     () => listQuotes({ status: filter === "active" ? undefined : filter }),
     [filter],

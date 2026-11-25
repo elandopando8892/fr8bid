@@ -1,5 +1,5 @@
 import { words, tr } from "@/i18n/shipper-intake";
-import { useLang, locale } from "@/i18n/language";
+import { useLang, locale, getLang } from "@/i18n/language";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/auth/AuthContext";
 import { Link, useNavigate } from "react-router-dom";
@@ -263,7 +263,7 @@ function ShipperIntakeContent() {
 
   return (
     <>
-      <TopBar title="Shipper intake" />
+      <TopBar title={getLang() === "es" ? "Solicitudes de shippers" : "Shipper requests"} />
       <main className="main intake">
         <div className="intake-cols">
           <section className="intake-drafts">

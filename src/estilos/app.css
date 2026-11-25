@@ -21,7 +21,6 @@ button, input, select, textarea { font: inherit; }
 .lateral nav a { display: block; color: var(--cloud); padding: 6px 10px; border-radius: 8px; }
 .lateral nav a:hover { background: #ffffff0d; text-decoration: none; }
 .lateral nav a.activo { background: #ffffff14; color: #fff; }
-.menu-boton { display: none; }
 .menu-grupo { margin-bottom: 12px; }
 .menu-titulo { display: block; color: var(--muted2); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 0 10px 4px; }
 .lateral nav .externo { color: var(--muted2); font-size: 11px; margin-left: 2px; }
@@ -164,11 +163,6 @@ button, input, select, textarea { font: inherit; }
 @media (max-width: 860px) {
   .marco { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
   .lateral { flex-direction: row; align-items: center; padding: 10px 16px; gap: 12px; flex-wrap: wrap; }
-  /* El menú completo se abre desde un botón para no llenar la barra. */
-  .menu { position: relative; }
-  .menu-boton { display: inline-flex; gap: 6px; background: #ffffff14; color: #fff; border: 0; border-radius: 8px; padding: 6px 10px; font-weight: 600; cursor: pointer; }
-  .menu-grupos { display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; background: var(--ink); border-radius: 10px; padding: 10px 6px; min-width: 230px; box-shadow: 0 10px 30px #0006; }
-  .menu.abierto .menu-grupos { display: block; }
   .cuenta { margin: 0 0 0 auto; flex-direction: row; align-items: center; flex-wrap: wrap; min-width: 0; max-width: 100%; }
   .cuenta .campo { margin: 0; flex-direction: row; align-items: center; }
   .cuenta .ver-como > span, .cuenta .aviso-pill { display: none; }
@@ -299,9 +293,6 @@ a.btn-secundario, a.btn-primario, a.btn-secundario:hover, a.btn-primario:hover {
 .fila-evento-principal > a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fila-evento-principal .tenue { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fila-evento .folio { font-size: 11.5px; color: var(--muted2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fila-evento-siguiente { display: flex; flex-direction: column; font-size: 13px; }
-.fila-evento-flecha { color: var(--muted2); }
-.fila-evento:hover .fila-evento-flecha { color: var(--accent); }
 
 /* Hoy */
 .hoy-columna { display: grid; gap: 14px; max-width: 880px; }
@@ -328,13 +319,11 @@ a.btn-secundario, a.btn-primario, a.btn-secundario:hover, a.btn-primario:hover {
 /* Página del evento: con varias rutas, el título es el shipper y las rutas van en chips. */
 
 @media (max-width: 1100px) {
-  .fila-evento { grid-template-columns: minmax(0, 1fr) 120px 150px 18px; }
-  .fila-evento-dato[data-etiqueta="Ofertas"], .fila-evento-dato[data-etiqueta="Plazo"] { display: none; }
+
 }
 @media (max-width: 860px) {
   .lateral { position: static; height: auto; overflow: visible; }
   .lateral .marca { padding: 0; }
-  .menu-boton svg { color: var(--orange); }
   .cuenta { padding: 0; }
   .cuenta .quien-texto, .cuenta-acciones .salir { display: none; }
   .buscador { min-width: 0; width: 100%; }
@@ -342,11 +331,6 @@ a.btn-secundario, a.btn-primario, a.btn-secundario:hover, a.btn-primario:hover {
   .pestana { flex: 0 0 auto; }
   .fila-evento { grid-template-columns: minmax(0, 1fr) 18px; gap: 4px 10px; padding: 12px; }
   .fila-evento-principal { grid-column: 1; }
-  .fila-evento-flecha { grid-column: 2; grid-row: 1; }
-  .fila-evento-dato, .fila-evento-dato[data-etiqueta] { display: inline-flex !important; grid-column: 1; gap: 6px; font-size: 12.5px; }
-  .fila-evento-dato[data-etiqueta]::before { content: attr(data-etiqueta) ": "; color: var(--muted); }
-  .fila-evento-dato[data-etiqueta="Estado"]::before { content: none; }
-  .fila-evento-siguiente { grid-column: 1; flex-direction: row; gap: 6px; }
   .siguiente-paso { padding: 16px; }
   .pendiente { flex-wrap: wrap; }
 }
@@ -373,7 +357,6 @@ a.btn-secundario, a.btn-primario, a.btn-secundario:hover, a.btn-primario:hover {
 .lateral nav a .contador { margin-left: auto; font-family: var(--mono); font-size: 11px; background: var(--orange); color: #fff; border-radius: 999px; padding: 0 7px; min-width: 20px; text-align: center; line-height: 18px; }
 @media (max-width: 860px) {
   .lateral { flex-wrap: wrap; gap: 8px; }
-  .menu-boton { max-width: 44vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cuenta select { font-size: 12px; padding: 4px 6px; max-width: 118px; }
   .cuenta .inicial { width: 26px; height: 26px; flex-basis: 26px; font-size: 12px; }
 }
@@ -506,3 +489,93 @@ tr.mejor > td { background: #f6fbf7; }
 .modelos-evento .check { margin: 0; }
 button.pill { border: 0; cursor: pointer; font-family: inherit; }
 button.pill:hover { filter: brightness(0.96); }
+
+/* Cascarón (rediseño 25-nov): búsqueda global, pestañas de sección y barra inferior del teléfono. */
+.buscar-global { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 38px; padding: 0 10px; border: 1px solid #ffffff1f; border-radius: 9px; background: #ffffff0d; color: #cfcfca; font-size: 13.5px; cursor: pointer; text-align: left; }
+.buscar-global:hover { background: #ffffff17; color: #fff; }
+.buscar-global .buscar-texto { flex: 1; }
+.buscar-global kbd { font-family: var(--mono); font-size: 11px; border: 1px solid #ffffff33; border-radius: 5px; padding: 0 6px; color: var(--muted2); }
+.lateral nav a { min-height: 38px; font-size: 14px; }
+.secciones { display: flex; gap: 4px; flex-wrap: wrap; margin: 0 0 16px; border-bottom: 1px solid var(--line); }
+.secciones a { display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--muted); font-weight: 600; font-size: 14px; }
+.secciones a:hover { color: var(--ink); text-decoration: none; }
+.secciones a.activa { color: var(--ink); border-bottom-color: var(--accent); }
+.barra-inferior, .hoja-mas-fondo { display: none; }
+
+.buscador-fondo { position: fixed; inset: 0; z-index: 60; background: #1e1e1e66; display: flex; justify-content: center; align-items: flex-start; padding: 10vh 16px 16px; }
+.buscador-global { width: min(640px, 100%); background: var(--panel); border-radius: 14px; box-shadow: 0 20px 50px #0005; overflow: hidden; display: flex; flex-direction: column; max-height: 75vh; }
+.buscador-campo { display: flex; align-items: center; gap: 10px; padding: 0 14px; border-bottom: 1px solid var(--line); color: var(--muted); }
+.buscador-campo input { flex: 1; min-width: 0; border: 0; outline: 0; padding: 16px 0; font-size: 16px; color: var(--ink); background: transparent; }
+.buscador-titulo { margin: 0; padding: 10px 16px 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.buscador-resultados { list-style: none; margin: 0; padding: 6px; overflow-y: auto; }
+.buscador-resultados button { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 6px 10px; border: 0; border-radius: 9px; background: none; color: var(--ink); text-align: left; cursor: pointer; }
+.buscador-resultados button svg { color: var(--muted); }
+.buscador-resultados button.activo { background: var(--orange-light); }
+.buscador-resultados button.activo svg { color: var(--accent); }
+.buscador-etiqueta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.buscador-detalle { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.buscador-vacio { margin: 0; padding: 14px 16px; color: var(--muted); font-size: 13.5px; }
+
+@media (max-width: 860px) {
+  .lateral .menu { display: none; }
+  .buscar-global { width: auto; min-height: 40px; padding: 0 12px; order: 2; margin-left: auto; }
+  .buscar-global .buscar-texto, .buscar-global kbd { display: none; }
+  .lateral .cuenta { order: 3; margin-left: 0; }
+  .contenido { padding-bottom: 92px; }
+  .secciones { flex-wrap: nowrap; overflow-x: auto; }
+  .secciones a { flex: 0 0 auto; }
+  .barra-inferior { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--panel); border-top: 1px solid var(--line); padding: 4px 4px calc(4px + env(safe-area-inset-bottom)); }
+  .barra-inferior a, .barra-inferior button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 56px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; border-radius: 10px; }
+  .barra-inferior a:hover { text-decoration: none; }
+  .barra-inferior .activo { color: var(--accent); }
+  .barra-icono { position: relative; display: inline-flex; }
+  .barra-icono .contador { position: absolute; top: -6px; right: -12px; font-family: var(--mono); font-size: 10.5px; background: var(--orange); color: #fff; border-radius: 999px; padding: 0 5px; min-width: 18px; line-height: 16px; text-align: center; }
+  .hoja-mas-fondo { display: block; position: fixed; inset: 0; z-index: 39; background: #1e1e1e59; }
+  .hoja-mas { position: absolute; left: 0; right: 0; bottom: calc(64px + env(safe-area-inset-bottom)); background: var(--panel); border-radius: 16px 16px 0 0; padding: 8px; display: flex; flex-direction: column; box-shadow: 0 -8px 30px #1e1e1e33; }
+  .hoja-mas-fila { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 14px; border: 0; border-radius: 10px; background: none; color: var(--ink); font: inherit; font-size: 15px; font-weight: 600; text-align: left; cursor: pointer; }
+  .hoja-mas-fila:hover { background: var(--subtle); text-decoration: none; }
+  .hoja-mas-fila.activo { color: var(--accent); }
+  .buscador-fondo { padding-top: 12px; }
+}
+
+/* Fila de Eventos: nombre y folio, etapa de 5, qué pasa y un solo botón. */
+.fila-evento { grid-template-columns: minmax(0, 2fr) 150px minmax(0, 1.4fr) 150px; gap: 8px 18px; padding: 14px 18px; }
+.fila-evento-principal > a { font-size: 14.5px; }
+.fila-evento .folio { font-size: 12px; color: var(--muted); }
+.fila-evento-etapa { display: flex; flex-direction: column; gap: 5px; }
+.barra-etapas { display: flex; gap: 3px; }
+.barra-etapas i { flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
+.barra-etapas i.hecha { background: var(--accent); }
+.barra-etapas i.actual { background: #f6b79c; }
+.fila-evento-pasa { font-size: 13.5px; }
+.fila-evento-accion { display: flex; justify-content: flex-end; }
+.fila-evento-accion a { min-height: 40px; width: 100%; justify-content: center; display: inline-flex; align-items: center; }
+.fila-evento-accion .btn-primario { background: var(--accent); }
+@media (max-width: 1100px) {
+  .fila-evento { grid-template-columns: minmax(0, 1fr) 140px 140px; }
+  .fila-evento-pasa { grid-column: 1 / -1; grid-row: 2; color: var(--muted); }
+}
+@media (max-width: 860px) {
+  .fila-evento { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 14px; }
+  .fila-evento-principal { grid-column: 1 / -1; }
+  .fila-evento-etapa { grid-column: 1; grid-row: 2; }
+  .fila-evento-pasa { grid-column: 1 / -1; grid-row: 3; }
+  .fila-evento-accion { grid-column: 2; grid-row: 2; }
+  .fila-evento-accion a { min-height: 44px; padding: 0 16px; }
+}
+.buscador-campo input::-webkit-search-cancel-button { display: none; }
+
+/* Página del evento: una ruta a la vez (rediseño 25-nov). */
+.selector-rutas { display: flex; flex-direction: column; gap: 10px; scroll-margin-top: 12px; }
+.selector-rutas .fila { align-items: center; gap: 12px; }
+.avance-rutas { flex: 1; min-width: 80px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.avance-rutas i { display: block; height: 6px; background: var(--green); }
+.chips-rutas { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-ruta { display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-width: 44px; min-height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); font: inherit; font-family: var(--mono); font-weight: 700; cursor: pointer; }
+.chip-ruta:hover { border-color: var(--grey); }
+.chip-ruta.lista { background: var(--green-light, #edf5ef); border-color: transparent; color: var(--green); }
+.chip-ruta.vacia { border-style: dashed; color: var(--muted); }
+.chip-ruta[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+.pasar-ruta { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 4px 0 16px; }
+.pasar-ruta .btn-primario { background: var(--accent); }
+.tarjeta[hidden] { display: none !important; }

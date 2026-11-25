@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ErrorApi } from "../cliente/api";
 import { USUARIOS_SIMULADOS, useSesion } from "./sesion";
@@ -10,6 +10,8 @@ import { ContextoEventos, useEventos } from "./Eventos";
 import { grupoDe } from "./eventosVista";
 import { hoyMexico } from "../dominio/recorrido";
 import { BotonAyudas } from "./BotonAyudas";
+import { Buscador, BotonBuscar, useAtajoBuscar } from "./Buscador";
+import { esActivo, MENU, MODULOS, moduloDe, seccionActiva, type Modulo } from "./navegacion";
 
 // ——— Rutas: react-router (las comparten la Mesa y los módulos de Bidware) ———
 export function useRuta(): string {
@@ -38,57 +40,17 @@ export function ir(ruta: string) {
   else window.location.assign(ruta);
 }
 
-export function Liga({ a, children, className, title }: { a: string; children: ReactNode; className?: string; title?: string }) {
+export function Liga({ a, children, className, title, "aria-current": actual }: { a: string; children: ReactNode; className?: string; title?: string; "aria-current"?: "page" }) {
   return (
-    <Link to={a} className={className} title={title}>
+    <Link to={a} className={className} title={title} aria-current={actual}>
       {children}
     </Link>
   );
 }
 
-// Menú completo: la página del evento y los módulos traídos de Bidware, todos
-// aquí, con el mismo trazo de iconos que Fr8Growth. «Más» va plegado.
-type Modulo = { etiqueta: string; a: string; icono: (p: { size?: number }) => JSX.Element; publica?: boolean; activo?: (ruta: string) => boolean };
-const bajo = (a: string) => (ruta: string) => ruta === a || ruta.startsWith(`${a}/`);
-export const MENU: { grupo: string; plegado?: boolean; modulos: Modulo[] }[] = [
-  {
-    grupo: "",
-    modulos: [
-      { etiqueta: "Hoy", a: "/", icono: I.Casa, activo: (r) => r === "/" },
-      { etiqueta: "Eventos RFx", a: "/eventos", icono: I.Martillo, activo: (r) => bajo("/eventos")(r) || bajo("/rfx")(r) },
-      { etiqueta: "QuoteDesk", a: "/quotedesk", icono: I.Calculadora },
-      { etiqueta: "Shipper intake", a: "/intake", icono: I.Bandeja }
-    ]
-  },
-  {
-    grupo: "Carriers",
-    modulos: [
-      { etiqueta: "Carrier CRM", a: "/crm", icono: I.Camion },
-      { etiqueta: "Listas de carriers", a: "/templates", icono: I.Lista },
-      { etiqueta: "Carrier fit", a: "/carrier-fit", icono: I.Mira },
-      { etiqueta: "Plantillas de correo", a: "/plantillas", icono: I.Sobre }
-    ]
-  },
-  {
-    grupo: "Shippers y tarifas",
-    modulos: [
-      { etiqueta: "Shippers", a: "/shippers", icono: I.Edificio },
-      // Un solo módulo con tres pestañas: por revisar, tarifario y archivos.
-      { etiqueta: "Tarifas", a: "/tarifas", icono: I.Etiqueta, activo: (r) => ["/tarifas", "/tarifario", "/archivos"].some((a) => bajo(a)(r)) }
-    ]
-  },
-  {
-    grupo: "Más",
-    plegado: true,
-    modulos: [
-      { etiqueta: "Integraciones", a: "/integraciones", icono: I.Enchufe },
-      // La vista que ven los carriers: se abre aparte, sin el marco del equipo.
-      { etiqueta: "Tablero público", a: "/board", icono: I.Pantalla, publica: true }
-    ]
-  }
-];
+// Menú: cinco entradas en español y «Más» plegado (navegacion.ts).
+export { MENU };
 
-const esActivo = (m: Modulo, ruta: string) => (m.activo ?? bajo(m.a))(ruta);
 
 function Entrada({ m, ruta, contador }: { m: Modulo; ruta: string; contador?: number }) {
   const Ic = m.icono;
@@ -98,8 +60,9 @@ function Entrada({ m, ruta, contador }: { m: Modulo; ruta: string; contador?: nu
         <Ic size={17} /> <span className="menu-texto">{m.etiqueta}</span> <I.Externo size={13} className="externo" aria-label="abre en otra pestaña" />
       </a>
     );
+  const activo = esActivo(m, ruta);
   return (
-    <Liga a={m.a} className={esActivo(m, ruta) ? "activo" : ""}>
+    <Liga a={m.a} className={activo ? "activo" : ""} aria-current={activo ? "page" : undefined}>
       <Ic size={17} /> <span className="menu-texto">{m.etiqueta}</span>
       {contador ? <span className="contador" title={`${contador} te toca`}>{contador}</span> : null}
     </Liga>
@@ -107,19 +70,11 @@ function Entrada({ m, ruta, contador }: { m: Modulo; ruta: string; contador?: nu
 }
 
 function Menu({ ruta, teToca }: { ruta: string; teToca: number }) {
-  const [abierto, setAbierto] = useState(false);
-  const todos = MENU.flatMap((g) => g.modulos);
-  const actual = todos.find((m) => !m.publica && esActivo(m, ruta));
   const masActivo = MENU.some((g) => g.plegado && g.modulos.some((m) => !m.publica && esActivo(m, ruta)));
   const [mas, setMas] = useState(masActivo);
-  useEffect(() => setAbierto(false), [ruta]);
   useEffect(() => { if (masActivo) setMas(true); }, [masActivo]);
-  const Actual = actual?.icono;
   return (
-    <nav className={`menu ${abierto ? "abierto" : ""}`} aria-label="Módulos">
-      <button className="menu-boton" aria-expanded={abierto} onClick={() => setAbierto(!abierto)}>
-        {Actual && <Actual size={17} />} {actual?.etiqueta ?? "Menú"} <span aria-hidden>▾</span>
-      </button>
+    <nav className="menu" aria-label="Módulos">
       <div className="menu-grupos">
         {MENU.map((g) =>
           g.plegado ? (
@@ -141,6 +96,74 @@ function Menu({ ruta, teToca }: { ruta: string; teToca: number }) {
   );
 }
 
+// Pestañas de la entrada activa (Carriers: directorio, listas, a quién invitar y plantillas).
+export function Secciones({ ruta }: { ruta: string }) {
+  const m = moduloDe(ruta);
+  if (!m?.secciones) return null;
+  const actual = seccionActiva(m, ruta);
+  return (
+    <nav className="secciones" aria-label={`Secciones de ${m.etiqueta}`}>
+      {m.secciones.map((s) => (
+        <Liga key={s.a} a={s.a} className={s === actual ? "activa" : ""} aria-current={s === actual ? "page" : undefined}>
+          {s.etiqueta}
+        </Liga>
+      ))}
+    </nav>
+  );
+}
+
+// Teléfono: las cuatro entradas de diario abajo, al alcance del pulgar; el resto en «Más».
+const ABAJO: { etiqueta: string; a: string; icono: (p: { size?: number }) => JSX.Element }[] = [
+  { etiqueta: "Hoy", a: "/", icono: I.Casa },
+  { etiqueta: "Eventos", a: "/eventos", icono: I.Martillo },
+  { etiqueta: "Cotizar", a: "/quotedesk", icono: I.Calculadora },
+  { etiqueta: "Carriers", a: "/crm", icono: I.Camion }
+];
+function BarraInferior({ ruta, teToca, onBuscar }: { ruta: string; teToca: number; onBuscar: () => void }) {
+  const [mas, setMas] = useState(false);
+  useEffect(() => setMas(false), [ruta]);
+  const actual = moduloDe(ruta);
+  const enAbajo = ABAJO.some((x) => actual?.a === x.a);
+  const resto = MODULOS.filter((m) => !ABAJO.some((x) => x.a === m.a));
+  return (
+    <>
+      {mas && (
+        <div className="hoja-mas-fondo" onClick={() => setMas(false)}>
+          <nav className="hoja-mas" aria-label="Más secciones" onClick={(ev) => ev.stopPropagation()}>
+            <button type="button" className="hoja-mas-fila" onClick={() => { setMas(false); onBuscar(); }}>
+              <I.Lupa size={18} /> Buscar
+            </button>
+            {resto.map((m) => {
+              const Ic = m.icono;
+              return m.publica ? (
+                <a key={m.a} href={m.a} target="_blank" rel="noreferrer" className="hoja-mas-fila"><Ic size={18} /> {m.etiqueta} <I.Externo size={13} /></a>
+              ) : (
+                <Liga key={m.a} a={m.a} className={`hoja-mas-fila ${esActivo(m, ruta) ? "activo" : ""}`}><Ic size={18} /> {m.etiqueta}</Liga>
+              );
+            })}
+          </nav>
+        </div>
+      )}
+      <nav className="barra-inferior" aria-label="Módulos">
+        {ABAJO.map((x) => {
+          const Ic = x.icono;
+          const activo = actual?.a === x.a;
+          return (
+            <Liga key={x.a} a={x.a} className={activo ? "activo" : ""} aria-current={activo ? "page" : undefined}>
+              <span className="barra-icono"><Ic size={20} />{x.a === "/eventos" && teToca > 0 && <span className="contador">{teToca}</span>}</span>
+              {x.etiqueta}
+            </Liga>
+          );
+        })}
+        <button type="button" className={!enAbajo || mas ? "activo" : ""} aria-expanded={mas} onClick={() => setMas(!mas)}>
+          <span className="barra-icono"><I.Puntos size={20} /></span>
+          Más
+        </button>
+      </nav>
+    </>
+  );
+}
+
 export function Marco({ children }: { children: ReactNode }) {
   const s = useSesion();
   useLang(); // el rol y el aviso cambian de idioma con los módulos
@@ -148,14 +171,20 @@ export function Marco({ children }: { children: ReactNode }) {
   // Una sola lectura de eventos por página: la usan el contador del menú, Hoy y Eventos.
   const eventos = useEventos();
   const teToca = eventos.carga.tipo === "ok" && s.rol === "admin" ? eventos.carga.datos.filter((e) => grupoDe(e, hoyMexico(), true) === "te_toca").length : 0;
+  const [buscando, setBuscando] = useState(false);
+  const abrirBusqueda = useCallback(() => setBuscando(true), []);
+  useAtajoBuscar(abrirBusqueda);
+  useEffect(() => setBuscando(false), [ruta]);
+  const irA = useCallback((a: string, externa?: boolean) => (externa ? window.open(a, "_blank", "noreferrer") : ir(a)), []);
   return (
     <ContextoEventos.Provider value={eventos}>
     <div className="marco">
       <aside className="lateral">
         <Liga a="/" className="marca">
           <span className="logo">MARKS<b>MAN</b></span>
-          <span className="sub">Fr8Bid · Bid Room</span>
+          <span className="sub">Fr8Bid</span>
         </Liga>
+        <BotonBuscar onAbrir={abrirBusqueda} />
         <Menu ruta={ruta} teToca={teToca} />
         <div className="cuenta">
           {s.modo === "simulado" ? (
@@ -196,8 +225,11 @@ export function Marco({ children }: { children: ReactNode }) {
             <b>{tr("text010")}</b> {tr("text011")}
           </div>
         )}
+        <Secciones ruta={ruta} />
         {children}
       </main>
+      <BarraInferior ruta={ruta} teToca={teToca} onBuscar={abrirBusqueda} />
+      <Buscador abierto={buscando} cerrar={() => setBuscando(false)} ir={irA} />
     </div>
     </ContextoEventos.Provider>
   );

@@ -36,10 +36,13 @@ describe("módulo Tarifas con tres pestañas", () => {
     expect(links.map((a) => a.textContent)).toEqual(["To review", "Rate base", "Files"]);
   });
 
-  it("el menú tiene una sola entrada Tarifas que sigue activa en las tres pantallas", () => {
-    const entradas = MENU.flatMap((g) => g.modulos).filter((m) => ["/tarifas", "/tarifario", "/archivos"].includes(m.a));
-    expect(entradas.map((m) => m.etiqueta)).toEqual(["Tarifas"]);
+  it("el menú tiene una sola entrada para tarifas que sigue activa en las tres pantallas", () => {
+    const entradas = MENU.flatMap((g) => g.modulos).filter((m) => ["/tarifas", "/tarifario", "/archivos"].some((r) => m.activo?.(r)));
+    expect(entradas.map((m) => m.etiqueta)).toEqual(["Shippers y tarifas"]);
     for (const ruta of ["/tarifas", "/tarifario", "/archivos"]) expect(entradas[0].activo!(ruta)).toBe(true);
     expect(entradas[0].activo!("/crm")).toBe(false);
+    const tarifas = entradas[0].secciones!.filter((s) => s.etiqueta === "Tarifas");
+    expect(tarifas).toHaveLength(1);
+    for (const ruta of ["/tarifas", "/tarifario", "/archivos"]) expect(tarifas[0].activo!(ruta)).toBe(true);
   });
 });

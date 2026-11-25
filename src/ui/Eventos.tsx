@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import type { ResumenEvento } from "../dominio/tipos";
 import { hoyMexico } from "../dominio/recorrido";
 import { aCarga, Desactualizado, EstadoVista, fecha, ir, Liga, plural, Prueba, type Carga } from "./comun";
-import { cuantasRutas, ESTADO_EVENTO, folioCorto, grupoDe, nombreEvento, porUrgencia, resumenRutas, shipperAparte, siguiente, type Grupo } from "./eventosVista";
+import { botonFila, cuantasRutas, ESTADO_EVENTO, folioCorto, grupoDe, nombreEvento, porUrgencia, quePasa, resumenRutas, shipperAparte, siguiente, type Grupo } from "./eventosVista";
+import { ETAPAS, etapaDe } from "./navegacion";
 import * as I from "./Iconos";
 import { useSesion } from "./sesion";
 
@@ -94,7 +95,6 @@ export function Eventos() {
     <section className="pagina">
       <header className="cabecera">
         <div>
-          <p className="miga">Eventos RFx</p>
           <h1>Eventos</h1>
         </div>
         {modo === "rateware" && rol !== "viewer" && (
@@ -126,7 +126,7 @@ export function Eventos() {
           {visibles.map((e) => {
             const sig = siguiente(e);
             const tuyo = sig.quien === "Administrador" && esAdmin;
-            const est = ESTADO_EVENTO[e.estado];
+            const etapa = etapaDe(e);
             const n = cuantasRutas(e);
             const rutas = resumenRutas(e.rutas);
             return (
@@ -134,21 +134,27 @@ export function Eventos() {
                 <div className="fila-evento-principal">
                   <Liga a={`/eventos/${e.id}`}><b>{nombreEvento(e)}</b></Liga>
                   <div className="tenue">
-                    {[shipperAparte(e), rutas || null, n > 1 || (!rutas && n) ? plural(n, "ruta") : null].filter(Boolean).join(" · ")}
+                    {[shipperAparte(e), rutas || null].filter(Boolean).join(" · ")}
                     {e.prueba && <> <Prueba /></>}
                   </div>
-                  <div className="folio mono" title={e.folio}>{folioCorto(e.folio)}</div>
+                  <div className="folio mono" title={e.folio}>{[folioCorto(e.folio), n && !/\bruta/i.test(nombreEvento(e)) ? plural(n, "ruta") : null].filter(Boolean).join(" · ")}</div>
                 </div>
-                <div className="fila-evento-dato" data-etiqueta="Estado"><span className={`pill ${est.tono}`}>{est.texto}</span></div>
-                <div className="fila-evento-dato" data-etiqueta="Ofertas">
-                  <span title={`${e.ofertas} ofertas de ${e.participaciones} invitaciones por ruta (carrier × ruta)`}><b>{e.ofertas}</b> <span className="tenue">{e.ofertas === 1 ? "oferta" : "ofertas"}</span></span>
+                <div className="fila-evento-etapa">
+                  {etapa ? (
+                    <>
+                      <span className="barra-etapas" role="img" aria-label={`Etapa ${etapa.n} de ${ETAPAS.length}: ${ETAPAS[etapa.n - 1]}`}>
+                        {ETAPAS.map((x, i) => <i key={x} className={i + 1 < etapa.n ? "hecha" : i + 1 === etapa.n ? "actual" : ""} />)}
+                      </span>
+                      <span className="tenue">{etapa.n} de {ETAPAS.length} · {etapa.texto}</span>
+                    </>
+                  ) : (
+                    <span className="pill">{ESTADO_EVENTO[e.estado].texto}</span>
+                  )}
                 </div>
-                <div className="fila-evento-dato" data-etiqueta="Plazo">{fecha(e.plazo)}</div>
-                <div className="fila-evento-siguiente">
-                  <span className={tuyo ? "alerta" : "tenue"}>{sig.accion}</span>
-                  {sig.quien !== "—" && <span className="tenue">{tuyo ? "Te toca" : sig.quien === "Carriers" ? "Los carriers" : sig.quien}</span>}
+                <div className="fila-evento-pasa">{quePasa(e, fecha)}</div>
+                <div className="fila-evento-accion">
+                  <Liga a={`/eventos/${e.id}`} className={tuyo ? "btn-primario" : "btn-secundario"}>{botonFila(e)}</Liga>
                 </div>
-                <I.Flecha size={16} className="fila-evento-flecha" />
               </div>
             );
           })}

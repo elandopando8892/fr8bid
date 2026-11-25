@@ -165,3 +165,9 @@ html:not(.ver-ayudas) .bw-publica .ayuda { display: none !important; }
 .info-titulo:hover { color: var(--accent, #f15a22); }
 .marco .banner.info.plegado > span { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
 @media (max-width: 860px) { .cuenta-acciones .boton-ayudas { display: none; } }
+
+/* Pestañas de sección del cascarón encima de una pantalla de Bidware: banda blanca alineada con su margen. */
+.contenido:has(> .bw) > .secciones { margin: 0; padding: 6px 14px 0; background: var(--panel); }
+@media (max-width: 860px) {
+  .contenido:has(> .bw) > .secciones { padding: 4px 2px 0; }
+}
