@@ -107,10 +107,18 @@ function BidRoomContent({ token }: { token: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   // Capacity, transit and validity the carrier chose to reuse on the lanes not quoted yet.
   const [shared, setShared] = useState<SharedFields | null>(null);
-  // Lanes answered here whose reload is still on its way: never offered again as "next".
-  const [answered, setAnswered] = useState<Set<string>>(new Set());
-  const answeredRef = useRef(answered);
-  answeredRef.current = answered;
+  // Lanes answered here, each with the server copy that was on screen when it was answered. Until a newer
+  // copy arrives (the reload, which useAsync only accepts from the latest request), the list still shows them
+  // pending, so they are never offered again as "next"; once it arrives the server's own state decides.
+  const [answeredOn, setAnsweredOn] = useState<Map<string, unknown>>(new Map());
+  const answeredRef = useRef(answeredOn);
+  answeredRef.current = answeredOn;
+  const dataRef = useRef<unknown>(null);
+  dataRef.current = data;
+  const answered = useMemo(
+    () => new Set([...answeredOn].filter(([, copy]) => copy === data).map(([id]) => id)),
+    [answeredOn, data],
+  );
   const pickedRef = useRef<string | null>(null);
   const lanesRef = useRef<BookLane[]>([]);
 
@@ -131,7 +139,7 @@ function BidRoomContent({ token }: { token: string }) {
     setNotice(null);
     setPicks(new Map());
     setShared(null);
-    setAnswered(new Set());
+    setAnsweredOn(new Map());
   }, [token]);
 
   // On a wide screen the panel opens on the first lane still waiting for a quote
@@ -198,9 +206,10 @@ function BidRoomContent({ token }: { token: string }) {
     // A first answer on a lane moves on to the next one still waiting (the button said so); a revision stays put.
     // On a phone, with nothing left to quote, the sheet closes and the list shows the progress.
     if (lane.bid_rate == null) {
-      const done = new Set(answeredRef.current).add(lane.rfx_lane_id);
-      answeredRef.current = done;
-      setAnswered(done);
+      const map = new Map(answeredRef.current).set(lane.rfx_lane_id, dataRef.current);
+      answeredRef.current = map;
+      setAnsweredOn(map);
+      const done = new Set([...map].filter(([, copy]) => copy === dataRef.current).map(([id]) => id));
       // If the carrier closed the sheet or moved to another lane while this one was sending, the late answer leaves the choice alone.
       if (pickedRef.current === lane.rfx_lane_id) {
         const next = nextPending(lanesRef.current, lane, done);

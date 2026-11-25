@@ -91,6 +91,13 @@ export function QuoteLanes({
   useLang();
   const panel = useRef<HTMLDivElement>(null);
   const isWide = useWide();
+  // While an offer is on its way the sheet stays open: its result (sent, or the error) shows there.
+  const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
+  sendingRef.current = sending;
+  const close = () => {
+    if (!sendingRef.current) onClose();
+  };
   // On a phone the quote opens as a sheet over the list, one lane at a time.
   const sheet = !isWide && Boolean(picked);
   const position = picked ? lanes.findIndex((l) => l.rfx_lane_id === picked.rfx_lane_id) + 1 : 0;
@@ -109,7 +116,7 @@ export function QuoteLanes({
         (d) => d !== panel.current && !panel.current?.contains(d),
       );
       if (above) return;
-      if (e.key === "Escape") return onClose();
+      if (e.key === "Escape") return close();
       // Tab stays inside the sheet.
       if (e.key !== "Tab" || !panel.current) return;
       const all = [...panel.current.querySelectorAll<HTMLElement>("button, input, select, textarea, summary, [href]")].filter(
@@ -239,7 +246,7 @@ export function QuoteLanes({
         </fieldset>
       </div>
 
-      {sheet && <div className="croom-hoja-fondo" onClick={onClose} aria-hidden />}
+      {sheet && <div className="croom-hoja-fondo" onClick={close} aria-hidden />}
       {(isWide || picked) && (
         <div
           className={`croom-panel-slot${sheet ? " croom-hoja" : ""}`}
@@ -251,7 +258,7 @@ export function QuoteLanes({
           {sheet && (
             <div className="croom-hoja-barra">
               <span className="croom-hoja-asa" aria-hidden />
-              <button type="button" className="btn-texto-croom" onClick={onClose}>
+              <button type="button" className="btn-texto-croom" onClick={close} disabled={sending}>
                 {q("panel.close")}
               </button>
             </div>
@@ -269,6 +276,7 @@ export function QuoteLanes({
               shared={shared}
               onShare={onShare}
               others={others}
+              onBusy={setSending}
             />
           ) : (
             <QuotePanelEmpty />

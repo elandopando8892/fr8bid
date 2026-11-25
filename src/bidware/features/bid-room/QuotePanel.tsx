@@ -70,6 +70,7 @@ export function QuotePanel({
   shared,
   onShare,
   others = 0,
+  onBusy,
 }: {
   lane: BookLane;
   /** "Ruta 4 de 8": where this lane sits among the carrier's lanes of the event. */
@@ -81,6 +82,8 @@ export function QuotePanel({
   onShare?: (fields: SharedFields | null) => void;
   /** How many other lanes the shared fields can still fill. */
   others?: number;
+  /** Told while a write is on its way, so the sheet cannot close and hide its outcome. */
+  onBusy?: (busy: boolean) => void;
   /** Opens capacity details when arriving from "Completar mi oferta". */
   extrasOpen?: boolean;
   onDone: (message: string) => void;
@@ -91,6 +94,10 @@ export function QuotePanel({
   const [form, setForm] = useState<OfferForm>(() => startForm(lane, shared).form);
   const [filled, setFilled] = useState(() => startForm(lane, shared).filled);
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    onBusy?.(busy);
+  }, [busy]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => onBusy?.(false), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [error, setError] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
   const [extras, setExtras] = useState(Boolean(extrasOpen));

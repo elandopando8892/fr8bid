@@ -12,7 +12,7 @@ const lanes=['Albany','Fort Worth','Houston','Trenton','Ridgeway','Windsor'].map
 (async()=>{
  const browser=await chromium.launch();
  const ctx=await browser.newContext({viewport:{width:390,height:844},locale:'es-MX'});
- const sent=[];let slow=false;let served=0;let slowSubmit=false;const errors=[];
+ const sent=[];let slow=false;let served=0;let slowSubmit=false;let failNext=false;const errors=[];
  await ctx.route('**/*',async route=>{
   const u=new URL(route.request().url());
   const api=(u.origin===origin&&u.pathname==='/api/funcion')||u.hostname==='bidware-fixture.supabase.co';
@@ -23,7 +23,7 @@ const lanes=['Albany','Fort Worth','Houston','Trenton','Ridgeway','Windsor'].map
    served++;
    return route.fulfill({json:{invitation:{rfx_event_id:event.id,rfx_events:event,rfx_lanes:lanes[1]},carrier_book:{carrier:{vendor_name:'Fixture'},invited:structuredClone(lanes),open_not_invited:[]},segment_confirmations:[]}});
   }
-  if(body.action==='submit_bid'){if(slowSubmit)await new Promise(r=>setTimeout(r,2000));const l=lanes.find(x=>x.invitation_token===body.token);sent.push(body);Object.assign(l,{bid_rate:Number(body.bid_rate),weekly_capacity:body.weekly_capacity,business_status:'quoted'});return route.fulfill({json:{saved:true}});}
+  if(body.action==='submit_bid'){if(slowSubmit)await new Promise(r=>setTimeout(r,2000));if(failNext){failNext=false;return route.fulfill({status:503,json:{error:'Synthetic temporary failure'}});}const l=lanes.find(x=>x.invitation_token===body.token);sent.push(body);Object.assign(l,{bid_rate:Number(body.bid_rate),weekly_capacity:body.weekly_capacity,business_status:'quoted'});return route.fulfill({json:{saved:true}});}
   return route.fulfill({json:{}});
  });
  const page=await ctx.newPage();page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
@@ -70,13 +70,21 @@ const lanes=['Albany','Fort Worth','Houston','Trenton','Ridgeway','Windsor'].map
   await sheet.getByRole('button',{name:'Enviar y seguir con la ruta 6'}).click();
   await sheet.getByText('Ruta 6 de 6').waitFor();
   assert.equal(await sheet.getByRole('button',{name:/Enviar y seguir/}).count(),0,'sin rutas pendientes no promete otra');
-  // Cerrar la hoja mientras la oferta se envía: la respuesta tardía no la vuelve a abrir.
-  slow=false;slowSubmit=true;
+  // Mientras la oferta se envía la hoja no se cierra (Cerrar, Escape ni el fondo): si falla, el error se ve ahí.
+  slow=false;slowSubmit=true;failNext=true;
   await sheet.getByLabel('Tarifa all-in *').fill('2800');
   await sheet.getByRole('button',{name:'Enviar oferta',exact:true}).click();
-  await page.getByRole('button',{name:'Cerrar'}).click();
-  await page.waitForTimeout(2600);
-  assert.equal(await sheet.count(),0,'la hoja cerrada sigue cerrada al terminar el envío');
+  await page.waitForTimeout(300);
+  assert.ok(await sheet.getByRole('button',{name:'Cerrar'}).isDisabled(),'Cerrar espera al envío');
+  await page.keyboard.press('Escape');
+  await page.mouse.click(195,40);
+  await page.waitForTimeout(2200);
+  assert.equal(await sheet.count(),1,'la hoja sigue abierta durante el envío');
+  await sheet.locator('.banner.error, [class*=error]').first().waitFor();
+  assert.equal(await sheet.getByLabel('Tarifa all-in *').inputValue(),'2800','el error no borra la tarifa');
+  // Reintento: ahora sí sale, y sin rutas pendientes la hoja se cierra sola.
+  await sheet.getByRole('button',{name:'Enviar oferta',exact:true}).click();
+  await sheet.waitFor({state:'detached',timeout:8000});
   assert.deepEqual(sent.map(s=>[s.token,Number(s.bid_rate),String(s.weekly_capacity)]),[['fx-2',2380,'4'],['fx-3',3590,'4'],['fx-4',2950,'4'],['fx-5',3100,'4'],['fx-6',2800,'4']]);
   await page.getByRole('button',{name:/Cotizar rutas · 6\/6/}).waitFor();
   assert.deepEqual(errors,[]);
