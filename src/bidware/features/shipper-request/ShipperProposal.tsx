@@ -57,7 +57,7 @@ async function downloadProposal(proposal: RequestProposal, copy: Copy, lang: Lan
       lane.lane_number ?? index + 1,
       lane.origin ?? "",
       lane.destination ?? "",
-      lane.equipment ?? "",
+      [lane.equipment, lane.trailer].filter(Boolean).join(" · "),
       lane.weekly_volume ?? "",
       lane.sell_rate ?? "",
       proposal.currency,
@@ -174,7 +174,7 @@ export function ProposalTable({
                   <td>
                     <span className="mono">L{lane.lane_number ?? index + 1}</span> {route(lane)}
                   </td>
-                  <td>{[lane.equipment, lane.service].filter(Boolean).join(" · ") || "—"}</td>
+                  <td>{[lane.equipment, lane.trailer, lane.service].filter(Boolean).join(" · ") || "—"}</td>
                   <td className="num">
                     {lane.weekly_volume ?? "—"}
                     {lane.weekly_volume !== null && <span className="sr-phone-only"> {copy.volumeShort}</span>}

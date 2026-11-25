@@ -46,7 +46,7 @@ describe("propuesta al shipper contra el simulado", () => {
     const d = await admin.detalle(eventId);
     const p = propuestaDelEvento(d);
     expect(p.faltan).toEqual([]);
-    const r = await admin.publicarPropuesta(eventId, "2026-11-20", huellaPropuesta(p));
+    const r = await admin.publicarPropuesta(eventId, "2026-11-20", huellaPropuesta(p), null);
     expect(r.conSolicitud).toBe(true);
     expect(r.propuesta?.lineas).toEqual([expect.objectContaining({ venta: p.lineas[0].venta, equipo: "Dry Van", volumenSemanal: 3 })]);
     expect(JSON.stringify(sim.propuestas)).not.toMatch(/1600|Carrier|vendor|expected/);
@@ -54,6 +54,7 @@ describe("propuesta al shipper contra el simulado", () => {
 
   for (const [que, cambiar] of [
     ["la oferta adjudicada", () => { sim.laneVendors.find((x) => x.id === A)!.bid_rate = 1700; }],
+    ["el número de la ruta", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.lane_number = 9; }],
     ["la caja de la ruta", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.trailer = "48"; }],
     ["el estado de destino", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.destination_state = "CA"; }],
     ["el servicio de la ruta", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.service = "D2D"; }]
@@ -63,7 +64,7 @@ describe("propuesta al shipper contra el simulado", () => {
       // El cambio llega justo después de la lectura fresca del proxy y antes de publicar.
       const r = await manejar(
         "rateware-api",
-        { action: "publish_rfx_shipper_proposal", event_id: eventId, valid_through: "2026-11-20", proposal_fingerprint: huellaPropuesta(p), confirmed: true, confirmation_action: "publish_rfx_shipper_proposal" },
+        { action: "publish_rfx_shipper_proposal", event_id: eventId, valid_through: "2026-11-20", proposal_fingerprint: huellaPropuesta(p), base_proposal_id: null, confirmed: true, confirmation_action: "publish_rfx_shipper_proposal" },
         "Bearer sim:admin",
         {
           permitirEscrituras: true,
@@ -91,7 +92,7 @@ describe("propuesta al shipper contra el simulado", () => {
     const p = propuestaDelEvento(await admin.detalle(eventId));
     expect(p.faltan).toEqual([]);
     expect(p.lineas).toHaveLength(2);
-    const v1 = await admin.publicarPropuesta(eventId, "2026-11-02", huellaPropuesta(p));
+    const v1 = await admin.publicarPropuesta(eventId, "2026-11-02", huellaPropuesta(p), null);
     // El shipper acepta solo la ruta 1, por el contrato de aceptación (idempotente).
     sim.aceptarPropuesta(v1.propuesta!.id, [l1.id], "Ana");
     sim.aceptarPropuesta(v1.propuesta!.id, [l1.id], "Ana");
@@ -101,7 +102,7 @@ describe("propuesta al shipper contra el simulado", () => {
     sim.hoy = () => "2026-11-05";
     expect(() => sim.aceptarPropuesta(v1.propuesta!.id, [l2.id])).toThrow(/validity/);
 
-    const v2 = await admin.publicarPropuesta(eventId, "2026-12-01", huellaPropuesta(p));
+    const v2 = await admin.publicarPropuesta(eventId, "2026-12-01", huellaPropuesta(p), v1.propuesta!.id);
     expect(v2.propuesta?.version).toBe(2);
     expect(v2.propuesta?.aceptadas.map((a) => [a.rutaId, a.por])).toEqual([[l1.id, "Ana"]]);
     // La versión vieja ya no se acepta; la nueva sí, y la ruta 2 queda aceptada también.
@@ -111,7 +112,7 @@ describe("propuesta al shipper contra el simulado", () => {
   });
   it("una respuesta perdida al publicar: el reintento no crea otra versión", async () => {
     const p = propuestaDelEvento(await admin.detalle(eventId));
-    const cuerpo = { action: "publish_rfx_shipper_proposal", event_id: eventId, valid_through: "2026-11-20", proposal_fingerprint: huellaPropuesta(p), confirmed: true, confirmation_action: "publish_rfx_shipper_proposal" };
+    const cuerpo = { action: "publish_rfx_shipper_proposal", event_id: eventId, valid_through: "2026-11-20", proposal_fingerprint: huellaPropuesta(p), base_proposal_id: null, confirmed: true, confirmation_action: "publish_rfx_shipper_proposal" };
     // Rateware la guarda, pero la respuesta no llega.
     const perdida = await manejar("rateware-api", { ...cuerpo }, "Bearer sim:admin", {
       permitirEscrituras: true,
@@ -128,8 +129,28 @@ describe("propuesta al shipper contra el simulado", () => {
     // La lectura muestra la vigente (el panel ya no ofrece publicar lo mismo) y un reintento igual no crea otra versión.
     const leida = await admin.propuestaShipper(eventId);
     expect(leida.propuesta?.version).toBe(1);
-    const otra = await admin.publicarPropuesta(eventId, "2026-11-20", huellaPropuesta(p));
+    const otra = await admin.publicarPropuesta(eventId, "2026-11-20", huellaPropuesta(p), null);
     expect(otra.propuesta?.version).toBe(1);
     expect(sim.propuestas).toHaveLength(1);
+  });
+
+  it("fuera de orden: la lectura llega antes que el envío perdido y se publica otra vigencia; el envío viejo que llega después no sustituye la nueva", async () => {
+    const p = propuestaDelEvento(await admin.detalle(eventId));
+    const cuerpo = (vigencia: string) => ({ action: "publish_rfx_shipper_proposal", event_id: eventId, valid_through: vigencia, proposal_fingerprint: huellaPropuesta(p), base_proposal_id: null, confirmed: true, confirmation_action: "publish_rfx_shipper_proposal" });
+    const op = { permitirEscrituras: true, hoy: () => sim.hoy(), enviar: (s: any, b: any, auth: any) => sim.llamar(s, b, auth) };
+    // El primer envío (vigencia 20-nov) sigue en camino; la lectura no ve nada publicado.
+    expect((await admin.propuestaShipper(eventId)).propuesta).toBeNull();
+    // El Administrador publica de nuevo con otra vigencia, sobre «ninguna»: llega primero.
+    const nueva = await manejar("rateware-api", cuerpo("2026-11-25"), "Bearer sim:admin", op as any);
+    expect(nueva.status).toBe(200);
+    // El envío viejo llega tarde, también sobre «ninguna»: Rateware lo rechaza.
+    const tarde = await manejar("rateware-api", cuerpo("2026-11-20"), "Bearer sim:admin", op as any);
+    expect(tarde.status).toBe(409);
+    expect(tarde.body?.code).toBe("RFX_PROPOSAL_STALE");
+    expect(sim.propuestas.map((x) => [x.version, x.status, x.valid_through])).toEqual([[1, "published", "2026-11-25"]]);
+    // Y al revés: sobre la versión vigente sí se publica otra.
+    const v1 = (await admin.propuestaShipper(eventId)).propuesta!;
+    const v2 = await admin.publicarPropuesta(eventId, "2026-11-30", huellaPropuesta(p), v1.id);
+    expect(v2.propuesta?.version).toBe(2);
   });
 });

@@ -926,16 +926,19 @@ export class RatewareSimulado {
           const vigenteIgual =
             esp.primary_id === prim[0].id &&
             ["bid_rate", "currency", "commercial_model", "carrier_share_pct", "marksman_margin_pct"].every((k) => esp.primary && k in esp.primary && mismo(esp.primary[k], prim[0][k])) &&
-            ["origin", "destination", "origin_city", "origin_state", "origin_country", "destination_city", "destination_state", "destination_country", "equipment", "trailer", "service", "weekly_volume"].every((k) => esp.lane && k in esp.lane && mismo(esp.lane[k], lane[k])) &&
+            ["lane_number", "origin", "destination", "origin_city", "origin_state", "origin_country", "destination_city", "destination_state", "destination_country", "equipment", "trailer", "service", "weekly_volume"].every((k) => esp.lane && k in esp.lane && mismo(esp.lane[k], lane[k])) &&
             "master_package" in esp && JSON.stringify(esp.master_package ?? null) === JSON.stringify(event.rfx_master_package ?? null);
           if (!vigenteIgual) throw new Falla(409, "The award or the lanes changed after the proposal was reviewed.", "RFX_PROPOSAL_STALE");
-          return { rfx_lane_id: lane.id, lane_number: lane.lane_number, origin: lane.origin, destination: lane.destination, equipment: lane.equipment, service: lane.service ?? null, weekly_volume: lane.weekly_volume ?? null, sell_rate: Math.round(venta * 100) / 100 };
+          return { rfx_lane_id: lane.id, lane_number: lane.lane_number, origin: lane.origin, destination: lane.destination, equipment: lane.equipment, trailer: lane.trailer ?? null, service: lane.service ?? null, weekly_volume: lane.weekly_volume ?? null, sell_rate: Math.round(venta * 100) / 100 };
         });
         const vigente = this.propuestas.find((x) => x.rfx_event_id === event.id && x.status === "published");
         const moneda = String(body.currency || "USD");
         // Como Rateware: publicar lo mismo otra vez (un reintento) devuelve la versión vigente.
         if (vigente && JSON.stringify(vigente.lanes) === JSON.stringify(lineas) && vigente.currency === moneda && (vigente.valid_through ?? null) === (body.valid_through || null) && (vigente.notes ?? null) === (body.notes || null))
           return ok({ proposal: this.propuestaVigente(event.id) });
+        // Como Rateware: solo se publica sobre la versión que se tenía a la vista.
+        if ((vigente?.id ?? null) !== (body.base_proposal_id ?? null))
+          throw new Falla(409, "Another version of the proposal was published after this one was reviewed.", "RFX_PROPOSAL_STALE");
         const heredadas = vigente ? this.aceptaciones.filter((a) => a.proposal_id === vigente.id) : [];
         if (vigente) {
           // Una versión nueva conserva lo aceptado si cada ruta aceptada vuelve igual.

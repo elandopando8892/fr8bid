@@ -16,6 +16,8 @@ export interface LineaPropuesta {
   origen: string;
   destino: string;
   equipo: string;
+  /** Caja de la ruta (rfx_lanes.trailer, p. ej. 53 ft): el shipper la ve junto al equipo. */
+  caja: string;
   /** Servicio de la ruta (rfx_lanes.service): el shipper lo ve junto al equipo. */
   servicio: string;
   volumenSemanal: number | null;
@@ -71,6 +73,7 @@ export function propuestaDelEvento(d: Detalle): Propuesta {
       destino: String(ruta.cruda?.destination ?? ruta.destino ?? "").trim(),
       // Equipo como lo guarda Rateware en la propuesta (rfx_lanes.equipment), sin la caja.
       equipo: String(ruta.cruda?.equipment ?? ruta.equipo ?? "").trim(),
+      caja: String(ruta.cruda?.trailer ?? "").trim(),
       servicio: String(ruta.cruda?.service ?? "").trim(),
       volumenSemanal: ruta.volumenSemanal,
       venta: venta.venta,
@@ -89,10 +92,10 @@ export function propuestaDelEvento(d: Detalle): Propuesta {
 // Rateware lo compara con la ruta y el primario bloqueados y rechaza si cambió
 // (RFX_PROPOSAL_STALE); guarda solo datos de la ruta y la venta.
 const CLAVES_PRIMARIO = ["bid_rate", "currency", "commercial_model", "carrier_share_pct", "marksman_margin_pct"];
-// Todo lo de la ruta que se ve (el shipper y el equipo): corredor, ciudad, estado y país,
-// caja, servicio y volumen.
+// Todo lo de la ruta que se ve (el shipper y el equipo): número, corredor, ciudad, estado
+// y país, equipo, caja, servicio y volumen.
 const CLAVES_RUTA = [
-  "origin", "destination", "origin_city", "origin_state", "origin_country",
+  "lane_number", "origin", "destination", "origin_city", "origin_state", "origin_country",
   "destination_city", "destination_state", "destination_country", "equipment", "trailer", "service", "weekly_volume"
 ];
 const tomar = (fila: any, claves: string[]) => Object.fromEntries(claves.map((k) => [k, fila?.[k] ?? null]));
@@ -111,12 +114,12 @@ export function lanesParaRateware(p: Propuesta, crudo: any) {
   });
 }
 
-// Huella de lo que el Administrador revisó: rutas, términos, venta y moneda. Al publicar,
+// Huella de lo que el Administrador revisó: rutas (con su número), términos, venta y moneda. Al publicar,
 // el servidor la recalcula con una lectura fresca y rechaza si no coincide.
 export function huellaPropuesta(p: Propuesta): string {
   const texto = JSON.stringify([
     p.moneda,
-    [...p.lineas].sort((a, b) => a.rutaId.localeCompare(b.rutaId)).map((l) => [l.rutaId, l.venta, l.origen, l.destino, l.equipo, l.servicio, l.volumenSemanal])
+    [...p.lineas].sort((a, b) => a.rutaId.localeCompare(b.rutaId)).map((l) => [l.rutaId, l.numero, l.venta, l.origen, l.destino, l.equipo, l.caja, l.servicio, l.volumenSemanal])
   ]);
   let h1 = 0x811c9dc5, h2 = 0x01000193;
   for (let i = 0; i < texto.length; i++) {
@@ -138,7 +141,7 @@ export interface PropuestaPublicada {
   moneda: string;
   vigenteHasta: string | null;
   publicadaEn: string | null;
-  lineas: { rutaId: string; numero: number | null; origen: string; destino: string; equipo: string; servicio: string; volumenSemanal: number | null; venta: number }[];
+  lineas: { rutaId: string; numero: number | null; origen: string; destino: string; equipo: string; caja: string; servicio: string; volumenSemanal: number | null; venta: number }[];
   aceptadas: { rutaId: string; en: string; por: string | null }[];
 }
 
@@ -159,6 +162,7 @@ export function leerPropuestaPublicada(crudo: any): { conSolicitud: boolean; pro
             origen: String(l.origin ?? ""),
             destino: String(l.destination ?? ""),
             equipo: String(l.equipment ?? ""),
+            caja: String(l.trailer ?? "").trim(),
             servicio: String(l.service ?? "").trim(),
             volumenSemanal: l.weekly_volume == null ? null : Number(l.weekly_volume),
             venta: Number(l.sell_rate)
@@ -175,9 +179,9 @@ export function leerPropuestaPublicada(crudo: any): { conSolicitud: boolean; pro
 
 // Lo publicado frente a la adjudicación de hoy. La tabla del equipo siempre muestra
 // lo publicado con lo aceptado; lo que cambió se muestra aparte. Cuenta como cambio
-// cualquier dato que el shipper ve: ruta, equipo, volumen, venta o moneda.
+// cualquier dato que el shipper ve: número, ruta, equipo, caja, servicio, volumen, venta o moneda.
 export interface Comparacion {
-  /** Rutas cuya venta o términos de hoy (ruta, equipo, servicio, volumen) no son los publicados (o que no estaban publicadas). */
+  /** Rutas cuya venta o términos de hoy (número, ruta, equipo, caja, servicio, volumen) no son los publicados (o que no estaban publicadas). */
   cambios: { rutaId: string; numero: number; origen: string; destino: string; antes: number | null; ahora: number; moneda: string; terminos: boolean; aceptada: boolean }[];
   /** Rutas publicadas que hoy ya no van (desiertas o sin primario). */
   quitadas: { numero: number; aceptada: boolean }[];
@@ -196,7 +200,7 @@ export function compararPropuesta(calculada: Propuesta, publicada: PropuestaPubl
   const cambios = publicada
     ? calculada.lineas.flatMap((l) => {
         const a = antes.get(l.rutaId);
-        const terminos = Boolean(a) && (a!.origen !== l.origen || a!.destino !== l.destino || (a!.equipo || "") !== (l.equipo || "") || (a!.servicio || "") !== (l.servicio || "") || (a!.volumenSemanal ?? null) !== (l.volumenSemanal ?? null));
+        const terminos = Boolean(a) && ((a!.numero ?? null) !== l.numero || a!.origen !== l.origen || a!.destino !== l.destino || (a!.equipo || "") !== (l.equipo || "") || (a!.caja || "") !== (l.caja || "") || (a!.servicio || "") !== (l.servicio || "") || (a!.volumenSemanal ?? null) !== (l.volumenSemanal ?? null));
         if (a && a.venta === l.venta && !terminos) return [];
         return [{ rutaId: l.rutaId, numero: l.numero, origen: l.origen, destino: l.destino, antes: a ? a.venta : null, ahora: l.venta, moneda: l.moneda, terminos, aceptada: aceptadas.has(l.rutaId) }];
       })

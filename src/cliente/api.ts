@@ -486,12 +486,14 @@ export class MesaApi {
   // `huella` es la de la propuesta que el Administrador revisó: el servidor la
   // recalcula y no publica si cambió. Publicar responde con la propuesta vigente
   // (con lo aceptado); si se publicó, el evento tiene solicitud del shipper.
-  async publicarPropuesta(eventId: string, vigenteHasta: string | null, huella: string) {
+  /** `base`: id de la propuesta publicada que se tenía a la vista (null si no había). */
+  async publicarPropuesta(eventId: string, vigenteHasta: string | null, huella: string, base: string | null) {
     const r: any = await this.rw({
       action: "publish_rfx_shipper_proposal",
       event_id: eventId,
       ...(vigenteHasta ? { valid_through: vigenteHasta } : {}),
       proposal_fingerprint: huella,
+      base_proposal_id: base,
       confirmed: true,
       confirmation_action: "publish_rfx_shipper_proposal"
     });

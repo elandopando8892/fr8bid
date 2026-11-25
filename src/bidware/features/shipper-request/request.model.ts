@@ -179,6 +179,8 @@ export interface ProposalLane {
   origin: string | null;
   destination: string | null;
   equipment: string | null;
+  /** Trailer (rfx_lanes.trailer, e.g. 53 ft): shown with the equipment. */
+  trailer?: string | null;
   service: string | null;
   weekly_volume: number | null;
   sell_rate: number | null;

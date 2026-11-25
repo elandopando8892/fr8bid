@@ -81,7 +81,7 @@ function op(det: unknown, enviados: Record<string, unknown>[]) {
 
 const huellaDe = (crudoDet: unknown) => huellaPropuesta(propuestaDelEvento(detalle(crudoDet as any)));
 const HUELLA = huellaDe(crudo([lane(L1, 1, [inv({})])]));
-const publicar = (x: Record<string, unknown> = {}) => ({ action: "publish_rfx_shipper_proposal", event_id: EV, valid_through: "2026-12-25", proposal_fingerprint: HUELLA, confirmed: true, confirmation_action: "publish_rfx_shipper_proposal", ...x });
+const publicar = (x: Record<string, unknown> = {}) => ({ action: "publish_rfx_shipper_proposal", event_id: EV, valid_through: "2026-12-25", proposal_fingerprint: HUELLA, base_proposal_id: null, confirmed: true, confirmation_action: "publish_rfx_shipper_proposal", ...x });
 
 describe("proxy: publicar la propuesta", () => {
   const det = crudo([lane(L1, 1, [inv({})])]);
@@ -98,7 +98,7 @@ describe("proxy: publicar la propuesta", () => {
       expected: {
         primary_id: "lv-1",
         primary: { bid_rate: 1000, currency: "USD", commercial_model: "cost_plus", carrier_share_pct: null, marksman_margin_pct: 10 },
-        lane: { origin: "Origen 1", destination: "Destino 1", origin_city: null, origin_state: null, origin_country: null, destination_city: null, destination_state: null, destination_country: null, equipment: "Dry Van", trailer: null, service: null, weekly_volume: 3 },
+        lane: { lane_number: 1, origin: "Origen 1", destination: "Destino 1", origin_city: null, origin_state: null, origin_country: null, destination_city: null, destination_state: null, destination_country: null, equipment: "Dry Van", trailer: null, service: null, weekly_volume: 3 },
         master_package: null
       }
     }]);
@@ -106,6 +106,8 @@ describe("proxy: publicar la propuesta", () => {
     expect(enviado.valid_through).toBe("2026-12-25");
     expect(enviado).not.toHaveProperty("confirmed");
     expect(enviado).not.toHaveProperty("proposal_fingerprint");
+    // La versión que se tenía a la vista pasa a Rateware, que publica solo si sigue vigente.
+    expect(enviado).toHaveProperty("base_proposal_id", null);
     expect(JSON.stringify(enviado)).not.toMatch(/Carrier Secreto|vendor_id|vendors/);
   });
 
@@ -116,7 +118,10 @@ describe("proxy: publicar la propuesta", () => {
       [publicar({ confirmed: false }), "SIN_CONFIRMAR"],
       [publicar({ valid_through: "2026-11-01" }), "VIGENCIA_PASADA"],
       [publicar({ valid_through: "25/12/2026" }), "VIGENCIA_INVALIDA"],
-      [publicar({ event_id: "otro" }), "FALTA_EVENTO"]
+      [publicar({ event_id: "otro" }), "FALTA_EVENTO"],
+      [publicar({ base_proposal_id: undefined }), "FALTA_BASE"],
+      [publicar({ base_proposal_id: "" }), "FALTA_BASE"],
+      [publicar({ base_proposal_id: 7 }), "FALTA_BASE"]
     ] as const) {
       const env: Record<string, unknown>[] = [];
       const r = await manejar("rateware-api", body as any, "Bearer x", op(det, env));
@@ -130,6 +135,8 @@ describe("proxy: publicar la propuesta", () => {
       crudo([lane(L1, 1, [inv({ bid_rate: 1200 })])]),
       crudo([lane(L1, 1, [inv({})], { weekly_volume: 9 })]),
       crudo([lane(L1, 1, [inv({})], { service: "D2D" })]),
+      crudo([lane(L1, 4, [inv({})])]),
+      crudo([lane(L1, 1, [inv({})], { trailer: "48 ft" })]),
       crudo([lane(L1, 1, [inv({})]), lane(L2, 2, [inv({ id: "lv-3" })])])
     ]) {
       const env: Record<string, unknown>[] = [];
@@ -198,7 +205,7 @@ describe("paso de los módulos (/api/funcion)", () => {
 
 describe("lo publicado frente a la adjudicación de hoy", () => {
   const calc = propuestaDelEvento(detalle(crudo([lane(L1, 1, [inv({})]), lane(L2, 2, [inv({ id: "lv-3" })])]) as any));
-  const linea = (rutaId: string, numero: number, venta: number, x: Record<string, unknown> = {}) => ({ rutaId, numero, origen: `Origen ${numero}`, destino: `Destino ${numero}`, equipo: "Dry Van", servicio: "", volumenSemanal: 3, venta, ...x });
+  const linea = (rutaId: string, numero: number, venta: number, x: Record<string, unknown> = {}) => ({ rutaId, numero, origen: `Origen ${numero}`, destino: `Destino ${numero}`, equipo: "Dry Van", caja: "", servicio: "", volumenSemanal: 3, venta, ...x });
   const pub = (x: Partial<PropuestaPublicada> = {}): PropuestaPublicada => ({
     id: "p", version: 1, moneda: "USD", vigenteHasta: "2026-12-25", publicadaEn: "2026-11-25T10:00:00Z",
     lineas: [linea(L1, 1, 1100), linea(L2, 2, 1100)],
@@ -217,8 +224,8 @@ describe("lo publicado frente a la adjudicación de hoy", () => {
     expect(compararPropuesta(calc, pub({ vigenteHasta: "2026-11-20", aceptadas: aceptoL1 }), "2026-11-25")).toMatchObject({ vencida: true, tocaAceptadas: false, puedePublicar: true });
   });
 
-  it("un cambio de ruta, equipo o volumen sin cambio de precio también cuenta", () => {
-    for (const x of [{ volumenSemanal: 5 }, { equipo: "Flatbed" }, { destino: "Otro" }, { servicio: "D2D" }]) {
+  it("un cambio de número, ruta, equipo, caja, servicio o volumen sin cambio de precio también cuenta", () => {
+    for (const x of [{ volumenSemanal: 5 }, { equipo: "Flatbed" }, { destino: "Otro" }, { servicio: "D2D" }, { caja: "48 ft" }, { numero: 7 }]) {
       const c = compararPropuesta(calc, pub({ lineas: [linea(L1, 1, 1100, x), linea(L2, 2, 1100)] }), "2026-11-25");
       expect(c.distinta).toBe(true);
       expect(c.cambios).toEqual([expect.objectContaining({ numero: 1, antes: 1100, ahora: 1100, terminos: true })]);
@@ -250,6 +257,8 @@ describe("lo publicado frente a la adjudicación de hoy", () => {
     expect(huellaPropuesta({ ...calc, lineas: [...calc.lineas].reverse() })).toBe(h);
     expect(huellaPropuesta({ ...calc, lineas: [{ ...calc.lineas[0], venta: 1101 }, calc.lineas[1]] })).not.toBe(h);
     expect(huellaPropuesta({ ...calc, lineas: [{ ...calc.lineas[0], volumenSemanal: 9 }, calc.lineas[1]] })).not.toBe(h);
+    expect(huellaPropuesta({ ...calc, lineas: [{ ...calc.lineas[0], caja: "48 ft" }, calc.lineas[1]] })).not.toBe(h);
+    expect(huellaPropuesta({ ...calc, lineas: [{ ...calc.lineas[0], numero: 9 }, calc.lineas[1]] })).not.toBe(h);
     expect(huellaPropuesta({ ...calc, moneda: "MXN" })).not.toBe(h);
   });
 });
@@ -260,13 +269,14 @@ describe("cliente: publicar y seguir viendo la liga del shipper", () => {
     const api = new MesaApi(async (_s, b) => {
       enviados.push(b);
       // Como Rateware: publicar responde con la propuesta vigente y lo aceptado.
-      return { status: 200, body: { proposal: { id: "p", version: 2, currency: "USD", lanes: [{ rfx_lane_id: L1, sell_rate: 1100, equipment: "Dry Van", weekly_volume: 3 }], accepted: [{ rfx_lane_id: L1, accepted_at: "2026-11-26", accepted_by_name: "Ana" }] } }, headers: {} };
+      return { status: 200, body: { proposal: { id: "p", version: 2, currency: "USD", lanes: [{ rfx_lane_id: L1, sell_rate: 1100, equipment: "Dry Van", trailer: "53 ft", weekly_volume: 3 }], accepted: [{ rfx_lane_id: L1, accepted_at: "2026-11-26", accepted_by_name: "Ana" }] } }, headers: {} };
     });
-    const r = await api.publicarPropuesta(EV, "2026-12-25", "abc");
+    const r = await api.publicarPropuesta(EV, "2026-12-25", "abc", "p-1");
     expect(enviados.map((b) => b.action)).toEqual(["publish_rfx_shipper_proposal"]);
     expect(enviados[0].proposal_fingerprint).toBe("abc");
+    expect(enviados[0].base_proposal_id).toBe("p-1");
     expect(r.conSolicitud).toBe(true);
-    expect(r.propuesta?.lineas[0]).toMatchObject({ equipo: "Dry Van", volumenSemanal: 3, venta: 1100 });
+    expect(r.propuesta?.lineas[0]).toMatchObject({ equipo: "Dry Van", caja: "53 ft", volumenSemanal: 3, venta: 1100 });
     expect(r.propuesta?.aceptadas[0].por).toBe("Ana");
   });
 });

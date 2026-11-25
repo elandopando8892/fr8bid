@@ -528,7 +528,7 @@ async function guardaModelo(body: Record<string, unknown>, autorizacion: string 
 // Propuesta al shipper: la pantalla solo dice qué evento y la vigencia. Las rutas y
 // la tarifa de venta salen de una lectura fresca (versión adjudicada al primario y su
 // modelo comercial), así lo publicado no depende de lo que mande el navegador.
-const CAMPOS_PROPUESTA = new Set(["action", "event_id", "valid_through", "notes", "confirmed", "confirmation_action", "proposal_fingerprint"]);
+const CAMPOS_PROPUESTA = new Set(["action", "event_id", "valid_through", "notes", "confirmed", "confirmation_action", "proposal_fingerprint", "base_proposal_id"]);
 async function guardaPropuesta(body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
   if (typeof body.event_id !== "string" || !UUID.test(body.event_id)) return error(400, "FALTA_EVENTO", "Indica el evento.");
   if (Object.keys(body).some((k) => !CAMPOS_PROPUESTA.has(k))) return error(400, "SOLO_PROPUESTA", "La propuesta se calcula en el servidor: solo se indica el evento y la vigencia.");
@@ -538,6 +538,11 @@ async function guardaPropuesta(body: Record<string, unknown>, autorizacion: stri
   if (typeof body.valid_through === "string" && body.valid_through && body.valid_through < (op.hoy?.() ?? hoyMexico()))
     return error(400, "VIGENCIA_PASADA", "La vigencia ya pasó.");
   if (body.notes != null && (typeof body.notes !== "string" || body.notes.length > 2000)) return error(400, "NOTA_INVALIDA", "La nota es un texto de hasta 2000 caracteres.");
+  // La versión publicada que el Administrador tenía a la vista (null si no había). Rateware
+  // solo publica si sigue siendo la vigente: un envío viejo que llega tarde, o uno que
+  // salió antes de ver otra publicación, no sustituye lo publicado después.
+  if (!("base_proposal_id" in body) || !(body.base_proposal_id === null || (typeof body.base_proposal_id === "string" && body.base_proposal_id.length > 0 && body.base_proposal_id.length <= 100)))
+    return error(400, "FALTA_BASE", "Indica qué propuesta publicada tenías a la vista (o ninguna).");
   const lectura = await leerDetalle(body.event_id, autorizacion, op);
   if (lectura === "sin_respuesta") return error(504, "SIN_RESPUESTA", "No se pudo comprobar el evento. No se publicó nada.");
   if (lectura.status !== 200) return { ...lectura, body: sinSecretos(lectura.body) };
