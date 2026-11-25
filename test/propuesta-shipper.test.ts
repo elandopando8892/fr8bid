@@ -90,7 +90,7 @@ describe("proxy: publicar la propuesta", () => {
       expected: {
         primary_id: "lv-1",
         primary: { bid_rate: 1000, currency: "USD", commercial_model: "cost_plus", carrier_share_pct: null, marksman_margin_pct: 10 },
-        lane: { origin: "Origen 1", destination: "Destino 1", equipment: "Dry Van", weekly_volume: 3 },
+        lane: { origin: "Origen 1", destination: "Destino 1", origin_city: null, origin_state: null, origin_country: null, destination_city: null, destination_state: null, destination_country: null, equipment: "Dry Van", trailer: null, service: null, weekly_volume: 3 },
         master_package: null
       }
     }]);
@@ -263,6 +263,24 @@ describe("página del shipper: aceptar y recuperarse", () => {
     accepted: accepted.map((id) => ({ rfx_lane_id: id, accepted_at: "2026-11-26", accepted_by_name: null })), ...extra
   });
 
+  it("una lectura que llega antes que una aceptación en curso: repetirla no registra nada nuevo", async () => {
+    // Rateware simulado del lado de la base: aceptar es idempotente por propuesta y ruta.
+    const registradas = new Set<string>();
+    let enCurso: Promise<void> | null = null;
+    const accept = async (_p: string, ids: string[]) => {
+      enCurso = new Promise((ok) => setTimeout(() => { ids.forEach((id) => registradas.add(id)); ok(); }, 5));
+      throw new Error("Failed to fetch");
+    };
+    const leer = async () => prop([...registradas]);
+    const r1 = await acceptLanes(prop(), [L1], { accept, reload: leer });
+    // La lectura llegó antes: L1 se ofrece otra vez.
+    expect(pendingLanes(r1.proposal!).map((l) => l.rfx_lane_id)).toEqual([L1, L2]);
+    await enCurso;
+    const r2 = await acceptLanes(r1.proposal!, [L1], { accept: async (_p, ids) => { ids.forEach((id) => registradas.add(id)); return { proposal: prop([...registradas]) }; }, reload: leer });
+    expect([...registradas]).toEqual([L1]);
+    expect(pendingLanes(r2.proposal!).map((l) => l.rfx_lane_id)).toEqual([L2]);
+  });
+
   it("tras una respuesta incierta sin poder leer la liga, aceptar queda bloqueado hasta que una lectura funcione", async () => {
     const antes = prop();
     const r = await acceptLanes(antes, [L1], { accept: async () => { throw new Error("Failed to fetch"); }, reload: async () => { throw new Error("Failed to fetch"); } });
@@ -282,6 +300,9 @@ describe("página del shipper: aceptar y recuperarse", () => {
     const progreso = { stage: "proposal" } as any;
     expect(progressAfter(progreso, prop([L1]))?.stage).toBe("proposal");
     expect(progressAfter(progreso, prop([L1, L2]))?.stage).toBe("accepted");
+    // Una propuesta nueva con rutas pendientes, después de aceptarlo todo, vuelve a «propuesta».
+    expect(progressAfter({ stage: "accepted" } as any, prop([L1], { id: "p2", version: 2 }))?.stage).toBe("proposal");
+    expect(progressAfter({ stage: "accepted" } as any, null)?.stage).toBe("proposal");
   });
 
   it("aceptar parcial usa la respuesta del servidor y no vuelve a leer", async () => {

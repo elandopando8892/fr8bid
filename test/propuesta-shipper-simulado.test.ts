@@ -52,26 +52,32 @@ describe("propuesta al shipper contra el simulado", () => {
     expect(JSON.stringify(sim.propuestas)).not.toMatch(/1600|Carrier|vendor|expected/);
   });
 
-  it("si la oferta adjudicada cambia entre la lectura del servidor y la escritura, Rateware rechaza (STALE)", async () => {
-    const p = propuestaDelEvento(await admin.detalle(eventId));
-    // El cambio llega justo después de la lectura fresca del proxy y antes de publicar.
-    const r = await manejar(
-      "rateware-api",
-      { action: "publish_rfx_shipper_proposal", event_id: eventId, valid_through: "2026-11-20", proposal_fingerprint: huellaPropuesta(p), confirmed: true, confirmation_action: "publish_rfx_shipper_proposal" },
-      "Bearer sim:admin",
-      {
-        permitirEscrituras: true,
-        hoy: () => sim.hoy(),
-        enviar: (s, b, auth) => {
-          if (b.action === "publish_rfx_shipper_proposal") sim.laneVendors.find((x) => x.id === A)!.bid_rate = 1700;
-          return sim.llamar(s, b, auth);
+  for (const [que, cambiar] of [
+    ["la oferta adjudicada", () => { sim.laneVendors.find((x) => x.id === A)!.bid_rate = 1700; }],
+    ["la caja de la ruta", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.trailer = "48"; }],
+    ["el estado de destino", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.destination_state = "CA"; }]
+  ] as const) {
+    it(`si cambia ${que} entre la lectura del servidor y la escritura, Rateware rechaza (STALE)`, async () => {
+      const p = propuestaDelEvento(await admin.detalle(eventId));
+      // El cambio llega justo después de la lectura fresca del proxy y antes de publicar.
+      const r = await manejar(
+        "rateware-api",
+        { action: "publish_rfx_shipper_proposal", event_id: eventId, valid_through: "2026-11-20", proposal_fingerprint: huellaPropuesta(p), confirmed: true, confirmation_action: "publish_rfx_shipper_proposal" },
+        "Bearer sim:admin",
+        {
+          permitirEscrituras: true,
+          hoy: () => sim.hoy(),
+          enviar: (s, b, auth) => {
+            if (b.action === "publish_rfx_shipper_proposal") cambiar();
+            return sim.llamar(s, b, auth);
+          }
         }
-      }
-    );
-    expect(r.status).toBe(409);
-    expect(r.body?.code).toBe("RFX_PROPOSAL_STALE");
-    expect(sim.propuestas).toHaveLength(0);
-  });
+      );
+      expect(r.status).toBe(409);
+      expect(r.body?.code).toBe("RFX_PROPOSAL_STALE");
+      expect(sim.propuestas).toHaveLength(0);
+    });
+  }
 
   it("con aceptación parcial vencida se renueva la vigencia y lo aceptado se queda aceptado", async () => {
     const p = propuestaDelEvento(await admin.detalle(eventId));

@@ -83,7 +83,12 @@ export function propuestaDelEvento(d: Detalle): Propuesta {
 // Rateware lo compara con la ruta y el primario bloqueados y rechaza si cambió
 // (RFX_PROPOSAL_STALE); guarda solo datos de la ruta y la venta.
 const CLAVES_PRIMARIO = ["bid_rate", "currency", "commercial_model", "carrier_share_pct", "marksman_margin_pct"];
-const CLAVES_RUTA = ["origin", "destination", "equipment", "weekly_volume"];
+// Todo lo de la ruta que se ve (el shipper y el equipo): corredor, ciudad, estado y país,
+// caja, servicio y volumen.
+const CLAVES_RUTA = [
+  "origin", "destination", "origin_city", "origin_state", "origin_country",
+  "destination_city", "destination_state", "destination_country", "equipment", "trailer", "service", "weekly_volume"
+];
 const tomar = (fila: any, claves: string[]) => Object.fromEntries(claves.map((k) => [k, fila?.[k] ?? null]));
 
 export function lanesParaRateware(p: Propuesta, crudo: any) {

@@ -6,9 +6,17 @@ export const pendingLanes = (proposal: RequestProposal): ProposalLane[] => {
   return proposal.lanes.filter((lane) => !accepted.has(lane.rfx_lane_id));
 };
 
-/** Once every lane is accepted the last step lights up. */
-export const progressAfter = (progress: RequestProgress | null | undefined, proposal: RequestProposal | null) =>
-  progress && proposal && proposal.lanes.length > 0 && pendingLanes(proposal).length === 0 ? { ...progress, stage: "accepted" as const } : progress ?? null;
+/**
+ * The last two steps follow the proposal on screen: every lane accepted lights up
+ * «accepted»; a newer proposal with pending lanes (after a full acceptance) goes back
+ * to «proposal».
+ */
+export function progressAfter(progress: RequestProgress | null | undefined, proposal: RequestProposal | null): RequestProgress | null {
+  if (!progress) return null;
+  if (!proposal || proposal.lanes.length === 0) return progress.stage === "accepted" ? { ...progress, stage: "proposal" } : progress;
+  if (pendingLanes(proposal).length === 0) return { ...progress, stage: "accepted" };
+  return progress.stage === "accepted" ? { ...progress, stage: "proposal" } : progress;
+}
 
 export interface AcceptDeps {
   accept: (proposalId: string, laneIds: string[]) => Promise<{ proposal: RequestProposal | null }>;
@@ -27,6 +35,11 @@ export type AcceptResult = { proposal: RequestProposal | null; error: string | n
  * uncertain answer (no connection, server error) may leave the page showing a stale
  * proposal or a write that did happen, so the link is read again before anything is
  * offered twice. If that read also fails, the page keeps what it had, locked.
+ *
+ * A read can still come back before an in-flight acceptance lands. Offering the lanes
+ * again is safe because accepting is idempotent per proposal and lane in Rateware
+ * (accept_rfx_shipper_proposal: on conflict (proposal_id, rfx_lane_id) do nothing,
+ * and only the published proposal it names): a repeat records nothing new.
  */
 export async function acceptLanes(current: RequestProposal, laneIds: string[], deps: AcceptDeps): Promise<AcceptResult> {
   try {
