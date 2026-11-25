@@ -99,7 +99,7 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
             </div>
           )}
           {cmp.vencida && !cmp.distinta && <p className="nota">La vigencia ya pasó y el shipper ya no puede aceptar. Vuelve a publicar con una fecha nueva para renovarla{aceptadas.size ? "; lo que ya aceptó se queda aceptado" : ""}.</p>}
-          {puedePublicar && propuesta && (
+          {puedePublicar && propuesta && !cmp.soloVigencia && (
             <div data-prueba="propuesta-nueva">
               <p className="tenue">Lo que verá el shipper si vuelves a publicar{aceptadas.size ? " (lo ya aceptado se queda aceptado)" : ""}:</p>
               <TablaPropuesta filas={calculada.lineas} aceptadas={aceptadas} />
@@ -112,7 +112,9 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
                 // Si una lectura cambia lo que se publica (o la versión vigente) con la confirmación
                 // abierta, se cierra: se publica solo lo que el Administrador revisó.
                 firma={`${huellaPropuesta(calculada)}|${propuesta?.id ?? ""}|${vigencia}`}
-                etiqueta={propuesta ? "Volver a publicar" : "Publicar al shipper"}
+                etiqueta={!propuesta ? "Publicar al shipper" : cmp.soloVigencia ? "Renovar vigencia" : "Volver a publicar"}
+                // Renovar antes de que venza: solo con una fecha distinta a la publicada.
+                deshabilitado={cmp.soloVigencia && (vigencia || null) === (propuesta?.vigenteHasta ?? null)}
                 advertencia={
                   <>
                     El shipper verá {calculada.lineas.length === 1 ? "1 ruta" : `${calculada.lineas.length} rutas`} con su tarifa de venta en la liga de su solicitud y podrá aceptarlas. No se le manda correo: avísale tú.{" "}

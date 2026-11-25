@@ -4,7 +4,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { MesaApi, transporteSimulado } from "../src/cliente/api";
 import { operacionAdjudicacion } from "../src/dominio/operacion";
-import { huellaPropuesta, propuestaDelEvento } from "../src/dominio/propuesta";
+import { compararPropuesta, huellaPropuesta, propuestaDelEvento } from "../src/dominio/propuesta";
 import { versionVigente } from "../src/dominio/recorrido";
 import type { Detalle, Participacion } from "../src/dominio/tipos";
 import { manejar } from "../src/servidor/proxy";
@@ -151,6 +151,17 @@ describe("propuesta al shipper contra el simulado", () => {
     ventana.dispatchEvent(new Event("focus"));
     await Promise.all(lecturas);
     expect(vista?.aceptadas.map((a) => [a.rutaId, a.por])).toEqual([[p.lineas[0].rutaId, "Ana"]]);
+  });
+
+  it("renovar la vigencia antes de que venza, con lo aceptado: sigue aceptado", async () => {
+    const p = propuestaDelEvento(await admin.detalle(eventId));
+    const v1 = await admin.publicarPropuesta(eventId, "2026-11-10", huellaPropuesta(p), null);
+    sim.aceptarPropuesta(v1.propuesta!.id, [p.lineas[0].rutaId], "Ana");
+    const leida = (await admin.propuestaShipper(eventId)).propuesta!;
+    expect(compararPropuesta(p, leida, sim.hoy())).toMatchObject({ soloVigencia: true, puedePublicar: true });
+    const v2 = await admin.publicarPropuesta(eventId, "2026-12-15", huellaPropuesta(p), leida.id);
+    expect(v2.propuesta).toMatchObject({ version: 2, vigenteHasta: "2026-12-15" });
+    expect(v2.propuesta?.aceptadas.map((a) => a.por)).toEqual(["Ana"]);
   });
 
   it("fuera de orden: la lectura llega antes que el envío perdido y se publica otra vigencia; el envío viejo que llega después no sustituye la nueva", async () => {

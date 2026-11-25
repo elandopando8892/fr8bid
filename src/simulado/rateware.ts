@@ -935,7 +935,8 @@ export class RatewareSimulado {
             ["lane_number", "origin", "destination", "origin_city", "origin_state", "origin_country", "destination_city", "destination_state", "destination_country", "equipment", "trailer", "service", "weekly_volume"].every((k) => esp.lane && k in esp.lane && mismo(esp.lane[k], lane[k])) &&
             "master_package" in esp && JSON.stringify(esp.master_package ?? null) === JSON.stringify(event.rfx_master_package ?? null);
           if (!vigenteIgual) throw new Falla(409, "The award or the lanes changed after the proposal was reviewed.", "RFX_PROPOSAL_STALE");
-          return { rfx_lane_id: lane.id, lane_number: lane.lane_number, origin: lane.origin, destination: lane.destination, equipment: lane.equipment, trailer: lane.trailer ?? null, service: lane.service ?? null, weekly_volume: lane.weekly_volume ?? null, sell_rate: Math.round(venta * 100) / 100 };
+          const lugar = (lado: "origin" | "destination") => String(lane[lado] ?? "").trim() || [lane[`${lado}_city`], lane[`${lado}_state`]].map((v) => String(v ?? "").trim()).filter(Boolean).join(", ") || null;
+          return { rfx_lane_id: lane.id, lane_number: lane.lane_number, origin: lugar("origin"), destination: lugar("destination"), equipment: lane.equipment, trailer: lane.trailer ?? null, service: lane.service ?? null, weekly_volume: lane.weekly_volume ?? null, sell_rate: Math.round(venta * 100) / 100 };
         });
         const vigente = this.propuestas.find((x) => x.rfx_event_id === event.id && x.status === "published");
         const moneda = String(body.currency || "USD");

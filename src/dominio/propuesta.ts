@@ -40,6 +40,13 @@ export interface Propuesta {
   desiertas: number;
 }
 
+// El texto de la ruta (origin/destination); si está vacío, ciudad y estado. Rateware guarda
+// exactamente esto en la propuesta (publish_rfx_shipper_proposal): la vista previa es lo publicado.
+export function lugarPropuesta(cruda: any, lado: "origin" | "destination"): string {
+  const parte = (v: unknown) => String(v ?? "").trim();
+  return parte(cruda?.[lado]) || [parte(cruda?.[`${lado}_city`]), parte(cruda?.[`${lado}_state`])].filter(Boolean).join(", ");
+}
+
 export function propuestaDelEvento(d: Detalle): Propuesta {
   const lineas: LineaPropuesta[] = [];
   const faltan: FaltaPropuesta[] = [];
@@ -59,6 +66,14 @@ export function propuestaDelEvento(d: Detalle): Propuesta {
       faltan.push({ numero: ruta.numero, motivo: "la versión adjudicada no se identifica" });
       continue;
     }
+    // Origen y destino con la misma regla que Rateware al guardar (lo que el shipper recibe):
+    // sin ellos la ruta no se identifica en su liga, así que no se publica.
+    const origen = lugarPropuesta(ruta.cruda, "origin");
+    const destino = lugarPropuesta(ruta.cruda, "destination");
+    if (!origen || !destino) {
+      faltan.push({ numero: ruta.numero, motivo: "falta el origen o el destino de la ruta" });
+      continue;
+    }
     const venta = tarifaVenta(v);
     if (!venta || !(venta.venta > 0)) {
       faltan.push({ numero: ruta.numero, motivo: "la oferta adjudicada no tiene modelo comercial" });
@@ -69,10 +84,10 @@ export function propuestaDelEvento(d: Detalle): Propuesta {
       numero: ruta.numero,
       // Ruta como la guarda Rateware en la propuesta y la ve el shipper (rfx_lanes.origin y
       // .destination): la misma en la vista previa, la huella, lo publicado y la comparación.
-      origen: String(ruta.cruda?.origin ?? ruta.origen ?? "").trim(),
-      destino: String(ruta.cruda?.destination ?? ruta.destino ?? "").trim(),
+      origen,
+      destino,
       // Equipo como lo guarda Rateware en la propuesta (rfx_lanes.equipment), sin la caja.
-      equipo: String(ruta.cruda?.equipment ?? ruta.equipo ?? "").trim(),
+      equipo: String(ruta.cruda?.equipment ?? "").trim(),
       caja: String(ruta.cruda?.trailer ?? "").trim(),
       servicio: String(ruta.cruda?.service ?? "").trim(),
       volumenSemanal: ruta.volumenSemanal,
@@ -203,6 +218,8 @@ export interface Comparacion {
   tocaAceptadas: boolean;
   /** Publicar por primera vez, o volver a publicar para corregir rutas pendientes o renovar la vigencia. */
   puedePublicar: boolean;
+  /** Publicada, igual a hoy y vigente: solo se puede renovar la vigencia (antes de que venza). */
+  soloVigencia: boolean;
 }
 
 export function compararPropuesta(calculada: Propuesta, publicada: PropuestaPublicada | null, hoy: string): Comparacion {
@@ -223,5 +240,5 @@ export function compararPropuesta(calculada: Propuesta, publicada: PropuestaPubl
   const vencida = Boolean(publicada?.vigenteHasta) && publicada!.vigenteHasta! < hoy;
   const tocaAceptadas = cambios.some((c) => c.aceptada) || quitadas.some((q) => q.aceptada) || (otraMoneda && aceptadas.size > 0);
   const lista = calculada.faltan.length === 0 && calculada.lineas.length > 0;
-  return { cambios, moneda: otraMoneda ? { antes: publicada!.moneda, ahora: calculada.moneda! } : null, quitadas, distinta, vencida, tocaAceptadas, puedePublicar: lista && !tocaAceptadas && (!publicada || distinta || vencida) };
+  return { cambios, moneda: otraMoneda ? { antes: publicada!.moneda, ahora: calculada.moneda! } : null, quitadas, distinta, vencida, tocaAceptadas, puedePublicar: lista && !tocaAceptadas, soloVigencia: Boolean(publicada) && !distinta && !vencida };
 }

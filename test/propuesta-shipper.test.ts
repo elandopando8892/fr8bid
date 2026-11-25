@@ -3,7 +3,7 @@
 // una lectura fresca y nunca toma rutas ni precios del navegador.
 import { describe, expect, it } from "vitest";
 import { detalle } from "../src/cliente/mapear";
-import { compararPropuesta, huellaPropuesta, leerPropuestaPublicada, propuestaDelEvento, type PropuestaPublicada } from "../src/dominio/propuesta";
+import { compararPropuesta, lugarPropuesta, huellaPropuesta, leerPropuestaPublicada, propuestaDelEvento, type PropuestaPublicada } from "../src/dominio/propuesta";
 import { manejar } from "../src/servidor/proxy";
 import { MesaApi } from "../src/cliente/api";
 import { recargarAlVolver, turnos } from "../src/ui/recargaAlVolver";
@@ -211,6 +211,26 @@ describe("paso de los módulos (/api/funcion)", () => {
   });
 });
 
+describe("vista previa igual a lo publicado", () => {
+  it("origen y destino con la regla de Rateware: el texto de la ruta y, si está vacío, ciudad y estado", () => {
+    const p = propuestaDelEvento(detalle(crudo([lane(L1, 1, [inv({})], { origin: null, origin_city: "Monterrey", origin_state: "NL" })]) as any));
+    expect(p.lineas[0]).toMatchObject({ origen: "Monterrey, NL", destino: "Destino 1" });
+    expect(lugarPropuesta({ origin: "  Libre ", origin_city: "Saltillo", origin_state: null }, "origin")).toBe("Libre");
+    expect(lugarPropuesta({ origin: " ", origin_city: "Saltillo", origin_state: "" }, "origin")).toBe("Saltillo");
+  });
+
+  it("sin origen ni destino de ningún tipo la ruta no se publica", () => {
+    const q = propuestaDelEvento(detalle(crudo([lane(L1, 1, [inv({})], { destination: "" })]) as any));
+    expect(q.lineas).toEqual([]);
+    expect(q.faltan).toEqual([{ numero: 1, motivo: "falta el origen o el destino de la ruta" }]);
+  });
+
+  it("el equipo de la vista previa es el crudo de Rateware (vacío si no hay)", () => {
+    const p = propuestaDelEvento(detalle(crudo([lane(L1, 1, [inv({})], { equipment: null })]) as any));
+    expect(p.lineas[0].equipo).toBe("");
+  });
+});
+
 describe("lo publicado frente a la adjudicación de hoy", () => {
   const calc = propuestaDelEvento(detalle(crudo([lane(L1, 1, [inv({})]), lane(L2, 2, [inv({ id: "lv-3" })])]) as any));
   const linea = (rutaId: string, numero: number, venta: number, x: Record<string, unknown> = {}) => ({ rutaId, numero, origen: `Origen ${numero}`, destino: `Destino ${numero}`, equipo: "Dry Van", caja: "", servicio: "", volumenSemanal: 3, venta, ...x });
@@ -223,7 +243,9 @@ describe("lo publicado frente a la adjudicación de hoy", () => {
 
   it("sin cambios ni vencimiento no ofrece volver a publicar", () => {
     const c = compararPropuesta(calc, pub(), "2026-11-25");
-    expect(c).toMatchObject({ distinta: false, vencida: false, puedePublicar: false, cambios: [], quitadas: [] });
+    // Sin cambios solo se ofrece renovar la vigencia (antes de que venza).
+    expect(c).toMatchObject({ distinta: false, vencida: false, puedePublicar: true, soloVigencia: true, cambios: [], quitadas: [] });
+    expect(compararPropuesta(calc, pub({ aceptadas: aceptoL1 }), "2026-11-25")).toMatchObject({ soloVigencia: true, tocaAceptadas: false, puedePublicar: true });
     expect(compararPropuesta(calc, null, "2026-11-25").puedePublicar).toBe(true);
   });
 
