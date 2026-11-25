@@ -6,8 +6,8 @@ import { detalle } from "../src/cliente/mapear";
 import { compararPropuesta, huellaPropuesta, leerPropuestaPublicada, propuestaDelEvento, type PropuestaPublicada } from "../src/dominio/propuesta";
 import { manejar } from "../src/servidor/proxy";
 import { MesaApi } from "../src/cliente/api";
-import { recargarAlVolver } from "../src/ui/recargaAlVolver";
-import { acceptLanes, afterAccept, canAccept, pendingLanes, progressAfter, reconcile } from "../src/bidware/features/shipper-request/proposal.flow";
+import { recargarAlVolver, turnos } from "../src/ui/recargaAlVolver";
+import { acceptLanes, afterAccept, proposalState, canAccept, pendingLanes, progressAfter, reconcile } from "../src/bidware/features/shipper-request/proposal.flow";
 import { mensajeDelServidor } from "../src/dominio/errores";
 import { revisar } from "../src/servidor/paso";
 import { explainRequestError } from "../src/bidware/features/shipper-request/request.service";
@@ -391,5 +391,30 @@ describe("la propuesta deja de existir o cambia mientras se ve", () => {
     t = 10000;
     ventana.dispatchEvent(new Event("focus"));
     expect(lecturas).toBe(2);
+  });
+});
+
+describe("lecturas fuera de orden y propuesta vacía", () => {
+  it("una lectura vieja que termina después (también tras publicar) no tapa la más nueva", async () => {
+    const t = turnos();
+    let vista = "inicial";
+    const leer = (valor: string, ms: number) => {
+      const turno = t.pedir();
+      return new Promise<void>((ok) => setTimeout(() => { if (t.vigente(turno)) vista = valor; ok(); }, ms));
+    };
+    const vieja = leer("lectura vieja", 30);
+    const publicada = leer("publicada v2", 5);
+    await Promise.all([vieja, publicada]);
+    expect(vista).toBe("publicada v2");
+    // Respuestas invertidas entre dos lecturas: gana la que se pidió al último.
+    await Promise.all([leer("primera", 20), leer("segunda", 1)]);
+    expect(vista).toBe("segunda");
+  });
+
+  it("una propuesta sin rutas no dice «aceptaste todas»", () => {
+    const base: any = { id: "p", version: 1, currency: "USD", accepted: [], expired: false };
+    expect(proposalState({ ...base, lanes: [] })).toBe("empty");
+    expect(proposalState({ ...base, lanes: [{ rfx_lane_id: "a" }] })).toBe("pending");
+    expect(proposalState({ ...base, lanes: [{ rfx_lane_id: "a" }], accepted: [{ rfx_lane_id: "a" }] })).toBe("all");
   });
 });

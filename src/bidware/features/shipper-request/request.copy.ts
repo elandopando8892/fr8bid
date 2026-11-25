@@ -207,6 +207,7 @@ export const COPY = {
     unresolved: "No pudimos confirmar si tu aceptación quedó registrada. Vuelve a cargar para revisarla antes de aceptar otra vez.",
     reload: "Volver a cargar",
     proposalGone: "La propuesta ya no está disponible en esta liga. Escríbenos y te mandamos la vigente.",
+    proposalEmpty: "Esta propuesta no tiene rutas por aceptar. Escríbenos si esperabas tarifas.",
     questions: "¿Dudas o algo que ajustar? Contesta al correo de tu contacto en MARKSMAN.",
     // Spot: one load, the short form
     spotTitle: "Tu carga",
@@ -406,6 +407,7 @@ export const COPY = {
     unresolved: "We couldn't confirm whether your acceptance was recorded. Reload to check before accepting again.",
     reload: "Reload",
     proposalGone: "The proposal is no longer available on this link. Write to us and we'll send you the current one.",
+    proposalEmpty: "This proposal has no lanes to accept. Write to us if you expected rates.",
     questions: "Questions or something to adjust? Reply to your MARKSMAN contact's email.",
     spotTitle: "Your load",
     spotNotesHint: "Anything the carrier should know: appointments, handling, restrictions…",

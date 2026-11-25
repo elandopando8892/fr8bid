@@ -24,3 +24,10 @@ export function recargarAlVolver(
     documento.removeEventListener("visibilitychange", avisar);
   };
 }
+
+// Lecturas que pueden volver fuera de orden: solo cuenta la última que se pidió. Publicar
+// también pide un turno, así una lectura vieja que termina después no tapa lo publicado.
+export function turnos() {
+  let ultimo = 0;
+  return { pedir: () => ++ultimo, vigente: (turno: number) => turno === ultimo };
+}

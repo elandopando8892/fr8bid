@@ -3,7 +3,7 @@ import { confirmAsync } from "@/components/confirm";
 import { ErrorBanner } from "@/components/ui";
 import type { Copy } from "./request.copy";
 import type { Lang, ProposalLane, RequestProgress, RequestProposal } from "./request.model";
-import { acceptLanes, afterAccept, canAccept, pendingLanes, reconcile } from "./proposal.flow";
+import { acceptLanes, afterAccept, canAccept, pendingLanes, proposalState, reconcile } from "./proposal.flow";
 import { acceptProposal, explainRequestError, loadRequest } from "./request.service";
 
 const money = (value: number | null, currency: string, lang: Lang) =>
@@ -207,7 +207,8 @@ export function ProposalTable({
           </button>
         </div>
       )}
-      {pending.length === 0 && <p className="sr-proposal-done">✓ {copy.allAccepted}</p>}
+      {proposalState(proposal) === "all" && <p className="sr-proposal-done">✓ {copy.allAccepted}</p>}
+      {proposalState(proposal) === "empty" && <p className="sr-muted">{copy.proposalEmpty}</p>}
       <p className="sr-muted">{copy.questions}</p>
     </section>
   );

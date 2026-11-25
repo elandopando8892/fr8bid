@@ -4,14 +4,14 @@
 // su solicitud) y ahí la acepta por ruta o todas. El shipper nunca ve carrier ni
 // costo. Las rutas y la venta las vuelve a calcular el servidor al publicar.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { compararPropuesta, huellaPropuesta, propuestaDelEvento, textoFaltan, type PropuestaPublicada } from "../dominio/propuesta";
 import { hoyMexico, type Contexto } from "../dominio/recorrido";
 import type { Detalle } from "../dominio/tipos";
 import { Confirmar, dinero, fecha } from "./comun";
 import { useSesion } from "./sesion";
 import * as I from "./Iconos";
-import { recargarAlVolver } from "./recargaAlVolver";
+import { recargarAlVolver, turnos } from "./recargaAlVolver";
 
 type Estado = { cargando: true } | { cargando: false; error: string | null; conSolicitud: boolean; propuesta: PropuestaPublicada | null };
 
@@ -27,14 +27,17 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
   const hoy = hoyMexico();
   const [vigencia, setVigencia] = useState(() => enDias(hoy, 30));
 
+  // Solo la última lectura (o publicación) cuenta: una respuesta vieja se descarta.
+  const turno = useRef(turnos()).current;
   const cargar = useCallback(async () => {
+    const t = turno.pedir();
     try {
       const r = await s.api.propuestaShipper(d.evento.id);
-      setEstado({ cargando: false, error: null, ...r });
+      if (turno.vigente(t)) setEstado({ cargando: false, error: null, ...r });
     } catch (e) {
-      setEstado({ cargando: false, error: (e as Error).message, conSolicitud: false, propuesta: null });
+      if (turno.vigente(t)) setEstado({ cargando: false, error: (e as Error).message, conSolicitud: false, propuesta: null });
     }
-  }, [s.api, d.evento.id]);
+  }, [s.api, d.evento.id, turno]);
   useEffect(() => { void cargar(); }, [cargar]);
   // Lo que el shipper acepta mientras el panel está abierto aparece al volver a la pestaña
   // (o con «Actualizar»): el equipo no trabaja sobre aceptaciones viejas.
@@ -114,9 +117,10 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
                 }
                 onConfirmar={() =>
                   accion(async () => {
+                    const t = turno.pedir();
                     try {
                       const r = await s.api.publicarPropuesta(d.evento.id, vigencia || null, huellaPropuesta(calculada), propuesta?.id ?? null);
-                      setEstado({ cargando: false, error: null, ...r });
+                      if (turno.vigente(t)) setEstado({ cargando: false, error: null, ...r });
                     } catch (e) {
                       // Respuesta perdida o rechazo: antes de ofrecer publicar otra vez se lee la
                       // propuesta vigente. Si ya quedó publicada, el botón desaparece; si la lectura

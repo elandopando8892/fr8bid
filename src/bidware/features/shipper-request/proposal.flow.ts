@@ -73,3 +73,7 @@ export function afterAccept(result: AcceptResult, explain: (error: string) => st
   if (!result.proposal) return { proposal: null, notice: message ? `${message} ${gone}` : gone };
   return { proposal: result.proposal, notice: null };
 }
+
+/** What the foot of the table says: nothing to accept, everything accepted, or lanes pending. */
+export const proposalState = (proposal: RequestProposal): "empty" | "all" | "pending" =>
+  proposal.lanes.length === 0 ? "empty" : pendingLanes(proposal).length === 0 ? "all" : "pending";
