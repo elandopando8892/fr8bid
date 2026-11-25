@@ -8933,3 +8933,137 @@ table.data.uploads-table {
 .web-intake-raw dd { margin: 0; overflow-wrap: anywhere; }
 .web-intake-options { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; max-height: 260px; overflow: auto; }
 .web-intake-options button { width: 100%; text-align: left; }
+
+/* ——— Cotización rápida del carrier (rediseño 25-nov, prioridad 4) ——— */
+.croom-persona {
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.croom-persona:hover,
+.croom-persona:focus-visible {
+  border-color: #fff;
+}
+/* Tarifa y «Enviar» primero: el botón ocupa todo el ancho del panel. */
+.croom-actions-enviar .primary {
+  flex: 1 1 auto;
+  min-height: 42px;
+  font-size: 13px;
+}
+.croom-actions-bajo {
+  justify-content: space-between;
+}
+.btn-texto-croom {
+  background: none;
+  border: 0;
+  padding: 6px 0;
+  color: var(--muted, #65665f);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  box-shadow: none;
+}
+.btn-texto-croom:hover {
+  color: inherit;
+}
+/* En el teléfono y la tableta la cotización es una hoja que sube desde abajo, sobre la lista. */
+.croom-hoja-fondo {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 20, 20, 0.45);
+  z-index: 60;
+}
+.croom-panel-slot.croom-hoja {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 61;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.18);
+  padding: 0 0 env(safe-area-inset-bottom);
+  overscroll-behavior: contain;
+}
+.croom-hoja .croom-panel {
+  max-height: none;
+  overflow: visible;
+  box-shadow: none;
+  border: 0;
+  padding-top: 4px;
+}
+.croom-hoja-barra {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 8px 20px 0;
+  background: #fff;
+}
+.croom-hoja-asa {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  width: 40px;
+  height: 4px;
+  margin-left: -20px;
+  border-radius: 2px;
+  background: #d6d6d2;
+}
+.croom-hoja > .banner,
+.croom-hoja > .banner.info {
+  margin: 8px 20px 0;
+}
+@media (max-width: 640px) {
+  .croom-persona {
+    padding: 5px 10px;
+    font-size: 11.5px;
+  }
+  .croom-bar-note {
+    display: none;
+  }
+  .croom-persona {
+    margin-left: auto;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .croom-panel-slot.croom-hoja {
+    animation: croom-hoja-sube 0.18s ease-out;
+  }
+}
+@keyframes croom-hoja-sube {
+  from { transform: translateY(24px); opacity: 0.6; }
+  to { transform: none; opacity: 1; }
+}
+.croom-persona {
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .croom-bar {
+    gap: 10px;
+  }
+  .croom-persona {
+    font-size: 11px;
+    padding: 5px 9px;
+  }
+}
+.croom-persona-corto {
+  display: none;
+}
+@media (max-width: 640px) {
+  .croom-persona-largo {
+    display: none;
+  }
+  .croom-persona-corto {
+    display: inline;
+  }
+}

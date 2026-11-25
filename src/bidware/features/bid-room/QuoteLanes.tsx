@@ -1,8 +1,9 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { InfoBanner, Pill, money } from "@/components/ui";
 import { useLang } from "@/i18n/language";
 import { q } from "@/i18n/bid-room-quote";
 import { QuotePanel, QuotePanelEmpty } from "./QuotePanel";
+import { nextPending, type SharedFields } from "./quick-quote";
 import { SegmentTerms } from "./SegmentTerms";
 import { QuoteExcel } from "./QuoteExcel";
 import { canQuote, laneState, type Answer, type BookLane, type LaneState } from "./bidroom.service";
@@ -33,6 +34,19 @@ function actionOf(lane: BookLane): { label: string; primary?: boolean } | null {
 /** Below this width the panel sits under the table instead of beside it. */
 export const wide = () => window.matchMedia("(min-width: 1001px)").matches;
 
+/** The same answer as wide(), kept current when the window is resized or the phone turns. */
+export function useWide() {
+  const [is, setIs] = useState(wide);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1001px)");
+    const change = () => setIs(mq.matches);
+    mq.addEventListener?.("change", change);
+    return () => mq.removeEventListener?.("change", change);
+  }, []);
+  return is;
+}
+
+
 /**
  * "Cotizar rutas" (wireframe 24): the carrier's lanes of this event, the terms
  * of their segments below, and the quote panel beside them.
@@ -50,6 +64,9 @@ export function QuoteLanes({
   onPick,
   onDone,
   onAsk,
+  onClose,
+  shared,
+  onShare,
 }: {
   token: string;
   eventId: string;
@@ -63,9 +80,51 @@ export function QuoteLanes({
   onPick: (lane: BookLane) => void;
   onDone: (lane: BookLane, message: string) => void;
   onAsk: () => void;
+  /** Closes the bottom sheet on a phone. */
+  onClose: () => void;
+  shared: SharedFields | null;
+  onShare: (fields: SharedFields | null) => void;
 }) {
   useLang();
   const panel = useRef<HTMLDivElement>(null);
+  const isWide = useWide();
+  // On a phone the quote opens as a sheet over the list, one lane at a time.
+  const sheet = !isWide && Boolean(picked);
+  const position = picked ? lanes.findIndex((l) => l.rfx_lane_id === picked.rfx_lane_id) + 1 : 0;
+  const next = picked && picked.bid_rate == null ? nextPending(lanes, picked) : null;
+  const others = lanes.filter((l) => l.bid_rate == null && canQuote(l) && l.rfx_lane_id !== picked?.rfx_lane_id).length;
+
+  // The sheet takes the focus to its title, closes with Escape, and the list behind it does not scroll.
+  useEffect(() => {
+    if (!sheet) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") return onClose();
+      // Tab stays inside the sheet.
+      if (e.key !== "Tab" || !panel.current) return;
+      const all = [...panel.current.querySelectorAll<HTMLElement>("button, input, select, textarea, summary, [href]")].filter(
+        (el) => !el.hasAttribute("disabled") && el.getClientRects().length > 0,
+      );
+      if (!all.length) return;
+      const first = all[0], last = all[all.length - 1];
+      if (!panel.current.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = overflow;
+      window.removeEventListener("keydown", onKey);
+      if (previous && document.contains(previous)) previous.focus();
+    };
+  }, [sheet]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!sheet) return;
+    panel.current?.scrollTo?.({ top: 0 });
+    panel.current?.querySelector<HTMLElement>(".croom-panel-title")?.focus();
+  }, [sheet, picked?.rfx_lane_id]);
   const [excelBusy, setExcelBusy] = useState(false);
   const quoted = lanes.filter((l) => l.bid_rate != null).length;
   const volumes = lanes.some((l) => l.weekly_volume != null && l.weekly_volume !== "");
@@ -73,7 +132,6 @@ export function QuoteLanes({
   function pick(lane: BookLane) {
     if (excelBusy) return;
     onPick(lane);
-    if (!wide()) window.setTimeout(() => panel.current?.scrollIntoView({ block: "start" }), 30);
   }
 
   return (
@@ -172,15 +230,43 @@ export function QuoteLanes({
         </fieldset>
       </div>
 
-      <div className="croom-panel-slot" ref={panel}>
-        <fieldset disabled={excelBusy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-        {picked ? (
-          <QuotePanel lane={picked} extrasOpen={extras} onDone={(message) => onDone(picked, message)} onAsk={onAsk} />
-        ) : (
-          <QuotePanelEmpty />
-        )}
-        </fieldset>
-      </div>
+      {sheet && <div className="croom-hoja-fondo" onClick={onClose} aria-hidden />}
+      {(isWide || picked) && (
+        <div
+          className={`croom-panel-slot${sheet ? " croom-hoja" : ""}`}
+          ref={panel}
+          role={sheet ? "dialog" : undefined}
+          aria-modal={sheet ? true : undefined}
+          aria-label={sheet && picked ? `${String(picked.origin ?? "")} → ${String(picked.destination ?? "")}` : undefined}
+        >
+          {sheet && (
+            <div className="croom-hoja-barra">
+              <span className="croom-hoja-asa" aria-hidden />
+              <button type="button" className="btn-texto-croom" onClick={onClose}>
+                {q("panel.close")}
+              </button>
+            </div>
+          )}
+          {sheet && notice && <InfoBanner>{notice}</InfoBanner>}
+          <fieldset disabled={excelBusy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+          {picked ? (
+            <QuotePanel
+              lane={picked}
+              extrasOpen={extras}
+              onDone={(message) => onDone(picked, message)}
+              onAsk={onAsk}
+              position={{ n: position, total: lanes.length }}
+              next={next}
+              shared={shared}
+              onShare={onShare}
+              others={others}
+            />
+          ) : (
+            <QuotePanelEmpty />
+          )}
+          </fieldset>
+        </div>
+      )}
     </div>
   );
 }
