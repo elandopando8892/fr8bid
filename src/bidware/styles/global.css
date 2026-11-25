@@ -9067,3 +9067,140 @@ table.data.uploads-table {
     display: inline;
   }
 }
+
+/* Avance y propuesta del shipper (25-nov-2026): cuatro pasos y la tarifa por ruta con «Aceptar». */
+.sr-steps ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.sr-steps li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  color: var(--muted);
+  font-size: 13px;
+}
+.sr-steps li b {
+  display: block;
+  font-weight: 600;
+}
+.sr-steps li small {
+  display: block;
+  font-size: 12px;
+}
+.sr-steps li.done,
+.sr-steps li.now {
+  color: var(--ink, inherit);
+}
+.sr-step-dot {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--line, #d9d9d9);
+  font-size: 12px;
+}
+.sr-steps li.done .sr-step-dot {
+  background: var(--green-light);
+  color: var(--green);
+  border-color: transparent;
+}
+.sr-steps li.now .sr-step-dot {
+  background: var(--accent, #c54714);
+  color: #fff;
+  border-color: transparent;
+}
+.sr-proposal-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.sr-proposal-head h2 {
+  margin: 0 0 4px;
+}
+.sr-proposal-table {
+  overflow-x: auto;
+  margin: 12px 0;
+}
+.sr-proposal-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.sr-proposal-table th,
+.sr-proposal-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line, #e5e5e5);
+  text-align: left;
+  vertical-align: middle;
+}
+.sr-proposal-table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+.sr-proposal-table tr.done td {
+  background: var(--green-light);
+}
+.sr-proposal-act {
+  text-align: right;
+  white-space: nowrap;
+}
+.sr-proposal-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+.sr-proposal-done {
+  color: var(--green);
+  font-weight: 600;
+}
+.sr-phone-only {
+  display: none;
+}
+@media (max-width: 700px) {
+  .sr-phone-only {
+    display: inline;
+  }
+  .sr-proposal-table tr.done {
+    background: var(--green-light);
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .sr-proposal-table tr.done td {
+    background: transparent;
+  }
+  .sr-steps ol {
+    grid-template-columns: 1fr 1fr;
+  }
+  .sr-proposal-table thead {
+    display: none;
+  }
+  .sr-proposal-table tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line, #e5e5e5);
+  }
+  .sr-proposal-table td {
+    border: 0;
+    padding: 0;
+  }
+  .sr-proposal-table td:first-child {
+    grid-column: 1 / -1;
+    font-weight: 600;
+  }
+  .sr-proposal-table .num {
+    text-align: left;
+  }
+  .sr-proposal-foot .btn {
+    width: 100%;
+  }
+}

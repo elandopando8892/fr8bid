@@ -16,6 +16,7 @@ import {
 } from "./request.model";
 import { explainRequestError, isAlreadySubmitted, loadRequest, saveRequest, submitRequest } from "./request.service";
 import { RequestForm, routeText, unitText } from "./RequestForm";
+import { ProposalTable, RequestSteps } from "./ShipperProposal";
 import { useAutosave, useSecondsSince, type SaveState } from "./useAutosave";
 import { BotonAyudas } from "../../../ui/BotonAyudas";
 
@@ -298,7 +299,21 @@ function ShipperRequestContent({ token, prefs }: { token: string; prefs: LinkPre
       aside={!done && !sending && <SaveStatus state={autosave.state} copy={copy} lang={lang} brand={brand} onRetry={() => void autosave.retry()} />}
     >
       {done ? (
-        <Thanks kind={kind} draft={draft} copy={copy} lang={lang} submittedAt={submittedAt} readOnly={alreadySent} />
+        <>
+          {response.progress && response.progress.stage !== "draft" && <RequestSteps progress={response.progress} copy={copy} lang={lang} />}
+          {response.proposal && (
+            <ProposalTable
+              token={token}
+              proposal={response.proposal}
+              copy={copy}
+              lang={lang}
+              brand={brand}
+              title={project.title || customer}
+              onChange={(proposal) => setResponse((current) => (current ? { ...current, proposal, progress: current.progress && proposal && proposal.lanes.length && proposal.accepted.length >= proposal.lanes.length ? { ...current.progress, stage: "accepted" } : current.progress } : current))}
+            />
+          )}
+          <Thanks kind={kind} draft={draft} copy={copy} lang={lang} submittedAt={submittedAt} readOnly={alreadySent} />
+        </>
       ) : (
         // Nothing can be edited while the request is on its way.
         <fieldset className="sr-fieldset" disabled={sending}>

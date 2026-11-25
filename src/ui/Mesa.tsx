@@ -44,6 +44,7 @@ import { pluralize } from "../bidware/i18n/language";
 import { folioCorto, nombreEvento, shipperAparte } from "./eventosVista";
 import { LecturaIA } from "./LecturaIA";
 import { Bw } from "./bidware";
+import { PanelPropuesta } from "./PropuestaShipper";
 
 // Corregir una ruta y ver la preselección de carriers: módulos de Bidware, cargados al usarse.
 const Preseleccion = lazy(() => import("../bidware/features/rfx-admin/CarrierPreselection").then((m) => ({ default: m.CarrierPreselection })));
@@ -238,6 +239,7 @@ export function Mesa({ id }: { id: string }) {
           {verInvitacion && <MasCarriers {...p} />}
           {actual === "entrega" && <PanelEntrega {...p} />}
           {actual === "aviso" && <PanelAviso {...p} />}
+          {actual === "aviso" && <PanelPropuesta d={d} ctx={ctx} accion={accion} />}
           {s.modo === "rateware" && (actual === "evento" || d.evento.estado === "archivado") && ctx.rol === "admin" && <AccionesEvento d={d} accion={accion} />}
           {s.modo === "rateware" && <MasDelEvento id={id} borrador={d.evento.estado === "borrador"} />}
           <ReportarFr8Desk eventoId={id} asuntoInicial={`${d.evento.folio} · ${d.evento.nombre}`} />

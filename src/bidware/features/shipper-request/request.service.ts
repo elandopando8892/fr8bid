@@ -1,5 +1,5 @@
 import { callRfxBidApi } from "@/lib/api-client";
-import { toRfiPayload, type Lang, type Place, type RequestDraft, type RequestResponse } from "./request.model";
+import { toRfiPayload, type Lang, type Place, type RequestDraft, type RequestProposal, type RequestResponse } from "./request.model";
 
 /** The shipper's link: the token is the only credential. */
 export const loadRequest = (token: string) => callRfxBidApi<RequestResponse>("get_customer_rfi", { token });
@@ -22,6 +22,10 @@ export async function submitRequest(token: string, draft: RequestDraft, base: Re
   requireCurrent();
   return await callRfxBidApi("submit_customer_rfi", { token, rfi: toRfiPayload(draft, base) });
 }
+
+/** Accepts lanes of the published proposal; accepting one twice changes nothing. */
+export const acceptProposal = (token: string, proposalId: string, laneIds: string[]) =>
+  callRfxBidApi<{ proposal: RequestProposal | null }>("accept_customer_rfi_proposal", { token, proposal_id: proposalId, lane_ids: laneIds });
 
 export async function searchPlaces(token: string, search: string, country?: string): Promise<Place[]> {
   if (search.trim().length < 2) return [];
@@ -50,6 +54,16 @@ function explainIn(message: string, lang: Lang) {
     return lang === "es"
       ? "Esta liga no está activa. Pide una nueva a tu contacto en MARKSMAN."
       : "This link isn't active. Ask your MARKSMAN contact for a new one.";
+  }
+  if (/proposal was updated/.test(text)) {
+    return lang === "es"
+      ? "La propuesta se actualizó. Vuelve a cargar la página para ver la vigente."
+      : "The proposal was updated. Reload the page to see the current one.";
+  }
+  if (/past its validity/.test(text)) {
+    return lang === "es"
+      ? "Esta propuesta ya venció. Pide una actualización a tu contacto en MARKSMAN."
+      : "This proposal has expired. Ask your MARKSMAN contact for an update.";
   }
   if (/already been submitted/.test(text)) {
     return lang === "es"

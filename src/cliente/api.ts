@@ -15,6 +15,7 @@ import { MAX_PAGINAS, POR_PAGINA, claveSegmento, consultaSegmento, leerHistorial
 import { campanaDelEvento, campanasDelEventoCompletas, campanaFr8bid, elegirPlantilla, plantillasDelEvento } from "../dominio/invitacion.js";
 import { operacionEntrega } from "../dominio/operacion.js";
 import { notasConCierre } from "../dominio/cierre.js";
+import { leerPropuestaPublicada } from "../dominio/propuesta.js";
 import { env } from "../bidware/config/env.js";
 import { hoyMexico, primario, versionMasReciente, versionVigente } from "../dominio/recorrido.js";
 import { ESPERA_ENTRE_TANDAS_MS, esCuota, leerResultado, operacionTanda, planearTandas, requiereAtencion, type ResultadoEnvio } from "../dominio/tandas.js";
@@ -475,6 +476,21 @@ export class MesaApi {
   // Corrige datos de una ruta (origen, destino, caja, volumen, objetivo, notas).
   corregirRuta(eventId: string, rutaId: string, patch: Record<string, unknown>) {
     return this.rw({ action: "update_rfx_lane", event_id: eventId, id: rutaId, patch });
+  }
+  // Propuesta al shipper (rateware #234): lo publicado y lo que el shipper aceptó.
+  async propuestaShipper(eventId: string) {
+    return leerPropuestaPublicada(await this.rw({ action: "get_rfx_shipper_proposal", event_id: eventId }));
+  }
+  // El servidor de Fr8Bid calcula rutas y tarifa de venta con una lectura fresca;
+  // aquí solo va el evento y la vigencia.
+  async publicarPropuesta(eventId: string, vigenteHasta: string | null) {
+    return leerPropuestaPublicada(await this.rw({
+      action: "publish_rfx_shipper_proposal",
+      event_id: eventId,
+      ...(vigenteHasta ? { valid_through: vigenteHasta } : {}),
+      confirmed: true,
+      confirmation_action: "publish_rfx_shipper_proposal"
+    }));
   }
   archivar(eventId: string) {
     return this.rw({ action: "archive_rfx_event", id: eventId, confirmed: true, confirmation_action: "archive_rfx_event" });
