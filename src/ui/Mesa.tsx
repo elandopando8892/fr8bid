@@ -14,6 +14,7 @@ import {
   puedeAdjudicar,
   recorrido,
   revisarCondiciones,
+  rutaDecidida,
   versionMasReciente,
   versionVigente,
   type Candado,
@@ -1550,6 +1551,18 @@ function PanelComparar({ d, ctx, accion }: Props) {
   const abierto = d.evento.estado === "abierto";
   const pendientes = seguimiento(d, ctx.hoy).filter((x) => esperaRespuesta(x.estado)).length;
   const fuera = new Set(fueraDeAceptados(d).map((x) => x.p.id));
+  // Varias rutas: una a la vez (rediseño 25-nov), empezando por la primera sin
+  // decidir que tenga ofertas. «Ver todas» regresa a la lista completa.
+  const varias = d.rutas.length > 1;
+  const [vista, setVista] = useState<string>(() => (d.rutas.find((r) => !rutaDecidida(r) && conOferta(r).length > 0) ?? d.rutas[0])?.id ?? "todas");
+  const rutaVista = varias ? d.rutas.find((r) => r.id === vista) : undefined;
+  const visibles = rutaVista ? [rutaVista] : d.rutas;
+  const verRuta = (numero: number) => {
+    const r = d.rutas.find((x) => x.numero === numero);
+    if (!r) return;
+    if (vista !== "todas") setVista(r.id);
+    requestAnimationFrame(() => document.getElementById(`ruta-${numero}`)?.scrollIntoView({ block: "start", behavior: "smooth" }));
+  };
 
   return (
     <>
@@ -1571,10 +1584,11 @@ function PanelComparar({ d, ctx, accion }: Props) {
         </div>
       )}
       <LecturaIA d={d} accion={accion} advertenciaReal={ADVERTENCIA_REAL(s, d)} />
-      {hayOfertas && <ResumenOfertas d={d} ctx={ctx} />}
+      {hayOfertas && <ResumenOfertas d={d} ctx={ctx} onVerRuta={verRuta} />}
       {d.evento.estado === "cerrado" && ctx.rol === "admin" && <AdjudicarEnLote d={d} ctx={ctx} accion={accion} />}
       {d.evento.estado === "cerrado" && ctx.rol === "admin" && <CerrarSinAdjudicar d={d} accion={accion} />}
-      {d.rutas.map((ruta) => {
+      {varias && <SelectorRutas d={d} vista={rutaVista?.id ?? null} onVista={(id) => setVista(id)} />}
+      {visibles.map((ruta) => {
         const filas = ofertasOrdenadas(ruta);
         const laMejor = masBajaComparable(ruta);
         // Una oferta rechazada deja de tener versión: ya no se puede elegir.
@@ -1671,7 +1685,69 @@ function PanelComparar({ d, ctx, accion }: Props) {
         );
         return <Fragment key={ruta.id}>{tabla}</Fragment>;
       })}
+      {rutaVista && <PasarDeRuta d={d} actual={rutaVista} onIr={(id) => { setVista(id); requestAnimationFrame(() => document.getElementById("selector-rutas")?.scrollIntoView({ block: "start", behavior: "smooth" })); }} />}
     </>
+  );
+}
+
+// Chips de las rutas con su avance: ✓ decidida, sin ofertas en gris, la elegida en negro.
+function SelectorRutas({ d, vista, onVista }: { d: Detalle; vista: string | null; onVista: (id: string) => void }) {
+  const decidir = ["cerrado", "adjudicado"].includes(d.evento.estado);
+  const hechas = d.rutas.filter((r) => (decidir ? rutaDecidida(r) : conOferta(r).length > 0)).length;
+  const total = d.rutas.length;
+  return (
+    <nav className="tarjeta selector-rutas" id="selector-rutas" aria-label="Rutas del evento">
+      <div className="fila">
+        <b>{hechas} de {plural(total, "ruta")} {decidir ? (hechas === 1 ? "decidida" : "decididas") : "con ofertas"}</b>
+        <span className="avance-rutas" aria-hidden><i style={{ width: `${Math.round((hechas / total) * 100)}%` }} /></span>
+        <button type="button" className="btn-texto" onClick={() => onVista(vista ? "todas" : (d.rutas.find((r) => !rutaDecidida(r)) ?? d.rutas[0]).id)}>
+          {vista ? "Ver todas las rutas" : "Una ruta a la vez"}
+        </button>
+      </div>
+      {vista && (
+        <div className="chips-rutas">
+          {d.rutas.map((r) => {
+            const lista = rutaDecidida(r);
+            const sinOfertas = conOferta(r).length === 0;
+            const estado = lista ? "decidida" : sinOfertas ? "sin ofertas" : "pendiente";
+            return (
+              <button
+                key={r.id}
+                type="button"
+                className={`chip-ruta ${lista ? "lista" : sinOfertas ? "vacia" : ""}`}
+                aria-pressed={r.id === vista}
+                aria-label={`Ruta ${r.numero}, ${r.origen} → ${r.destino}, ${estado}`}
+                title={`${r.origen} → ${r.destino} · ${estado}`}
+                onClick={() => onVista(r.id)}
+              >
+                {lista && <I.Check size={13} />}{r.numero}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </nav>
+  );
+}
+
+// Al pie de la ruta: la anterior y la siguiente; con esta ya decidida, la siguiente pendiente va primero.
+function PasarDeRuta({ d, actual, onIr }: { d: Detalle; actual: Ruta; onIr: (id: string) => void }) {
+  const i = d.rutas.findIndex((r) => r.id === actual.id);
+  const antes = d.rutas[i - 1];
+  const despues = d.rutas[i + 1];
+  const orden = [...d.rutas.slice(i + 1), ...d.rutas.slice(0, i)];
+  const pendiente = ["cerrado", "adjudicado"].includes(d.evento.estado) && rutaDecidida(actual) ? orden.find((r) => !rutaDecidida(r)) : undefined;
+  return (
+    <div className="pasar-ruta">
+      {antes ? (
+        <button type="button" className="btn-secundario" onClick={() => onIr(antes.id)}>← Ruta {antes.numero}</button>
+      ) : <span />}
+      {pendiente ? (
+        <button type="button" className="btn-primario" onClick={() => onIr(pendiente.id)}>Siguiente pendiente: ruta {pendiente.numero} →</button>
+      ) : despues ? (
+        <button type="button" className="btn-secundario" onClick={() => onIr(despues.id)}>Ruta {despues.numero} →</button>
+      ) : <span />}
+    </div>
   );
 }
 
@@ -1688,7 +1764,7 @@ function porCarrier(ofertas: OfertaSinModelo[]): string {
 
 // Arriba de las rutas: una fila por ruta (salta a su tarjeta), el Excel del
 // evento completo y lo que hay que ver antes de adjudicar, una sola vez.
-function ResumenOfertas({ d, ctx }: { d: Detalle; ctx: Contexto }) {
+function ResumenOfertas({ d, ctx, onVerRuta }: { d: Detalle; ctx: Contexto; onVerRuta: (numero: number) => void }) {
   const filas = resumenPorRuta(d, ctx.hoy);
   const mixtos = modelosMixtos(d);
   const sinElegir = sinModelo(d);
@@ -1719,7 +1795,7 @@ function ResumenOfertas({ d, ctx }: { d: Detalle; ctx: Contexto }) {
             <tbody>
               {filas.map((x) => (
                 <tr key={x.ruta.id}>
-                  <td data-etiqueta="Ruta"><a href={`#ruta-${x.ruta.numero}`} onClick={(e) => { e.preventDefault(); document.getElementById(`ruta-${x.ruta.numero}`)?.scrollIntoView({ block: "start", behavior: "smooth" }); }}>{x.ruta.numero} · {x.ruta.origen} → {x.ruta.destino}</a></td>
+                  <td data-etiqueta="Ruta"><a href={`#ruta-${x.ruta.numero}`} onClick={(e) => { e.preventDefault(); onVerRuta(x.ruta.numero); }}>{x.ruta.numero} · {x.ruta.origen} → {x.ruta.destino}</a></td>
                   <td data-etiqueta="Ofertas">{x.ofertas || <span className="tenue">0</span>}{x.otraMoneda > 0 && <span className="tenue" title="No se comparan contra las demás ni contra el objetivo"> · {x.otraMoneda} en otra moneda</span>}</td>
                   <td data-etiqueta="Más baja">
                     {x.masBaja ? <><b>{x.masBaja.p.carrier}</b> · <span className="mono">{dinero(x.masBaja.allIn, x.masBaja.moneda)}</span>{x.masBaja.sinVigencia && <span className="alerta"> · sin vigencia</span>}{x.masBaja.vencida && <span className="alerta"> · vencida</span>}</> : "—"}

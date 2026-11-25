@@ -564,3 +564,17 @@ button.pill:hover { filter: brightness(0.96); }
   .fila-evento-accion a { min-height: 44px; padding: 0 16px; }
 }
 .buscador-campo input::-webkit-search-cancel-button { display: none; }
+
+/* Página del evento: una ruta a la vez (rediseño 25-nov). */
+.selector-rutas { display: flex; flex-direction: column; gap: 10px; scroll-margin-top: 12px; }
+.selector-rutas .fila { align-items: center; gap: 12px; }
+.avance-rutas { flex: 1; min-width: 80px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.avance-rutas i { display: block; height: 6px; background: var(--green); }
+.chips-rutas { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-ruta { display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-width: 44px; min-height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); font: inherit; font-family: var(--mono); font-weight: 700; cursor: pointer; }
+.chip-ruta:hover { border-color: var(--grey); }
+.chip-ruta.lista { background: var(--green-light, #edf5ef); border-color: transparent; color: var(--green); }
+.chip-ruta.vacia { border-style: dashed; color: var(--muted); }
+.chip-ruta[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+.pasar-ruta { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 4px 0 16px; }
+.pasar-ruta .btn-primario { background: var(--accent); }
