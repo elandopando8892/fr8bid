@@ -28,6 +28,7 @@ interface Fila {
   notas: string;
   cita: string;
   dudas: string[];
+  guardada: boolean; // ya entró como versión: un reintento no la repite
 }
 
 const TIPO: Record<Lectura["tipo"], string> = { oferta: "Mandó oferta", rechazo: "Rechazó", pregunta: "Hizo una pregunta", otro: "Sin oferta" };
@@ -65,7 +66,8 @@ function aFilas(d: Detalle, l: Lectura, carrierId: string): Fila[] {
       transito: o.diasTransito === null ? "" : String(o.diasTransito),
       notas: o.notas,
       cita: o.cita,
-      dudas: o.dudas
+      dudas: o.dudas,
+      guardada: false
     }];
   });
 }
@@ -90,11 +92,32 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
   const [revisando, setRevisando] = useState<LecturaGuardada | null>(null);
   // Ya se sumó lo que leyó el servidor: hasta entonces no se sabe si el correo de la bandeja está aquí.
   const [conServidor, setConServidor] = useState(false);
-  const [nota, setNota] = useState<string | null>(null);
+  // Aviso al llegar de la bandeja; con «quitar», la respuesta se puede retirar de Respuestas sin capturarla.
+  const [nota, setNota] = useState<{ texto: string; quitar?: LecturaGuardada } | null>(null);
   const enCurso = useRef(false);
 
   const carriers = new Map<string, string>();
   for (const r of d.rutas) for (const p of r.participaciones) if (capturable(r, p)) carriers.set(p.carrierId, p.carrier);
+  const puedeLeer = s.rol !== "viewer" && ["abierto", "cerrado"].includes(d.evento.estado);
+
+  // Deja la respuesta lista para todo el equipo. Si el servidor no contesta, queda pendiente en este
+  // navegador y se reintenta al volver a abrir el evento. false = el servidor no la tiene (la leyó
+  // solo este navegador): no está en la bandeja y no hay nada que avisar.
+  const avisarEquipo = async (correoId: string, desenlace: Desenlace) => {
+    let ok = true;
+    try {
+      await s.api.marcarLectura(d.evento.id, correoId, desenlace);
+    } catch {
+      ok = false;
+    }
+    const previa = cargarLecturas(d.evento.id);
+    if (!previa[correoId]) return ok;
+    const { marcaPendiente: _, ...sin } = previa[correoId];
+    const todas = { ...previa, [correoId]: ok ? sin : { ...sin, marcaPendiente: desenlace } };
+    guardarLecturas(d.evento.id, todas);
+    setLeidas(todas);
+    return ok;
+  };
 
   // Lectura automática: Rateware revisa cada 15 min y deja borradores; al abrir el evento se suman y la IA
   // lee aquí solo los correos que falten (hasta 5 por apertura).
@@ -102,7 +125,8 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
   useEffect(() => {
     // Cerrado a ofertas (plazo vencido) sigue admitiendo captura: se suman los borradores del servidor,
     // pero la IA solo lee aquí correos nuevos mientras el evento está abierto.
-    if (enCurso.current || s.rol === "viewer" || !["abierto", "cerrado"].includes(d.evento.estado) || !carriers.size) return;
+    // Sin carriers capturables igual se suman (para explicar una liga de la bandeja y poder quitarla).
+    if (enCurso.current || !puedeLeer) return;
     enCurso.current = true;
     void (async () => {
       // Primero lo que ya leyó la revisión programada de Rateware: no se paga dos veces.
@@ -110,7 +134,9 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
       guardarLecturas(d.evento.id, delServidor);
       setLeidas(delServidor);
       setConServidor(true);
-      const pendientes = d.evento.estado === "abierto" ? correosPendientes(d, carriers, delServidor) : [];
+      // Marcas que no llegaron al equipo la vez pasada.
+      for (const g of Object.values(delServidor)) if (g.marcaPendiente) await avisarEquipo(g.correoId, g.marcaPendiente);
+      const pendientes = d.evento.estado === "abierto" && carriers.size ? correosPendientes(d, carriers, delServidor) : [];
       for (const x of pendientes) {
         setLeyendoAuto(x.carrier);
         const base = { correoId: x.correo.id, carrierId: x.carrierId, carrier: x.carrier, en: x.correo.en, leidoEn: new Date().toISOString(), revisado: false };
@@ -134,11 +160,14 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
 
   // Llegó desde la bandeja: abre ese borrador (o el correo, si la IA no pudo leerlo) una sola vez.
   useEffect(() => {
-    if (!abrir || !conServidor) return;
-    const g = leidas[abrir];
-    if (!g) setNota("Esa respuesta no está entre los borradores de este evento. Puede que el carrier ya no admita captura.");
-    else if (g.revisado) setNota(`La respuesta de ${g.carrier} ya quedó lista.`);
-    else if (!carriers.has(g.carrierId)) setNota(`${g.carrier} ya no admite captura en este evento (tiene primario, declinó o no está invitado).`);
+    if (!abrir || (puedeLeer && !conServidor)) return;
+    const g = puedeLeer ? leidas[abrir] : undefined;
+    if (s.rol === "viewer") setNota({ texto: "Con el rol Consulta solo se ven las ofertas; la respuesta la atiende alguien del equipo." });
+    else if (!puedeLeer) setNota({ texto: "Este evento ya no está abierto a ofertas: esa respuesta ya no se captura aquí." });
+    else if (!g) setNota({ texto: "Esa respuesta ya no está entre los borradores de este evento." });
+    else if (g.revisado) setNota({ texto: `La respuesta de ${g.carrier} ya quedó lista.` });
+    else if (!carriers.has(g.carrierId))
+      setNota({ texto: `${g.carrier} ya no admite captura en este evento (tiene primario, declinó o no está invitado). Puedes quitar su respuesta de la bandeja.`, quitar: g });
     else if (g.lectura) revisar(g);
     else {
       setCarrierId(g.carrierId);
@@ -152,7 +181,23 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abrir, conServidor]);
 
-  if (s.rol === "viewer" || !carriers.size || d.evento.estado === "adjudicado" || d.evento.estado === "archivado") return null;
+  const quitarDeBandeja = async (g: LecturaGuardada) => {
+    const previa = cargarLecturas(d.evento.id);
+    const todas = { ...previa, [g.correoId]: { ...(previa[g.correoId] ?? g), revisado: true } };
+    guardarLecturas(d.evento.id, todas);
+    setLeidas(todas);
+    const ok = await avisarEquipo(g.correoId, "dismissed");
+    setNota(ok ? null : { texto: "No se pudo quitar de la bandeja del equipo. Se reintenta la próxima vez que abras este evento." });
+  };
+  const avisoNota = nota && (
+    <div id="lectura-ia" className="estado" role="status">
+      {nota.texto}{" "}
+      {nota.quitar && <button className="btn-texto" onClick={() => void quitarDeBandeja(nota.quitar!)}>Quitar de Respuestas</button>}{" "}
+      <button className="btn-texto" onClick={() => setNota(null)}>Entendido</button>
+    </div>
+  );
+
+  if (s.rol === "viewer" || !carriers.size || d.evento.estado === "adjudicado" || d.evento.estado === "archivado") return avisoNota || null;
 
   const porRevisar = lecturasPorRevisar(leidas, carriers);
   const revisar = (g: LecturaGuardada) => {
@@ -168,7 +213,6 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     setRevisando(g);
     setAbierto(true);
   };
-  const avisoNota = nota && <div id="lectura-ia" className="estado" role="status">{nota} <button className="btn-texto" onClick={() => setNota(null)}>Entendido</button></div>;
   if (!abierto)
     return (
       <>
@@ -205,16 +249,17 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
   // «Volver» o «Cancelar» solo lo cierran y lo dejan en la lista para después (recorrido 24-nov-2026).
   const cerrar = (desenlace: Desenlace | null = null) => {
     // El correo que se atendió: el borrador abierto o el que se trajo de Gmail para leerlo aquí.
-    const correoId = revisando?.correoId ?? traido?.id ?? null;
+    // Lo traído de Gmail manda: si se cambió de correo después de abrir un borrador, se marca el que se leyó.
+    const correoId = traido?.id ?? revisando?.correoId ?? null;
     if (desenlace && correoId) {
       const previa = cargarLecturas(d.evento.id);
-      const base: LecturaGuardada = revisando ?? previa[correoId] ?? { correoId, carrierId, carrier: carriers.get(carrierId) || "Carrier", en: new Date().toISOString(), leidoEn: new Date().toISOString(), lectura: null, fallo: null, revisado: false };
-      const todas = { ...previa, [correoId]: { ...base, revisado: true } };
+      const base: LecturaGuardada = previa[correoId] ?? (revisando?.correoId === correoId ? revisando : null) ?? { correoId, carrierId, carrier: carriers.get(carrierId) || "Carrier", en: new Date().toISOString(), leidoEn: new Date().toISOString(), lectura: null, fallo: null, revisado: false };
+      const todas = { ...previa, [correoId]: { ...base, revisado: true, marcaPendiente: desenlace } };
       guardarLecturas(d.evento.id, todas);
       setLeidas(todas);
-      s.api.marcarLectura(d.evento.id, correoId, desenlace).catch(() =>
-        setNota("Quedó listo en este navegador, pero no se pudo avisar al equipo: puede volver a salir en la bandeja de Respuestas.")
-      );
+      void avisarEquipo(correoId, desenlace).then((ok) => {
+        if (!ok) setNota({ texto: "Quedó lista aquí, pero no se pudo avisar al equipo. Se reintenta la próxima vez que abras este evento." });
+      });
     }
     setRevisando(null);
     limpiar();
@@ -236,6 +281,8 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
 
   const traer = async (c: CorreoRespuesta) => {
     limpiar();
+    // Desde aquí se atiende el correo traído, no el borrador con que se abrió el formulario.
+    setRevisando(null);
     setTrayendo(c.id);
     try {
       const t = await s.api.traerCorreo(d.evento.id, c.id);
@@ -281,7 +328,8 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
   const cambiar = (i: number, c: Partial<Fila>) => setFilas(filas.map((f, j) => (j === i ? { ...f, ...c } : f)));
   const numero = (x: string) => (x.trim() === "" ? null : Number(x));
   const valida = (f: Fila) => Number(f.tarifa.replace(/,/g, "")) > 0 && Boolean(f.moneda) && [f.capacidad, f.transito].every((x) => x.trim() === "" || Number.isFinite(Number(x)));
-  const elegidas = filas.filter((f) => f.incluir && f.p);
+  const elegidas = filas.filter((f) => f.incluir && f.p && !f.guardada);
+  const yaGuardadas = filas.filter((f) => f.guardada).length;
   // Rechazo o pregunta: sale de los intentos en las rutas donde aún no oferta.
   const sinOferta = d.rutas.flatMap((r) => r.participaciones.filter((p) => p.carrierId === carrierId && !p.versiones.length && ["invitada", "vista"].includes(p.estado)));
 
@@ -340,6 +388,8 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
         <div className="fila-botones">
           <button className="btn-primario" disabled={!carrierId || (texto.trim().length < 3 && !adjuntos.length && !anexos.length) || leyendo} onClick={leer}>{leyendo ? "Leyendo…" : "Leer con IA"}</button>
           <button className="btn-texto" onClick={() => cerrar()}>Cancelar</button>
+          {/* Un correo que la IA no pudo leer (por ejemplo, un Excel) también se puede dar por atendido. */}
+          {(revisando || traido) && <button className="btn-texto" onClick={() => cerrar("dismissed")}>Descartar este correo</button>}
         </div>
       )}
       {error && <div className="estado estado-error" role="alert">{error}</div>}
@@ -355,13 +405,14 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
           {filas.map((f, i) => (
             <div key={f.ruta.id} className="aviso-caja atencion">
               <label className="fila-icono">
-                <input type="checkbox" checked={f.incluir} disabled={!f.p} onChange={(e) => cambiar(i, { incluir: e.target.checked })} />
+                <input type="checkbox" checked={f.incluir} disabled={!f.p || f.guardada} onChange={(e) => cambiar(i, { incluir: e.target.checked })} />
                 <strong>Ruta {f.ruta.numero} · {f.ruta.origen} → {f.ruta.destino}</strong>
               </label>
               {!f.p && <p className="tenue">{carrier} no tiene una invitación capturable en esta ruta.</p>}
+              {f.guardada && <p className="tenue">Ya guardada como nueva versión.</p>}
               {f.cita && <p className="tenue">«{f.cita}»</p>}
               {f.dudas.length > 0 && <ul>{f.dudas.map((x, j) => <li key={j}>{x}</li>)}</ul>}
-              {f.p && (
+              {f.p && !f.guardada && (
                 <>
                   <div className="rejilla">
                     <label className="campo"><span>Tarifa all-in</span><input inputMode="decimal" value={f.tarifa} onChange={(e) => cambiar(i, { tarifa: e.target.value })} /></label>
@@ -388,7 +439,8 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
                   // Solo queda lista si todo se guardó: con un error el borrador sigue a la vista.
                   let hecho = false;
                   await accion(async () => {
-                    for (const f of elegidas)
+                    // Una por una; cada una que entra se marca, para que un reintento tras un error no la repita.
+                    for (const f of elegidas) {
                       await s.api.capturarOferta({
                         eventId: d.evento.id,
                         participacionId: f.p!.id,
@@ -401,6 +453,8 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
                         notas: f.notas,
                         leidaConIA: true
                       });
+                      setFilas((xs) => xs.map((x) => (x.ruta.id === f.ruta.id ? { ...x, guardada: true, incluir: false } : x)));
+                    }
                     hecho = true;
                     return elegidas.length;
                   }, (n) => `${plural(n, "oferta capturada", "ofertas capturadas")}.`);
@@ -424,8 +478,9 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
                 }}
               />
             )}
-            {revisando && <button className="btn-texto" onClick={() => cerrar()}>Volver a la lista</button>}
-            <button className="btn-texto" onClick={() => cerrar("dismissed")}>Descartar</button>
+            {/* Con parte ya guardada no se vuelve a la lista: al reabrir el borrador se podría repetir. */}
+            {revisando && !yaGuardadas && <button className="btn-texto" onClick={() => cerrar()}>Volver a la lista</button>}
+            <button className="btn-texto" onClick={() => cerrar(yaGuardadas ? "captured" : "dismissed")}>{yaGuardadas ? "Terminar sin guardar las demás" : "Descartar"}</button>
           </div>
         </div>
       )}

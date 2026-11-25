@@ -3,6 +3,7 @@
 // deja su propuesta como borrador. Nada se guarda como oferta sin confirmar.
 // Lo leído se recuerda en este navegador para no pagar dos veces la misma lectura.
 
+import type { Desenlace } from "./bandeja.js";
 import type { Lectura } from "./lectura.js";
 import type { CorreoRespuesta, Detalle } from "./tipos.js";
 
@@ -20,6 +21,8 @@ export interface LecturaGuardada {
   lectura: (Lectura & { recortado: boolean }) | null;
   fallo: string | null;
   revisado: boolean; // ya se guardó o se descartó: no se vuelve a mostrar
+  // Quedó lista aquí, pero el aviso al equipo (marca en el servidor) falló: se reintenta al abrir el evento.
+  marcaPendiente?: Desenlace;
 }
 
 export interface Pendiente {

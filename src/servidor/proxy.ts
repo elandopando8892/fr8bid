@@ -194,7 +194,7 @@ function filtrarProtegidos(body: any): any {
   if (body?.event && esProtegido(body.event.id)) return null;
   if (!body) return body;
   let limpio = body;
-  for (const k of ["rows", "events"]) {
+  for (const k of ["rows", "events", "readings"]) {
     if (Array.isArray(body[k])) limpio = { ...limpio, [k]: body[k].filter((e: any) => !esProtegido(e?.id) && !esProtegido(e?.rfx_event_id)) };
   }
   return limpio;

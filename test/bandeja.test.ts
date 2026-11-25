@@ -5,7 +5,7 @@ import { ErrorApi, MesaApi, transporteSimulado } from "../src/cliente/api";
 import { aBandeja, aRespuestaBandeja, ligaRespuesta } from "../src/dominio/bandeja";
 import { combinarLecturas, type LecturaGuardada, type LecturaServidor } from "../src/dominio/lecturaAutomatica";
 import { EVENTOS_PROTEGIDOS } from "../src/dominio/protegidos";
-import { ESCRITURAS, LECTURAS } from "../src/servidor/proxy";
+import { ESCRITURAS, LECTURAS, manejar } from "../src/servidor/proxy";
 import { revisar, sinProtegidos } from "../src/servidor/paso";
 import type { RatewareSimulado } from "../src/simulado/rateware";
 import { crearSimulado } from "../src/simulado/semilla";
@@ -80,9 +80,18 @@ describe("proxy", () => {
     expect(revisar({ fn: "rateware-api", json: { action: "mark_rfx_reply_reading", event_id: "e", gmail_message_id: "msg000001", outcome: "dismissed" }, autorizacion: "Bearer x", modo: "no" })?.status).toBe(423);
   });
 
-  it("HDships no aparece en la bandeja ni se puede marcar", () => {
+  it("HDships no aparece en la bandeja ni se puede marcar", async () => {
     const hd = [...EVENTOS_PROTEGIDOS][0];
     expect(sinProtegidos({ readings: [fila(), fila({ rfx_event_id: hd })] }).readings.map((r: any) => r.rfx_event_id)).toEqual(["ev-1"]);
+    // La ruta que usa la app (/api/rateware) también lo quita de la respuesta completa.
+    const r = await manejar("rateware-api", { action: "list_rfx_reply_inbox" }, "Bearer x", {
+      permitirEscrituras: false,
+      real: true,
+      enviar: async () => ({ status: 200, body: { readings: [fila(), fila({ rfx_event_id: hd })], has_more: false }, headers: {} })
+    } as any);
+    expect(r.status).toBe(200);
+    expect(JSON.stringify(r.body)).not.toContain(hd);
+    expect((r.body as any).readings).toHaveLength(1);
     expect(revisar({ fn: "rateware-api", json: { action: "mark_rfx_reply_reading", event_id: hd, gmail_message_id: "msg000001", outcome: "dismissed" }, autorizacion: "Bearer x", modo: "si" })?.status).toBe(404);
   });
 });
