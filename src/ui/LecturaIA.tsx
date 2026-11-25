@@ -141,7 +141,8 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     const previa = cargarLecturas(d.evento.id);
     if (!previa[correoId]) return ok;
     const { marcaPendiente: _, marcaDe: __, ...sin } = previa[correoId];
-    const todas = { ...previa, [correoId]: ok || !desenlace ? sin : { ...sin, marcaPendiente: desenlace, marcaDe: s.correo ?? null } };
+    // Al llegar la marca queda lista aquí también (aunque otra cuenta la hubiera reabierto en este navegador).
+    const todas = { ...previa, [correoId]: ok || !desenlace ? { ...sin, revisado: true } : { ...sin, marcaPendiente: desenlace, marcaDe: s.correo ?? null } };
     guardarLecturas(d.evento.id, todas);
     setLeidas(todas);
     return ok;
@@ -179,9 +180,9 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
         else if (g.marcaDe === (s.correo ?? null)) await avisarEquipo(g.correoId, g.marcaPendiente);
         else {
           // La dejó otra cuenta y no llegó al equipo: para esta cuenta sigue por atender (Rateware manda).
+          // El pendiente se conserva: cuando vuelva esa cuenta, lo reintenta.
           const todas = cargarLecturas(d.evento.id);
-          const { marcaPendiente: _, marcaDe: __, ...sin } = todas[g.correoId];
-          todas[g.correoId] = { ...sin, revisado: false };
+          todas[g.correoId] = { ...todas[g.correoId], revisado: false };
           guardarLecturas(d.evento.id, todas);
           delServidor[g.correoId] = todas[g.correoId];
           setLeidas({ ...delServidor });
@@ -534,6 +535,7 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
                 onConfirmar={async () => {
                   // Solo queda lista si todo se guardó: con un error el borrador sigue a la vista.
                   let hecho = false;
+                  let quedan = false;
                   await accion(async () => {
                     // Una por una; cada una que entra se marca, para que un reintento tras un error no la repita.
                     for (const f of elegidas) {
@@ -554,9 +556,12 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
                       recordar(f.ruta.id, { guardada: true });
                     }
                     hecho = true;
+                    quedan = filas.some((x) => x.p && !x.guardada && !elegidas.includes(x) && x.tarifa.trim() !== "");
                     return elegidas.length;
                   }, (n) => `${plural(n, "oferta capturada", "ofertas capturadas")}.`);
-                  if (hecho) cerrar("captured");
+                  // Si quedan rutas con tarifa sin guardar, el borrador sigue abierto: se guardan o se cierra
+                  // a propósito con «Terminar sin guardar las demás».
+                  if (hecho && !quedan) cerrar("captured");
                 }}
               />
             )}

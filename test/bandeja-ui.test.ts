@@ -150,6 +150,18 @@ describe("borrador abierto desde la bandeja", () => {
     expect(sesion.api.capturarOferta.mock.calls.map((c: any[]) => c[0].participacionId)).toEqual(["p2"]);
   });
 
+  it("guardar solo parte de las rutas no deja la respuesta lista: hay que cerrarla a propósito", async () => {
+    // La ruta 2 sale sin marcar (posible duplicado); se guarda solo la 1.
+    detalle = detalleBase({ p2: [capturada(1200)] });
+    await render("msgoferta1");
+    await clic(/Guardar 1 oferta/);
+    await clic("Sí, confirmar");
+    expect(sesion.api.marcarLectura).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Borrador de la IA");
+    await clic("Terminar sin guardar las demás");
+    expect(sesion.api.marcarLectura).toHaveBeenCalledWith(EV, "msgoferta1", "captured");
+  });
+
   it("si Rateware no da los borradores, la liga se conserva, no se lee nada nuevo y se puede reintentar", async () => {
     sesion.api.lecturasServidor = vi.fn(async () => { throw new Error("503"); });
     await render("msgoferta1");
@@ -197,12 +209,23 @@ describe("borrador abierto desde la bandeja", () => {
     // La marca sí había entrado (la respuesta se perdió): se limpia sin escribir.
     await act(async () => root.unmount());
     root = createRoot(container);
+    // El pendiente de la primera cuenta se conserva.
+    expect(cargarLecturas(EV).msgoferta1).toMatchObject({ marcaPendiente: "dismissed", marcaDe: "operador@equipo.mx" });
+
     // La primera cuenta vuelve; la marca sí había entrado (la respuesta se perdió): se limpia sin escribir.
-    almacen.set(`fr8bid-lecturas-ia-${EV}`, JSON.stringify({ msgoferta1: { ...cargarLecturas(EV).msgoferta1, revisado: true, marcaPendiente: "dismissed", marcaDe: "operador@equipo.mx" } }));
     sesion.correo = "operador@equipo.mx";
     sesion.api.lecturasServidor = vi.fn(async () => [servidor({ reviewed_at: "2026-11-25T12:00:00Z", review_outcome: "dismissed" })]);
     await render(null);
     expect(sesion.api.marcarLectura).not.toHaveBeenCalled();
+    expect(cargarLecturas(EV).msgoferta1).toMatchObject({ revisado: true });
+    expect(cargarLecturas(EV).msgoferta1.marcaPendiente).toBeUndefined();
+  });
+
+  it("si la otra cuenta reabrió la respuesta, la primera igual reintenta su marca al volver", async () => {
+    almacen.set(`fr8bid-lecturas-ia-${EV}`, JSON.stringify({ msgoferta1: { correoId: "msgoferta1", carrierId: "c1", carrier: "Grupo Omega", en: "2026-11-25T10:00:00Z", leidoEn: "2026-11-25T10:05:00Z", lectura: null, fallo: null, revisado: false, marcaPendiente: "captured", marcaDe: "operador@equipo.mx" } }));
+    await render(null);
+    expect(sesion.api.marcarLectura).toHaveBeenCalledWith(EV, "msgoferta1", "captured");
+    expect(cargarLecturas(EV).msgoferta1).toMatchObject({ revisado: true });
     expect(cargarLecturas(EV).msgoferta1.marcaPendiente).toBeUndefined();
   });
 
