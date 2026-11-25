@@ -27,6 +27,8 @@ import { NEED_REASON } from "@/lib/roles";
 import { Spinner, ErrorBanner, InfoBanner, Empty, Pill } from "@/components/ui";
 import type { Vendor } from "@/types/domain";
 import { LegalNameUnder } from "./LegalName";
+import { coincide, enOtrasEtapas } from "./busqueda";
+import { paginar } from "@/lib/paginar";
 
 type Column = BaseStage | FunnelStage;
 type Row = Vendor & { effective_funnel_stage?: string; funnel_stage?: string; stage_days?: number | null };
@@ -68,6 +70,7 @@ export function CarrierCrmPage() {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [cardVersion, setCardVersion] = useState(0);
   const [search, setSearch] = useState("");
+  const [numPagina, setNumPagina] = useState(1);
   const [target, setTarget] = useState<Column>("invited");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -96,14 +99,20 @@ export function CarrierCrmPage() {
     );
   }, [getLang(), column, funnel.data, sourcing.data, archived.data]);
 
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((v) =>
-      [v.vendor_name, v.legal_name, v.profile_legal_name, v.domain, v.primary_email]
-        .some((f) => String(f ?? "").toLowerCase().includes(q)),
-    );
-  }, [getLang(), rows, search]);
+  const visible = useMemo(() => rows.filter((v) => coincide(v, search)), [getLang(), rows, search]);
+  // 25 por página: una etapa con cientos de carriers ya no pinta cientos de casillas.
+  const pagina = paginar(visible, numPagina);
+
+  // Con búsqueda, cuántos hay en las otras etapas (con un botón para ir).
+  const otras = useMemo(() => {
+    const funnelRows = (funnel.data?.rows ?? []) as Row[];
+    const porEtapa: [string, Row[]][] = [
+      ["sourcing", sourcing.data?.rows ?? []],
+      ...FUNNEL_STAGES.map((st) => [st, funnelRows.filter((r) => (r.effective_funnel_stage || r.funnel_stage) === st)] as [string, Row[]]),
+      ["archived", archived.data?.rows ?? []],
+    ];
+    return enOtrasEtapas(porEtapa, column, search);
+  }, [getLang(), column, search, funnel.data, sourcing.data, archived.data]);
 
   // La ficha abre solo cuando eliges un carrier: abrir la primera fila por sí sola invitaba a
   // cambiar el estatus de un carrier que nadie escogió.
@@ -113,6 +122,7 @@ export function CarrierCrmPage() {
 
   function pickColumn(next: Column) {
     setColumn(next);
+    setNumPagina(1);
     setSelected(new Set());
     setFocusId(null);
     setNotice(null);
@@ -127,7 +137,8 @@ export function CarrierCrmPage() {
     });
   }
 
-  const allVisibleSelected = visible.length > 0 && visible.every((v) => selected.has(v.id));
+  const allVisibleSelected = pagina.filas.length > 0 && pagina.filas.every((v) => selected.has(v.id));
+  const todosSeleccionados = visible.length > 0 && visible.every((v) => selected.has(v.id));
 
   function reloadAll() {
     funnel.reload();
@@ -231,6 +242,20 @@ export function CarrierCrmPage() {
         />
       )}
 
+      {/* Buscar primero (prioridad 7): la búsqueda va antes de las etapas. */}
+      <div className="crm-tools crm-tools-arriba">
+        <input
+          className="crm-search"
+          type="search"
+          aria-label={tr("text081")}
+          placeholder={tr("text081")}
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setNumPagina(1);
+          }}
+        />
+      </div>
       <nav className="crm-stages" aria-label={tr("text078")}>
         {pestanas.map((c) => (
           <button
@@ -257,14 +282,16 @@ export function CarrierCrmPage() {
             <InfoBanner title={tr("text080")}>{funnel.data.warnings.join(" · ")}</InfoBanner>
           ) : null}
 
-          <div className="crm-tools">
-            <input
-              className="crm-search"
-              placeholder={tr("text081")}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+          {otras.length > 0 && (
+            <p className="crm-otras" role="status">
+              {getLang() === "es" ? "También en:" : "Also in:"}
+              {otras.map(([etapa, n]) => (
+                <button key={etapa} className="link" onClick={() => pickColumn(etapa as Column)}>
+                  {STAGE_LABEL[etapa] ?? etapa} ({fmt(n)})
+                </button>
+              ))}
+            </p>
+          )}
           {selected.size > 0 && (
             <div className="crm-selection" role="region" aria-label={tr("text077")}>
               <b>{tr("text242", fmt(selected.size))}</b>
@@ -296,6 +323,7 @@ export function CarrierCrmPage() {
           {loading ? (
             <Spinner label={tr("text086")} />
           ) : visible.length ? (
+            <>
             <div className="crm-table-wrap">
               <table className="data crm-table">
                 <thead>
@@ -306,7 +334,11 @@ export function CarrierCrmPage() {
                         aria-label={tr("text082")}
                         checked={allVisibleSelected}
                         onChange={() =>
-                          setSelected(allVisibleSelected ? new Set() : new Set(visible.map((v) => v.id)))
+                          setSelected((prev) => {
+                            const s = new Set(prev);
+                            for (const v of pagina.filas) allVisibleSelected ? s.delete(v.id) : s.add(v.id);
+                            return s;
+                          })
                         }
                       />
                     </th>
@@ -318,7 +350,7 @@ export function CarrierCrmPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visible.map((v) => {
+                  {pagina.filas.map((v) => {
                     const effective = v.effective_funnel_stage;
                     const stored = v.funnel_stage;
                     const status = String(v.status || "").toLowerCase();
@@ -366,6 +398,29 @@ export function CarrierCrmPage() {
                 </tbody>
               </table>
             </div>
+              {pagina.paginas > 1 && (
+                <nav className="crm-paginas" aria-label={getLang() === "es" ? "Páginas" : "Pages"}>
+                  <span>
+                    {getLang() === "es"
+                      ? `${fmt(pagina.desde)}–${fmt(pagina.hasta)} de ${fmt(pagina.total)}`
+                      : `${fmt(pagina.desde)}–${fmt(pagina.hasta)} of ${fmt(pagina.total)}`}
+                    {allVisibleSelected && !todosSeleccionados && (
+                      <button className="link" onClick={() => setSelected(new Set(visible.map((v) => v.id)))}>
+                        {getLang() === "es" ? ` · Seleccionar los ${fmt(visible.length)}` : ` · Select all ${fmt(visible.length)}`}
+                      </button>
+                    )}
+                  </span>
+                  <div>
+                    <button disabled={pagina.pagina <= 1} onClick={() => setNumPagina(pagina.pagina - 1)}>
+                      {getLang() === "es" ? "Anterior" : "Previous"}
+                    </button>
+                    <button disabled={pagina.pagina >= pagina.paginas} onClick={() => setNumPagina(pagina.pagina + 1)}>
+                      {getLang() === "es" ? "Siguiente" : "Next"}
+                    </button>
+                  </div>
+                </nav>
+              )}
+            </>
           ) : (
             <Empty
               title={tr("text095", STAGE_LABEL[column])}

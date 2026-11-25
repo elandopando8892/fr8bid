@@ -20,6 +20,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { NEED_REASON } from "@/lib/roles";
 import { Spinner, ErrorBanner, InfoBanner, Empty, dateShort } from "@/components/ui";
 import type { CarrierListTemplate } from "@/types/domain";
+import { agruparPorFamilia, esBitacora, OTRAS, partesNombre } from "./familias";
 
 type Lifecycle = "active" | "draft" | "archived";
 
@@ -79,6 +80,8 @@ function CarrierTemplatesContent() {
   const [focusId, setFocusId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Familias abiertas; con búsqueda se abren todas las que tienen resultados.
+  const [abiertas, setAbiertas] = useState<Set<string>>(new Set());
 
   const all = error ? [] : data?.rows ?? [];
   const counts = useMemo(() => {
@@ -98,6 +101,15 @@ function CarrierTemplatesContent() {
 
   // La ficha abre solo cuando eliges una lista, no con la primera por omisión.
   const focused = rows.find((t) => t.id === focusId) ?? null;
+  const familias = useMemo(() => agruparPorFamilia(rows, templateName), [rows]);
+  const buscando = search.trim().length > 0;
+  const abierta = (nombre: string) => buscando || familias.length === 1 || abiertas.has(nombre);
+  const alternar = (nombre: string) =>
+    setAbiertas((prev) => {
+      const s = new Set(prev);
+      s.has(nombre) ? s.delete(nombre) : s.add(nombre);
+      return s;
+    });
 
   async function run(id: string, fn: () => Promise<unknown>, ok: string) {
     setBusyId(id);
@@ -191,48 +203,71 @@ function CarrierTemplatesContent() {
                       <th className="tpl-col-actions">{tr("text023")}</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {rows.map((t) => {
-                      const lc = lifecycleOf(t);
-                      const busy = busyId === t.id;
-                      return (
-                        <tr
-                          key={t.id}
-                          className={focused?.id === t.id ? "picked" : undefined}
-                          onClick={() => setFocusId(t.id)}
-                        >
-                          <td>
-                            <div className="tpl-name ellipsis" title={templateName(t)}>
-                              {templateName(t)}
-                            </div>
-                            {t.description && (
-                              <div className="tpl-desc ellipsis" title={splitDescription(t.description).head}>
-                                {splitDescription(t.description).head}
-                              </div>
-                            )}
-                          </td>
-                          <td className="mono tpl-col-members">{memberCount(t)}</td>
-                          <td className="tpl-col-state">
-                            <span className={`tpl-state ${lc}`}>{STATE_LABEL[lc] ?? lc.toUpperCase()}</span>
-                          </td>
-                          <td className="tpl-col-date">{dateShort(t.updated_at)}</td>
-                          <td className="tpl-col-actions" onClick={(e) => e.stopPropagation()}>
-                            {lc === "archived" ? (
-                              <button className="link" disabled={busy || Boolean(adminOnly)} title={adminOnly} onClick={() => restore(t)}>
-                                {tr("text024")}</button>
-                            ) : (
-                              <>
-                                <Link to={`/templates/${t.id}/edit`}>{tr("text025")}</Link>
-                                {" · "}
-                                <button className="link" disabled={busy || Boolean(locked)} title={locked} onClick={() => askDuplicate(t)}>
-                                  {tr("text026")}</button>
-                              </>
-                            )}
+                  {familias.map((f) => {
+                    const abre = abierta(f.nombre);
+                    return (
+                      <tbody key={f.nombre}>
+                        <tr className="tpl-familia">
+                          <td colSpan={5}>
+                            <button
+                              type="button"
+                              className="tpl-familia-boton"
+                              aria-expanded={abre}
+                              disabled={buscando || familias.length === 1}
+                              onClick={() => alternar(f.nombre)}
+                            >
+                              <span aria-hidden="true">{abre ? "▾" : "▸"}</span> <b>{f.nombre}</b>
+                              <span className="tpl-familia-cuenta">
+                                {f.listas.length} {language === "es" ? (f.listas.length === 1 ? "lista" : "listas") : f.listas.length === 1 ? "list" : "lists"}
+                              </span>
+                              {!abre && f.nombre !== OTRAS && <span className="tpl-familia-equipos ellipsis">{f.equipos.join(" · ")}</span>}
+                            </button>
                           </td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
+                        {abre && f.listas.map((t) => {
+                          const lc = lifecycleOf(t);
+                          const busy = busyId === t.id;
+                          return (
+                            <tr
+                              key={t.id}
+                              className={focused?.id === t.id ? "picked" : undefined}
+                              onClick={() => setFocusId(t.id)}
+                            >
+                              <td>
+                                <div className="tpl-name ellipsis" title={templateName(t)}>
+                                  {nombreEnFamilia(t)}
+                                  {partesNombre(templateName(t)).ampliada && <span className="tpl-ampliada">{language === "es" ? "Ampliada" : "Extended"}</span>}
+                                </div>
+                                {t.description && !esBitacora(t.description) && (
+                                  <div className="tpl-desc ellipsis" title={splitDescription(t.description).head}>
+                                    {splitDescription(t.description).head}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="mono tpl-col-members">{memberCount(t)}</td>
+                              <td className="tpl-col-state">
+                                <span className={`tpl-state ${lc}`}>{STATE_LABEL[lc] ?? lc.toUpperCase()}</span>
+                              </td>
+                              <td className="tpl-col-date">{dateShort(t.updated_at)}</td>
+                              <td className="tpl-col-actions" onClick={(e) => e.stopPropagation()}>
+                                {lc === "archived" ? (
+                                  <button className="link" disabled={busy || Boolean(adminOnly)} title={adminOnly} onClick={() => restore(t)}>
+                                    {tr("text024")}</button>
+                                ) : (
+                                  <>
+                                    <Link to={`/templates/${t.id}/edit`}>{tr("text025")}</Link>
+                                    {" · "}
+                                    <button className="link" disabled={busy || Boolean(locked)} title={locked} onClick={() => askDuplicate(t)}>
+                                      {tr("text026")}</button>
+                                  </>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    );
+                  })}
                 </table>
               </div>
             ) : (
@@ -256,6 +291,12 @@ function CarrierTemplatesContent() {
       </div>
     </>
   );
+}
+
+/** Dentro de su familia la lista se nombra por su equipo; «Otras listas» conserva el nombre completo. */
+function nombreEnFamilia(t: CarrierListTemplate): string {
+  const p = partesNombre(templateName(t));
+  return p.familia === OTRAS ? templateName(t).replace(/\s*·\s*ampliada$/i, "") : p.equipo;
 }
 
 /** The template being looked at: its facts, a look at who is in it, and what can be done. */
@@ -290,7 +331,10 @@ function TemplateSide({
   }
 
   const lc = lifecycleOf(t);
-  const description = splitDescription(t.description);
+  // Si la primera línea es pura bitácora, todo va a Historial.
+  const description = esBitacora(t.description)
+    ? { head: "", rest: String(t.description ?? "").trim() }
+    : splitDescription(t.description);
   const total = memberCount(t);
   const names = new Map((members.data ?? []).map((v) => [v.id, vendorLabel(v)]));
 
