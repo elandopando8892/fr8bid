@@ -204,6 +204,8 @@ export const COPY = {
     confirmAcceptOk: "Aceptar",
     confirmAcceptCancel: "Todavía no",
     downloadExcel: "Descargar en Excel",
+    unresolved: "No pudimos confirmar si tu aceptación quedó registrada. Vuelve a cargar para revisarla antes de aceptar otra vez.",
+    reload: "Volver a cargar",
     questions: "¿Dudas o algo que ajustar? Contesta al correo de tu contacto en MARKSMAN.",
     // Spot: one load, the short form
     spotTitle: "Tu carga",
@@ -400,6 +402,8 @@ export const COPY = {
     confirmAcceptOk: "Accept",
     confirmAcceptCancel: "Not yet",
     downloadExcel: "Download in Excel",
+    unresolved: "We couldn't confirm whether your acceptance was recorded. Reload to check before accepting again.",
+    reload: "Reload",
     questions: "Questions or something to adjust? Reply to your MARKSMAN contact's email.",
     spotTitle: "Your load",
     spotNotesHint: "Anything the carrier should know: appointments, handling, restrictions…",

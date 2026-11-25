@@ -549,7 +549,7 @@ async function guardaPropuesta(body: Record<string, unknown>, autorizacion: stri
   // términos cambiaron desde que abrió la confirmación, no se publica.
   if (body.proposal_fingerprint !== huellaPropuesta(propuesta))
     return error(409, "PROPUESTA_CAMBIO", "La propuesta cambió desde que la revisaste. Vuelve a cargar la página y revísala antes de publicar.");
-  body.lanes = lanesParaRateware(propuesta);
+  body.lanes = lanesParaRateware(propuesta, lectura.body);
   body.currency = propuesta.moneda;
   delete body.confirmed;
   delete body.confirmation_action;

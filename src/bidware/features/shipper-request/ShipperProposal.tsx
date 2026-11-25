@@ -3,7 +3,7 @@ import { confirmAsync } from "@/components/confirm";
 import { ErrorBanner } from "@/components/ui";
 import type { Copy } from "./request.copy";
 import type { Lang, ProposalLane, RequestProgress, RequestProposal } from "./request.model";
-import { acceptLanes, pendingLanes } from "./proposal.flow";
+import { acceptLanes, canAccept, pendingLanes, reconcile } from "./proposal.flow";
 import { acceptProposal, explainRequestError, loadRequest } from "./request.service";
 
 const money = (value: number | null, currency: string, lang: Lang) =>
@@ -96,9 +96,23 @@ export function ProposalTable({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [unresolved, setUnresolved] = useState(false);
   const accepted = new Map(proposal.accepted.map((row) => [row.rfx_lane_id, row]));
   const pending = pendingLanes(proposal);
-  const locked = proposal.expired || busy !== null;
+  const locked = !canAccept(proposal, busy !== null, unresolved);
+  const reload = async () => (await loadRequest(token)).proposal ?? null;
+
+  async function retryRead() {
+    if (busy) return;
+    setBusy("reload");
+    const result = await reconcile(proposal, null, { reload });
+    setUnresolved(result.unresolved);
+    if (!result.unresolved) {
+      setError(null);
+      onChange(result.proposal);
+    }
+    setBusy(null);
+  }
 
   async function accept(lanes: ProposalLane[], key: string) {
     if (!lanes.length || busy) return;
@@ -109,8 +123,9 @@ export function ProposalTable({
     setError(null);
     const result = await acceptLanes(proposal, lanes.map((lane) => lane.rfx_lane_id), {
       accept: (proposalId, laneIds) => acceptProposal(token, proposalId, laneIds),
-      reload: async () => (await loadRequest(token)).proposal ?? null,
+      reload,
     });
+    setUnresolved(result.unresolved);
     onChange(result.proposal);
     if (result.error) setError(explainRequestError(result.error, lang, brand));
     setBusy(null);
@@ -131,7 +146,15 @@ export function ProposalTable({
         </button>
       </div>
       {proposal.expired && <ErrorBanner message={copy.expired} />}
-      {error && <ErrorBanner message={error} />}
+      {error && !unresolved && <ErrorBanner message={error} />}
+      {unresolved && (
+        <div className="sr-proposal-foot" role="alert">
+          <ErrorBanner message={copy.unresolved} />
+          <button type="button" className="btn" disabled={busy !== null} onClick={() => void retryRead()}>
+            {busy === "reload" ? "…" : copy.reload}
+          </button>
+        </div>
+      )}
       <div className="sr-proposal-table">
         <table>
           <thead>

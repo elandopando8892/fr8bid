@@ -6,7 +6,7 @@ import { detalle } from "../src/cliente/mapear";
 import { compararPropuesta, huellaPropuesta, leerPropuestaPublicada, propuestaDelEvento, type PropuestaPublicada } from "../src/dominio/propuesta";
 import { manejar } from "../src/servidor/proxy";
 import { MesaApi } from "../src/cliente/api";
-import { acceptLanes, pendingLanes, progressAfter } from "../src/bidware/features/shipper-request/proposal.flow";
+import { acceptLanes, canAccept, pendingLanes, progressAfter, reconcile } from "../src/bidware/features/shipper-request/proposal.flow";
 import { mensajeDelServidor } from "../src/dominio/errores";
 import { revisar } from "../src/servidor/paso";
 import { explainRequestError } from "../src/bidware/features/shipper-request/request.service";
@@ -39,7 +39,9 @@ describe("propuestaDelEvento", () => {
     expect(p.faltan).toEqual([]);
     expect(p.moneda).toBe("USD");
     expect(p.lineas.map((l) => [l.numero, l.venta])).toEqual([[1, 1100], [2, 2240]]);
-    expect(JSON.stringify(p)).not.toMatch(/Carrier Secreto|lv-1|1000/);
+    // primarioId solo viaja a Rateware para comprobar lo revisado; lo demás no nombra carrier ni costo.
+    expect(p.lineas.map((l) => l.primarioId)).toEqual(["lv-1", "lv-3"]);
+    expect(JSON.stringify(p.lineas.map(({ primarioId: _p, ...resto }) => resto))).not.toMatch(/Carrier Secreto|lv-1|1000/);
   });
 
   it("dice qué falta: sin primario, sin modelo comercial o monedas mezcladas; las desiertas no van", () => {
@@ -81,12 +83,22 @@ describe("proxy: publicar la propuesta", () => {
     const r = await manejar("rateware-api", publicar(), "Bearer x", op(det, env));
     expect(r.status).toBe(200);
     const enviado = env.find((b) => b.action === "publish_rfx_shipper_proposal")!;
-    expect(enviado.lanes).toEqual([{ rfx_lane_id: L1, sell_rate: 1100 }]);
+    // Id de ruta, venta y lo que se usó para calcularla (Rateware lo compara bajo candado).
+    expect(enviado.lanes).toEqual([{
+      rfx_lane_id: L1,
+      sell_rate: 1100,
+      expected: {
+        primary_id: "lv-1",
+        primary: { bid_rate: 1000, currency: "USD", commercial_model: "cost_plus", carrier_share_pct: null, marksman_margin_pct: 10 },
+        lane: { origin: "Origen 1", destination: "Destino 1", equipment: "Dry Van", weekly_volume: 3 },
+        master_package: null
+      }
+    }]);
     expect(enviado.currency).toBe("USD");
     expect(enviado.valid_through).toBe("2026-12-25");
     expect(enviado).not.toHaveProperty("confirmed");
     expect(enviado).not.toHaveProperty("proposal_fingerprint");
-    expect(JSON.stringify(enviado)).not.toMatch(/Carrier Secreto|bid_rate/);
+    expect(JSON.stringify(enviado)).not.toMatch(/Carrier Secreto|vendor_id|vendors/);
   });
 
   it("no acepta rutas ni precios del navegador, ni sin confirmar, ni con vigencia pasada", async () => {
@@ -251,6 +263,20 @@ describe("página del shipper: aceptar y recuperarse", () => {
     accepted: accepted.map((id) => ({ rfx_lane_id: id, accepted_at: "2026-11-26", accepted_by_name: null })), ...extra
   });
 
+  it("tras una respuesta incierta sin poder leer la liga, aceptar queda bloqueado hasta que una lectura funcione", async () => {
+    const antes = prop();
+    const r = await acceptLanes(antes, [L1], { accept: async () => { throw new Error("Failed to fetch"); }, reload: async () => { throw new Error("Failed to fetch"); } });
+    expect(r.unresolved).toBe(true);
+    expect(canAccept(r.proposal!, false, r.unresolved)).toBe(false);
+    const fallaOtraVez = await reconcile(antes, null, { reload: async () => { throw new Error("Failed to fetch"); } });
+    expect(fallaOtraVez.unresolved).toBe(true);
+    const leida = await reconcile(antes, null, { reload: async () => prop([L1]) });
+    expect(leida).toMatchObject({ unresolved: false, error: null });
+    expect(canAccept(leida.proposal!, false, leida.unresolved)).toBe(true);
+    expect(pendingLanes(leida.proposal!).map((l) => l.rfx_lane_id)).toEqual([L2]);
+    expect(canAccept(prop([], { expired: true }), false, false)).toBe(false);
+  });
+
   it("pendientes y avance: el último paso se enciende al aceptar todas", () => {
     expect(pendingLanes(prop([L1])).map((l) => l.rfx_lane_id)).toEqual([L2]);
     const progreso = { stage: "proposal" } as any;
@@ -284,5 +310,6 @@ describe("página del shipper: aceptar y recuperarse", () => {
     const r = await acceptLanes(antes, [L1], { accept: async () => { throw new Error("Failed to fetch"); }, reload: async () => { throw new Error("Failed to fetch"); } });
     expect(r.proposal).toBe(antes);
     expect(r.error).toMatch(/fetch/);
+    expect(r.unresolved).toBe(true);
   });
 });

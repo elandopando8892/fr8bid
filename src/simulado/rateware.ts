@@ -901,8 +901,19 @@ export class RatewareSimulado {
           if (!lane || !(venta > 0)) throw new Falla(400, "Each lane needs to belong to the event and have a sell rate above zero.", "RFX_PROPOSAL_LANE_INVALID");
           if (vistas.has(lane.id)) throw new Falla(400, "A lane appears twice in the proposal.", "RFX_PROPOSAL_LANE_DUPLICATE");
           vistas.add(lane.id);
-          if (!this.laneVendors.some((lv) => lv.rfx_lane_id === lane.id && lv.award_role === "primary"))
+          const prim = this.laneVendors.filter((lv) => lv.rfx_lane_id === lane.id && lv.award_role === "primary");
+          if (prim.length !== 1)
             throw new Falla(409, "Every lane in the proposal needs a primary carrier.", "RFX_PROPOSAL_LANE_NOT_AWARDED");
+          // Como Rateware: lo revisado (primario, su tarifa y modelo, términos de la ruta,
+          // modelos aceptados) debe seguir igual; si no, RFX_PROPOSAL_STALE.
+          const esp = (x.expected ?? {}) as Fila;
+          const mismo = (a: unknown, b: unknown) => (a ?? null) === (b ?? null) || (typeof a === "number" || typeof b === "number" ? Number(a) === Number(b) && a != null && b != null : false);
+          const vigenteIgual =
+            esp.primary_id === prim[0].id &&
+            ["bid_rate", "currency", "commercial_model", "carrier_share_pct", "marksman_margin_pct"].every((k) => esp.primary && k in esp.primary && mismo(esp.primary[k], prim[0][k])) &&
+            ["origin", "destination", "equipment", "weekly_volume"].every((k) => esp.lane && k in esp.lane && mismo(esp.lane[k], lane[k])) &&
+            "master_package" in esp && JSON.stringify(esp.master_package ?? null) === JSON.stringify(event.rfx_master_package ?? null);
+          if (!vigenteIgual) throw new Falla(409, "The award or the lanes changed after the proposal was reviewed.", "RFX_PROPOSAL_STALE");
           return { rfx_lane_id: lane.id, lane_number: lane.lane_number, origin: lane.origin, destination: lane.destination, equipment: lane.equipment, weekly_volume: lane.weekly_volume ?? null, sell_rate: Math.round(venta * 100) / 100 };
         });
         const vigente = this.propuestas.find((x) => x.rfx_event_id === event.id && x.status === "published");

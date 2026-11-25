@@ -19,6 +19,8 @@ export interface LineaPropuesta {
   volumenSemanal: number | null;
   venta: number;
   moneda: string;
+  /** rfx_lane_vendors.id del primario (solo para Rateware; nunca llega al shipper). */
+  primarioId: string;
 }
 
 export interface FaltaPropuesta {
@@ -66,7 +68,8 @@ export function propuestaDelEvento(d: Detalle): Propuesta {
       equipo: ruta.equipo,
       volumenSemanal: ruta.volumenSemanal,
       venta: venta.venta,
-      moneda: (v.moneda || ruta.moneda || "USD").toUpperCase()
+      moneda: (v.moneda || ruta.moneda || "USD").toUpperCase(),
+      primarioId: String(p.id)
     });
   }
   const monedas = new Set(lineas.map((l) => l.moneda));
@@ -74,10 +77,27 @@ export function propuestaDelEvento(d: Detalle): Propuesta {
   return { lineas, faltan, moneda: monedas.size === 1 ? [...monedas][0] : null, desiertas };
 }
 
-// Lo que Rateware recibe: id de la ruta y venta. Rateware toma origen, destino,
-// equipo y volumen de su propia ruta y guarda solo eso.
-export function lanesParaRateware(p: Propuesta) {
-  return p.lineas.map((l) => ({ rfx_lane_id: l.rutaId, sell_rate: l.venta }));
+// Lo que Rateware recibe: id de la ruta, venta y lo que se usó para calcularla, tal
+// como vino en la lectura fresca (`crudo`, list_rfx_detail): el primario, su tarifa y
+// modelo comercial, los términos de la ruta y los modelos aceptados del evento.
+// Rateware lo compara con la ruta y el primario bloqueados y rechaza si cambió
+// (RFX_PROPOSAL_STALE); guarda solo datos de la ruta y la venta.
+const CLAVES_PRIMARIO = ["bid_rate", "currency", "commercial_model", "carrier_share_pct", "marksman_margin_pct"];
+const CLAVES_RUTA = ["origin", "destination", "equipment", "weekly_volume"];
+const tomar = (fila: any, claves: string[]) => Object.fromEntries(claves.map((k) => [k, fila?.[k] ?? null]));
+
+export function lanesParaRateware(p: Propuesta, crudo: any) {
+  const rutas: any[] = Array.isArray(crudo?.lanes) ? crudo.lanes : [];
+  const paquete = crudo?.event?.rfx_master_package ?? null;
+  return p.lineas.map((l) => {
+    const ruta = rutas.find((r) => String(r?.id) === l.rutaId);
+    const prim = (Array.isArray(ruta?.invitations) ? ruta.invitations : []).find((x: any) => String(x?.id) === l.primarioId);
+    return {
+      rfx_lane_id: l.rutaId,
+      sell_rate: l.venta,
+      expected: { primary_id: l.primarioId, primary: tomar(prim, CLAVES_PRIMARIO), lane: tomar(ruta, CLAVES_RUTA), master_package: paquete }
+    };
+  });
 }
 
 // Huella de lo que el Administrador revisó: rutas, términos, venta y moneda. Al publicar,

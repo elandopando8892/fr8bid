@@ -43,8 +43,8 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
   const cmp = compararPropuesta(calculada, propuesta, hoy);
   const puedePublicar = ctx.rol === "admin" && estado.conSolicitud && cmp.puedePublicar;
   // Siempre lo publicado (con lo aceptado); antes de publicar, lo calculado.
-  const filas = propuesta
-    ? propuesta.lineas.map((l) => ({ rutaId: l.rutaId, numero: l.numero, origen: l.origen, destino: l.destino, equipo: d.rutas.find((r) => r.id === l.rutaId)?.equipo ?? "", venta: l.venta, moneda: propuesta.moneda }))
+  const filas: Fila[] = propuesta
+    ? propuesta.lineas.map((l) => ({ rutaId: l.rutaId, numero: l.numero, origen: l.origen, destino: l.destino, equipo: l.equipo, volumenSemanal: l.volumenSemanal, venta: l.venta, moneda: propuesta.moneda }))
     : calculada.lineas;
 
   return (
@@ -66,24 +66,7 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
           ) : (
             <p className="tenue">El shipper verá en la liga de su solicitud la tarifa de venta por ruta, sin carrier ni costo, y podrá aceptarla por ruta o todas.</p>
           )}
-          <table className="tabla tabla-compacta">
-            <thead>
-              <tr><th>Ruta</th><th>Equipo</th><th>Tarifa de venta</th>{propuesta && <th>Shipper</th>}</tr>
-            </thead>
-            <tbody>
-              {filas.map((l) => {
-                const a = aceptadas.get(l.rutaId);
-                return (
-                  <tr key={l.rutaId}>
-                    <td>{l.numero ? `${l.numero} · ` : ""}{l.origen} → {l.destino}</td>
-                    <td>{l.equipo}</td>
-                    <td className="mono">{dinero(l.venta, l.moneda)}</td>
-                    {propuesta && <td>{a ? <span className="pill ok">aceptó {fecha(a.en)}{a.por ? ` · ${a.por}` : ""}</span> : <span className="tenue">pendiente</span>}</td>}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <TablaPropuesta filas={filas} aceptadas={propuesta ? aceptadas : null} />
           {calculada.desiertas > 0 && <p className="tenue">{calculada.desiertas === 1 ? "1 ruta desierta no va" : `${calculada.desiertas} rutas desiertas no van`} en la propuesta.</p>}
           {calculada.faltan.length > 0 && <p className="tenue fila-icono"><I.Candado size={15} />Antes de publicar: {textoFaltan(calculada.faltan)}.</p>}
           {cmp.distinta && (
@@ -107,6 +90,12 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
             </div>
           )}
           {cmp.vencida && !cmp.distinta && <p className="nota">La vigencia ya pasó y el shipper ya no puede aceptar. Vuelve a publicar con una fecha nueva para renovarla{aceptadas.size ? "; lo que ya aceptó se queda aceptado" : ""}.</p>}
+          {puedePublicar && propuesta && (
+            <div data-prueba="propuesta-nueva">
+              <p className="tenue">Lo que verá el shipper si vuelves a publicar{aceptadas.size ? " (lo ya aceptado se queda aceptado)" : ""}:</p>
+              <TablaPropuesta filas={calculada.lineas} aceptadas={aceptadas} />
+            </div>
+          )}
           {puedePublicar && (
             <div className="fila-botones">
               <label className="campo"><span>Vigente hasta</span><input type="date" value={vigencia} min={hoy} onChange={(e) => setVigencia(e.target.value)} /></label>
@@ -131,5 +120,32 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
         </>
       )}
     </div>
+  );
+}
+
+type Fila = { rutaId: string; numero: number | null; origen: string; destino: string; equipo: string; volumenSemanal: number | null; venta: number; moneda: string };
+
+// Ruta, equipo, volumen y venta: lo que el shipper ve (sin carrier ni costo).
+function TablaPropuesta({ filas, aceptadas }: { filas: Fila[]; aceptadas: Map<string, { en: string; por: string | null }> | null }) {
+  return (
+    <table className="tabla tabla-compacta">
+      <thead>
+        <tr><th>Ruta</th><th>Equipo</th><th>Volumen</th><th>Tarifa de venta</th>{aceptadas && <th>Shipper</th>}</tr>
+      </thead>
+      <tbody>
+        {filas.map((l) => {
+          const a = aceptadas?.get(l.rutaId);
+          return (
+            <tr key={l.rutaId}>
+              <td>{l.numero ? `${l.numero} · ` : ""}{l.origen} → {l.destino}</td>
+              <td>{l.equipo || "—"}</td>
+              <td>{l.volumenSemanal ?? "—"}</td>
+              <td className="mono">{dinero(l.venta, l.moneda)}</td>
+              {aceptadas && <td>{a ? <span className="pill ok">aceptó {fecha(a.en)}{a.por ? ` · ${a.por}` : ""}</span> : <span className="tenue">pendiente</span>}</td>}
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }
