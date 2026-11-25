@@ -102,7 +102,7 @@ export function quePasa(e: ResumenEvento, fecha: (iso: string | null) => string)
     case "borrador":
       return e.plazo ? `Sin publicar. Plazo ${fecha(e.plazo)}.` : "Sin publicar.";
     case "abierto":
-      if (e.participaciones > 0 && e.ofertas >= e.participaciones) return `Todas las invitaciones tienen oferta (${ofertas}). Ya puedes cerrar.`;
+      if (e.participaciones > 0 && e.ofertas >= e.participaciones) return `${ofertas} de ${e.participaciones.toLocaleString("es-MX")} ${e.participaciones === 1 ? "invitación" : "invitaciones"} · puedes cerrar.`;
       // participaciones = invitaciones por carrier y ruta, no ofertas esperadas.
       if (!e.participaciones) return `Sin invitaciones todavía · cierra ${fecha(e.plazo)}.`;
       return `${ofertas} de ${e.participaciones.toLocaleString("es-MX")} ${e.participaciones === 1 ? "invitación" : "invitaciones"} · cierra ${fecha(e.plazo)}.`;

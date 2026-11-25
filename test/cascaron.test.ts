@@ -70,7 +70,7 @@ describe("fila de Eventos: etapa, qué pasa y un botón", () => {
     expect(quePasa(ev({ ofertas: 3, participaciones: 8 }), f)).toBe("3 ofertas de 8 invitaciones · cierra 2026-11-20.");
     expect(quePasa(ev({ ofertas: 0, participaciones: 0 }), f)).toBe("Sin invitaciones todavía · cierra 2026-11-20.");
     expect(botonFila(ev({ ofertas: 3, participaciones: 8 }))).toBe("Ver ofertas");
-    expect(quePasa(ev({ ofertas: 8, participaciones: 8 }), f)).toBe("Todas las invitaciones tienen oferta (8 ofertas). Ya puedes cerrar.");
+    expect(quePasa(ev({ ofertas: 8, participaciones: 8 }), f)).toBe("8 ofertas de 8 invitaciones · puedes cerrar.");
     expect(botonFila(ev({ ofertas: 8, participaciones: 8 }))).toBe("Cerrar a ofertas");
     expect(quePasa(ev({ estado: "cerrado", ofertas: 1 }), f)).toBe("1 oferta · plazo 2026-11-20. Elige primario y respaldo.");
     expect(quePasa(ev({ estado: "cerrado" }), f)).toBe("Cerrado sin ofertas · plazo 2026-11-20.");
