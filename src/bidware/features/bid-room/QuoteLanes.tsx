@@ -1,8 +1,10 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { InfoBanner, Pill, money } from "@/components/ui";
 import { useLang } from "@/i18n/language";
 import { q } from "@/i18n/bid-room-quote";
 import { QuotePanel, QuotePanelEmpty } from "./QuotePanel";
+import { nextPending, type AnswerKind, type SharedFields } from "./quick-quote";
+import { ReloadRetry } from "./ReloadRetry";
 import { SegmentTerms } from "./SegmentTerms";
 import { QuoteExcel } from "./QuoteExcel";
 import { canQuote, laneState, type Answer, type BookLane, type LaneState } from "./bidroom.service";
@@ -33,6 +35,19 @@ function actionOf(lane: BookLane): { label: string; primary?: boolean } | null {
 /** Below this width the panel sits under the table instead of beside it. */
 export const wide = () => window.matchMedia("(min-width: 1001px)").matches;
 
+/** The same answer as wide(), kept current when the window is resized or the phone turns. */
+export function useWide() {
+  const [is, setIs] = useState(wide);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1001px)");
+    const change = () => setIs(mq.matches);
+    mq.addEventListener?.("change", change);
+    return () => mq.removeEventListener?.("change", change);
+  }, []);
+  return is;
+}
+
+
 /**
  * "Cotizar rutas" (wireframe 24): the carrier's lanes of this event, the terms
  * of their segments below, and the quote panel beside them.
@@ -50,6 +65,12 @@ export function QuoteLanes({
   onPick,
   onDone,
   onAsk,
+  onClose,
+  shared,
+  onShare,
+  answered,
+  reloadFailed,
+  onRetry,
 }: {
   token: string;
   eventId: string;
@@ -61,11 +82,75 @@ export function QuoteLanes({
   extras: boolean;
   notice: string | null;
   onPick: (lane: BookLane) => void;
-  onDone: (lane: BookLane, message: string) => void;
+  onDone: (lane: BookLane, message: string, kind?: AnswerKind) => void;
   onAsk: () => void;
+  /** Closes the bottom sheet on a phone. */
+  onClose: () => void;
+  shared: SharedFields | null;
+  onShare: (fields: SharedFields | null) => void;
+  /** Lanes answered here whose reload has not arrived yet, and how. */
+  answered: ReadonlyMap<string, AnswerKind>;
+  /** The reload after an answer failed: the answered lanes wait for a retry. */
+  reloadFailed: boolean;
+  onRetry: () => void;
 }) {
   useLang();
   const panel = useRef<HTMLDivElement>(null);
+  const isWide = useWide();
+  // While an offer is on its way the sheet stays open: its result (sent, or the error) shows there.
+  const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
+  sendingRef.current = sending;
+  const close = () => {
+    if (!sendingRef.current) onClose();
+  };
+  // On a phone the quote opens as a sheet over the list, one lane at a time.
+  const sheet = !isWide && Boolean(picked);
+  const position = picked ? lanes.findIndex((l) => l.rfx_lane_id === picked.rfx_lane_id) + 1 : 0;
+  const next = picked && picked.bid_rate == null ? nextPending(lanes, picked, answered) : null;
+  const others = lanes.filter((l) => l.bid_rate == null && canQuote(l) && !answered.has(l.rfx_lane_id) && l.rfx_lane_id !== picked?.rfx_lane_id).length;
+
+  // The sheet takes the focus to its title, closes with Escape, and the list behind it does not scroll.
+  useEffect(() => {
+    if (!sheet) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      // A confirmation opened over the sheet handles its own keys.
+      const above = [...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]')].some(
+        (d) => d !== panel.current && !panel.current?.contains(d),
+      );
+      if (above) return;
+      if (e.key === "Escape") return close();
+      // Tab stays inside the sheet.
+      if (e.key !== "Tab" || !panel.current) return;
+      const all = [...panel.current.querySelectorAll<HTMLElement>("button, input, select, textarea, summary, [href]")].filter(
+        (el) => !el.hasAttribute("disabled") && el.getClientRects().length > 0,
+      );
+      if (!all.length) return;
+      const first = all[0], last = all[all.length - 1];
+      const inside = panel.current.contains(document.activeElement);
+      const listed = all.includes(document.activeElement as HTMLElement);
+      if (!inside) { e.preventDefault(); first.focus(); }
+      // From the title (focused on open, not a control): Shift+Tab wraps to the last control instead of leaving.
+      else if (!listed) { if (e.shiftKey) { e.preventDefault(); last.focus(); } }
+      else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    // Capture phase: runs while a confirmation on top is still open, so its Escape never closes the sheet.
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      document.body.style.overflow = overflow;
+      window.removeEventListener("keydown", onKey, true);
+      if (previous && document.contains(previous)) previous.focus();
+    };
+  }, [sheet]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!sheet) return;
+    panel.current?.scrollTo?.({ top: 0 });
+    panel.current?.querySelector<HTMLElement>(".croom-panel-title")?.focus();
+  }, [sheet, picked?.rfx_lane_id]);
   const [excelBusy, setExcelBusy] = useState(false);
   const quoted = lanes.filter((l) => l.bid_rate != null).length;
   const volumes = lanes.some((l) => l.weekly_volume != null && l.weekly_volume !== "");
@@ -73,7 +158,6 @@ export function QuoteLanes({
   function pick(lane: BookLane) {
     if (excelBusy) return;
     onPick(lane);
-    if (!wide()) window.setTimeout(() => panel.current?.scrollIntoView({ block: "start" }), 30);
   }
 
   return (
@@ -120,13 +204,15 @@ export function QuoteLanes({
             </thead>
             <tbody>
               {lanes.map((lane) => {
+                // Sent here and waiting for the reload: shown as sent, and not opened again until the server confirms it.
+                const sentHere = answered.get(lane.rfx_lane_id);
                 const state = laneState(lane);
-                const action = actionOf(lane);
+                const action = sentHere ? null : actionOf(lane);
                 return (
                   <tr
                     key={lane.rfx_lane_id}
-                    className={`clickable${picked?.rfx_lane_id === lane.rfx_lane_id ? " picked" : ""}`}
-                    onClick={() => pick(lane)}
+                    className={`${sentHere ? "" : "clickable"}${picked?.rfx_lane_id === lane.rfx_lane_id ? " picked" : ""}`}
+                    onClick={() => !sentHere && pick(lane)}
                   >
                     <td className="c-num mono croom-soft">{lane.lane_number != null ? String(lane.lane_number) : "—"}</td>
                     <td className="c-origin ellipsis" title={String(lane.origin ?? "")}>
@@ -143,7 +229,13 @@ export function QuoteLanes({
                       {lane.bid_rate != null ? money(lane.bid_rate, String(lane.currency || "USD")) : "—"}
                     </td>
                     <td className="c-state">
-                      <Pill tone={STATE_TONE[state]}>{q(`state.${state}`)}</Pill>
+                      {sentHere === "sent" ? (
+                        <Pill tone="green">{q("state.sent")}</Pill>
+                      ) : sentHere === "declined" ? (
+                        <Pill tone="">{q("state.declined")}</Pill>
+                      ) : (
+                        <Pill tone={STATE_TONE[state]}>{q(`state.${state}`)}</Pill>
+                      )}
                     </td>
                     <td className="c-action" style={{ textAlign: "right" }}>
                       {action ? (
@@ -172,15 +264,56 @@ export function QuoteLanes({
         </fieldset>
       </div>
 
-      <div className="croom-panel-slot" ref={panel}>
-        <fieldset disabled={excelBusy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-        {picked ? (
-          <QuotePanel lane={picked} extrasOpen={extras} onDone={(message) => onDone(picked, message)} onAsk={onAsk} />
-        ) : (
-          <QuotePanelEmpty />
-        )}
-        </fieldset>
-      </div>
+      {sheet && <div className="croom-hoja-fondo" onClick={close} aria-hidden />}
+      {(isWide || picked) && (
+        <div
+          className={`croom-panel-slot${sheet ? " croom-hoja" : ""}`}
+          ref={panel}
+          role={sheet ? "dialog" : undefined}
+          aria-modal={sheet ? true : undefined}
+          aria-label={sheet && picked ? `${String(picked.origin ?? "")} → ${String(picked.destination ?? "")}` : undefined}
+        >
+          {sheet && (
+            <div className="croom-hoja-barra">
+              <span className="croom-hoja-asa" aria-hidden />
+              <button type="button" className="btn-texto-croom" onClick={close} disabled={sending}>
+                {q("panel.close")}
+              </button>
+            </div>
+          )}
+          {sheet && notice && <InfoBanner>{notice}</InfoBanner>}
+          <fieldset disabled={excelBusy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+          {sheet && reloadFailed && answered.size > 0 && <ReloadRetry onRetry={onRetry} />}
+          {picked && answered.has(picked.rfx_lane_id) ? (
+            // Answered here, waiting for the server's copy: nothing to send again until it arrives.
+            <aside className="croom-panel">
+              <div className="croom-eyebrow">{q("panel.position", position, lanes.length)}</div>
+              <h3 className="croom-panel-title" tabIndex={-1}>
+                {String(picked.origin ?? "—")} → {String(picked.destination ?? "—")}
+              </h3>
+              <p className="croom-note" role="status">
+                {q(answered.get(picked.rfx_lane_id) === "declined" ? "panel.declinedWaiting" : "panel.sentWaiting")}
+              </p>
+            </aside>
+          ) : picked ? (
+            <QuotePanel
+              lane={picked}
+              extrasOpen={extras}
+              onDone={(message, kind) => onDone(picked, message, kind)}
+              onAsk={onAsk}
+              position={{ n: position, total: lanes.length }}
+              next={next}
+              shared={shared}
+              onShare={onShare}
+              others={others}
+              onBusy={setSending}
+            />
+          ) : (
+            <QuotePanelEmpty />
+          )}
+          </fieldset>
+        </div>
+      )}
     </div>
   );
 }

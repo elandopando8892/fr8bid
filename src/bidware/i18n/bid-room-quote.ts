@@ -9,6 +9,10 @@ import { translator } from "./language";
 export const quoteCopy = {
   // Cabecera y pestañas
   "bar.note": { es: "Acceso privado de carrier", en: "Private carrier access" },
+  "bar.person": { es: "Hablar con una persona", en: "Talk to a person" },
+  "bar.personShort": { es: "Escríbenos", en: "Contact us" },
+  "page.onlyRate": { es: "solo necesitas tu tarifa all-in", en: "all you need is your all-in rate" },
+  "tab.bidsCount": { es: "Cotizar rutas · {0}/{1}", en: "Quote lanes · {0}/{1}" },
   "bar.language": { es: "Idioma / Language", en: "Idioma / Language" },
   "tab.master": { es: "El negocio", en: "The business" },
   "tab.bids": { es: "Cotizar rutas", en: "Quote lanes" },
@@ -53,6 +57,7 @@ export const quoteCopy = {
 
   // Tabla de rutas
   "state.quoted": { es: "COTIZADA", en: "QUOTED" },
+  "state.sent": { es: "ENVIADA", en: "SENT" },
   "state.pending": { es: "PENDIENTE", en: "PENDING" },
   "state.declined": { es: "NO PARTICIPO", en: "NOT BIDDING" },
   "state.withdrawn": { es: "RETIRADA", en: "WITHDRAWN" },
@@ -78,6 +83,15 @@ export const quoteCopy = {
   // Panel de cotización
   "panel.eyebrow": { es: "Cotización", en: "Quote" },
   "panel.eyebrowLane": { es: "Cotización · ruta {0}", en: "Quote · lane {0}" },
+  "panel.position": { es: "Ruta {0} de {1}", en: "Lane {0} of {1}" },
+  "panel.close": { es: "Cerrar", en: "Close" },
+  "panel.sentWaiting": { es: "Oferta enviada. Estamos actualizando tus rutas.", en: "Offer sent. We are updating your lanes." },
+  "panel.declinedWaiting": { es: "Marcada como no participo. Estamos actualizando tus rutas.", en: "Marked as not bidding. We are updating your lanes." },
+  "page.reloadFailed": {
+    es: "Tu respuesta se guardó, pero no pudimos actualizar tus rutas.",
+    en: "Your answer was saved, but we could not update your lanes.",
+  },
+  "page.retry": { es: "Volver a cargar", en: "Load again" },
   "panel.review": { es: "Revisar", en: "Review" },
   "panel.quote": { es: "Cotizar", en: "Quote" },
   "panel.yourOffer": { es: "Tu oferta", en: "Your offer" },
@@ -144,11 +158,11 @@ export const quoteCopy = {
     en: "If you don't choose, MARKSMAN sets the commercial model before awarding.",
   },
   "form.blankPlaceholder": { es: "vacío = {0}", en: "blank = {0}" },
-  "form.extrasSummary": { es: "Sumar puntos a tu oferta", en: "Add points to your offer" },
+  "form.extrasSummary": { es: "Suma puntos a tu oferta · opcional", en: "Add points to your offer · optional" },
   "form.extrasCount": { es: "{0} de {1}", en: "{0} of {1}" },
   "form.extrasHint": {
-    es: "Equipo, ETA, GPS y vacío suben tu score; puedes completarlos después de enviar.",
-    en: "Equipment, ETA, GPS and deadhead raise your score; you can fill them in after sending.",
+    es: "Capacidad, vigencia, equipo, ETA, GPS y vacío suben tu score; puedes completarlos después de enviar.",
+    en: "Capacity, validity, equipment, ETA, GPS and deadhead raise your score; you can fill them in after sending.",
   },
   "form.equipmentAvailable": { es: "Equipo disponible", en: "Equipment available" },
   "form.unsaid": { es: "Sin decir", en: "Not stated" },
@@ -174,7 +188,7 @@ export const quoteCopy = {
   "form.altNotes": { es: "Condiciones", en: "Conditions" },
   "form.notes": { es: "Notas para MARKSMAN", en: "Notes for MARKSMAN" },
   "form.optional": { es: "opcional", en: "optional" },
-  "form.finalBefore": { es: "Es mi oferta final — se registra como ", en: "This is my final offer — it is recorded as " },
+  "form.finalBefore": { es: "Es mi mejor precio para esta ruta (oferta final)", en: "This is my best price for this lane (final offer)" },
   "form.finalAfter": { es: "", en: "" },
   "form.gapsAria": { es: "Revisión de información de la oferta", en: "Offer information check" },
   "form.missing": { es: "Falta:", en: "Missing:" },
@@ -185,7 +199,7 @@ export const quoteCopy = {
   "form.withdrawConfirm": { es: "Retirar tu oferta de {0}. ¿Continuar?", en: "Withdraw your offer for {0}. Continue?" },
   "form.withdrawOk": { es: "Retirar", en: "Withdraw" },
   "form.withdrawn": { es: "Oferta retirada · {0}.", en: "Offer withdrawn · {0}." },
-  "form.decline": { es: "No participo", en: "Not bidding" },
+  "form.decline": { es: "No participo en esta ruta", en: "Not bidding on this lane" },
   "form.declinePrompt": {
     es: "Motivo (opcional) para no participar en esta ruta:",
     en: "Reason (optional) for not bidding on this lane:",
@@ -194,6 +208,15 @@ export const quoteCopy = {
   "form.sending": { es: "Enviando…", en: "Sending…" },
   "form.update": { es: "Actualizar oferta", en: "Update offer" },
   "form.send": { es: "Enviar oferta", en: "Send offer" },
+  "form.sendNext": { es: "Enviar y seguir con la ruta {0}", en: "Send and go to lane {0}" },
+  "form.share": {
+    es: "Usar la misma capacidad, tránsito y vigencia en mis demás rutas",
+    en: "Use the same capacity, transit and validity on my other lanes",
+  },
+  "form.shared": {
+    es: "Capacidad, tránsito y vigencia vienen de tu ruta anterior; cámbialos si esta ruta es distinta.",
+    en: "Capacity, transit and validity come from your previous lane; change them if this lane is different.",
+  },
   "form.confirmSend": { es: "Confirmar y enviar oferta", en: "Confirm and send offer" },
   "form.backToReview": { es: "Volver a revisar", en: "Back to review" },
   "form.sentFinal": { es: "Oferta final enviada · {0}.", en: "Final offer sent · {0}." },

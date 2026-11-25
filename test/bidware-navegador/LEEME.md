@@ -19,6 +19,17 @@ antes de congelar Bidware. No tocan producción: todo es sintético.
 prueba como si fuera la función de Supabase. `FR8BID_TRAZA=1` muestra las llamadas y
 `FR8BID_FOTO=nombre` toma una captura cuando falla un paso.
 
+## Pruebas propias de Fr8Bid
+
+- `cotizacion-rapida.browser.cjs` (25-nov): el Bid Room en un teléfono, con la hoja por ruta, «Enviar y seguir»,
+  datos copiados a las demás rutas, envíos seguidos con recarga lenta, envío que falla y una confirmación sobre la
+  hoja.
+- `cotizacion-rapida-escritorio.browser.cjs` (25-nov): en escritorio, la última ruta no se envía dos veces mientras
+  llega la recarga, «No participo» se ve como tal y una recarga fallida se explica y se reintenta.
+
+Córrelas antes de abrir un PR que toque `src/bidware/features/bid-room/`:
+`test/bidware-navegador/correr.sh test/bidware-navegador/cotizacion-rapida*.browser.cjs`.
+
 ## Cambios respecto a Bidware
 
 - Rutas: `src/…` pasa a `src/bidware/…`, y `/rfx/<id>` pasa a `/rfx/<id>/detalle` (en Fr8Bid

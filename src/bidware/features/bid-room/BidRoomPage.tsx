@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import {
   answersOf,
@@ -15,7 +15,9 @@ import {
   type PrivateWorkspace,
 } from "./bidroom.service";
 import { QuoteLanes, wide } from "./QuoteLanes";
-import { BusinessOverview, modeCopy } from "./BusinessOverview";
+import { nextPending, type AnswerKind, type SharedFields } from "./quick-quote";
+import { ReloadRetry } from "./ReloadRetry";
+import { BusinessOverview } from "./BusinessOverview";
 import { BidRoomChat } from "./BidRoomChat";
 import { BidSupportAssistant } from "./BidSupportAssistant";
 import { MyRanking } from "./MyRanking";
@@ -60,7 +62,7 @@ function deadlineText(due: DueState): string {
 }
 
 /** La barra de marca: el carrier llega desde un correo y ve primero quién lo invita. */
-function MarcaCarrier() {
+function MarcaCarrier({ onPerson }: { onPerson?: () => void }) {
   const lang = useLang();
   // El documento declara el idioma que se ve: lectores de pantalla y traductores del navegador lo usan.
   useEffect(() => {
@@ -72,6 +74,12 @@ function MarcaCarrier() {
         MARKS<b>MAN</b>
       </span>
       <span className="croom-bar-note">{q("bar.note")}</span>
+      {onPerson && (
+        <button type="button" className="croom-persona" onClick={onPerson} aria-label={q("bar.person")}>
+          <span className="croom-persona-largo">{q("bar.person")}</span>
+          <span className="croom-persona-corto" aria-hidden>{q("bar.personShort")}</span>
+        </button>
+      )}
       <BotonAyudas en={lang === "en"} className="boton-ayudas-publica" />
       <div className="profile-lang sr-lang" role="group" aria-label={q("bar.language")}>
         {(["es", "en"] as Lang[]).map((l) => (
@@ -98,6 +106,22 @@ function BidRoomContent({ token }: { token: string }) {
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [extras, setExtras] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Capacity, transit and validity the carrier chose to reuse on the lanes not quoted yet.
+  const [shared, setShared] = useState<SharedFields | null>(null);
+  // Lanes answered here, each with the server copy that was on screen when it was answered. Until a newer
+  // copy arrives (the reload, which useAsync only accepts from the latest request), the list still shows them
+  // pending, so they are never offered again as "next"; once it arrives the server's own state decides.
+  const [answeredOn, setAnsweredOn] = useState<Map<string, { copy: unknown; kind: AnswerKind }>>(new Map());
+  const answeredRef = useRef(answeredOn);
+  answeredRef.current = answeredOn;
+  const dataRef = useRef<unknown>(null);
+  dataRef.current = data;
+  const answered = useMemo(
+    () => new Map([...answeredOn].filter(([, a]) => a.copy === data).map(([id, a]) => [id, a.kind] as const)),
+    [answeredOn, data],
+  );
+  const pickedRef = useRef<string | null>(null);
+  const lanesRef = useRef<BookLane[]>([]);
 
   const invitation = (data?.invitation ?? {}) as Record<string, unknown>;
   const event = (invitation.rfx_events ?? {}) as BookEvent;
@@ -115,6 +139,8 @@ function BidRoomContent({ token }: { token: string }) {
     setExtras(false);
     setNotice(null);
     setPicks(new Map());
+    setShared(null);
+    setAnsweredOn(new Map());
   }, [token]);
 
   // On a wide screen the panel opens on the first lane still waiting for a quote
@@ -164,37 +190,55 @@ function BidRoomContent({ token }: { token: string }) {
   const due = dueOf(lanes, event.due_date);
   const deadline = deadlineText(due);
   const picked = lanes.find((l) => l.rfx_lane_id === pickedId) ?? null;
+  // Read by a send that finishes later: the selection and lanes as they are then, not as they were when it started.
+  pickedRef.current = pickedId;
+  lanesRef.current = lanes;
+  const canQuoteAny = lanes.some(canQuote);
+  const quotedCount = lanes.filter((l) => l.bid_rate != null).length;
   const band = bandOf(mode);
   /** The link's own lane, for the assistant's "details of this route" prompt. */
   const linkLane = (invitation.rfx_lanes ?? {}) as Record<string, unknown>;
   const linkRoute =
     linkLane.origin && linkLane.destination ? `${String(linkLane.origin)} → ${String(linkLane.destination)}` : undefined;
 
-  function afterWrite(lane: BookLane, message: string) {
+  function afterWrite(lane: BookLane, message: string, kind?: AnswerKind) {
     setNotice(message);
     setExtras(false);
-    // A first answer on a lane moves on to the next one still waiting; a revision stays put.
-    if (lane.bid_rate == null && wide()) {
-      const next = lanes.find((l) => l.rfx_lane_id !== lane.rfx_lane_id && laneState(l) === "pending" && canQuote(l));
-      if (next) setPickedId(next.rfx_lane_id);
+    // A first answer on a lane moves on to the next one still waiting (the button said so); a revision stays put.
+    // On a phone, with nothing left to quote, the sheet closes and the list shows the progress.
+    if (lane.bid_rate == null && kind) {
+      const map = new Map(answeredRef.current).set(lane.rfx_lane_id, { copy: dataRef.current, kind });
+      answeredRef.current = map;
+      setAnsweredOn(map);
+      const done = new Set([...map].filter(([, a]) => a.copy === dataRef.current).map(([id]) => id));
+      // If the carrier closed the sheet or moved to another lane while this one was sending, the late answer leaves the choice alone.
+      if (pickedRef.current === lane.rfx_lane_id) {
+        const next = nextPending(lanesRef.current, lane, done);
+        if (next) setPickedId(next.rfx_lane_id);
+        else if (!wide()) setPickedId(null);
+      }
     }
     reload();
   }
 
   return (
     <div className="croom">
-      <MarcaCarrier />
+      <MarcaCarrier onPerson={() => setPhase("chat")} />
       <header className="croom-head">
         <h1>{event.name || q("page.private")}</h1>
         {/* Una línea, sin chips (decisión de Jose, 6-nov). */}
         <div className="croom-meta">
           <span>
-            {[carrier, modeCopy(mode).label.toLowerCase(), event.rfx_id]
+            {/* Lo que se le pide y cuándo cierra, en palabras de despachador (C2, C5). */}
+            {[carrier, `${lanes.length} ${lanes.length === 1 ? q("page.laneOne") : q("page.laneMany")}`, canQuoteAny ? q("page.onlyRate") : ""]
               .filter(Boolean)
               .join(" · ")}
             {" · "}
-            {lanes.length} {lanes.length === 1 ? q("page.laneOne") : q("page.laneMany")} ·{" "}
-            <span className={due.status === "closing" ? "croom-closing" : undefined}>{deadline}</span>
+            <span className={due.status === "closing" ? "croom-closing" : undefined}>
+              {deadline}
+              {due.due_date && due.status !== "closed" && due.status !== "no_deadline" ? ` (${dateShort(due.due_date)})` : ""}
+            </span>
+            {event.rfx_id ? ` · ${event.rfx_id}` : ""}
             {event.operation_start_date ? ` · ${q("page.starts", dateShort(event.operation_start_date))}` : ""}
           </span>
         </div>
@@ -206,7 +250,7 @@ function BidRoomContent({ token }: { token: string }) {
               className={phase === p ? "active" : undefined}
               onClick={() => setPhase(p)}
             >
-              {q(`tab.${p}`)}
+              {p === "bids" && lanes.length ? q("tab.bidsCount", quotedCount, lanes.length) : q(`tab.${p}`)}
             </button>
           ))}
         </nav>
@@ -221,6 +265,8 @@ function BidRoomContent({ token }: { token: string }) {
 
       <main className="croom-page">
         {error && <ErrorBanner message={error} />}
+        {/* A reload that failed after an answer: the list keeps the answer as sent until it can be read again. */}
+        {error && answered.size > 0 && <ReloadRetry onRetry={reload} />}
         {linkLane.no_award === true && (
           <InfoBanner title={q("page.noAwardTitle")}>
             {linkRoute ? q("page.noAwardRoute", linkRoute) : q("page.noAwardNoRoute")}
@@ -261,6 +307,12 @@ function BidRoomContent({ token }: { token: string }) {
               }}
               onDone={afterWrite}
               onAsk={() => setPhase("chat")}
+              onClose={() => setPickedId(null)}
+              shared={shared}
+              onShare={setShared}
+              answered={answered}
+              reloadFailed={Boolean(error)}
+              onRetry={reload}
             />
           ) : (
             <Empty

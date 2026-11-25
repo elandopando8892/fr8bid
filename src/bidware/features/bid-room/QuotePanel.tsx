@@ -16,9 +16,9 @@ import {
   isLockedBrokerage,
   modelIsOptional,
   laneState,
+  offerForm,
   modelCopy,
   modelSpec,
-  offerForm,
   offerDraft,
   offerPayload,
   offerProblems,
@@ -30,6 +30,12 @@ import {
   type BookLane,
   type OfferForm,
 } from "./bidroom.service";
+
+import { SHARED_KEYS, sharedOf, startForm, type AnswerKind, type SharedFields } from "./quick-quote";
+export type { SharedFields };
+
+/** The lane's number as the carrier sees it in the list. */
+const laneLabel = (lane: BookLane) => (lane.lane_number != null ? String(lane.lane_number) : route(lane));
 
 const route = (lane: BookLane) => `${String(lane.origin ?? "—")} → ${String(lane.destination ?? "—")}`;
 
@@ -59,17 +65,40 @@ export function QuotePanel({
   extrasOpen,
   onDone,
   onAsk,
+  position,
+  next,
+  shared,
+  onShare,
+  others = 0,
+  onBusy,
 }: {
   lane: BookLane;
+  /** "Ruta 4 de 8": where this lane sits among the carrier's lanes of the event. */
+  position?: { n: number; total: number };
+  /** The next lane still waiting for a quote, named on the send button. */
+  next?: BookLane | null;
+  /** Capacity, transit and validity to reuse on lanes not quoted yet (null = off). */
+  shared?: SharedFields | null;
+  onShare?: (fields: SharedFields | null) => void;
+  /** How many other lanes the shared fields can still fill. */
+  others?: number;
+  /** Told while a write is on its way, so the sheet cannot close and hide its outcome. */
+  onBusy?: (busy: boolean) => void;
   /** Opens capacity details when arriving from "Completar mi oferta". */
   extrasOpen?: boolean;
-  onDone: (message: string) => void;
+  /** `kind` says how a lane without an offer was just answered (sent or declined); a revision or withdrawal has none. */
+  onDone: (message: string, kind?: AnswerKind) => void;
   /** Sends the carrier to Mensajes. */
   onAsk: () => void;
 }) {
   useLang();
-  const [form, setForm] = useState<OfferForm>(() => offerForm(lane));
+  const [form, setForm] = useState<OfferForm>(() => startForm(lane, shared).form);
+  const [filled, setFilled] = useState(() => startForm(lane, shared).filled);
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    onBusy?.(busy);
+  }, [busy]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => onBusy?.(false), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [error, setError] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
   const [extras, setExtras] = useState(Boolean(extrasOpen));
@@ -79,19 +108,28 @@ export function QuotePanel({
   scopeToken.current = lane.invitation_token;
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
 
-  // Another lane, or this one after a reload, starts from its own values.
+  // Another lane, or this lane once the server's copy of its offer changed, starts from its own values.
+  // A reload that brings the same lane back unchanged (another lane was just sent) keeps what is being typed.
+  const laneVersion = `${lane.rfx_lane_id}|${lane.invitation_token}|${laneState(lane)}|${JSON.stringify(offerForm(lane))}`;
   useEffect(() => {
-    setForm(offerForm(lane));
+    const start = startForm(lane, shared);
+    setForm(start.form);
+    setFilled(start.filled);
     setError(null);
     setTried(false);
-  }, [lane]);
+  }, [laneVersion]); // eslint-disable-line react-hooks/exhaustive-deps -- shared values only seed a lane when it opens
   useEffect(() => {
     if (extrasOpen) setExtras(true);
   }, [extrasOpen, lane]);
   // The extra conditions start folded on every lane (decision of Jose, 6-nov): four fields price a route.
   useEffect(() => setExtras(Boolean(extrasOpen)), [lane.invitation_token]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const set = (patch: Partial<OfferForm>) => setForm((f) => ({ ...f, ...patch }));
+  const set = (patch: Partial<OfferForm>) => {
+    const nextForm = { ...form, ...patch };
+    setForm(nextForm);
+    // While reuse is on, what is typed here is what the other lanes get.
+    if (shared && onShare && SHARED_KEYS.some((k) => k in patch)) onShare(sharedOf(nextForm));
+  };
   const revision = isRevision(lane);
   const editable = canQuote(lane);
   const lockedCommercialModel = isLockedBrokerage(lane);
@@ -113,12 +151,12 @@ export function QuotePanel({
     return SCORE_FACTORS.filter((f) => f.done(draft)).length;
   }, [form, lane]);
 
-  async function run(fn: () => Promise<unknown>, ok: string) {
+  async function run(fn: () => Promise<unknown>, ok: string, kind?: AnswerKind) {
     setBusy(true);
     setError(null);
     try {
       await fn();
-      onDone(ok);
+      onDone(ok, kind);
     } catch (e) {
       setError(explainBidError(e));
     } finally {
@@ -139,6 +177,7 @@ export function QuotePanel({
       await run(
         () => submitBid(token, offerPayload(form, lane)),
         q(form.best_final ? "form.sentFinal" : revision ? "form.sentUpdated" : "form.sent", route(lane)),
+        "sent",
       );
     } finally {
       sending.current = false;
@@ -149,10 +188,14 @@ export function QuotePanel({
   const head = (
     <>
       <div className="croom-eyebrow">
-        {lane.lane_number != null ? q("panel.eyebrowLane", String(lane.lane_number)) : q("panel.eyebrow")}
+        {position
+          ? q("panel.position", position.n, position.total)
+          : lane.lane_number != null
+            ? q("panel.eyebrowLane", String(lane.lane_number))
+            : q("panel.eyebrow")}
       </div>
-      <h3 className="croom-panel-title">
-        {editable ? (revision ? q("panel.review") : q("panel.quote")) : q("panel.yourOffer")} · {route(lane)}
+      <h3 className="croom-panel-title" tabIndex={-1}>
+        {route(lane)}
       </h3>
       <div className="croom-panel-sub">
         {[lane.equipment, lane.weekly_volume != null && lane.weekly_volume !== "" ? q("panel.loadsPerWeek", String(lane.weekly_volume)) : ""]
@@ -230,21 +273,10 @@ export function QuotePanel({
           </select>
         </label>
       </div>
-
-      <div className="croom-fields">
-        <label>
-          <span>{q("form.capacity")}</span>
-          <input className="mono" inputMode="numeric" value={form.weekly_capacity} onChange={(e) => set({ weekly_capacity: e.target.value })} />
-        </label>
-        <label>
-          <span>{q("form.transitDays")}</span>
-          <input className="mono" inputMode="numeric" value={form.transit_days} onChange={(e) => set({ transit_days: e.target.value })} />
-        </label>
-        <label>
-          <span>{q("form.validThrough")}</span>
-          <input className="mono" type="date" value={form.valid_through} onChange={(e) => set({ valid_through: e.target.value })} />
-        </label>
-      </div>
+      <label className="croom-final">
+        <input type="checkbox" checked={form.best_final} onChange={(e) => set({ best_final: e.target.checked })} />
+        <span>{q("form.finalBefore")}</span>
+      </label>
 
       {lockedCommercialModel ? (<>
         <div className="croom-note" aria-label={q("form.fixedModelLabel")}>
@@ -302,12 +334,49 @@ export function QuotePanel({
 
       </>)}
 
+      {billing && <p className="croom-note" role="note" aria-label={q("form.billingAria")}><strong>{billing}</strong></p>}
+      {tried && problems.length > 0 && <p className="croom-problems">{problems.join(" ")}</p>}
+      <div className="croom-actions croom-actions-enviar">
+        <button
+          type="button"
+          className="primary"
+          disabled={busy || (tried && problems.length > 0) || parseAmount(form.bid_rate) === null}
+          onClick={send}
+        >
+          {busy ? q("form.sending") : revision ? q("form.update") : next ? q("form.sendNext", laneLabel(next)) : q("form.send")}
+        </button>
+      </div>
       <details className="croom-extras" open={extras} onToggle={(e) => setExtras((e.target as HTMLDetailsElement).open)}>
         <summary>
           {q("form.extrasSummary")}
           <span className="mono">{q("form.extrasCount", scored, SCORE_FACTORS.length)}</span>
         </summary>
         <p className="croom-hint ayuda">{q("form.extrasHint")}</p>
+        {filled && <p className="croom-note" role="note">{q("form.shared")}</p>}
+      <div className="croom-fields">
+        <label>
+          <span>{q("form.capacity")}</span>
+          <input className="mono" inputMode="numeric" value={form.weekly_capacity} onChange={(e) => set({ weekly_capacity: e.target.value })} />
+        </label>
+        <label>
+          <span>{q("form.transitDays")}</span>
+          <input className="mono" inputMode="numeric" value={form.transit_days} onChange={(e) => set({ transit_days: e.target.value })} />
+        </label>
+        <label>
+          <span>{q("form.validThrough")}</span>
+          <input className="mono" type="date" value={form.valid_through} onChange={(e) => set({ valid_through: e.target.value })} />
+        </label>
+      </div>
+        {onShare && others > 0 && (
+          <label className="croom-check">
+            <input
+              type="checkbox"
+              checked={Boolean(shared)}
+              onChange={(e) => onShare(e.target.checked ? sharedOf(form) : null)}
+            />
+            <span>{q("form.share")}</span>
+          </label>
+        )}
         <div className="croom-fields">
           <label>
             <span>{q("form.equipmentAvailable")}</span>
@@ -400,14 +469,7 @@ export function QuotePanel({
         </label>
       </details>
 
-      <label className="croom-final">
-        <input type="checkbox" checked={form.best_final} onChange={(e) => set({ best_final: e.target.checked })} />
-        <span>
-          {q("form.finalBefore")}<b>best and final</b>{q("form.finalAfter")}
-        </span>
-      </label>
 
-      {tried && problems.length > 0 && <p className="croom-problems">{problems.join(" ")}</p>}
 
       <section className="croom-gaps" aria-label={q("form.gapsAria")} title={warnings.join(" ")}>
         {gaps.length ? (
@@ -419,9 +481,8 @@ export function QuotePanel({
         )}
       </section>
 
-      {billing && <p className="croom-note" role="note" aria-label={q("form.billingAria")}><strong>{billing}</strong></p>}
 
-      <div className="croom-actions">
+      <div className="croom-actions croom-actions-bajo">
         {revision && (
           <button
             type="button"
@@ -437,25 +498,17 @@ export function QuotePanel({
         {laneState(lane) !== "declined" && (
           <button
             type="button"
+            className="btn-texto-croom"
             disabled={busy}
             onClick={async () => {
               const reason = await promptAsync(q("form.declinePrompt"));
               if (reason === null) return;
-              run(() => declineInvitation(token, reason), q("form.declined", route(lane)));
+              run(() => declineInvitation(token, reason), q("form.declined", route(lane)), "declined");
             }}
           >
             {q("form.decline")}
           </button>
         )}
-        <div className="spacer" />
-        <button
-          type="button"
-          className="primary"
-          disabled={busy || (tried && problems.length > 0) || parseAmount(form.bid_rate) === null}
-          onClick={send}
-        >
-          {busy ? q("form.sending") : revision ? q("form.update") : q("form.send")}
-        </button>
       </div>
       </fieldset>
     </aside>
