@@ -68,6 +68,12 @@ describe("combinarLecturas con la marca del equipo", () => {
     expect(combinarLecturas({}, [servidor()], carriers).msg000001.revisado).toBe(false);
   });
 
+  it("la propuesta del servidor gana a un fallo leído en este navegador, sin perder lo local", () => {
+    const local = { msg000001: { correoId: "msg000001", carrierId: "c1", carrier: "JPI", en: "x", leidoEn: "x", lectura: null, fallo: "sin texto", revisado: false, rutasGuardadas: ["r1"] } as LecturaGuardada };
+    const r = combinarLecturas(local, [servidor()], carriers).msg000001;
+    expect([r.lectura?.tipo, r.fallo, r.rutasGuardadas]).toEqual(["oferta", null, ["r1"]]);
+  });
+
   it("también cuando este navegador lo tenía pendiente", () => {
     const local = { msg000001: { ...combinarLecturas({}, [servidor()], carriers).msg000001 } as LecturaGuardada };
     expect(combinarLecturas(local, [servidor({ reviewed_at: "2026-11-25T12:00:00Z", review_outcome: "dismissed" })], carriers).msg000001.revisado).toBe(true);

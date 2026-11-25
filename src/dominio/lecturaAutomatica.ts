@@ -125,12 +125,14 @@ export function combinarLecturas(
   for (const f of servidor) {
     if (!f?.gmail_message_id) continue;
     const listo = Boolean(f.reviewed_at);
-    if (salida[f.gmail_message_id]) {
-      if (listo && !salida[f.gmail_message_id].revisado) salida[f.gmail_message_id] = { ...salida[f.gmail_message_id], revisado: true };
-      continue;
-    }
     const carrierId = f.vendor_id || "";
     const lectura = f.status === "proposed" && f.reading?.lectura ? { ...f.reading.lectura, recortado: Boolean(f.reading.recortado) } : null;
+    const local = salida[f.gmail_message_id];
+    if (local) {
+      // Lo local guarda la revisión y los intentos; la propuesta del servidor gana a un fallo leído aquí.
+      salida[f.gmail_message_id] = { ...local, ...(!local.lectura && lectura ? { lectura, fallo: null } : {}), revisado: local.revisado || listo };
+      continue;
+    }
     salida[f.gmail_message_id] = {
       correoId: f.gmail_message_id,
       carrierId,

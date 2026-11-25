@@ -162,6 +162,20 @@ describe("borrador abierto desde la bandeja", () => {
     expect(sesion.api.marcarLectura).toHaveBeenCalledWith(EV, "msgoferta1", "captured");
   });
 
+  it("si Rateware aún no tiene el borrador, la marca queda pendiente sin aviso y llega cuando aparece", async () => {
+    sesion.api.marcarLectura = vi.fn(async () => false);
+    await render("msgoferta1");
+    await clic("Descartar");
+    expect(cargarLecturas(EV).msgoferta1).toMatchObject({ revisado: true, marcaPendiente: "dismissed" });
+    expect(container.textContent).not.toContain("no se pudo avisar al equipo");
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    sesion.api.marcarLectura = vi.fn(async () => true);
+    await render(null);
+    expect(sesion.api.marcarLectura).toHaveBeenCalledWith(EV, "msgoferta1", "dismissed");
+    expect(cargarLecturas(EV).msgoferta1.marcaPendiente).toBeUndefined();
+  });
+
   it("si Rateware no da los borradores, la liga se conserva, no se lee nada nuevo y se puede reintentar", async () => {
     sesion.api.lecturasServidor = vi.fn(async () => { throw new Error("503"); });
     await render("msgoferta1");

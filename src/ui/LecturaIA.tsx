@@ -133,19 +133,24 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
   // desenlace null: Rateware ya la tiene marcada; solo se limpia lo pendiente aquí.
   const avisarEquipo = async (correoId: string, desenlace: Desenlace | null) => {
     let ok = true;
+    let fallo = false;
     try {
-      if (desenlace) await s.api.marcarLectura(d.evento.id, correoId, desenlace);
+      // false: Rateware aún no tiene ese borrador (lo leyó este navegador). Queda pendiente sin aviso: si la
+      // revisión programada lo lee después, la marca llega en la siguiente apertura.
+      if (desenlace) ok = await s.api.marcarLectura(d.evento.id, correoId, desenlace);
     } catch {
       ok = false;
+      fallo = true;
     }
     const previa = cargarLecturas(d.evento.id);
-    if (!previa[correoId]) return ok;
+    if (!previa[correoId]) return !fallo;
     const { marcaPendiente: _, marcaDe: __, ...sin } = previa[correoId];
     // Al llegar la marca queda lista aquí también (aunque otra cuenta la hubiera reabierto en este navegador).
     const todas = { ...previa, [correoId]: ok || !desenlace ? { ...sin, revisado: true } : { ...sin, marcaPendiente: desenlace, marcaDe: s.correo ?? null } };
     guardarLecturas(d.evento.id, todas);
     setLeidas(todas);
-    return ok;
+    // Solo un error del servidor merece aviso; «aún no lo tiene» no.
+    return !fallo;
   };
 
   // Lectura automática: Rateware revisa cada 15 min y deja borradores; al abrir el evento se suman y la IA
