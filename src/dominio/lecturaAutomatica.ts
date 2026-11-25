@@ -81,7 +81,8 @@ export function correosPendientes(
         if (vistos.has(c.id)) continue;
         vistos.add(c.id);
         const previa = leidas[c.id];
-        if (previa && !(previa.fallo && ahora - Date.parse(previa.leidoEn) >= REINTENTO_MS)) continue;
+        // Un fallo se reintenta al día siguiente, salvo que el equipo ya lo haya dado por atendido.
+        if (previa && (previa.revisado || !(previa.fallo && ahora - Date.parse(previa.leidoEn) >= REINTENTO_MS))) continue;
         salida.push({ correo: c, carrierId: p.carrierId, carrier });
       }
     }

@@ -37,6 +37,13 @@ describe("correosPendientes", () => {
     expect(correosPendientes(d, capturables, leidas, ahora + REINTENTO_MS).map((x) => x.correo.id)).toEqual(["f"]);
   });
 
+  it("un fallo que el equipo descartó no se vuelve a leer (bandeja, 25-nov)", () => {
+    const d = detalle({ p1: { correos: [correo("f", "2026-11-12T16:00:00Z")] } });
+    const ahora = Date.parse("2026-11-16T19:00:00Z") + REINTENTO_MS;
+    const leidas = { f: guardada("f", { lectura: null, fallo: "x", leidoEn: "2026-11-16T18:00:00Z", revisado: true }) };
+    expect(correosPendientes(d, capturables, leidas, ahora)).toEqual([]);
+  });
+
   it("limita las lecturas por apertura", () => {
     const muchos = Array.from({ length: 9 }, (_, i) => correo(`m${i}`, `2026-11-1${i}T00:00:00Z`));
     expect(correosPendientes(detalle({ p1: { correos: muchos } }), capturables, {})).toHaveLength(MAX_LECTURAS_POR_APERTURA);
