@@ -49,10 +49,18 @@ export interface WebLane {
   notes: string;
 }
 
-const field = (lead: Record<string, unknown>, key: string) => {
-  const value = lead[key];
-  return typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "";
+// The site forms sometimes send an empty field as the word "None" or "null"
+// (24-nov-2026: a lead showed «None» as its company); that is no value.
+const VACIOS = new Set(["none", "null", "undefined", "nan"]);
+
+/** A lead field as text, empty when the site sent nothing (or a placeholder for nothing). */
+export const leadText = (lead: Record<string, unknown>, key: string) => {
+  const raw = lead[key];
+  const value = typeof raw === "string" ? raw.trim() : typeof raw === "number" ? String(raw) : "";
+  return VACIOS.has(value.toLowerCase()) ? "" : value;
 };
+
+const field = leadText;
 
 /** A whole positive number of loads, or empty for the operator to complete. */
 const loads = (value: string) => (/^\d+(\.\d+)?$/.test(value) && Number(value) > 0 ? value : "");

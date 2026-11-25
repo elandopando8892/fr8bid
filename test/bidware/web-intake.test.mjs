@@ -114,3 +114,12 @@ test('several lanes go as one `lanes` array; one lane keeps the original shape',
   await assert.rejects(() => m.promoteWebLead(ID, SHIPPER, Array.from({ length: 11 }, () => a), 'USD'));
   assert.equal(calls.length, 2, 'invalid lane lists never reach the API');
 });
+
+test('a field the site sent as «None» or «null» is empty, not a company called None', () => {
+  assert.equal(m.leadText({ company: 'None' }, 'company'), '');
+  assert.equal(m.leadText({ company: ' null ' }, 'company'), '');
+  assert.equal(m.leadText({ company: 'Acme' }, 'company'), 'Acme');
+  const lane = m.laneFromLead({ origin_city: 'None', destination_city: 'Aguascalientes', product: 'None' });
+  assert.equal(lane.origin_text, '');
+  assert.equal(lane.destination_text, 'Aguascalientes');
+});

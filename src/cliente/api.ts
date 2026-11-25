@@ -38,6 +38,14 @@ export interface AvanceEnvio {
   detenido: string | null;
 }
 
+// Gmail responde «Quota exceeded … per minute» (o 429) cuando se le consulta
+// demasiado seguido; pasa solo en un minuto.
+const PAUSA_GMAIL_MS = 2000;
+export function gmailSaturado(e: unknown): boolean {
+  if (!(e instanceof ErrorApi)) return false;
+  return e.status === 429 || /quota exceeded|rate limit|ratelimitexceeded/i.test(e.message);
+}
+
 export class ErrorApi extends Error {
   constructor(public status: number, public code: string, mensaje: string, public incierta = false) {
     super(mensaje);
@@ -295,9 +303,9 @@ export class MesaApi {
       this.respuestasDe(eventId)
     ]);
     if (mensajes.has_more === true) throw new ErrorApi(409, "LECTURA_INCOMPLETA", "Hay más avisos de los que devuelve esta lectura. Consulta la cola de Rateware antes de continuar.");
-    const { respuestas, aperturas } = revision;
+    const { respuestas, aperturas, gmailOcupado } = revision;
     const d = mapear.detalle(crudo, mapear.filasListado(mensajes, "messages"), null, { hoy: this.hoy(), rubros: rubros.rows || [], condiciones, revisiones, respuestas, aperturas });
-    return { ...d, recibo };
+    return { ...d, recibo, ...(gmailOcupado ? { gmailOcupado } : {}) };
   }
 
   // ——— Condiciones de ruta (parche R1, en rateware-prod desde el 23-oct-2026;
@@ -324,14 +332,25 @@ export class MesaApi {
   // (undefined) y queda el botón «Ya respondió»; si falla, null: la Mesa no
   // prepara intentos. La misma lectura trae las aperturas del correo (píxel,
   // 7-nov-2026); sin ellas, el seguimiento sigue como antes.
-  private async respuestasDe(eventId: string): Promise<{ respuestas: Record<string, unknown>[] | null | undefined; aperturas: Record<string, unknown>[] }> {
-    try {
-      const r = await this.rw({ action: "list_rfx_carrier_replies", event_id: eventId });
-      const aperturas = r.opens_status === "checked" && Array.isArray(r.opens) ? r.opens : [];
-      return { respuestas: r.email_status === "checked" ? r.rows || [] : null, aperturas };
-    } catch (e) {
-      if (e instanceof ErrorApi && e.code === "PASO_EN_RATEWARE") return { respuestas: undefined, aperturas: [] };
-      return { respuestas: null, aperturas: [] };
+  //
+  // Gmail limita las consultas por minuto: varias recargas seguidas de la
+  // página del evento la saturan (recorrido 24-nov-2026). Se reintenta una vez
+  // tras una pausa corta y, si sigue saturado, se avisa con ese motivo.
+  private async respuestasDe(eventId: string): Promise<{ respuestas: Record<string, unknown>[] | null | undefined; aperturas: Record<string, unknown>[]; gmailOcupado?: boolean }> {
+    for (let intento = 0; ; intento++) {
+      try {
+        const r = await this.rw({ action: "list_rfx_carrier_replies", event_id: eventId });
+        const aperturas = r.opens_status === "checked" && Array.isArray(r.opens) ? r.opens : [];
+        return { respuestas: r.email_status === "checked" ? r.rows || [] : null, aperturas };
+      } catch (e) {
+        if (e instanceof ErrorApi && e.code === "PASO_EN_RATEWARE") return { respuestas: undefined, aperturas: [] };
+        const ocupado = gmailSaturado(e);
+        if (ocupado && intento === 0) {
+          await new Promise((listo) => setTimeout(listo, PAUSA_GMAIL_MS));
+          continue;
+        }
+        return { respuestas: null, aperturas: [], ...(ocupado ? { gmailOcupado: true } : {}) };
+      }
     }
   }
   // Contactos que Rateware ya conoce del carrier y de otros registros con su

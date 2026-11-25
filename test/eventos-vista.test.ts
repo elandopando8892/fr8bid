@@ -27,6 +27,12 @@ describe("presentación de eventos en Hoy y Eventos", () => {
     const xs = [ev({ id: "b", estado: "borrador" }), ev({ id: "c", estado: "cerrado", plazo: "2026-12-01" })].sort(porUrgencia);
     expect(xs.map((x) => x.id)).toEqual(["c", "b"]);
   });
+  it("al adjudicar, el que cerró más reciente va primero (O-I antes que septiembre)", () => {
+    const xs = [ev({ id: "sep", estado: "cerrado", plazo: "2026-09-30" }), ev({ id: "oi", estado: "cerrado", plazo: "2026-11-20" })].sort(porUrgencia);
+    expect(xs.map((x) => x.id)).toEqual(["oi", "sep"]);
+    const pub = [ev({ id: "dic", estado: "borrador", plazo: "2026-12-15" }), ev({ id: "nov", estado: "borrador", plazo: "2026-11-30" })].sort(porUrgencia);
+    expect(pub.map((x) => x.id)).toEqual(["nov", "dic"]);
+  });
 });
 
 describe("un mismo nombre y folio legible (recorrido 22-nov)", () => {

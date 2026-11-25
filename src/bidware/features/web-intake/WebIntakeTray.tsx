@@ -20,12 +20,13 @@ import {
   registerWebRateSheet,
   webRateSheetUrl,
   leadSource,
+  leadText,
   type WebIntake,
   type WebLane,
 } from "./webIntake.service";
 
 const SITE: Record<string, string> = { marksman: "MARKSMAN", xbf: "XBF", holding: "Grupo" };
-const text = (lead: Record<string, unknown>, key: string) => (typeof lead[key] === "string" ? String(lead[key]) : "");
+const text = leadText;
 const isXlsx = (row: WebIntake) => /\.xlsx$/i.test(text(row.lead, "file_name"));
 const stamp = (value: string) => {
   const at = new Date(value);
@@ -130,7 +131,7 @@ export function WebIntakeTray({ onPromoted }: { onPromoted?: () => void }) {
                   {leadSource(row) && <div className="cell-sub" title={tr("source")}>{leadSource(row)}</div>}
                 </td>
                 <td>
-                  <div className="cell-title">{text(row.lead, "company")}</div>
+                  <div className="cell-title">{text(row.lead, "company") || "—"}</div>
                   <div className="cell-sub">{[text(row.lead, "name"), text(row.lead, "email")].filter(Boolean).join(" · ")}</div>
                 </td>
                 <td>

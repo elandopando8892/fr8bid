@@ -208,6 +208,8 @@ export interface Detalle {
   // participación (list_rfx_carrier_replies, parche R2). null: no se pudo
   // revisar, y entonces no se preparan intentos; sin el campo: no se consultó.
   respuestas?: Record<string, RespuestaCarrier> | null;
+  // true cuando respuestas es null porque Gmail pidió una pausa (cuota por minuto).
+  gmailOcupado?: boolean;
 }
 
 export interface RespuestaCarrier {

@@ -1147,7 +1147,9 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
       </ul>
       {d.respuestas === null && (
         <p className="aviso-caja">
-          No se pudo revisar quién ya contestó por correo o en el chat del Bid Room. Mientras no se pueda, Fr8Bid no prepara intentos ni recordatorios.
+          {d.gmailOcupado
+            ? "Gmail pidió una pausa por tantas consultas seguidas: las respuestas de los carriers no se cuentan arriba y Fr8Bid no prepara intentos. Recarga en un minuto."
+            : "No se pudo revisar quién ya contestó por correo o en el chat del Bid Room. Mientras no se pueda, Fr8Bid no prepara intentos ni recordatorios."}
         </p>
       )}
       {flacas.length > 0 && (
