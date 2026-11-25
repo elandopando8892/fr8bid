@@ -59,7 +59,7 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
       <div className="fila">
         <h2 className="fila-icono"><I.Sobre size={17} />Propuesta al shipper</h2>
         {propuesta && <span className="pill">{aceptadas.size ? `aceptó ${aceptadas.size} de ${propuesta.lineas.length}` : `publicada v${propuesta.version}`}</span>}
-        {estado.conSolicitud && <button type="button" className="btn-texto" onClick={() => void cargar()}>Actualizar</button>}
+        {(estado.conSolicitud || estado.error) && <button type="button" className="btn-texto" onClick={() => void cargar()}>{estado.error ? "Reintentar" : "Actualizar"}</button>}
       </div>
       {estado.error && <div className="estado estado-error">{estado.error}</div>}
       {!estado.error && !estado.conSolicitud && (
@@ -93,6 +93,7 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
                     {c.aceptada ? " · ya aceptada" : ""}
                   </li>
                 ))}
+                {cmp.moneda && <li>La moneda cambió: {cmp.moneda.antes} → {cmp.moneda.ahora}{aceptadas.size ? " (y el shipper ya aceptó rutas en la moneda anterior)" : ""}.</li>}
                 {cmp.quitadas.length > 0 && <li>{cmp.quitadas.length === 1 ? `La ruta ${cmp.quitadas[0].numero || ""} ya no va` : `Las rutas ${cmp.quitadas.map((q) => q.numero).join(", ")} ya no van`} en la propuesta.</li>}
               </ul>
             </div>
@@ -108,6 +109,9 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
             <div className="fila-botones">
               <label className="campo"><span>Vigente hasta</span><input type="date" value={vigencia} min={hoy} onChange={(e) => setVigencia(e.target.value)} /></label>
               <Confirmar
+                // Si una lectura cambia lo que se publica (o la versión vigente) con la confirmación
+                // abierta, se cierra: se publica solo lo que el Administrador revisó.
+                firma={`${huellaPropuesta(calculada)}|${propuesta?.id ?? ""}|${vigencia}`}
                 etiqueta={propuesta ? "Volver a publicar" : "Publicar al shipper"}
                 advertencia={
                   <>

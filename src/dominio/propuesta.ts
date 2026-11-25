@@ -193,6 +193,8 @@ export function leerPropuestaPublicada(crudo: any): { conSolicitud: boolean; pro
 export interface Comparacion {
   /** Rutas cuya venta o términos de hoy (número, ruta, equipo, caja, servicio, volumen) no son los publicados (o que no estaban publicadas). */
   cambios: { rutaId: string; numero: number; origen: string; destino: string; antes: number | null; ahora: number; moneda: string; terminos: boolean; aceptada: boolean }[];
+  /** La moneda publicada y la de hoy, si cambió. */
+  moneda: { antes: string; ahora: string } | null;
   /** Rutas publicadas que hoy ya no van (desiertas o sin primario). */
   quitadas: { numero: number; aceptada: boolean }[];
   distinta: boolean;
@@ -221,5 +223,5 @@ export function compararPropuesta(calculada: Propuesta, publicada: PropuestaPubl
   const vencida = Boolean(publicada?.vigenteHasta) && publicada!.vigenteHasta! < hoy;
   const tocaAceptadas = cambios.some((c) => c.aceptada) || quitadas.some((q) => q.aceptada) || (otraMoneda && aceptadas.size > 0);
   const lista = calculada.faltan.length === 0 && calculada.lineas.length > 0;
-  return { cambios, quitadas, distinta, vencida, tocaAceptadas, puedePublicar: lista && !tocaAceptadas && (!publicada || distinta || vencida) };
+  return { cambios, moneda: otraMoneda ? { antes: publicada!.moneda, ahora: calculada.moneda! } : null, quitadas, distinta, vencida, tocaAceptadas, puedePublicar: lista && !tocaAceptadas && (!publicada || distinta || vencida) };
 }

@@ -324,13 +324,17 @@ export const fecha = (iso: string | null | undefined) => {
 };
 
 // Botón de dos tiempos para acciones que escriben: primero explica, luego confirma.
+/** Una confirmación abierta sigue valiendo solo si lo que se confirma no cambió desde que se abrió. */
+export const confirmacionVigente = (alAbrir: string | undefined, ahora: string | undefined) => alAbrir === ahora;
+
 export function Confirmar({
   etiqueta,
   advertencia,
   onConfirmar,
   deshabilitado,
   clase = "btn-primario",
-  icono
+  icono,
+  firma
 }: {
   etiqueta: string;
   icono?: ReactNode;
@@ -338,12 +342,18 @@ export function Confirmar({
   onConfirmar: () => Promise<void> | void;
   deshabilitado?: boolean;
   clase?: string;
+  /** Lo que se está confirmando: si cambia con la confirmación abierta, se cierra sin hacer nada. */
+  firma?: string;
 }) {
   const [paso, setPaso] = useState<"inicio" | "confirmar" | "enviando">("inicio");
   const enCurso = useRef(false);
+  const alAbrir = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (paso === "confirmar" && !confirmacionVigente(alAbrir.current, firma)) setPaso("inicio");
+  }, [paso, firma]);
   if (paso === "inicio")
     return (
-      <button className={clase} disabled={deshabilitado} onClick={() => setPaso("confirmar")}>
+      <button className={clase} disabled={deshabilitado} onClick={() => { alAbrir.current = firma; setPaso("confirmar"); }}>
         {icono}
         {etiqueta}
       </button>
@@ -357,6 +367,7 @@ export function Confirmar({
           disabled={deshabilitado || paso === "enviando"}
           onClick={async () => {
             if (deshabilitado || enCurso.current) return;
+            if (!confirmacionVigente(alAbrir.current, firma)) return setPaso("inicio");
             enCurso.current = true;
             setPaso("enviando");
             try {

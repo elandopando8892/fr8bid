@@ -7,6 +7,7 @@ import { compararPropuesta, huellaPropuesta, leerPropuestaPublicada, propuestaDe
 import { manejar } from "../src/servidor/proxy";
 import { MesaApi } from "../src/cliente/api";
 import { recargarAlVolver, turnos } from "../src/ui/recargaAlVolver";
+import { confirmacionVigente } from "../src/ui/comun";
 import { proposalRows } from "../src/bidware/features/shipper-request/ShipperProposal";
 import { copyFor } from "../src/bidware/features/shipper-request/request.copy";
 import { acceptLanes, afterAccept, proposalState, canAccept, pendingLanes, progressAfter, reconcile } from "../src/bidware/features/shipper-request/proposal.flow";
@@ -251,6 +252,20 @@ describe("lo publicado frente a la adjudicación de hoy", () => {
     // L1 aceptada sin cambio; L2 pendiente cambió: se puede publicar y L1 se queda aceptada.
     const parcial = pub({ lineas: [linea(L1, 1, 1100), linea(L2, 2, 900)], aceptadas: aceptoL1 });
     expect(compararPropuesta(calc, parcial, "2026-11-25")).toMatchObject({ distinta: true, tocaAceptadas: false, puedePublicar: true });
+  });
+
+  it("un cambio solo de moneda se explica, con y sin rutas aceptadas", () => {
+    const sinAceptar = compararPropuesta(calc, pub({ moneda: "MXN" }), "2026-11-25");
+    expect(sinAceptar).toMatchObject({ distinta: true, cambios: [], quitadas: [], moneda: { antes: "MXN", ahora: "USD" }, tocaAceptadas: false, puedePublicar: true });
+    const conAceptadas = compararPropuesta(calc, pub({ moneda: "MXN", aceptadas: aceptoL1 }), "2026-11-25");
+    expect(conAceptadas).toMatchObject({ moneda: { antes: "MXN", ahora: "USD" }, tocaAceptadas: true, puedePublicar: false });
+    expect(compararPropuesta(calc, pub(), "2026-11-25").moneda).toBeNull();
+  });
+
+  it("una confirmación abierta se cierra si cambia lo que se confirma", () => {
+    expect(confirmacionVigente("h1|p1|2026-12-25", "h1|p1|2026-12-25")).toBe(true);
+    expect(confirmacionVigente("h1|p1|2026-12-25", "h2|p1|2026-12-25")).toBe(false);
+    expect(confirmacionVigente("h1||2026-12-25", "h1|p1|2026-12-25")).toBe(false);
   });
 
   it("un cambio de servicio en una ruta aceptada impide volver a publicar", () => {
