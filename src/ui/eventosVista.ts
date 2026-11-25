@@ -105,9 +105,11 @@ export function quePasa(e: ResumenEvento, fecha: (iso: string | null) => string)
       if (e.participaciones > 0 && e.ofertas >= e.participaciones) return `Llegaron las ${ofertas}. Ya puedes cerrar.`;
       return `${e.ofertas.toLocaleString("es-MX")} de ${e.participaciones.toLocaleString("es-MX")} ofertas · cierra ${fecha(e.plazo)}.`;
     case "cerrado":
-      return e.ofertas ? `${ofertas} · cerró ${fecha(e.plazo)}. Elige primario y respaldo.` : `Cerró ${fecha(e.plazo)} sin ofertas.`;
+      // e.plazo es la fecha límite; el evento pudo cerrarse antes.
+      return e.ofertas ? `${ofertas} · plazo ${fecha(e.plazo)}. Elige primario y respaldo.` : `Cerrado sin ofertas · plazo ${fecha(e.plazo)}.`;
     case "adjudicado":
-      return "Entregado a Rateware. Falta avisar a los carriers.";
+      // El listado no trae el recibo ni los avisos: se confirman en la página del evento.
+      return "Adjudicado. Confirma la entrega a Rateware y los avisos.";
     default:
       return "Archivado.";
   }
@@ -124,7 +126,7 @@ export function botonFila(e: ResumenEvento): string {
     case "Adjudicar y entregar":
       return "Adjudicar";
     case "Avisar a los carriers":
-      return "Avisar";
+      return "Revisar";
     default:
       return "Abrir";
   }

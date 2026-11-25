@@ -63,7 +63,7 @@ describe("fila de Eventos: etapa, qué pasa y un botón", () => {
     expect(etapaDe(ev({ estado: "borrador" }))).toEqual({ n: 2, texto: "Invitar" });
     expect(etapaDe(ev({ estado: "abierto" }))).toEqual({ n: 3, texto: "Ofertas" });
     expect(etapaDe(ev({ estado: "cerrado" }))).toEqual({ n: 3, texto: "Adjudicar" });
-    expect(etapaDe(ev({ estado: "adjudicado" }))).toEqual({ n: 5, texto: "Avisar" });
+    expect(etapaDe(ev({ estado: "adjudicado" }))).toEqual({ n: 4, texto: "Entrega y avisos" });
     expect(etapaDe(ev({ estado: "archivado" }))).toBeNull();
   });
   it("dice qué pasa en una frase y da un solo botón", () => {
@@ -71,10 +71,11 @@ describe("fila de Eventos: etapa, qué pasa y un botón", () => {
     expect(botonFila(ev({ ofertas: 3, participaciones: 8 }))).toBe("Ver ofertas");
     expect(quePasa(ev({ ofertas: 8, participaciones: 8 }), f)).toBe("Llegaron las 8 ofertas. Ya puedes cerrar.");
     expect(botonFila(ev({ ofertas: 8, participaciones: 8 }))).toBe("Cerrar a ofertas");
-    expect(quePasa(ev({ estado: "cerrado", ofertas: 1 }), f)).toBe("1 oferta · cerró 2026-11-20. Elige primario y respaldo.");
-    expect(quePasa(ev({ estado: "cerrado" }), f)).toBe("Cerró 2026-11-20 sin ofertas.");
+    expect(quePasa(ev({ estado: "cerrado", ofertas: 1 }), f)).toBe("1 oferta · plazo 2026-11-20. Elige primario y respaldo.");
+    expect(quePasa(ev({ estado: "cerrado" }), f)).toBe("Cerrado sin ofertas · plazo 2026-11-20.");
+    expect(quePasa(ev({ estado: "adjudicado" }), f)).toBe("Adjudicado. Confirma la entrega a Rateware y los avisos.");
     expect(botonFila(ev({ estado: "cerrado" }))).toBe("Adjudicar");
     expect(botonFila(ev({ estado: "borrador" }))).toBe("Invitar");
-    expect(botonFila(ev({ estado: "adjudicado" }))).toBe("Avisar");
+    expect(botonFila(ev({ estado: "adjudicado" }))).toBe("Revisar");
   });
 });

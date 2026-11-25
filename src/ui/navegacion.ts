@@ -98,6 +98,7 @@ export function entradasDeEventos(eventos: ResumenEvento[]): Resultado[] {
   }));
 }
 
+// Las ciudades solo cuentan cuando el listado trae las rutas (Rateware real puede mandar solo cuántas son).
 // Sin acentos ni mayúsculas: «cotizacion» encuentra «Cotización».
 export const plegar = (x: string) => x.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
@@ -129,7 +130,8 @@ export function etapaDe(e: Pick<ResumenEvento, "estado">): { n: number; texto: s
     case "cerrado":
       return { n: 3, texto: "Adjudicar" };
     case "adjudicado":
-      return { n: 5, texto: "Avisar" };
+      // Sin recibo ni avisos en el listado: queda entre la entrega y el aviso.
+      return { n: 4, texto: "Entrega y avisos" };
     default:
       return null;
   }

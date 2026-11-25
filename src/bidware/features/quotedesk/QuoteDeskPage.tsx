@@ -41,6 +41,9 @@ export function QuoteDeskPage() {
   const [search, setSearch] = useState("");
   // ?new=1 opens the new-quote dialog (the Dashboard's search links here).
   const [creating, setCreating] = useState(() => params.get("new") === "1");
+  // También al llegar con ?new=1 estando ya en esta pantalla (búsqueda global).
+  const nueva = params.get("new") === "1";
+  useEffect(() => { if (nueva) setCreating(true); }, [nueva, params]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panelDirty, setPanelDirty] = useState(false);
   const { data, loading, error, reload } = useAsync(

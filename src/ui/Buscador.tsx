@@ -50,6 +50,13 @@ export function Buscador({ abierto, cerrar, ir }: { abierto: boolean; cerrar: ()
   );
   const resultados: Resultado[] = q.trim() ? buscar(q, entradas) : sugeridos;
 
+  const caja = useRef<HTMLDivElement>(null);
+  // Al cerrar, el foco regresa a donde estaba (el botón Buscar o la pantalla).
+  useEffect(() => {
+    if (!abierto) return;
+    const previo = document.activeElement as HTMLElement | null;
+    return () => { if (previo && document.contains(previo)) previo.focus(); };
+  }, [abierto]);
   useEffect(() => {
     if (!abierto) return;
     setQ("");
@@ -67,21 +74,37 @@ export function Buscador({ abierto, cerrar, ir }: { abierto: boolean; cerrar: ()
   };
   return (
     <div className="buscador-fondo" onMouseDown={(ev) => { if (ev.target === ev.currentTarget) cerrar(); }}>
-      <div className="buscador-global" role="dialog" aria-modal="true" aria-label="Buscar en Fr8Bid">
+      <div
+        ref={caja}
+        className="buscador-global"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Buscar en Fr8Bid"
+        onKeyDown={(ev) => {
+          // Escape cierra desde cualquier parte del diálogo; Tab no sale de él.
+          if (ev.key === "Escape") { ev.preventDefault(); cerrar(); return; }
+          if (ev.key !== "Tab" || !caja.current) return;
+          const enfocables = [...caja.current.querySelectorAll<HTMLElement>("input, button")].filter((el) => !el.hasAttribute("disabled"));
+          if (!enfocables.length) return;
+          const primero = enfocables[0];
+          const ultimo = enfocables[enfocables.length - 1];
+          if (ev.shiftKey && document.activeElement === primero) { ev.preventDefault(); ultimo.focus(); }
+          else if (!ev.shiftKey && document.activeElement === ultimo) { ev.preventDefault(); primero.focus(); }
+        }}
+      >
         <label className="buscador-campo">
           <I.Lupa size={18} />
           <input
             ref={campo}
             type="search"
             value={q}
-            placeholder="Evento, folio, shipper, ciudad o sección…"
+            placeholder="Evento, folio, shipper o sección…"
             aria-label="Buscar en Fr8Bid"
             aria-controls="buscador-resultados"
             aria-activedescendant={resultados[cursor] ? `buscador-r${cursor}` : undefined}
             onChange={(ev) => setQ(ev.target.value)}
             onKeyDown={(ev) => {
-              if (ev.key === "Escape") { ev.preventDefault(); cerrar(); }
-              else if (ev.key === "ArrowDown") { ev.preventDefault(); setCursor((c) => Math.min(c + 1, resultados.length - 1)); }
+              if (ev.key === "ArrowDown") { ev.preventDefault(); setCursor((c) => Math.min(c + 1, resultados.length - 1)); }
               else if (ev.key === "ArrowUp") { ev.preventDefault(); setCursor((c) => Math.max(c - 1, 0)); }
               else if (ev.key === "Enter") { ev.preventDefault(); elegir(resultados[cursor]); }
             }}
@@ -100,7 +123,7 @@ export function Buscador({ abierto, cerrar, ir }: { abierto: boolean; cerrar: ()
             </li>
           ))}
         </ul>
-        {q.trim() && !resultados.length && <p className="buscador-vacio">Nada coincide con «{q.trim()}». Prueba con el folio, el shipper o una ciudad.</p>}
+        {q.trim() && !resultados.length && <p className="buscador-vacio">Nada coincide con «{q.trim()}». Prueba con el folio o el shipper.</p>}
         {!eventos && <p className="buscador-vacio">Los eventos aún se están leyendo; las secciones ya se pueden buscar.</p>}
       </div>
     </div>
