@@ -3,9 +3,12 @@
 // una lectura fresca y nunca toma rutas ni precios del navegador.
 import { describe, expect, it } from "vitest";
 import { detalle } from "../src/cliente/mapear";
-import { leerPropuestaPublicada, propuestaDelEvento } from "../src/dominio/propuesta";
+import { compararPropuesta, leerPropuestaPublicada, propuestaDelEvento, type PropuestaPublicada } from "../src/dominio/propuesta";
 import { manejar } from "../src/servidor/proxy";
+import { MesaApi } from "../src/cliente/api";
 import { mensajeDelServidor } from "../src/dominio/errores";
+import { revisar } from "../src/servidor/paso";
+import { explainRequestError } from "../src/bidware/features/shipper-request/request.service";
 
 const EV = "11111111-1111-4111-8111-111111111111";
 const L1 = "22222222-2222-4222-8222-222222222221";
@@ -126,5 +129,76 @@ describe("lectura y rechazos", () => {
   it("los rechazos de Rateware salen en español", () => {
     expect(mensajeDelServidor("RFX_PROPOSAL_HAS_ACCEPTANCE", "x")).toMatch(/ya aceptó/);
     expect(mensajeDelServidor("RFX_PROPOSAL_NO_SHIPPER_REQUEST", "x")).toMatch(/solicitud del shipper/);
+  });
+});
+
+describe("paso de los módulos (/api/funcion)", () => {
+  const paso = (fn: string, json: Record<string, unknown>, modo: "no" | "borradores" | "si") => revisar({ fn, json, autorizacion: "Bearer x", modo });
+
+  it("publicar la propuesta solo pasa por la página del evento, en cualquier modo", () => {
+    const body = { action: "publish_rfx_shipper_proposal", event_id: EV, lanes: [{ rfx_lane_id: L1, sell_rate: 1 }], currency: "USD" };
+    expect(paso("rateware-api", body, "si")?.body.code).toBe("EN_LA_MESA");
+    for (const modo of ["no", "borradores"] as const) expect(paso("rateware-api", body, modo)?.status).toBe(423);
+    expect(paso("rateware-api", { action: "get_rfx_shipper_proposal", event_id: EV }, "no")).toBeNull();
+  });
+
+  it("la aceptación del shipper es escritura: pasa con «si» y con el candado se le explica qué hacer", () => {
+    const body = { action: "accept_customer_rfi_proposal", token: "t", proposal_id: "p", lane_ids: [L1] };
+    expect(paso("rfx-bid-api", body, "si")).toBeNull();
+    for (const modo of ["no", "borradores"] as const) {
+      const r = paso("rfx-bid-api", body, modo);
+      expect(r?.status).toBe(423);
+      expect(explainRequestError(r!.body.error, "es")).toMatch(/no podemos registrar tu aceptación/);
+      expect(explainRequestError(r!.body.error, "en")).toMatch(/can't record your acceptance/);
+    }
+    expect(paso("rfx-bid-api", { action: "get_customer_rfi", token: "t" }, "no")).toBeNull();
+  });
+});
+
+describe("lo publicado frente a la adjudicación de hoy", () => {
+  const calc = propuestaDelEvento(detalle(crudo([lane(L1, 1, [inv({})]), lane(L2, 2, [inv({ id: "lv-3" })])]) as any));
+  const pub = (x: Partial<PropuestaPublicada> = {}): PropuestaPublicada => ({
+    id: "p", version: 1, moneda: "USD", vigenteHasta: "2026-12-25", publicadaEn: "2026-11-25T10:00:00Z",
+    lineas: [{ rutaId: L1, numero: 1, origen: "Origen 1", destino: "Destino 1", venta: 1100 }, { rutaId: L2, numero: 2, origen: "Origen 2", destino: "Destino 2", venta: 1100 }],
+    aceptadas: [], ...x
+  });
+
+  it("sin cambios ni vencimiento no ofrece volver a publicar", () => {
+    const c = compararPropuesta(calc, pub(), "2026-11-25");
+    expect(c).toMatchObject({ distinta: false, vencida: false, puedePublicar: false, cambios: [], quitadas: [] });
+    expect(compararPropuesta(calc, null, "2026-11-25").puedePublicar).toBe(true);
+  });
+
+  it("con la vigencia vencida deja renovarla aunque la tarifa no cambie", () => {
+    const c = compararPropuesta(calc, pub({ vigenteHasta: "2026-11-20" }), "2026-11-25");
+    expect(c).toMatchObject({ distinta: false, vencida: true, puedePublicar: true });
+  });
+
+  it("los cambios salen aparte, con lo publicado y lo de hoy; con algo aceptado no se vuelve a publicar", () => {
+    const antes = pub({ lineas: [{ rutaId: L1, numero: 1, origen: "Origen 1", destino: "Destino 1", venta: 1000 }, { rutaId: "otra", numero: 3, origen: "X", destino: "Y", venta: 5 }] });
+    const c = compararPropuesta(calc, antes, "2026-11-25");
+    expect(c.distinta).toBe(true);
+    expect(c.cambios.map((x) => [x.numero, x.antes, x.ahora])).toEqual([[1, 1000, 1100], [2, null, 1100]]);
+    expect(c.quitadas).toEqual([3]);
+    expect(c.puedePublicar).toBe(true);
+    const aceptada = compararPropuesta(calc, { ...antes, aceptadas: [{ rutaId: L1, en: "2026-11-26", por: "Ana" }] }, "2026-11-25");
+    expect(aceptada).toMatchObject({ distinta: true, puedePublicar: false });
+  });
+});
+
+describe("cliente: publicar y seguir viendo la liga del shipper", () => {
+  it("después de publicar vuelve a leer, así conserva que el evento tiene solicitud del shipper", async () => {
+    const acciones: string[] = [];
+    const api = new MesaApi(async (_s, b) => {
+      acciones.push(String(b.action));
+      // Como Rateware: publicar responde solo con la propuesta.
+      return b.action === "publish_rfx_shipper_proposal"
+        ? { status: 200, body: { proposal: { id: "p", version: 1, currency: "USD", lanes: [] } }, headers: {} }
+        : { status: 200, body: { has_shipper_request: true, proposal: { id: "p", version: 1, currency: "USD", lanes: [], accepted: [] } }, headers: {} };
+    });
+    const r = await api.publicarPropuesta(EV, "2026-12-25");
+    expect(acciones).toEqual(["publish_rfx_shipper_proposal", "get_rfx_shipper_proposal"]);
+    expect(r.conSolicitud).toBe(true);
+    expect(r.propuesta?.id).toBe("p");
   });
 });

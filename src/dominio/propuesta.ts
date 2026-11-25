@@ -122,3 +122,32 @@ export function leerPropuestaPublicada(crudo: any): { conSolicitud: boolean; pro
       : null
   };
 }
+
+// Lo publicado frente a la adjudicación de hoy. La tabla del equipo siempre muestra
+// lo publicado con lo aceptado; lo que cambió se muestra aparte.
+export interface Comparacion {
+  /** Rutas cuya venta de hoy no es la publicada (o que no estaban publicadas). */
+  cambios: { rutaId: string; numero: number; origen: string; destino: string; antes: number | null; ahora: number; moneda: string }[];
+  /** Rutas publicadas que hoy ya no van (desiertas o sin primario). */
+  quitadas: number[];
+  distinta: boolean;
+  vencida: boolean;
+  /** Publicar por primera vez, o volver a publicar para corregir o renovar la vigencia. */
+  puedePublicar: boolean;
+}
+
+export function compararPropuesta(calculada: Propuesta, publicada: PropuestaPublicada | null, hoy: string): Comparacion {
+  const antes = new Map((publicada?.lineas ?? []).map((l) => [l.rutaId, l.venta]));
+  const hoyIds = new Set(calculada.lineas.map((l) => l.rutaId));
+  const cambios = publicada
+    ? calculada.lineas
+        .filter((l) => antes.get(l.rutaId) !== l.venta)
+        .map((l) => ({ rutaId: l.rutaId, numero: l.numero, origen: l.origen, destino: l.destino, antes: antes.get(l.rutaId) ?? null, ahora: l.venta, moneda: l.moneda }))
+    : [];
+  const quitadas = publicada ? publicada.lineas.filter((l) => !hoyIds.has(l.rutaId)).map((l) => l.numero ?? 0) : [];
+  const distinta = Boolean(publicada) && (cambios.length > 0 || quitadas.length > 0 || (calculada.moneda !== null && calculada.moneda !== publicada!.moneda));
+  const vencida = Boolean(publicada?.vigenteHasta) && publicada!.vigenteHasta! < hoy;
+  const lista = calculada.faltan.length === 0 && calculada.lineas.length > 0;
+  const sinAceptar = (publicada?.aceptadas.length ?? 0) === 0;
+  return { cambios, quitadas, distinta, vencida, puedePublicar: lista && sinAceptar && (!publicada || distinta || vencida) };
+}

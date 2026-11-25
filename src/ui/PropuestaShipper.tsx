@@ -5,7 +5,7 @@
 // costo. Las rutas y la venta las vuelve a calcular el servidor al publicar.
 
 import { useCallback, useEffect, useState } from "react";
-import { propuestaDelEvento, textoFaltan, type PropuestaPublicada } from "../dominio/propuesta";
+import { compararPropuesta, propuestaDelEvento, textoFaltan, type PropuestaPublicada } from "../dominio/propuesta";
 import { hoyMexico, type Contexto } from "../dominio/recorrido";
 import type { Detalle } from "../dominio/tipos";
 import { Confirmar, dinero, fecha } from "./comun";
@@ -40,13 +40,12 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
   if (estado.cargando) return null;
   const { propuesta } = estado;
   const aceptadas = new Map((propuesta?.aceptadas ?? []).map((a) => [a.rutaId, a]));
-  const ventaPublicada = new Map((propuesta?.lineas ?? []).map((l) => [l.rutaId, l.venta]));
-  // La adjudicación cambió después de publicar: lo publicado ya no coincide.
-  const distinta = Boolean(propuesta) && (
-    propuesta!.lineas.length !== calculada.lineas.length ||
-    calculada.lineas.some((l) => ventaPublicada.get(l.rutaId) !== l.venta)
-  );
-  const puedePublicar = ctx.rol === "admin" && estado.conSolicitud && !calculada.faltan.length && calculada.lineas.length > 0 && aceptadas.size === 0 && (!propuesta || distinta);
+  const cmp = compararPropuesta(calculada, propuesta, hoy);
+  const puedePublicar = ctx.rol === "admin" && estado.conSolicitud && cmp.puedePublicar;
+  // Siempre lo publicado (con lo aceptado); antes de publicar, lo calculado.
+  const filas = propuesta
+    ? propuesta.lineas.map((l) => ({ rutaId: l.rutaId, numero: l.numero, origen: l.origen, destino: l.destino, equipo: d.rutas.find((r) => r.id === l.rutaId)?.equipo ?? "", venta: l.venta, moneda: propuesta.moneda }))
+    : calculada.lineas;
 
   return (
     <div className="tarjeta" data-prueba="propuesta-shipper">
@@ -72,7 +71,7 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
               <tr><th>Ruta</th><th>Equipo</th><th>Tarifa de venta</th>{propuesta && <th>Shipper</th>}</tr>
             </thead>
             <tbody>
-              {(propuesta && !distinta ? propuesta.lineas.map((l) => ({ rutaId: l.rutaId, numero: l.numero, origen: l.origen, destino: l.destino, equipo: d.rutas.find((r) => r.id === l.rutaId)?.equipo ?? "", venta: l.venta, moneda: propuesta.moneda })) : calculada.lineas).map((l) => {
+              {filas.map((l) => {
                 const a = aceptadas.get(l.rutaId);
                 return (
                   <tr key={l.rutaId}>
@@ -87,8 +86,22 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
           </table>
           {calculada.desiertas > 0 && <p className="tenue">{calculada.desiertas === 1 ? "1 ruta desierta no va" : `${calculada.desiertas} rutas desiertas no van`} en la propuesta.</p>}
           {calculada.faltan.length > 0 && <p className="tenue fila-icono"><I.Candado size={15} />Antes de publicar: {textoFaltan(calculada.faltan)}.</p>}
-          {distinta && aceptadas.size === 0 && <p className="nota">La adjudicación cambió después de publicar. Vuelve a publicar para que el shipper vea las tarifas de hoy.</p>}
-          {distinta && aceptadas.size > 0 && <p className="nota">La adjudicación cambió, pero el shipper ya aceptó rutas de la propuesta publicada. Habla con él antes de cambiar algo.</p>}
+          {cmp.distinta && (
+            <div className="nota" data-prueba="propuesta-cambios">
+              <p>
+                {aceptadas.size === 0
+                  ? "La adjudicación cambió después de publicar. Arriba está lo que ve el shipper; vuelve a publicar para que vea las tarifas de hoy:"
+                  : "La adjudicación cambió, pero el shipper ya aceptó rutas de la propuesta publicada (arriba). Habla con él antes de cambiar algo. Con la adjudicación de hoy quedaría:"}
+              </p>
+              <ul>
+                {cmp.cambios.map((c) => (
+                  <li key={c.rutaId}>{c.numero ? `${c.numero} · ` : ""}{c.origen} → {c.destino}: {c.antes === null ? "no estaba publicada" : dinero(c.antes, propuesta!.moneda)} → {dinero(c.ahora, c.moneda)}</li>
+                ))}
+                {cmp.quitadas.length > 0 && <li>{cmp.quitadas.length === 1 ? `La ruta ${cmp.quitadas[0] || ""} ya no va` : `Las rutas ${cmp.quitadas.join(", ")} ya no van`} en la propuesta.</li>}
+              </ul>
+            </div>
+          )}
+          {cmp.vencida && !cmp.distinta && aceptadas.size === 0 && <p className="nota">La vigencia ya pasó y el shipper ya no puede aceptar. Vuelve a publicar con una fecha nueva para renovarla.</p>}
           {puedePublicar && (
             <div className="fila-botones">
               <label className="campo"><span>Vigente hasta</span><input type="date" value={vigencia} min={hoy} onChange={(e) => setVigencia(e.target.value)} /></label>

@@ -58,6 +58,11 @@ export const EN_LA_MESA = new Set([
   "generate_rfx_award_notices"
 ]);
 
+// La propuesta al shipper se publica en la página del evento: ahí el servidor de
+// Fr8Bid calcula rutas y venta con una lectura fresca (proxy.ts, guardaPropuesta).
+// Por /api/funcion llegaría con rutas y precios del navegador.
+export const SOLO_EN_LA_PAGINA = new Set(["publish_rfx_shipper_proposal"]);
+
 const ESTADOS_DE_ENTREGA = new Set(["closed", "awarded"]);
 
 export function esFuncion(fn: string): fn is Funcion {
@@ -128,6 +133,9 @@ export function revisar(l: Llamada): Rechazo | null {
 
   if (fn === "rateware-api" && EN_LA_MESA.has(action))
     return rechazo(409, "EN_LA_MESA", "Adjudicar, entregar a Rateware y avisar a los carriers se hacen en la página del evento, con sus candados.", action);
+
+  if (fn === "rateware-api" && SOLO_EN_LA_PAGINA.has(action))
+    return rechazo(409, "EN_LA_MESA", "La propuesta al shipper se publica desde la página del evento, que calcula la tarifa de venta.", action);
 
   if (fn === "rateware-api" && action === "update_rfx_event") {
     const patch = body.patch && typeof body.patch === "object" ? (body.patch as Record<string, unknown>) : {};

@@ -65,6 +65,12 @@ function explainIn(message: string, lang: Lang) {
       ? "Esta propuesta ya venció. Pide una actualización a tu contacto en MARKSMAN."
       : "This proposal has expired. Ask your MARKSMAN contact for an update.";
   }
+  // Fr8Bid with real writes locked (FR8BID_ESCRITURAS_REALES not «si»): the acceptance is not recorded.
+  if (/aprobación del propietario|solo borradores/.test(text)) {
+    return lang === "es"
+      ? "Por ahora no podemos registrar tu aceptación en línea. Avísale a tu contacto en MARKSMAN qué rutas aceptas."
+      : "We can't record your acceptance online right now. Tell your MARKSMAN contact which lanes you accept.";
+  }
   if (/already been submitted/.test(text)) {
     return lang === "es"
       ? "Esta solicitud ya se envió. Si necesitas cambiarla, avísale a tu contacto en MARKSMAN."
