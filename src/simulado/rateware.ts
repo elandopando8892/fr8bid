@@ -203,7 +203,7 @@ export class RatewareSimulado {
   aceptarPropuesta(proposalId: string, laneIds: string[], nombre: string | null = null) {
     const p = this.propuestas.find((x) => x.id === proposalId);
     if (!p) throw new Falla(404, "Proposal not found.", "NOT_FOUND");
-    if (p.status !== "published") throw new Falla(409, "A newer proposal replaced this one.", "RFX_PROPOSAL_REPLACED");
+    if (p.status !== "published") throw new Falla(409, "This proposal was updated. Reload the page to see the current one.", "RFX_PROPOSAL_REPLACED");
     if (p.valid_through && String(p.valid_through) < this.hoy()) throw new Falla(409, "The proposal is past its validity.", "RFX_PROPOSAL_EXPIRED");
     const suyas = new Set((p.lanes as Fila[]).map((l) => l.rfx_lane_id));
     if (!laneIds.length || laneIds.some((id) => !suyas.has(id))) throw new Falla(400, "One of the lanes is not part of this proposal.", "RFX_PROPOSAL_LANE_INVALID");

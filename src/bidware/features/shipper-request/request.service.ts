@@ -55,7 +55,7 @@ function explainIn(message: string, lang: Lang) {
       ? "Esta liga no está activa. Pide una nueva a tu contacto en MARKSMAN."
       : "This link isn't active. Ask your MARKSMAN contact for a new one.";
   }
-  if (/proposal was updated/.test(text)) {
+  if (/proposal was updated|newer proposal|rfx_proposal_replaced/.test(text)) {
     return lang === "es"
       ? "La propuesta se actualizó. Vuelve a cargar la página para ver la vigente."
       : "The proposal was updated. Reload the page to see the current one.";

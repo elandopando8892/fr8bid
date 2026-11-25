@@ -469,3 +469,10 @@ describe("Excel de la propuesta para el shipper", () => {
     expect(filas[1]).toEqual([1, "Monterrey", "Dallas", "Dry Van · 53 ft", "D2D", 3, 1100, "USD", "Sí"]);
   });
 });
+
+describe("mensaje al shipper cuando su propuesta fue reemplazada", () => {
+  it("reconoce el texto de Rateware, el código y la variante anterior", () => {
+    for (const m of ["This proposal was updated. Reload the page to see the current one.", "RFX_PROPOSAL_REPLACED", "A newer proposal replaced this one."])
+      expect(explainRequestError(m, "es", "MARKSMAN")).toMatch(/La propuesta se actualizó/);
+  });
+});

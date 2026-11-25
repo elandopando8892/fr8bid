@@ -110,7 +110,7 @@ describe("propuesta al shipper contra el simulado", () => {
     expect(v2.propuesta?.version).toBe(2);
     expect(v2.propuesta?.aceptadas.map((a) => [a.rutaId, a.por])).toEqual([[l1.id, "Ana"]]);
     // La versión vieja ya no se acepta; la nueva sí, y la ruta 2 queda aceptada también.
-    expect(() => sim.aceptarPropuesta(v1.propuesta!.id, [l2.id])).toThrow(/replaced/);
+    expect(() => sim.aceptarPropuesta(v1.propuesta!.id, [l2.id])).toThrow(/proposal was updated/);
     const fin = sim.aceptarPropuesta(v2.propuesta!.id, [l2.id], "Ana")!;
     expect((fin.accepted as any[]).map((a) => a.rfx_lane_id).sort()).toEqual([l1.id, l2.id].sort());
   });
