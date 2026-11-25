@@ -8,7 +8,7 @@ import { aCarga, Desactualizado, EstadoVista, fecha, Liga, plural, type Carga } 
 import * as I from "./Iconos";
 import { useSesion } from "./sesion";
 
-type Bandeja = { respuestas: RespuestaBandeja[]; hayMas: boolean };
+type Bandeja = { respuestas: RespuestaBandeja[]; hayMas: boolean; incompletas: number };
 
 // Una sola lectura vigente: la de esta sesión y fuente, y la última que se pidió.
 export function useBandeja(activo = true) {
@@ -69,7 +69,12 @@ export function Respuestas() {
       </header>
       {carga.tipo === "ok" && <Desactualizado leidoEn={carga.leidoEn} actualizar={leer} />}
       <EstadoVista carga={carga} reintentar={leer} />
-      {datos && !respuestas.length && (
+      {datos && datos.incompletas > 0 && (
+        <div className="estado estado-error" role="alert">
+          {plural(datos.incompletas, "respuesta llegó incompleta", "respuestas llegaron incompletas")} de Rateware y no se muestra{datos.incompletas === 1 ? "" : "n"}. Ábrelas desde la página de su evento.
+        </div>
+      )}
+      {datos && !respuestas.length && !datos.incompletas && (
         <div className="estado vacio">
           <p>No hay respuestas por atender. Cada 15 minutos la IA lee los correos nuevos de los carriers y los deja aquí.</p>
         </div>

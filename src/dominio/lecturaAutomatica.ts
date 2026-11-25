@@ -27,6 +27,8 @@ export interface LecturaGuardada {
   marcaDe?: string | null;
   // Rutas que ya entraron como oferta desde este correo: un reintento o reabrir el borrador no las repite.
   rutasGuardadas?: string[];
+  // Importe enviado por ruta antes de saber si entró: si la respuesta se pierde, sirve para reconocerla.
+  intentos?: Record<string, { tarifa: number; moneda: string }>;
 }
 
 export interface Pendiente {

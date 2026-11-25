@@ -28,7 +28,10 @@ interface Fila {
   notas: string;
   cita: string;
   dudas: string[];
-  guardada: boolean; // ya entró como versión: un reintento no la repite
+  guardada: boolean; // este navegador vio que entró como versión: un reintento no la repite
+  // Rateware ya tiene una oferta igual capturada por el equipo después del correo: puede ser esta (respuesta
+  // perdida, otra persona u otro equipo) o una independiente. Lo decide quien revisa; no se marca sola.
+  posibleDuplicado: string | null;
 }
 
 const TIPO: Record<Lectura["tipo"], string> = { oferta: "Mandó oferta", rechazo: "Rechazó", pregunta: "Hizo una pregunta", otro: "Sin oferta" };
@@ -49,23 +52,34 @@ const rutasLectura = (d: Detalle) => d.rutas.map((r) => ({ id: r.id, numero: r.n
 const fecha = (en: string) => new Date(en).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Monterrey" });
 
 // Propuesta de la IA convertida en filas editables, solo en rutas donde ese carrier admite captura.
-// Ya entró a Rateware una oferta igual capturada por el equipo después de que llegó el correo: es la de
-// este borrador (un intento anterior, otra persona u otro equipo, o una respuesta que se perdió en la red).
-const yaEnRateware = (p: Participacion | null, tarifa: string, moneda: string, desde: string) =>
-  Boolean(p && p.versiones.some((v) => v.fuente === "captura_equipo" && v.creadaEn >= desde && v.tarifaAllIn === Number(tarifa.replace(/,/g, "")) && v.moneda === moneda));
+// Oferta del equipo en Rateware, posterior al correo, con alguno de los importes que este borrador pudo
+// guardar (el de la IA, el editado o el de un intento cuya respuesta se perdió). Solo es un indicio.
+type Importe = { tarifa: number; moneda: string };
+function coincidencia(p: Participacion | null, importes: Importe[], desde: string): string | null {
+  if (!p || !desde) return null;
+  const v = p.versiones.find((x) => x.fuente === "captura_equipo" && x.creadaEn >= desde && importes.some((i) => i.tarifa === x.tarifaAllIn && i.moneda === x.moneda));
+  return v ? `Rateware ya tiene una oferta de ${dinero(v.tarifaAllIn, v.moneda)} capturada por el equipo el ${fecha(v.creadaEn)}, después de este correo. Puede ser esta misma: revisa antes de guardar otra.` : null;
+}
+const importe = (tarifa: string, moneda: string): Importe[] => {
+  const n = Number(tarifa.replace(/,/g, ""));
+  return n > 0 && moneda ? [{ tarifa: n, moneda }] : [];
+};
 
-// guardadas: rutas que ya entraron desde este correo (un intento anterior que falló a la mitad).
-function aFilas(d: Detalle, l: Lectura, carrierId: string, guardadas: string[] = [], desde = ""): Fila[] {
+// previa: lo que este navegador recuerda de ese correo (rutas que entraron e intentos con su importe).
+function aFilas(d: Detalle, l: Lectura, carrierId: string, previa: LecturaGuardada | undefined, desde = ""): Fila[] {
+  const guardadas = previa?.rutasGuardadas ?? [];
   return l.ofertas.flatMap((o) => {
     const ruta = d.rutas.find((r) => r.id === o.rutaId);
     if (!ruta) return [];
     const p = ruta.participaciones.find((x) => x.carrierId === carrierId) ?? null;
     const sirve = p && capturable(ruta, p) ? p : null;
-    const ya = guardadas.includes(ruta.id) || (desde !== "" && o.tarifa !== null && yaEnRateware(p, String(o.tarifa), o.moneda || "", desde));
+    const ya = guardadas.includes(ruta.id);
+    const intento = previa?.intentos?.[ruta.id];
+    const posible = ya ? null : coincidencia(p, [...importe(o.tarifa === null ? "" : String(o.tarifa), o.moneda || ""), ...(intento ? [intento] : [])], desde);
     return [{
       ruta,
       p: sirve,
-      incluir: Boolean(sirve) && o.tarifa !== null && !ya,
+      incluir: Boolean(sirve) && o.tarifa !== null && !ya && !posible,
       tarifa: o.tarifa === null ? "" : String(o.tarifa),
       moneda: o.moneda || "",
       vigencia: o.vigencia || "",
@@ -74,7 +88,8 @@ function aFilas(d: Detalle, l: Lectura, carrierId: string, guardadas: string[] =
       notas: o.notas,
       cita: o.cita,
       dudas: o.dudas,
-      guardada: ya
+      guardada: ya,
+      posibleDuplicado: posible
     }];
   });
 }
@@ -162,6 +177,15 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
         if (!g.marcaPendiente) continue;
         if (servidor.some((f) => f.gmail_message_id === g.correoId && f.reviewed_at)) await avisarEquipo(g.correoId, null);
         else if (g.marcaDe === (s.correo ?? null)) await avisarEquipo(g.correoId, g.marcaPendiente);
+        else {
+          // La dejó otra cuenta y no llegó al equipo: para esta cuenta sigue por atender (Rateware manda).
+          const todas = cargarLecturas(d.evento.id);
+          const { marcaPendiente: _, marcaDe: __, ...sin } = todas[g.correoId];
+          todas[g.correoId] = { ...sin, revisado: false };
+          guardarLecturas(d.evento.id, todas);
+          delServidor[g.correoId] = todas[g.correoId];
+          setLeidas({ ...delServidor });
+        }
       }
       const pendientes = d.evento.estado === "abierto" && carriers.size ? correosPendientes(d, carriers, delServidor) : [];
       for (const x of pendientes) {
@@ -191,9 +215,10 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     if (!desde) return;
     setFilas((xs) => {
       const nuevas = xs.map((x) => {
-        if (x.guardada || !x.p) return x;
+        if (x.guardada || x.posibleDuplicado || !x.p) return x;
         const fresca = d.rutas.find((r) => r.id === x.ruta.id)?.participaciones.find((p) => p.id === x.p!.id) ?? null;
-        return yaEnRateware(fresca, x.tarifa, x.moneda, desde) ? { ...x, guardada: true, incluir: false } : x;
+        const posible = coincidencia(fresca, importe(x.tarifa, x.moneda), desde);
+        return posible ? { ...x, posibleDuplicado: posible, incluir: false } : x;
       });
       return nuevas.some((x, i) => x !== xs[i]) ? nuevas : xs;
     });
@@ -258,7 +283,7 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     setError(null);
     setLectura(g.lectura);
     setDesde(g.en);
-    setFilas(aFilas(d, g.lectura!, g.carrierId, cargarLecturas(d.evento.id)[g.correoId]?.rutasGuardadas, g.en));
+    setFilas(aFilas(d, g.lectura!, g.carrierId, cargarLecturas(d.evento.id)[g.correoId], g.en));
     setRevisando(g);
     setAbierto(true);
   };
@@ -371,7 +396,7 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
       const l = await s.api.leerRespuesta({ texto, canal, carrier, adjuntos, anexos, rutas: rutasLectura(d) });
       setLectura(l);
       const correoId = traido?.id ?? revisando?.correoId;
-      setFilas(aFilas(d, l, carrierId, correoId ? cargarLecturas(d.evento.id)[correoId]?.rutasGuardadas : [], desde));
+      setFilas(aFilas(d, l, carrierId, correoId ? cargarLecturas(d.evento.id)[correoId] : undefined, desde));
     } catch (e) {
       setError(e instanceof ErrorApi ? e.message : "La IA no pudo leer esta respuesta. Captúrala a mano.");
     } finally {
@@ -380,12 +405,18 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
   };
 
   // Se recuerda en este navegador qué rutas de este correo ya entraron, para que reabrir el borrador no las repita.
-  const recordarGuardada = (rutaId: string) => {
+  // Antes de enviar se anota el importe (si la respuesta se pierde, sirve para reconocerla en Rateware);
+  // al confirmar Rateware, la ruta queda como guardada.
+  const recordar = (rutaId: string, que: { intento: Importe } | { guardada: true }) => {
     const correoId = traido?.id ?? revisando?.correoId;
     if (!correoId) return;
     const previa = cargarLecturas(d.evento.id);
     const base: LecturaGuardada = previa[correoId] ?? (revisando?.correoId === correoId ? revisando : null) ?? { correoId, carrierId, carrier, en: new Date().toISOString(), leidoEn: new Date().toISOString(), lectura: null, fallo: null, revisado: false };
-    const todas = { ...previa, [correoId]: { ...base, rutasGuardadas: [...new Set([...(base.rutasGuardadas ?? []), rutaId])] } };
+    const cambio: Partial<LecturaGuardada> =
+      "intento" in que
+        ? { intentos: { ...(base.intentos ?? {}), [rutaId]: que.intento } }
+        : { rutasGuardadas: [...new Set([...(base.rutasGuardadas ?? []), rutaId])] };
+    const todas = { ...previa, [correoId]: { ...base, ...cambio } };
     guardarLecturas(d.evento.id, todas);
     setLeidas(todas);
   };
@@ -474,6 +505,7 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
               </label>
               {!f.p && <p className="tenue">{carrier} no tiene una invitación capturable en esta ruta.</p>}
               {f.guardada && <p className="tenue">Ya guardada como nueva versión.</p>}
+              {!f.guardada && f.posibleDuplicado && <p className="nota" role="note">{f.posibleDuplicado}</p>}
               {f.cita && <p className="tenue">«{f.cita}»</p>}
               {f.dudas.length > 0 && <ul>{f.dudas.map((x, j) => <li key={j}>{x}</li>)}</ul>}
               {f.p && !f.guardada && (
@@ -505,6 +537,7 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
                   await accion(async () => {
                     // Una por una; cada una que entra se marca, para que un reintento tras un error no la repita.
                     for (const f of elegidas) {
+                      recordar(f.ruta.id, { intento: { tarifa: Number(f.tarifa.replace(/,/g, "")), moneda: f.moneda } });
                       await s.api.capturarOferta({
                         eventId: d.evento.id,
                         participacionId: f.p!.id,
@@ -518,7 +551,7 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
                         leidaConIA: true
                       });
                       setFilas((xs) => xs.map((x) => (x.ruta.id === f.ruta.id ? { ...x, guardada: true, incluir: false } : x)));
-                      recordarGuardada(f.ruta.id);
+                      recordar(f.ruta.id, { guardada: true });
                     }
                     hecho = true;
                     return elegidas.length;

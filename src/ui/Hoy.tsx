@@ -44,8 +44,8 @@ function Indicadores() {
 // esperan a alguien del equipo. Solo si hay alguna.
 function RespuestasPorAtender() {
   const { carga } = useBandeja();
-  if (carga.tipo !== "ok" || !carga.datos.respuestas.length) return null;
-  const n = carga.datos.respuestas.length;
+  const n = carga.tipo === "ok" ? carga.datos.respuestas.length + carga.datos.incompletas : 0;
+  if (carga.tipo !== "ok" || !n) return null;
   return (
     <div className="atajos-chips indicadores">
       <Liga a="/respuestas" className="chip-liga acento"><I.Sobre size={15} />{carga.datos.hayMas ? "Más de " : ""}{plural(n, "respuesta")} de carriers por atender</Liga>

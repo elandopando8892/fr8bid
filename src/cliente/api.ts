@@ -259,7 +259,7 @@ export class MesaApi {
   }
 
   // Bandeja de respuestas con IA (rateware #235): lo pendiente de todos los eventos abiertos.
-  async bandejaRespuestas(): Promise<{ respuestas: RespuestaBandeja[]; hayMas: boolean }> {
+  async bandejaRespuestas(): Promise<{ respuestas: RespuestaBandeja[]; hayMas: boolean; incompletas: number }> {
     try {
       const cuerpo: any = await this.rw({ action: "list_rfx_reply_inbox" });
       if (!Array.isArray(cuerpo?.readings)) throw new ErrorApi(502, "RESPUESTA_INCOMPLETA", "Rateware no devolvió la lista de respuestas. Intenta de nuevo.");

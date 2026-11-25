@@ -47,6 +47,8 @@ describe("aBandeja", () => {
     });
     expect(b.respuestas.map((r) => [r.correoId, r.tipo])).toEqual([["msg000002", "rechazo"], ["msg000001", "oferta"]]);
     expect(b.hayMas).toBe(true);
+    // Las dos filas sin correo o evento válidos se cuentan para avisar, no se esconden.
+    expect(b.incompletas).toBe(2);
   });
 
   it("la liga abre el evento con esa respuesta", () => {

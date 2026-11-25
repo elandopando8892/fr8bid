@@ -67,20 +67,26 @@ export function aRespuestaBandeja(f: any): RespuestaBandeja | null {
 }
 
 // Una respuesta sin la lista no se toma como «no hay pendientes»: se avisa que no se pudo leer.
-export function aBandeja(cuerpo: any): { respuestas: RespuestaBandeja[]; hayMas: boolean } {
+// incompletas: filas que Rateware mandó sin evento o correo válidos; se avisan, no se esconden.
+export function aBandeja(cuerpo: any): { respuestas: RespuestaBandeja[]; hayMas: boolean; incompletas: number } {
   if (!Array.isArray(cuerpo?.readings)) throw new Error("RESPUESTA_INCOMPLETA");
   const filas = cuerpo.readings;
   const vistos = new Set<string>();
+  let incompletas = 0;
   const respuestas: RespuestaBandeja[] = [];
   for (const f of filas) {
     const r = aRespuestaBandeja(f);
     const clave = r && `${r.eventoId}:${r.correoId}`;
-    if (!r || vistos.has(clave!)) continue;
+    if (!r) {
+      incompletas++;
+      continue;
+    }
+    if (vistos.has(clave!)) continue;
     vistos.add(clave!);
     respuestas.push(r);
   }
   respuestas.sort((a, b) => b.en.localeCompare(a.en));
-  return { respuestas, hayMas: cuerpo?.has_more === true };
+  return { respuestas, hayMas: cuerpo?.has_more === true, incompletas };
 }
 
 // Liga a la página del evento con esa respuesta abierta para revisarla.

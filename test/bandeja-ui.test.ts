@@ -105,7 +105,7 @@ describe("borrador abierto desde la bandeja", () => {
     expect(sesion.api.marcarLectura).toHaveBeenCalledWith(EV, "msgoferta1", "captured");
   });
 
-  it("una captura cuya respuesta se perdió pero sí entró no se vuelve a ofrecer al releer el evento", async () => {
+  it("una captura cuya respuesta se perdió pero sí entró sale como posible duplicado y no se vuelve a marcar sola", async () => {
     sesion.api.capturarOferta = vi.fn(async (o: any) => { if (o.participacionId === "p2") throw new Error("504"); return {}; });
     await render("msgoferta1");
     await clic(/Guardar 2 ofertas/);
@@ -113,14 +113,38 @@ describe("borrador abierto desde la bandeja", () => {
     // La página relee el evento tras el intento: Rateware sí tiene la de la ruta 2.
     detalle = detalleBase({ p1: [capturada(1100)], p2: [capturada(1200)] });
     await render(null);
+    expect(container.textContent).toContain("Ya guardada como nueva versión");
+    expect(container.textContent).toContain("Puede ser esta misma");
     expect(boton(/Guardar \d+ oferta/)?.disabled).toBe(true);
-    expect(container.textContent?.match(/Ya guardada como nueva versión/g)).toHaveLength(2);
   });
 
-  it("en otro equipo (sin nada guardado en el navegador) lo ya capturado sale marcado", async () => {
+  it("si se editó la tarifa y la respuesta se perdió, al reabrir se reconoce por el importe enviado", async () => {
+    sesion.api.capturarOferta = vi.fn(async () => { throw new Error("504"); });
+    await render("msgoferta1");
+    await clic(/Guardar 2 ofertas/);
+    await clic("Sí, confirmar");
+    // Antes de enviar se anotó el importe de cada ruta.
+    expect(cargarLecturas(EV).msgoferta1.intentos?.r1).toEqual({ tarifa: 1100, moneda: "USD" });
+
+    // Otro intento anterior mandó la ruta 1 corregida a 1150 y Rateware sí la guardó.
+    const previa = cargarLecturas(EV).msgoferta1;
+    almacen.set(`fr8bid-lecturas-ia-${EV}`, JSON.stringify({ msgoferta1: { ...previa, intentos: { r1: { tarifa: 1150, moneda: "USD" } } } }));
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    detalle = detalleBase({ p1: [capturada(1150)] });
+    await render("msgoferta1");
+    expect(container.textContent).toContain("Rateware ya tiene una oferta de");
+    expect(boton(/Guardar 1 oferta/)).toBeTruthy();
+  });
+
+  it("otra oferta del mismo importe no se da por guardada: queda a decisión de quien revisa", async () => {
     detalle = detalleBase({ p1: [capturada(1100)], p2: [capturada(1200, "2026-11-24T09:00:00Z")] });
     await render("msgoferta1");
-    // La ruta 2 tiene una versión de antes del correo: esa no cuenta, sigue pendiente.
+    // Ruta 1: indicio de duplicado, sin marcar. Ruta 2: versión de antes del correo, no cuenta.
+    expect(container.textContent).toContain("Puede ser esta misma");
+    expect(container.textContent).not.toContain("Ya guardada como nueva versión");
+    // Quien revisa puede incluirla de todos modos.
+    expect((container.querySelectorAll("input[type=checkbox]")[0] as HTMLInputElement).disabled).toBe(false);
     await clic(/Guardar 1 oferta/);
     await clic("Sí, confirmar");
     expect(sesion.api.capturarOferta.mock.calls.map((c: any[]) => c[0].participacionId)).toEqual(["p2"]);
@@ -166,10 +190,15 @@ describe("borrador abierto desde la bandeja", () => {
     sesion.api.marcarLectura = vi.fn(async () => true);
     await render(null);
     expect(sesion.api.marcarLectura).not.toHaveBeenCalled();
+    // Para esa otra cuenta sigue por atender (Rateware no la tiene marcada): no se queda bloqueada.
+    expect(cargarLecturas(EV).msgoferta1).toMatchObject({ revisado: false });
+    expect(container.textContent).toContain("Respuestas por correo leídas por la IA");
 
     // La marca sí había entrado (la respuesta se perdió): se limpia sin escribir.
     await act(async () => root.unmount());
     root = createRoot(container);
+    // La primera cuenta vuelve; la marca sí había entrado (la respuesta se perdió): se limpia sin escribir.
+    almacen.set(`fr8bid-lecturas-ia-${EV}`, JSON.stringify({ msgoferta1: { ...cargarLecturas(EV).msgoferta1, revisado: true, marcaPendiente: "dismissed", marcaDe: "operador@equipo.mx" } }));
     sesion.correo = "operador@equipo.mx";
     sesion.api.lecturasServidor = vi.fn(async () => [servidor({ reviewed_at: "2026-11-25T12:00:00Z", review_outcome: "dismissed" })]);
     await render(null);
