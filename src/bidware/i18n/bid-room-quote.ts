@@ -85,6 +85,13 @@ export const quoteCopy = {
   "panel.eyebrowLane": { es: "Cotización · ruta {0}", en: "Quote · lane {0}" },
   "panel.position": { es: "Ruta {0} de {1}", en: "Lane {0} of {1}" },
   "panel.close": { es: "Cerrar", en: "Close" },
+  "panel.sentWaiting": { es: "Oferta enviada. Estamos actualizando tus rutas.", en: "Offer sent. We are updating your lanes." },
+  "panel.declinedWaiting": { es: "Marcada como no participo. Estamos actualizando tus rutas.", en: "Marked as not bidding. We are updating your lanes." },
+  "page.reloadFailed": {
+    es: "Tu respuesta se guardó, pero no pudimos actualizar tus rutas.",
+    en: "Your answer was saved, but we could not update your lanes.",
+  },
+  "page.retry": { es: "Volver a cargar", en: "Load again" },
   "panel.review": { es: "Revisar", en: "Review" },
   "panel.quote": { es: "Cotizar", en: "Quote" },
   "panel.yourOffer": { es: "Tu oferta", en: "Your offer" },

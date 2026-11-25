@@ -31,7 +31,10 @@ export function startForm(lane: BookLane, shared: SharedFields | null | undefine
  * `answered` holds the lanes answered here whose reload has not arrived yet:
  * the list still shows them pending, but they are never offered again.
  */
-export function nextPending(lanes: BookLane[], from: BookLane, answered: ReadonlySet<string> = new Set()): BookLane | null {
+/** How a lane was answered here: an offer sent, or "not bidding". */
+export type AnswerKind = "sent" | "declined";
+
+export function nextPending(lanes: BookLane[], from: BookLane, answered: { has(id: string): boolean } = new Set<string>()): BookLane | null {
   const i = lanes.findIndex((l) => l.rfx_lane_id === from.rfx_lane_id);
   const order = [...lanes.slice(i + 1), ...lanes.slice(0, Math.max(i, 0))];
   return (

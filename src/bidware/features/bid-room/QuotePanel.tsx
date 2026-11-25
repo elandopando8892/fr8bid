@@ -31,7 +31,7 @@ import {
   type OfferForm,
 } from "./bidroom.service";
 
-import { SHARED_KEYS, sharedOf, startForm, type SharedFields } from "./quick-quote";
+import { SHARED_KEYS, sharedOf, startForm, type AnswerKind, type SharedFields } from "./quick-quote";
 export type { SharedFields };
 
 /** The lane's number as the carrier sees it in the list. */
@@ -86,7 +86,8 @@ export function QuotePanel({
   onBusy?: (busy: boolean) => void;
   /** Opens capacity details when arriving from "Completar mi oferta". */
   extrasOpen?: boolean;
-  onDone: (message: string) => void;
+  /** `kind` says how a lane without an offer was just answered (sent or declined); a revision or withdrawal has none. */
+  onDone: (message: string, kind?: AnswerKind) => void;
   /** Sends the carrier to Mensajes. */
   onAsk: () => void;
 }) {
@@ -150,12 +151,12 @@ export function QuotePanel({
     return SCORE_FACTORS.filter((f) => f.done(draft)).length;
   }, [form, lane]);
 
-  async function run(fn: () => Promise<unknown>, ok: string) {
+  async function run(fn: () => Promise<unknown>, ok: string, kind?: AnswerKind) {
     setBusy(true);
     setError(null);
     try {
       await fn();
-      onDone(ok);
+      onDone(ok, kind);
     } catch (e) {
       setError(explainBidError(e));
     } finally {
@@ -176,6 +177,7 @@ export function QuotePanel({
       await run(
         () => submitBid(token, offerPayload(form, lane)),
         q(form.best_final ? "form.sentFinal" : revision ? "form.sentUpdated" : "form.sent", route(lane)),
+        "sent",
       );
     } finally {
       sending.current = false;
@@ -501,7 +503,7 @@ export function QuotePanel({
             onClick={async () => {
               const reason = await promptAsync(q("form.declinePrompt"));
               if (reason === null) return;
-              run(() => declineInvitation(token, reason), q("form.declined", route(lane)));
+              run(() => declineInvitation(token, reason), q("form.declined", route(lane)), "declined");
             }}
           >
             {q("form.decline")}

@@ -23,8 +23,12 @@ prueba como si fuera la función de Supabase. `FR8BID_TRAZA=1` muestra las llama
 
 - `cotizacion-rapida.browser.cjs` (25-nov): el Bid Room en un teléfono, con la hoja por ruta, «Enviar y seguir»,
   datos copiados a las demás rutas, envíos seguidos con recarga lenta, envío que falla y una confirmación sobre la
-  hoja. Córrela antes de abrir un PR que toque `src/bidware/features/bid-room/`:
-  `test/bidware-navegador/correr.sh test/bidware-navegador/cotizacion-rapida.browser.cjs`.
+  hoja.
+- `cotizacion-rapida-escritorio.browser.cjs` (25-nov): en escritorio, la última ruta no se envía dos veces mientras
+  llega la recarga, «No participo» se ve como tal y una recarga fallida se explica y se reintenta.
+
+Córrelas antes de abrir un PR que toque `src/bidware/features/bid-room/`:
+`test/bidware-navegador/correr.sh test/bidware-navegador/cotizacion-rapida*.browser.cjs`.
 
 ## Cambios respecto a Bidware
 

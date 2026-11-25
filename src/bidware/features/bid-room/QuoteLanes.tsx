@@ -3,7 +3,8 @@ import { InfoBanner, Pill, money } from "@/components/ui";
 import { useLang } from "@/i18n/language";
 import { q } from "@/i18n/bid-room-quote";
 import { QuotePanel, QuotePanelEmpty } from "./QuotePanel";
-import { nextPending, type SharedFields } from "./quick-quote";
+import { nextPending, type AnswerKind, type SharedFields } from "./quick-quote";
+import { ReloadRetry } from "./ReloadRetry";
 import { SegmentTerms } from "./SegmentTerms";
 import { QuoteExcel } from "./QuoteExcel";
 import { canQuote, laneState, type Answer, type BookLane, type LaneState } from "./bidroom.service";
@@ -68,6 +69,8 @@ export function QuoteLanes({
   shared,
   onShare,
   answered,
+  reloadFailed,
+  onRetry,
 }: {
   token: string;
   eventId: string;
@@ -79,14 +82,17 @@ export function QuoteLanes({
   extras: boolean;
   notice: string | null;
   onPick: (lane: BookLane) => void;
-  onDone: (lane: BookLane, message: string) => void;
+  onDone: (lane: BookLane, message: string, kind?: AnswerKind) => void;
   onAsk: () => void;
   /** Closes the bottom sheet on a phone. */
   onClose: () => void;
   shared: SharedFields | null;
   onShare: (fields: SharedFields | null) => void;
-  /** Lanes answered here whose reload has not arrived yet. */
-  answered: ReadonlySet<string>;
+  /** Lanes answered here whose reload has not arrived yet, and how. */
+  answered: ReadonlyMap<string, AnswerKind>;
+  /** The reload after an answer failed: the answered lanes wait for a retry. */
+  reloadFailed: boolean;
+  onRetry: () => void;
 }) {
   useLang();
   const panel = useRef<HTMLDivElement>(null);
@@ -199,7 +205,7 @@ export function QuoteLanes({
             <tbody>
               {lanes.map((lane) => {
                 // Sent here and waiting for the reload: shown as sent, and not opened again until the server confirms it.
-                const sentHere = answered.has(lane.rfx_lane_id);
+                const sentHere = answered.get(lane.rfx_lane_id);
                 const state = laneState(lane);
                 const action = sentHere ? null : actionOf(lane);
                 return (
@@ -223,7 +229,13 @@ export function QuoteLanes({
                       {lane.bid_rate != null ? money(lane.bid_rate, String(lane.currency || "USD")) : "—"}
                     </td>
                     <td className="c-state">
-                      {sentHere ? <Pill tone="green">{q("state.sent")}</Pill> : <Pill tone={STATE_TONE[state]}>{q(`state.${state}`)}</Pill>}
+                      {sentHere === "sent" ? (
+                        <Pill tone="green">{q("state.sent")}</Pill>
+                      ) : sentHere === "declined" ? (
+                        <Pill tone="">{q("state.declined")}</Pill>
+                      ) : (
+                        <Pill tone={STATE_TONE[state]}>{q(`state.${state}`)}</Pill>
+                      )}
                     </td>
                     <td className="c-action" style={{ textAlign: "right" }}>
                       {action ? (
@@ -271,11 +283,23 @@ export function QuoteLanes({
           )}
           {sheet && notice && <InfoBanner>{notice}</InfoBanner>}
           <fieldset disabled={excelBusy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
-          {picked ? (
+          {sheet && reloadFailed && answered.size > 0 && <ReloadRetry onRetry={onRetry} />}
+          {picked && answered.has(picked.rfx_lane_id) ? (
+            // Answered here, waiting for the server's copy: nothing to send again until it arrives.
+            <aside className="croom-panel">
+              <div className="croom-eyebrow">{q("panel.position", position, lanes.length)}</div>
+              <h3 className="croom-panel-title" tabIndex={-1}>
+                {String(picked.origin ?? "—")} → {String(picked.destination ?? "—")}
+              </h3>
+              <p className="croom-note" role="status">
+                {q(answered.get(picked.rfx_lane_id) === "declined" ? "panel.declinedWaiting" : "panel.sentWaiting")}
+              </p>
+            </aside>
+          ) : picked ? (
             <QuotePanel
               lane={picked}
               extrasOpen={extras}
-              onDone={(message) => onDone(picked, message)}
+              onDone={(message, kind) => onDone(picked, message, kind)}
               onAsk={onAsk}
               position={{ n: position, total: lanes.length }}
               next={next}

@@ -15,7 +15,8 @@ import {
   type PrivateWorkspace,
 } from "./bidroom.service";
 import { QuoteLanes, wide } from "./QuoteLanes";
-import { nextPending, type SharedFields } from "./quick-quote";
+import { nextPending, type AnswerKind, type SharedFields } from "./quick-quote";
+import { ReloadRetry } from "./ReloadRetry";
 import { BusinessOverview } from "./BusinessOverview";
 import { BidRoomChat } from "./BidRoomChat";
 import { BidSupportAssistant } from "./BidSupportAssistant";
@@ -110,13 +111,13 @@ function BidRoomContent({ token }: { token: string }) {
   // Lanes answered here, each with the server copy that was on screen when it was answered. Until a newer
   // copy arrives (the reload, which useAsync only accepts from the latest request), the list still shows them
   // pending, so they are never offered again as "next"; once it arrives the server's own state decides.
-  const [answeredOn, setAnsweredOn] = useState<Map<string, unknown>>(new Map());
+  const [answeredOn, setAnsweredOn] = useState<Map<string, { copy: unknown; kind: AnswerKind }>>(new Map());
   const answeredRef = useRef(answeredOn);
   answeredRef.current = answeredOn;
   const dataRef = useRef<unknown>(null);
   dataRef.current = data;
   const answered = useMemo(
-    () => new Set([...answeredOn].filter(([, copy]) => copy === data).map(([id]) => id)),
+    () => new Map([...answeredOn].filter(([, a]) => a.copy === data).map(([id, a]) => [id, a.kind] as const)),
     [answeredOn, data],
   );
   const pickedRef = useRef<string | null>(null);
@@ -200,16 +201,16 @@ function BidRoomContent({ token }: { token: string }) {
   const linkRoute =
     linkLane.origin && linkLane.destination ? `${String(linkLane.origin)} → ${String(linkLane.destination)}` : undefined;
 
-  function afterWrite(lane: BookLane, message: string) {
+  function afterWrite(lane: BookLane, message: string, kind?: AnswerKind) {
     setNotice(message);
     setExtras(false);
     // A first answer on a lane moves on to the next one still waiting (the button said so); a revision stays put.
     // On a phone, with nothing left to quote, the sheet closes and the list shows the progress.
-    if (lane.bid_rate == null) {
-      const map = new Map(answeredRef.current).set(lane.rfx_lane_id, dataRef.current);
+    if (lane.bid_rate == null && kind) {
+      const map = new Map(answeredRef.current).set(lane.rfx_lane_id, { copy: dataRef.current, kind });
       answeredRef.current = map;
       setAnsweredOn(map);
-      const done = new Set([...map].filter(([, copy]) => copy === dataRef.current).map(([id]) => id));
+      const done = new Set([...map].filter(([, a]) => a.copy === dataRef.current).map(([id]) => id));
       // If the carrier closed the sheet or moved to another lane while this one was sending, the late answer leaves the choice alone.
       if (pickedRef.current === lane.rfx_lane_id) {
         const next = nextPending(lanesRef.current, lane, done);
@@ -264,6 +265,8 @@ function BidRoomContent({ token }: { token: string }) {
 
       <main className="croom-page">
         {error && <ErrorBanner message={error} />}
+        {/* A reload that failed after an answer: the list keeps the answer as sent until it can be read again. */}
+        {error && answered.size > 0 && <ReloadRetry onRetry={reload} />}
         {linkLane.no_award === true && (
           <InfoBanner title={q("page.noAwardTitle")}>
             {linkRoute ? q("page.noAwardRoute", linkRoute) : q("page.noAwardNoRoute")}
@@ -308,6 +311,8 @@ function BidRoomContent({ token }: { token: string }) {
               shared={shared}
               onShare={setShared}
               answered={answered}
+              reloadFailed={Boolean(error)}
+              onRetry={reload}
             />
           ) : (
             <Empty
