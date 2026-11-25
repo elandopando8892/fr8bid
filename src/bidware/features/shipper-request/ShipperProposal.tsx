@@ -48,16 +48,17 @@ export function RequestSteps({ progress, copy, lang }: { progress: RequestProgre
   );
 }
 
-async function downloadProposal(proposal: RequestProposal, copy: Copy, lang: Lang, title: string) {
-  const XLSX = await import("xlsx");
+/** The Excel rows: every term the table shows (route, equipment and trailer, service, volume, rate). */
+export function proposalRows(proposal: RequestProposal, copy: Copy, lang: Lang): (string | number)[][] {
   const accepted = new Set(proposal.accepted.map((row) => row.rfx_lane_id));
   const rows = [
-    [copy.colLane, lang === "es" ? "Origen" : "Origin", lang === "es" ? "Destino" : "Destination", copy.colEquipment, copy.colVolume, copy.colRate, lang === "es" ? "Moneda" : "Currency", copy.accepted],
+    [copy.colLane, lang === "es" ? "Origen" : "Origin", lang === "es" ? "Destino" : "Destination", copy.colEquipment, lang === "es" ? "Servicio" : "Service", copy.colVolume, copy.colRate, lang === "es" ? "Moneda" : "Currency", copy.accepted],
     ...proposal.lanes.map((lane, index) => [
       lane.lane_number ?? index + 1,
       lane.origin ?? "",
       lane.destination ?? "",
       [lane.equipment, lane.trailer].filter(Boolean).join(" · "),
+      lane.service ?? "",
       lane.weekly_volume ?? "",
       lane.sell_rate ?? "",
       proposal.currency,
@@ -65,8 +66,14 @@ async function downloadProposal(proposal: RequestProposal, copy: Copy, lang: Lan
     ]),
   ];
   if (proposal.valid_through) rows.push([], [copy.validThrough, proposal.valid_through]);
+  return rows;
+}
+
+async function downloadProposal(proposal: RequestProposal, copy: Copy, lang: Lang, title: string) {
+  const XLSX = await import("xlsx");
+  const rows = proposalRows(proposal, copy, lang);
   const sheet = XLSX.utils.aoa_to_sheet(rows);
-  sheet["!cols"] = [{ wch: 6 }, { wch: 28 }, { wch: 28 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 9 }, { wch: 10 }];
+  sheet["!cols"] = [{ wch: 6 }, { wch: 28 }, { wch: 28 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 9 }, { wch: 10 }];
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, sheet, lang === "es" ? "Propuesta" : "Proposal");
   const name = (title || "propuesta").replace(/[^\w-]+/g, "_").slice(0, 60);

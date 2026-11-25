@@ -7,6 +7,8 @@ import { compararPropuesta, huellaPropuesta, leerPropuestaPublicada, propuestaDe
 import { manejar } from "../src/servidor/proxy";
 import { MesaApi } from "../src/cliente/api";
 import { recargarAlVolver, turnos } from "../src/ui/recargaAlVolver";
+import { proposalRows } from "../src/bidware/features/shipper-request/ShipperProposal";
+import { copyFor } from "../src/bidware/features/shipper-request/request.copy";
 import { acceptLanes, afterAccept, proposalState, canAccept, pendingLanes, progressAfter, reconcile } from "../src/bidware/features/shipper-request/proposal.flow";
 import { mensajeDelServidor } from "../src/dominio/errores";
 import { revisar } from "../src/servidor/paso";
@@ -416,5 +418,15 @@ describe("lecturas fuera de orden y propuesta vacía", () => {
     expect(proposalState({ ...base, lanes: [] })).toBe("empty");
     expect(proposalState({ ...base, lanes: [{ rfx_lane_id: "a" }] })).toBe("pending");
     expect(proposalState({ ...base, lanes: [{ rfx_lane_id: "a" }], accepted: [{ rfx_lane_id: "a" }] })).toBe("all");
+  });
+});
+
+describe("Excel de la propuesta para el shipper", () => {
+  it("lleva todos los términos que muestra la tabla, servicio y caja incluidos", () => {
+    const prop: any = { id: "p", version: 1, currency: "USD", valid_through: "2026-12-25", expired: false, accepted: [{ rfx_lane_id: "a" }],
+      lanes: [{ rfx_lane_id: "a", lane_number: 1, origin: "Monterrey", destination: "Dallas", equipment: "Dry Van", trailer: "53 ft", service: "D2D", weekly_volume: 3, sell_rate: 1100 }] };
+    const filas = proposalRows(prop, copyFor("es", "MARKSMAN"), "es");
+    expect(filas[0]).toContain("Servicio");
+    expect(filas[1]).toEqual([1, "Monterrey", "Dallas", "Dry Van · 53 ft", "D2D", 3, 1100, "USD", "Sí"]);
   });
 });

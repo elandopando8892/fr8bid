@@ -121,6 +121,9 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
                     try {
                       const r = await s.api.publicarPropuesta(d.evento.id, vigencia || null, huellaPropuesta(calculada), propuesta?.id ?? null);
                       if (turno.vigente(t)) setEstado({ cargando: false, error: null, ...r });
+                      // Una lectura que salió mientras se publicaba pudo descartar esta respuesta:
+                      // se lee otra vez ya publicada, y esa lectura es la última que cuenta.
+                      else await cargar();
                     } catch (e) {
                       // Respuesta perdida o rechazo: antes de ofrecer publicar otra vez se lee la
                       // propuesta vigente. Si ya quedó publicada, el botón desaparece; si la lectura
