@@ -933,6 +933,9 @@ export class RatewareSimulado {
         });
         const vigente = this.propuestas.find((x) => x.rfx_event_id === event.id && x.status === "published");
         const moneda = String(body.currency || "USD");
+        // Como Rateware: publicar lo mismo otra vez (un reintento) devuelve la versión vigente.
+        if (vigente && JSON.stringify(vigente.lanes) === JSON.stringify(lineas) && vigente.currency === moneda && (vigente.valid_through ?? null) === (body.valid_through || null) && (vigente.notes ?? null) === (body.notes || null))
+          return ok({ proposal: this.propuestaVigente(event.id) });
         const heredadas = vigente ? this.aceptaciones.filter((a) => a.proposal_id === vigente.id) : [];
         if (vigente) {
           // Una versión nueva conserva lo aceptado si cada ruta aceptada vuelve igual.

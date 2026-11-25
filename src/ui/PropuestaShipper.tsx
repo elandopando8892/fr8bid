@@ -41,7 +41,7 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
   const { propuesta } = estado;
   const aceptadas = new Map((propuesta?.aceptadas ?? []).map((a) => [a.rutaId, a]));
   const cmp = compararPropuesta(calculada, propuesta, hoy);
-  const puedePublicar = ctx.rol === "admin" && estado.conSolicitud && cmp.puedePublicar;
+  const puedePublicar = ctx.rol === "admin" && !estado.error && estado.conSolicitud && cmp.puedePublicar;
   // Siempre lo publicado (con lo aceptado); antes de publicar, lo calculado.
   const filas: Fila[] = propuesta
     ? propuesta.lineas.map((l) => ({ rutaId: l.rutaId, numero: l.numero, origen: l.origen, destino: l.destino, equipo: l.equipo, servicio: l.servicio, volumenSemanal: l.volumenSemanal, venta: l.venta, moneda: propuesta.moneda }))
@@ -109,8 +109,17 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
                 }
                 onConfirmar={() =>
                   accion(async () => {
-                    const r = await s.api.publicarPropuesta(d.evento.id, vigencia || null, huellaPropuesta(calculada));
-                    setEstado({ cargando: false, error: null, ...r });
+                    try {
+                      const r = await s.api.publicarPropuesta(d.evento.id, vigencia || null, huellaPropuesta(calculada));
+                      setEstado({ cargando: false, error: null, ...r });
+                    } catch (e) {
+                      // Respuesta perdida o rechazo: antes de ofrecer publicar otra vez se lee la
+                      // propuesta vigente. Si ya quedó publicada, el botón desaparece; si la lectura
+                      // también falla, el panel queda con error y sin botón. (Repetir lo mismo no
+                      // crea otra versión en Rateware.)
+                      await cargar();
+                      throw e;
+                    }
                   }, "Propuesta publicada en la liga del shipper.")
                 }
               />

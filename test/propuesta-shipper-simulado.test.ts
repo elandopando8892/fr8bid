@@ -109,4 +109,27 @@ describe("propuesta al shipper contra el simulado", () => {
     const fin = sim.aceptarPropuesta(v2.propuesta!.id, [l2.id], "Ana")!;
     expect((fin.accepted as any[]).map((a) => a.rfx_lane_id).sort()).toEqual([l1.id, l2.id].sort());
   });
+  it("una respuesta perdida al publicar: el reintento no crea otra versión", async () => {
+    const p = propuestaDelEvento(await admin.detalle(eventId));
+    const cuerpo = { action: "publish_rfx_shipper_proposal", event_id: eventId, valid_through: "2026-11-20", proposal_fingerprint: huellaPropuesta(p), confirmed: true, confirmation_action: "publish_rfx_shipper_proposal" };
+    // Rateware la guarda, pero la respuesta no llega.
+    const perdida = await manejar("rateware-api", { ...cuerpo }, "Bearer sim:admin", {
+      permitirEscrituras: true,
+      hoy: () => sim.hoy(),
+      timeoutMs: 50,
+      enviar: async (s, b, auth) => {
+        const r = await sim.llamar(s, b, auth);
+        if (b.action === "publish_rfx_shipper_proposal") await new Promise((ok) => setTimeout(ok, 200));
+        return r;
+      }
+    });
+    expect(perdida.status).toBe(504);
+    expect(sim.propuestas).toHaveLength(1);
+    // La lectura muestra la vigente (el panel ya no ofrece publicar lo mismo) y un reintento igual no crea otra versión.
+    const leida = await admin.propuestaShipper(eventId);
+    expect(leida.propuesta?.version).toBe(1);
+    const otra = await admin.publicarPropuesta(eventId, "2026-11-20", huellaPropuesta(p));
+    expect(otra.propuesta?.version).toBe(1);
+    expect(sim.propuestas).toHaveLength(1);
+  });
 });

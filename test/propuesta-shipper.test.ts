@@ -44,6 +44,14 @@ describe("propuestaDelEvento", () => {
     expect(JSON.stringify(p.lineas.map(({ primarioId: _p, ...resto }) => resto))).not.toMatch(/Carrier Secreto|lv-1|1000/);
   });
 
+  it("la ruta es la que guarda Rateware (origin/destination), aunque ciudad y estado digan otra cosa", () => {
+    const conCiudad = (origin: string) => propuestaDelEvento(detalle(crudo([lane(L1, 1, [inv({})], { origin, origin_city: "Monterrey", origin_state: "NL" })]) as any));
+    const p = conCiudad("MTY Planta 2");
+    expect(p.lineas[0].origen).toBe("MTY Planta 2");
+    // Cambiar ese texto cambia la huella aunque ciudad y estado sigan iguales.
+    expect(huellaPropuesta(conCiudad("MTY Planta 3"))).not.toBe(huellaPropuesta(p));
+  });
+
   it("dice qué falta: sin primario, sin modelo comercial o monedas mezcladas; las desiertas no van", () => {
     const sinPrimario = detalle(crudo([lane(L1, 1, [inv({ award_role: null })])]) as any);
     expect(propuestaDelEvento(sinPrimario).faltan).toEqual([{ numero: 1, motivo: "sin primario" }]);

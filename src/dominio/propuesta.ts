@@ -65,8 +65,10 @@ export function propuestaDelEvento(d: Detalle): Propuesta {
     lineas.push({
       rutaId: ruta.id,
       numero: ruta.numero,
-      origen: ruta.origen,
-      destino: ruta.destino,
+      // Ruta como la guarda Rateware en la propuesta y la ve el shipper (rfx_lanes.origin y
+      // .destination): la misma en la vista previa, la huella, lo publicado y la comparación.
+      origen: String(ruta.cruda?.origin ?? ruta.origen ?? "").trim(),
+      destino: String(ruta.cruda?.destination ?? ruta.destino ?? "").trim(),
       // Equipo como lo guarda Rateware en la propuesta (rfx_lanes.equipment), sin la caja.
       equipo: String(ruta.cruda?.equipment ?? ruta.equipo ?? "").trim(),
       servicio: String(ruta.cruda?.service ?? "").trim(),
