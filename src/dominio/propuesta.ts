@@ -91,7 +91,9 @@ export function propuestaDelEvento(d: Detalle): Propuesta {
 // modelo comercial, los términos de la ruta y los modelos aceptados del evento.
 // Rateware lo compara con la ruta y el primario bloqueados y rechaza si cambió
 // (RFX_PROPOSAL_STALE); guarda solo datos de la ruta y la venta.
-const CLAVES_PRIMARIO = ["bid_rate", "currency", "commercial_model", "carrier_share_pct", "marksman_margin_pct"];
+// awarded_at fija la versión adjudicada (la última antes de ese instante): una adjudicación
+// rehecha, aun con los mismos términos, es otra revisión.
+const CLAVES_PRIMARIO = ["bid_rate", "currency", "commercial_model", "carrier_share_pct", "marksman_margin_pct", "awarded_at"];
 // Todo lo de la ruta que se ve (el shipper y el equipo): número, corredor, ciudad, estado
 // y país, equipo, caja, servicio y volumen.
 const CLAVES_RUTA = [

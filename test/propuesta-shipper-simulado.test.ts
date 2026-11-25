@@ -56,6 +56,7 @@ describe("propuesta al shipper contra el simulado", () => {
   for (const [que, cambiar] of [
     ["la oferta adjudicada", () => { sim.laneVendors.find((x) => x.id === A)!.bid_rate = 1700; }],
     ["el número de la ruta", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.lane_number = 9; }],
+    ["la adjudicación (rehecha con los mismos términos)", () => { sim.laneVendors.find((x) => x.id === A)!.awarded_at = "2026-11-01T18:00:00.000Z"; }],
     ["la caja de la ruta", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.trailer = "48"; }],
     ["el estado de destino", () => { sim.lanes.find((l) => l.rfx_event_id === eventId)!.destination_state = "CA"; }],
     ["las rutas del evento (una ruta nueva)", () => { const l = sim.lanes.find((x) => x.rfx_event_id === eventId)!; sim.lanes.push({ ...l, id: "44444444-4444-4444-8444-4444444444a4", lane_number: 2 }); }],

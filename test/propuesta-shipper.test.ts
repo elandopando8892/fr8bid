@@ -100,7 +100,7 @@ describe("proxy: publicar la propuesta", () => {
       sell_rate: 1100,
       expected: {
         primary_id: "lv-1",
-        primary: { bid_rate: 1000, currency: "USD", commercial_model: "cost_plus", carrier_share_pct: null, marksman_margin_pct: 10 },
+        primary: { bid_rate: 1000, currency: "USD", commercial_model: "cost_plus", carrier_share_pct: null, marksman_margin_pct: 10, awarded_at: "2026-11-21T10:00:00Z" },
         lane: { lane_number: 1, origin: "Origen 1", destination: "Destino 1", origin_city: null, origin_state: null, origin_country: null, destination_city: null, destination_state: null, destination_country: null, equipment: "Dry Van", trailer: null, service: null, weekly_volume: 3 },
         master_package: null
       }
@@ -120,6 +120,8 @@ describe("proxy: publicar la propuesta", () => {
     for (const [body, code] of [
       [publicar({ lanes: [{ rfx_lane_id: L1, sell_rate: 1 }] }), "SOLO_PROPUESTA"],
       [publicar({ currency: "MXN" }), "SOLO_PROPUESTA"],
+      // Las notas no se publican: la liga del shipper no las muestra.
+      [publicar({ notes: "condición oculta" }), "SOLO_PROPUESTA"],
       [publicar({ confirmed: false }), "SIN_CONFIRMAR"],
       [publicar({ valid_through: "2026-11-01" }), "VIGENCIA_PASADA"],
       [publicar({ valid_through: "25/12/2026" }), "VIGENCIA_INVALIDA"],

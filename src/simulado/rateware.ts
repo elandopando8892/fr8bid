@@ -931,7 +931,7 @@ export class RatewareSimulado {
           const mismo = (a: unknown, b: unknown) => (a ?? null) === (b ?? null) || (typeof a === "number" || typeof b === "number" ? Number(a) === Number(b) && a != null && b != null : false);
           const vigenteIgual =
             esp.primary_id === prim[0].id &&
-            ["bid_rate", "currency", "commercial_model", "carrier_share_pct", "marksman_margin_pct"].every((k) => esp.primary && k in esp.primary && mismo(esp.primary[k], prim[0][k])) &&
+            ["bid_rate", "currency", "commercial_model", "carrier_share_pct", "marksman_margin_pct", "awarded_at"].every((k) => esp.primary && k in esp.primary && mismo(esp.primary[k], prim[0][k])) &&
             ["lane_number", "origin", "destination", "origin_city", "origin_state", "origin_country", "destination_city", "destination_state", "destination_country", "equipment", "trailer", "service", "weekly_volume"].every((k) => esp.lane && k in esp.lane && mismo(esp.lane[k], lane[k])) &&
             "master_package" in esp && JSON.stringify(esp.master_package ?? null) === JSON.stringify(event.rfx_master_package ?? null);
           if (!vigenteIgual) throw new Falla(409, "The award or the lanes changed after the proposal was reviewed.", "RFX_PROPOSAL_STALE");
