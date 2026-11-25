@@ -3,9 +3,10 @@
 // una lectura fresca y nunca toma rutas ni precios del navegador.
 import { describe, expect, it } from "vitest";
 import { detalle } from "../src/cliente/mapear";
-import { compararPropuesta, leerPropuestaPublicada, propuestaDelEvento, type PropuestaPublicada } from "../src/dominio/propuesta";
+import { compararPropuesta, huellaPropuesta, leerPropuestaPublicada, propuestaDelEvento, type PropuestaPublicada } from "../src/dominio/propuesta";
 import { manejar } from "../src/servidor/proxy";
 import { MesaApi } from "../src/cliente/api";
+import { acceptLanes, pendingLanes, progressAfter } from "../src/bidware/features/shipper-request/proposal.flow";
 import { mensajeDelServidor } from "../src/dominio/errores";
 import { revisar } from "../src/servidor/paso";
 import { explainRequestError } from "../src/bidware/features/shipper-request/request.service";
@@ -68,7 +69,9 @@ function op(det: unknown, enviados: Record<string, unknown>[]) {
   } as any;
 }
 
-const publicar = (x: Record<string, unknown> = {}) => ({ action: "publish_rfx_shipper_proposal", event_id: EV, valid_through: "2026-12-25", confirmed: true, confirmation_action: "publish_rfx_shipper_proposal", ...x });
+const huellaDe = (crudoDet: unknown) => huellaPropuesta(propuestaDelEvento(detalle(crudoDet as any)));
+const HUELLA = huellaDe(crudo([lane(L1, 1, [inv({})])]));
+const publicar = (x: Record<string, unknown> = {}) => ({ action: "publish_rfx_shipper_proposal", event_id: EV, valid_through: "2026-12-25", proposal_fingerprint: HUELLA, confirmed: true, confirmation_action: "publish_rfx_shipper_proposal", ...x });
 
 describe("proxy: publicar la propuesta", () => {
   const det = crudo([lane(L1, 1, [inv({})])]);
@@ -82,6 +85,7 @@ describe("proxy: publicar la propuesta", () => {
     expect(enviado.currency).toBe("USD");
     expect(enviado.valid_through).toBe("2026-12-25");
     expect(enviado).not.toHaveProperty("confirmed");
+    expect(enviado).not.toHaveProperty("proposal_fingerprint");
     expect(JSON.stringify(enviado)).not.toMatch(/Carrier Secreto|bid_rate/);
   });
 
@@ -99,6 +103,22 @@ describe("proxy: publicar la propuesta", () => {
       expect(r.body?.code).toBe(code);
       expect(env.some((b) => b.action === "publish_rfx_shipper_proposal")).toBe(false);
     }
+  });
+
+  it("no publica si la adjudicación cambió desde que el Administrador la revisó", async () => {
+    for (const cambiado of [
+      crudo([lane(L1, 1, [inv({ bid_rate: 1200 })])]),
+      crudo([lane(L1, 1, [inv({})], { weekly_volume: 9 })]),
+      crudo([lane(L1, 1, [inv({})]), lane(L2, 2, [inv({ id: "lv-3" })])])
+    ]) {
+      const env: Record<string, unknown>[] = [];
+      const r = await manejar("rateware-api", publicar(), "Bearer x", op(cambiado, env));
+      expect(r.status).toBe(409);
+      expect(r.body?.code).toBe("PROPUESTA_CAMBIO");
+      expect(env.map((b) => b.action)).toEqual(["list_rfx_detail"]);
+    }
+    const env: Record<string, unknown>[] = [];
+    expect((await manejar("rateware-api", publicar({ proposal_fingerprint: undefined }), "Bearer x", op(det, env))).body?.code).toBe("PROPUESTA_CAMBIO");
   });
 
   it("no publica si falta adjudicar o definir el modelo", async () => {
@@ -157,11 +177,13 @@ describe("paso de los módulos (/api/funcion)", () => {
 
 describe("lo publicado frente a la adjudicación de hoy", () => {
   const calc = propuestaDelEvento(detalle(crudo([lane(L1, 1, [inv({})]), lane(L2, 2, [inv({ id: "lv-3" })])]) as any));
+  const linea = (rutaId: string, numero: number, venta: number, x: Record<string, unknown> = {}) => ({ rutaId, numero, origen: `Origen ${numero}`, destino: `Destino ${numero}`, equipo: "Dry Van", volumenSemanal: 3, venta, ...x });
   const pub = (x: Partial<PropuestaPublicada> = {}): PropuestaPublicada => ({
     id: "p", version: 1, moneda: "USD", vigenteHasta: "2026-12-25", publicadaEn: "2026-11-25T10:00:00Z",
-    lineas: [{ rutaId: L1, numero: 1, origen: "Origen 1", destino: "Destino 1", venta: 1100 }, { rutaId: L2, numero: 2, origen: "Origen 2", destino: "Destino 2", venta: 1100 }],
+    lineas: [linea(L1, 1, 1100), linea(L2, 2, 1100)],
     aceptadas: [], ...x
   });
+  const aceptoL1 = [{ rutaId: L1, en: "2026-11-26", por: "Ana" }];
 
   it("sin cambios ni vencimiento no ofrece volver a publicar", () => {
     const c = compararPropuesta(calc, pub(), "2026-11-25");
@@ -169,36 +191,98 @@ describe("lo publicado frente a la adjudicación de hoy", () => {
     expect(compararPropuesta(calc, null, "2026-11-25").puedePublicar).toBe(true);
   });
 
-  it("con la vigencia vencida deja renovarla aunque la tarifa no cambie", () => {
-    const c = compararPropuesta(calc, pub({ vigenteHasta: "2026-11-20" }), "2026-11-25");
-    expect(c).toMatchObject({ distinta: false, vencida: true, puedePublicar: true });
+  it("con la vigencia vencida deja renovarla aunque la tarifa no cambie, también con aceptación parcial", () => {
+    expect(compararPropuesta(calc, pub({ vigenteHasta: "2026-11-20" }), "2026-11-25")).toMatchObject({ distinta: false, vencida: true, puedePublicar: true });
+    expect(compararPropuesta(calc, pub({ vigenteHasta: "2026-11-20", aceptadas: aceptoL1 }), "2026-11-25")).toMatchObject({ vencida: true, tocaAceptadas: false, puedePublicar: true });
   });
 
-  it("los cambios salen aparte, con lo publicado y lo de hoy; con algo aceptado no se vuelve a publicar", () => {
-    const antes = pub({ lineas: [{ rutaId: L1, numero: 1, origen: "Origen 1", destino: "Destino 1", venta: 1000 }, { rutaId: "otra", numero: 3, origen: "X", destino: "Y", venta: 5 }] });
+  it("un cambio de ruta, equipo o volumen sin cambio de precio también cuenta", () => {
+    for (const x of [{ volumenSemanal: 5 }, { equipo: "Flatbed" }, { destino: "Otro" }]) {
+      const c = compararPropuesta(calc, pub({ lineas: [linea(L1, 1, 1100, x), linea(L2, 2, 1100)] }), "2026-11-25");
+      expect(c.distinta).toBe(true);
+      expect(c.cambios).toEqual([expect.objectContaining({ numero: 1, antes: 1100, ahora: 1100, terminos: true })]);
+      expect(c.puedePublicar).toBe(true);
+    }
+  });
+
+  it("los cambios salen aparte; se puede corregir lo pendiente, no lo aceptado", () => {
+    const antes = pub({ lineas: [linea(L1, 1, 1000), linea("otra", 3, 5)] });
     const c = compararPropuesta(calc, antes, "2026-11-25");
-    expect(c.distinta).toBe(true);
     expect(c.cambios.map((x) => [x.numero, x.antes, x.ahora])).toEqual([[1, 1000, 1100], [2, null, 1100]]);
-    expect(c.quitadas).toEqual([3]);
+    expect(c.quitadas).toEqual([{ numero: 3, aceptada: false }]);
     expect(c.puedePublicar).toBe(true);
-    const aceptada = compararPropuesta(calc, { ...antes, aceptadas: [{ rutaId: L1, en: "2026-11-26", por: "Ana" }] }, "2026-11-25");
-    expect(aceptada).toMatchObject({ distinta: true, puedePublicar: false });
+    // L1 aceptada y cambió: no se vuelve a publicar.
+    expect(compararPropuesta(calc, { ...antes, aceptadas: aceptoL1 }, "2026-11-25")).toMatchObject({ distinta: true, tocaAceptadas: true, puedePublicar: false });
+    // L1 aceptada sin cambio; L2 pendiente cambió: se puede publicar y L1 se queda aceptada.
+    const parcial = pub({ lineas: [linea(L1, 1, 1100), linea(L2, 2, 900)], aceptadas: aceptoL1 });
+    expect(compararPropuesta(calc, parcial, "2026-11-25")).toMatchObject({ distinta: true, tocaAceptadas: false, puedePublicar: true });
+  });
+
+  it("la huella cambia con la venta, los términos o la moneda, y no con el orden", () => {
+    const h = huellaPropuesta(calc);
+    expect(huellaPropuesta({ ...calc, lineas: [...calc.lineas].reverse() })).toBe(h);
+    expect(huellaPropuesta({ ...calc, lineas: [{ ...calc.lineas[0], venta: 1101 }, calc.lineas[1]] })).not.toBe(h);
+    expect(huellaPropuesta({ ...calc, lineas: [{ ...calc.lineas[0], volumenSemanal: 9 }, calc.lineas[1]] })).not.toBe(h);
+    expect(huellaPropuesta({ ...calc, moneda: "MXN" })).not.toBe(h);
   });
 });
 
 describe("cliente: publicar y seguir viendo la liga del shipper", () => {
-  it("después de publicar vuelve a leer, así conserva que el evento tiene solicitud del shipper", async () => {
-    const acciones: string[] = [];
+  it("publica con la huella revisada y conserva que el evento tiene solicitud del shipper, sin otra lectura", async () => {
+    const enviados: Record<string, unknown>[] = [];
     const api = new MesaApi(async (_s, b) => {
-      acciones.push(String(b.action));
-      // Como Rateware: publicar responde solo con la propuesta.
-      return b.action === "publish_rfx_shipper_proposal"
-        ? { status: 200, body: { proposal: { id: "p", version: 1, currency: "USD", lanes: [] } }, headers: {} }
-        : { status: 200, body: { has_shipper_request: true, proposal: { id: "p", version: 1, currency: "USD", lanes: [], accepted: [] } }, headers: {} };
+      enviados.push(b);
+      // Como Rateware: publicar responde con la propuesta vigente y lo aceptado.
+      return { status: 200, body: { proposal: { id: "p", version: 2, currency: "USD", lanes: [{ rfx_lane_id: L1, sell_rate: 1100, equipment: "Dry Van", weekly_volume: 3 }], accepted: [{ rfx_lane_id: L1, accepted_at: "2026-11-26", accepted_by_name: "Ana" }] } }, headers: {} };
     });
-    const r = await api.publicarPropuesta(EV, "2026-12-25");
-    expect(acciones).toEqual(["publish_rfx_shipper_proposal", "get_rfx_shipper_proposal"]);
+    const r = await api.publicarPropuesta(EV, "2026-12-25", "abc");
+    expect(enviados.map((b) => b.action)).toEqual(["publish_rfx_shipper_proposal"]);
+    expect(enviados[0].proposal_fingerprint).toBe("abc");
     expect(r.conSolicitud).toBe(true);
-    expect(r.propuesta?.id).toBe("p");
+    expect(r.propuesta?.lineas[0]).toMatchObject({ equipo: "Dry Van", volumenSemanal: 3, venta: 1100 });
+    expect(r.propuesta?.aceptadas[0].por).toBe("Ana");
+  });
+});
+
+describe("página del shipper: aceptar y recuperarse", () => {
+  const prop = (accepted: string[] = [], extra: Record<string, unknown> = {}): any => ({
+    id: "p", version: 1, currency: "USD", valid_through: "2026-12-25", expired: false,
+    lanes: [{ rfx_lane_id: L1, lane_number: 1, sell_rate: 1100 }, { rfx_lane_id: L2, lane_number: 2, sell_rate: 900 }],
+    accepted: accepted.map((id) => ({ rfx_lane_id: id, accepted_at: "2026-11-26", accepted_by_name: null })), ...extra
+  });
+
+  it("pendientes y avance: el último paso se enciende al aceptar todas", () => {
+    expect(pendingLanes(prop([L1])).map((l) => l.rfx_lane_id)).toEqual([L2]);
+    const progreso = { stage: "proposal" } as any;
+    expect(progressAfter(progreso, prop([L1]))?.stage).toBe("proposal");
+    expect(progressAfter(progreso, prop([L1, L2]))?.stage).toBe("accepted");
+  });
+
+  it("aceptar parcial usa la respuesta del servidor y no vuelve a leer", async () => {
+    let lecturas = 0;
+    const r = await acceptLanes(prop(), [L1], { accept: async (_p, ids) => ({ proposal: prop(ids) }), reload: async () => { lecturas++; return null; } });
+    expect(r.error).toBeNull();
+    expect(pendingLanes(r.proposal!).map((l) => l.rfx_lane_id)).toEqual([L2]);
+    expect(lecturas).toBe(0);
+  });
+
+  it("un rechazo (propuesta reemplazada) vuelve a leer la liga y muestra la vigente", async () => {
+    const nueva = prop([L1], { id: "p2", version: 2 });
+    const r = await acceptLanes(prop(), [L2], { accept: async () => { throw new Error("A newer proposal replaced this one (proposal was updated)."); }, reload: async () => nueva });
+    expect(r.proposal?.id).toBe("p2");
+    expect(explainRequestError(r.error!, "es")).toMatch(/se actualizó/);
+  });
+
+  it("una respuesta incierta vuelve a leer: si la aceptación sí entró, no se ofrece otra vez", async () => {
+    const r = await acceptLanes(prop(), [L1, L2], { accept: async () => { throw new Error("Failed to fetch"); }, reload: async () => prop([L1, L2]) });
+    expect(pendingLanes(r.proposal!)).toEqual([]);
+    expect(explainRequestError(r.error!, "es")).toMatch(/Sin conexión/);
+  });
+
+  it("si tampoco se puede leer, se queda lo que había y el error", async () => {
+    const antes = prop();
+    const r = await acceptLanes(antes, [L1], { accept: async () => { throw new Error("Failed to fetch"); }, reload: async () => { throw new Error("Failed to fetch"); } });
+    expect(r.proposal).toBe(antes);
+    expect(r.error).toMatch(/fetch/);
   });
 });

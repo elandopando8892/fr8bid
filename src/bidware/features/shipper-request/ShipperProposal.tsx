@@ -3,7 +3,8 @@ import { confirmAsync } from "@/components/confirm";
 import { ErrorBanner } from "@/components/ui";
 import type { Copy } from "./request.copy";
 import type { Lang, ProposalLane, RequestProgress, RequestProposal } from "./request.model";
-import { acceptProposal, explainRequestError } from "./request.service";
+import { acceptLanes, pendingLanes } from "./proposal.flow";
+import { acceptProposal, explainRequestError, loadRequest } from "./request.service";
 
 const money = (value: number | null, currency: string, lang: Lang) =>
   value === null ? "—" : `${value.toLocaleString(lang === "es" ? "es-MX" : "en-US", { minimumFractionDigits: Number.isInteger(value) ? 0 : 2, maximumFractionDigits: 2 })} ${currency}`;
@@ -96,7 +97,7 @@ export function ProposalTable({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const accepted = new Map(proposal.accepted.map((row) => [row.rfx_lane_id, row]));
-  const pending = proposal.lanes.filter((lane) => !accepted.has(lane.rfx_lane_id));
+  const pending = pendingLanes(proposal);
   const locked = proposal.expired || busy !== null;
 
   async function accept(lanes: ProposalLane[], key: string) {
@@ -106,14 +107,13 @@ export function ProposalTable({
     if (!ok) return;
     setBusy(key);
     setError(null);
-    try {
-      const res = await acceptProposal(token, proposal.id, lanes.map((lane) => lane.rfx_lane_id));
-      onChange(res.proposal ?? null);
-    } catch (e) {
-      setError(explainRequestError((e as Error).message, lang, brand));
-    } finally {
-      setBusy(null);
-    }
+    const result = await acceptLanes(proposal, lanes.map((lane) => lane.rfx_lane_id), {
+      accept: (proposalId, laneIds) => acceptProposal(token, proposalId, laneIds),
+      reload: async () => (await loadRequest(token)).proposal ?? null,
+    });
+    onChange(result.proposal);
+    if (result.error) setError(explainRequestError(result.error, lang, brand));
+    setBusy(null);
   }
 
   return (

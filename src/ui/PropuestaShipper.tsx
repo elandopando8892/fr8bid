@@ -5,7 +5,7 @@
 // costo. Las rutas y la venta las vuelve a calcular el servidor al publicar.
 
 import { useCallback, useEffect, useState } from "react";
-import { compararPropuesta, propuestaDelEvento, textoFaltan, type PropuestaPublicada } from "../dominio/propuesta";
+import { compararPropuesta, huellaPropuesta, propuestaDelEvento, textoFaltan, type PropuestaPublicada } from "../dominio/propuesta";
 import { hoyMexico, type Contexto } from "../dominio/recorrido";
 import type { Detalle } from "../dominio/tipos";
 import { Confirmar, dinero, fecha } from "./comun";
@@ -89,19 +89,24 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
           {cmp.distinta && (
             <div className="nota" data-prueba="propuesta-cambios">
               <p>
-                {aceptadas.size === 0
-                  ? "La adjudicación cambió después de publicar. Arriba está lo que ve el shipper; vuelve a publicar para que vea las tarifas de hoy:"
-                  : "La adjudicación cambió, pero el shipper ya aceptó rutas de la propuesta publicada (arriba). Habla con él antes de cambiar algo. Con la adjudicación de hoy quedaría:"}
+                {cmp.tocaAceptadas
+                  ? "La adjudicación cambió en rutas que el shipper ya aceptó (arriba, lo que él ve). Habla con él antes de cambiar algo; con la adjudicación de hoy quedaría:"
+                  : "La adjudicación cambió después de publicar. Arriba está lo que ve el shipper; vuelve a publicar para que vea lo de hoy (lo que ya aceptó se queda aceptado):"}
               </p>
               <ul>
                 {cmp.cambios.map((c) => (
-                  <li key={c.rutaId}>{c.numero ? `${c.numero} · ` : ""}{c.origen} → {c.destino}: {c.antes === null ? "no estaba publicada" : dinero(c.antes, propuesta!.moneda)} → {dinero(c.ahora, c.moneda)}</li>
+                  <li key={c.rutaId}>
+                    {c.numero ? `${c.numero} · ` : ""}{c.origen} → {c.destino}:{" "}
+                    {c.antes === null ? "no estaba publicada" : c.antes === c.ahora ? "cambiaron ruta, equipo o volumen" : `${dinero(c.antes, propuesta!.moneda)} → ${dinero(c.ahora, c.moneda)}`}
+                    {c.antes !== null && c.antes !== c.ahora && c.terminos ? " (y cambiaron ruta, equipo o volumen)" : ""}
+                    {c.aceptada ? " · ya aceptada" : ""}
+                  </li>
                 ))}
-                {cmp.quitadas.length > 0 && <li>{cmp.quitadas.length === 1 ? `La ruta ${cmp.quitadas[0] || ""} ya no va` : `Las rutas ${cmp.quitadas.join(", ")} ya no van`} en la propuesta.</li>}
+                {cmp.quitadas.length > 0 && <li>{cmp.quitadas.length === 1 ? `La ruta ${cmp.quitadas[0].numero || ""} ya no va` : `Las rutas ${cmp.quitadas.map((q) => q.numero).join(", ")} ya no van`} en la propuesta.</li>}
               </ul>
             </div>
           )}
-          {cmp.vencida && !cmp.distinta && aceptadas.size === 0 && <p className="nota">La vigencia ya pasó y el shipper ya no puede aceptar. Vuelve a publicar con una fecha nueva para renovarla.</p>}
+          {cmp.vencida && !cmp.distinta && <p className="nota">La vigencia ya pasó y el shipper ya no puede aceptar. Vuelve a publicar con una fecha nueva para renovarla{aceptadas.size ? "; lo que ya aceptó se queda aceptado" : ""}.</p>}
           {puedePublicar && (
             <div className="fila-botones">
               <label className="campo"><span>Vigente hasta</span><input type="date" value={vigencia} min={hoy} onChange={(e) => setVigencia(e.target.value)} /></label>
@@ -115,7 +120,7 @@ export function PanelPropuesta({ d, ctx, accion }: { d: Detalle; ctx: Contexto; 
                 }
                 onConfirmar={() =>
                   accion(async () => {
-                    const r = await s.api.publicarPropuesta(d.evento.id, vigencia || null);
+                    const r = await s.api.publicarPropuesta(d.evento.id, vigencia || null, huellaPropuesta(calculada));
                     setEstado({ cargando: false, error: null, ...r });
                   }, "Propuesta publicada en la liga del shipper.")
                 }

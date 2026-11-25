@@ -883,8 +883,8 @@ export class RatewareSimulado {
         return ok({ row: this.invitacionCruda(lv), before: { award_role: antes } });
       }
       // Como publish_rfx_shipper_proposal (rateware #234): cada ruta del evento y con
-      // primario; guarda solo datos de la ruta y la venta; no reemplaza una propuesta
-      // con rutas aceptadas. En el simulado todo evento viene de una solicitud del shipper.
+      // primario; guarda solo datos de la ruta y la venta; una versión nueva conserva lo
+      // aceptado si las rutas aceptadas vuelven iguales. En el simulado todo evento viene de una solicitud del shipper.
       case "get_rfx_shipper_proposal": {
         const event = this.evento(u, body.event_id || body.id);
         return ok({ has_shipper_request: true, proposal: this.propuestaVigente(event.id) });
@@ -906,13 +906,23 @@ export class RatewareSimulado {
           return { rfx_lane_id: lane.id, lane_number: lane.lane_number, origin: lane.origin, destination: lane.destination, equipment: lane.equipment, weekly_volume: lane.weekly_volume ?? null, sell_rate: Math.round(venta * 100) / 100 };
         });
         const vigente = this.propuestas.find((x) => x.rfx_event_id === event.id && x.status === "published");
+        const moneda = String(body.currency || "USD");
+        const heredadas = vigente ? this.aceptaciones.filter((a) => a.proposal_id === vigente.id) : [];
         if (vigente) {
-          if (this.aceptaciones.some((a) => a.proposal_id === vigente.id)) throw new Falla(409, "The shipper already accepted lanes of the published proposal; it can no longer be replaced.", "RFX_PROPOSAL_HAS_ACCEPTANCE");
+          // Una versión nueva conserva lo aceptado si cada ruta aceptada vuelve igual.
+          const igual = (a: Fila) => {
+            const antes = (vigente.lanes as Fila[]).find((l) => l.rfx_lane_id === a.rfx_lane_id);
+            const ahora = lineas.find((l: Fila) => l.rfx_lane_id === a.rfx_lane_id);
+            return Boolean(antes && ahora) && JSON.stringify(antes) === JSON.stringify(ahora);
+          };
+          if (heredadas.length && (moneda !== vigente.currency || !heredadas.every(igual)))
+            throw new Falla(409, "The shipper already accepted lanes of the published proposal; those lanes cannot change.", "RFX_PROPOSAL_HAS_ACCEPTANCE");
           vigente.status = "superseded";
         }
         const version = this.propuestas.filter((x) => x.rfx_event_id === event.id).length + 1;
-        const fila = { id: `prop-${event.id}-${version}`, rfx_event_id: event.id, version, status: "published", currency: String(body.currency || "USD"), valid_through: body.valid_through || null, notes: body.notes || null, lanes: lineas, published_at: this.ahora(), published_by_email: u.email };
+        const fila = { id: `prop-${event.id}-${version}`, rfx_event_id: event.id, version, status: "published", currency: moneda, valid_through: body.valid_through || null, notes: body.notes || null, lanes: lineas, published_at: this.ahora(), published_by_email: u.email };
         this.propuestas.push(fila);
+        for (const a of heredadas) this.aceptaciones.push({ ...a, proposal_id: fila.id });
         this.bitacorar(u.email, "rfx.shipper_proposal.publish", "rfx_events", event.id, vigente?.version ?? null, version, {});
         return ok({ proposal: this.propuestaVigente(event.id) });
       }

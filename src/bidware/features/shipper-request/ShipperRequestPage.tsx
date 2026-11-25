@@ -17,6 +17,7 @@ import {
 import { explainRequestError, isAlreadySubmitted, loadRequest, saveRequest, submitRequest } from "./request.service";
 import { RequestForm, routeText, unitText } from "./RequestForm";
 import { ProposalTable, RequestSteps } from "./ShipperProposal";
+import { progressAfter } from "./proposal.flow";
 import { useAutosave, useSecondsSince, type SaveState } from "./useAutosave";
 import { BotonAyudas } from "../../../ui/BotonAyudas";
 
@@ -309,7 +310,7 @@ function ShipperRequestContent({ token, prefs }: { token: string; prefs: LinkPre
               lang={lang}
               brand={brand}
               title={project.title || customer}
-              onChange={(proposal) => setResponse((current) => (current ? { ...current, proposal, progress: current.progress && proposal && proposal.lanes.length && proposal.accepted.length >= proposal.lanes.length ? { ...current.progress, stage: "accepted" } : current.progress } : current))}
+              onChange={(proposal) => setResponse((current) => (current ? { ...current, proposal, progress: progressAfter(current.progress, proposal) } : current))}
             />
           )}
           <Thanks kind={kind} draft={draft} copy={copy} lang={lang} submittedAt={submittedAt} readOnly={alreadySent} />

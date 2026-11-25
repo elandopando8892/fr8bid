@@ -483,17 +483,19 @@ export class MesaApi {
   }
   // El servidor de Fr8Bid calcula rutas y tarifa de venta con una lectura fresca;
   // aquí solo va el evento y la vigencia.
-  // La respuesta de publicar trae solo la propuesta; se vuelve a leer para tener
-  // también si el evento tiene solicitud del shipper y lo aceptado.
-  async publicarPropuesta(eventId: string, vigenteHasta: string | null) {
-    await this.rw({
+  // `huella` es la de la propuesta que el Administrador revisó: el servidor la
+  // recalcula y no publica si cambió. Publicar responde con la propuesta vigente
+  // (con lo aceptado); si se publicó, el evento tiene solicitud del shipper.
+  async publicarPropuesta(eventId: string, vigenteHasta: string | null, huella: string) {
+    const r: any = await this.rw({
       action: "publish_rfx_shipper_proposal",
       event_id: eventId,
       ...(vigenteHasta ? { valid_through: vigenteHasta } : {}),
+      proposal_fingerprint: huella,
       confirmed: true,
       confirmation_action: "publish_rfx_shipper_proposal"
     });
-    return this.propuestaShipper(eventId);
+    return leerPropuestaPublicada({ ...r, has_shipper_request: true });
   }
   archivar(eventId: string) {
     return this.rw({ action: "archive_rfx_event", id: eventId, confirmed: true, confirmation_action: "archive_rfx_event" });

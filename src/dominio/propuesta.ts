@@ -80,6 +80,22 @@ export function lanesParaRateware(p: Propuesta) {
   return p.lineas.map((l) => ({ rfx_lane_id: l.rutaId, sell_rate: l.venta }));
 }
 
+// Huella de lo que el Administrador revisó: rutas, términos, venta y moneda. Al publicar,
+// el servidor la recalcula con una lectura fresca y rechaza si no coincide.
+export function huellaPropuesta(p: Propuesta): string {
+  const texto = JSON.stringify([
+    p.moneda,
+    [...p.lineas].sort((a, b) => a.rutaId.localeCompare(b.rutaId)).map((l) => [l.rutaId, l.venta, l.origen, l.destino, l.equipo, l.volumenSemanal])
+  ]);
+  let h1 = 0x811c9dc5, h2 = 0x01000193;
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ c, 0x5bd1e995) >>> 0;
+  }
+  return `${h1.toString(16).padStart(8, "0")}${h2.toString(16).padStart(8, "0")}`;
+}
+
 export function textoFaltan(faltan: FaltaPropuesta[]): string {
   return faltan.map((f) => (f.numero ? `Ruta ${f.numero}: ${f.motivo}` : f.motivo)).join(" · ");
 }
@@ -91,7 +107,7 @@ export interface PropuestaPublicada {
   moneda: string;
   vigenteHasta: string | null;
   publicadaEn: string | null;
-  lineas: { rutaId: string; numero: number | null; origen: string; destino: string; venta: number }[];
+  lineas: { rutaId: string; numero: number | null; origen: string; destino: string; equipo: string; volumenSemanal: number | null; venta: number }[];
   aceptadas: { rutaId: string; en: string; por: string | null }[];
 }
 
@@ -111,6 +127,8 @@ export function leerPropuestaPublicada(crudo: any): { conSolicitud: boolean; pro
             numero: l.lane_number == null ? null : Number(l.lane_number),
             origen: String(l.origin ?? ""),
             destino: String(l.destination ?? ""),
+            equipo: String(l.equipment ?? ""),
+            volumenSemanal: l.weekly_volume == null ? null : Number(l.weekly_volume),
             venta: Number(l.sell_rate)
           })),
           aceptadas: (Array.isArray(p.accepted) ? p.accepted : []).map((a: any) => ({
@@ -124,30 +142,38 @@ export function leerPropuestaPublicada(crudo: any): { conSolicitud: boolean; pro
 }
 
 // Lo publicado frente a la adjudicación de hoy. La tabla del equipo siempre muestra
-// lo publicado con lo aceptado; lo que cambió se muestra aparte.
+// lo publicado con lo aceptado; lo que cambió se muestra aparte. Cuenta como cambio
+// cualquier dato que el shipper ve: ruta, equipo, volumen, venta o moneda.
 export interface Comparacion {
-  /** Rutas cuya venta de hoy no es la publicada (o que no estaban publicadas). */
-  cambios: { rutaId: string; numero: number; origen: string; destino: string; antes: number | null; ahora: number; moneda: string }[];
+  /** Rutas cuya venta o términos de hoy no son los publicados (o que no estaban publicadas). */
+  cambios: { rutaId: string; numero: number; origen: string; destino: string; antes: number | null; ahora: number; moneda: string; terminos: boolean; aceptada: boolean }[];
   /** Rutas publicadas que hoy ya no van (desiertas o sin primario). */
-  quitadas: number[];
+  quitadas: { numero: number; aceptada: boolean }[];
   distinta: boolean;
   vencida: boolean;
-  /** Publicar por primera vez, o volver a publicar para corregir o renovar la vigencia. */
+  /** Una ruta que el shipper ya aceptó cambiaría: no se vuelve a publicar sin hablar con él. */
+  tocaAceptadas: boolean;
+  /** Publicar por primera vez, o volver a publicar para corregir rutas pendientes o renovar la vigencia. */
   puedePublicar: boolean;
 }
 
 export function compararPropuesta(calculada: Propuesta, publicada: PropuestaPublicada | null, hoy: string): Comparacion {
-  const antes = new Map((publicada?.lineas ?? []).map((l) => [l.rutaId, l.venta]));
+  const antes = new Map((publicada?.lineas ?? []).map((l) => [l.rutaId, l]));
+  const aceptadas = new Set((publicada?.aceptadas ?? []).map((a) => a.rutaId));
   const hoyIds = new Set(calculada.lineas.map((l) => l.rutaId));
   const cambios = publicada
-    ? calculada.lineas
-        .filter((l) => antes.get(l.rutaId) !== l.venta)
-        .map((l) => ({ rutaId: l.rutaId, numero: l.numero, origen: l.origen, destino: l.destino, antes: antes.get(l.rutaId) ?? null, ahora: l.venta, moneda: l.moneda }))
+    ? calculada.lineas.flatMap((l) => {
+        const a = antes.get(l.rutaId);
+        const terminos = Boolean(a) && (a!.origen !== l.origen || a!.destino !== l.destino || (a!.equipo || "") !== (l.equipo || "") || (a!.volumenSemanal ?? null) !== (l.volumenSemanal ?? null));
+        if (a && a.venta === l.venta && !terminos) return [];
+        return [{ rutaId: l.rutaId, numero: l.numero, origen: l.origen, destino: l.destino, antes: a ? a.venta : null, ahora: l.venta, moneda: l.moneda, terminos, aceptada: aceptadas.has(l.rutaId) }];
+      })
     : [];
-  const quitadas = publicada ? publicada.lineas.filter((l) => !hoyIds.has(l.rutaId)).map((l) => l.numero ?? 0) : [];
-  const distinta = Boolean(publicada) && (cambios.length > 0 || quitadas.length > 0 || (calculada.moneda !== null && calculada.moneda !== publicada!.moneda));
+  const quitadas = publicada ? publicada.lineas.filter((l) => !hoyIds.has(l.rutaId)).map((l) => ({ numero: l.numero ?? 0, aceptada: aceptadas.has(l.rutaId) })) : [];
+  const otraMoneda = Boolean(publicada) && calculada.moneda !== null && calculada.moneda !== publicada!.moneda;
+  const distinta = cambios.length > 0 || quitadas.length > 0 || otraMoneda;
   const vencida = Boolean(publicada?.vigenteHasta) && publicada!.vigenteHasta! < hoy;
+  const tocaAceptadas = cambios.some((c) => c.aceptada) || quitadas.some((q) => q.aceptada) || (otraMoneda && aceptadas.size > 0);
   const lista = calculada.faltan.length === 0 && calculada.lineas.length > 0;
-  const sinAceptar = (publicada?.aceptadas.length ?? 0) === 0;
-  return { cambios, quitadas, distinta, vencida, puedePublicar: lista && sinAceptar && (!publicada || distinta || vencida) };
+  return { cambios, quitadas, distinta, vencida, tocaAceptadas, puedePublicar: lista && !tocaAceptadas && (!publicada || distinta || vencida) };
 }

@@ -16,7 +16,7 @@ import { claveCampana, esPlantillaInvitacion } from "../dominio/invitacion.js";
 import { esProtegido } from "../dominio/protegidos.js";
 import { bloqueoDesierta, bloqueoReabrirRuta } from "../dominio/acciones-mesa.js";
 import { textoModelosAceptados } from "../dominio/modelo.js";
-import { lanesParaRateware, propuestaDelEvento, textoFaltan } from "../dominio/propuesta.js";
+import { huellaPropuesta, lanesParaRateware, propuestaDelEvento, textoFaltan } from "../dominio/propuesta.js";
 import { parseAcceptedCommercialModels, teamDefinedCommercialModel } from "../dominio/modelosAceptados.js";
 import { candadosAdjudicacion, hoyMexico, puedeAdjudicar } from "../dominio/recorrido.js";
 import { revisionesVigentes } from "../dominio/revision.js";
@@ -528,7 +528,7 @@ async function guardaModelo(body: Record<string, unknown>, autorizacion: string 
 // Propuesta al shipper: la pantalla solo dice qué evento y la vigencia. Las rutas y
 // la tarifa de venta salen de una lectura fresca (versión adjudicada al primario y su
 // modelo comercial), así lo publicado no depende de lo que mande el navegador.
-const CAMPOS_PROPUESTA = new Set(["action", "event_id", "valid_through", "notes", "confirmed", "confirmation_action"]);
+const CAMPOS_PROPUESTA = new Set(["action", "event_id", "valid_through", "notes", "confirmed", "confirmation_action", "proposal_fingerprint"]);
 async function guardaPropuesta(body: Record<string, unknown>, autorizacion: string | null, op: OpcionesProxy): Promise<Respuesta | null> {
   if (typeof body.event_id !== "string" || !UUID.test(body.event_id)) return error(400, "FALTA_EVENTO", "Indica el evento.");
   if (Object.keys(body).some((k) => !CAMPOS_PROPUESTA.has(k))) return error(400, "SOLO_PROPUESTA", "La propuesta se calcula en el servidor: solo se indica el evento y la vigencia.");
@@ -545,10 +545,15 @@ async function guardaPropuesta(body: Record<string, unknown>, autorizacion: stri
   const propuesta = propuestaDelEvento(d);
   if (propuesta.faltan.length) return error(409, "PROPUESTA_INCOMPLETA", `Antes de publicar: ${textoFaltan(propuesta.faltan)}.`);
   if (!propuesta.lineas.length) return error(409, "PROPUESTA_VACIA", "No hay rutas adjudicadas que publicar.");
+  // Lo que se publica es lo que el Administrador revisó: si la adjudicación o sus
+  // términos cambiaron desde que abrió la confirmación, no se publica.
+  if (body.proposal_fingerprint !== huellaPropuesta(propuesta))
+    return error(409, "PROPUESTA_CAMBIO", "La propuesta cambió desde que la revisaste. Vuelve a cargar la página y revísala antes de publicar.");
   body.lanes = lanesParaRateware(propuesta);
   body.currency = propuesta.moneda;
   delete body.confirmed;
   delete body.confirmation_action;
+  delete body.proposal_fingerprint;
   return null;
 }
 
