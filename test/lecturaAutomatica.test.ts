@@ -90,3 +90,14 @@ describe("combinarLecturas (revisión programada de Rateware)", () => {
     expect(lecturasPorRevisar(todas, capturables)).toEqual([]);
   });
 });
+
+describe("textoFallo: el fallo se dice en español", () => {
+  it("traduce la cuota de Gmail y deja los demás motivos como llegan", async () => {
+    const { textoFallo, FALLO_GENERICO } = await import("../src/dominio/lecturaAutomatica");
+    expect(textoFallo("Quota exceeded for quota metric 'Queries' and limit 'Queries per minute per user'")).toMatch(/^Gmail limitó las lecturas/);
+    expect(textoFallo("Requested entity was not found.")).toMatch(/ya no está en Gmail/);
+    expect(textoFallo("")).toBe(FALLO_GENERICO);
+    expect(textoFallo(null)).toBe(FALLO_GENERICO);
+    expect(textoFallo("El correo no trae texto legible.")).toBe("El correo no trae texto legible.");
+  });
+});

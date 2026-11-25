@@ -37,6 +37,18 @@ export interface Pendiente {
   carrier: string;
 }
 
+// Los fallos llegan como el error crudo del servidor (a veces en inglés, de Gmail o de la IA).
+// Los errores conocidos de Gmail se dicen en español con qué puede hacer el equipo; el resto se respeta.
+export const FALLO_GENERICO = "La IA no pudo leer este correo.";
+export function textoFallo(error: unknown): string {
+  const t = typeof error === "string" ? error.trim() : "";
+  if (!t) return FALLO_GENERICO;
+  if (/quota|rate ?limit|too many requests|\b429\b/i.test(t)) return "Gmail limitó las lecturas en ese momento. Léelo a mano o espera la siguiente revisión.";
+  if (/not ?found|\b404\b/i.test(t)) return "El correo ya no está en Gmail. Revísalo a mano o descártalo.";
+  if (/timeout|timed out|deadline/i.test(t)) return "La lectura tardó demasiado. Se reintenta en la siguiente revisión.";
+  return t;
+}
+
 export const claveLecturas = (eventoId: string) => `fr8bid-lecturas-ia-${eventoId}`;
 
 export function cargarLecturas(eventoId: string, almacen: Pick<Storage, "getItem"> | null = almacenLocal()): Record<string, LecturaGuardada> {
@@ -140,7 +152,7 @@ export function combinarLecturas(
       en: f.received_at || f.created_at,
       leidoEn: f.created_at,
       lectura,
-      fallo: lectura ? null : f.error || "La IA no pudo leer este correo.",
+      fallo: lectura ? null : textoFallo(f.error),
       revisado: listo
     };
   }

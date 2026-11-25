@@ -4,6 +4,7 @@
 // el equipo (rateware mark_rfx_reply_reading). La IA solo propone: nada se guarda sin confirmar.
 
 import type { Lectura, TipoLectura } from "./lectura.js";
+import { textoFallo } from "./lecturaAutomatica.js";
 
 export type Desenlace = "captured" | "declined" | "answered" | "dismissed";
 
@@ -62,7 +63,7 @@ export function aRespuestaBandeja(f: any): RespuestaBandeja | null {
     tipo,
     resumen: tipo === "fallo" ? "" : texto(lectura?.resumen).slice(0, 280),
     rutas: new Set(ofertas.map((o) => o?.rutaId).filter(Boolean)).size,
-    fallo: tipo === "fallo" ? texto(f?.error) || "La IA no pudo leer este correo." : null
+    fallo: tipo === "fallo" ? textoFallo(texto(f?.error)) : null
   };
 }
 
