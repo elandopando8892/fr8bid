@@ -3,7 +3,7 @@
 // se niega a leer.
 
 import { describe, expect, it } from "vitest";
-import { aceptarDocumentos, camposValidos, mismoValor, opcionDe, type CampoDocumento } from "../src/dominio/documentos";
+import { aceptarDocumentos, camposValidos, citaEnTexto, mismoValor, opcionDe, type CampoDocumento } from "../src/dominio/documentos";
 import { dentroDelLimite, leerDocumentos, ligaActiva, MAX_LECTURAS_POR_HORA, type ConsultaDocumentos, type LeerDocumentos, type ValidarLiga } from "../src/servidor/documentos";
 import { documentFields as camposCarrier, fieldByKey } from "../src/bidware/features/carrier-profile/profile.schema";
 import { addReadLanes, laneFields, laneFrom, laneSummary } from "../src/bidware/features/shipper-request/lectura";
@@ -50,6 +50,26 @@ describe("lo que se acepta de la IA", () => {
   it("un valor sin cita no se presenta como leído", () => {
     const l = aceptarDocumentos({ campos: [{ clave: "identity.rfc", valores: ["XAXX010101000"], cita: " " }] }, campos, []);
     expect(l.campos).toEqual([]);
+  });
+
+  it("con solo texto, una cita que no aparece en él se descarta", () => {
+    const fuente = "Razón social: Transportes del Norte\nRFC: TNO-010101-AB1\nCertificaciones CTPAT y OEA";
+    expect(citaEnTexto("RFC TNO010101AB1", fuente)).toBe(true);
+    expect(citaEnTexto("correo.txt: RFC: TNO-010101-AB1", fuente)).toBe(true);
+    expect(citaEnTexto("Razón social … RFC", fuente)).toBe(true);
+    expect(citaEnTexto("RFC: XAXX010101000", fuente)).toBe(false);
+    const l = aceptarDocumentos(
+      {
+        campos: [
+          { clave: "identity.rfc", valores: ["TNO010101AB1"], cita: "RFC: TNO-010101-AB1" },
+          { clave: "general.company_type", valores: ["Persona Moral"], cita: "Régimen: Persona Moral" }
+        ]
+      },
+      campos,
+      [],
+      fuente
+    );
+    expect(l.campos.map((c) => c.clave)).toEqual(["identity.rfc"]);
   });
 
   it("una opción que no existe no se inventa", () => {
@@ -198,10 +218,15 @@ describe("la solicitud arma rutas con lo leído", () => {
   ];
 
   it("traduce cada campo al formulario", () => {
-    const lane = laneFrom("rfq", leida, "MX");
+    const lane = laneFrom("rfq", leida);
     expect(lane.origin?.city).toBe("Monterrey");
     expect(lane.origin?.country).toBe("MX");
     expect(lane.destination?.country).toBe("US");
+    // Una ciudad sola no toma el país de la liga: se queda en blanco y se avisa.
+    const sola = laneFrom("rfq", [{ clave: "origin", valores: ["Monterrey, NL, MX"], cita: "x" }, { clave: "destination", valores: ["Laredo"], cita: "x" }]);
+    expect(sola.destination?.country ?? "").toBe("");
+    expect(laneSummary("rfq", [...leida.filter((v) => v.clave !== "destination"), { clave: "destination", valores: ["Laredo"], cita: "x" }], "es").faltan).toContain("Falta país");
+    expect(laneSummary("rfq", leida, "es").titulo).toMatch(/\(MX\).*\(US\)/);
     expect(lane.equipment).toBe("Dry Van");
     expect(lane.loads).toBe("5");
     expect(lane.weight).toBe("40000");
@@ -230,9 +255,9 @@ describe("la solicitud arma rutas con lo leído", () => {
 
   it("las rutas en blanco ceden su lugar y las llenas se quedan", () => {
     const draft = emptyDraft("rfq", { name: "", company: "", country: "MX" } as any);
-    const lleno = addReadLanes(draft, [leida, leida], "MX", new Set());
+    const lleno = addReadLanes(draft, [leida, leida], new Set());
     expect(lleno.lanes).toHaveLength(2);
-    const conservada = addReadLanes(lleno, [leida], "MX", new Set([lleno.lanes[0].key]));
+    const conservada = addReadLanes(lleno, [leida], new Set([lleno.lanes[0].key]));
     expect(conservada.lanes).toHaveLength(2);
     expect(conservada.lanes[0].key).toBe(lleno.lanes[0].key);
   });

@@ -86,7 +86,23 @@ export function opcionDe(campo: CampoDocumento, valor: string): string | null {
   return campo.opciones?.find((o) => plano(o) === buscado) ?? null;
 }
 
-function valoresDe(crudos: unknown, campos: CampoDocumento[]): ValorLeido[] {
+const compacto = (x: string) => plano(x).replace(/ /g, "");
+
+/**
+ * ¿La cita sale de verdad del texto? Se compara sin acentos, mayúsculas,
+ * espacios ni puntuación; un «archivo: …» al inicio y los «…» de en medio se
+ * toleran. Sin texto de referencia (solo PDF o fotos) no hay contra qué.
+ */
+export function citaEnTexto(cita: string, fuente: string): boolean {
+  const base = compacto(fuente);
+  const sinArchivo = cita.includes(":") ? cita.slice(cita.indexOf(":") + 1) : cita;
+  return [cita, sinArchivo].some((c) => {
+    const trozos = c.split(/\.\.\.|…/).map(compacto).filter(Boolean);
+    return trozos.length > 0 && trozos.every((t) => base.includes(t));
+  });
+}
+
+function valoresDe(crudos: unknown, campos: CampoDocumento[], fuente?: string): ValorLeido[] {
   const porClave = new Map(campos.map((c) => [c.clave, c]));
   const salida = new Map<string, ValorLeido>();
   for (const v of Array.isArray(crudos) ? (crudos as any[]) : []) {
@@ -100,6 +116,7 @@ function valoresDe(crudos: unknown, campos: CampoDocumento[]): ValorLeido[] {
     // Sin la cita literal de donde sale, no es un dato leído sino uno supuesto.
     const cita = texto(v?.cita, 240);
     if (!valores.length || !cita) continue;
+    if (fuente !== undefined && !citaEnTexto(cita, fuente)) continue;
     salida.set(campo.clave, { clave: campo.clave, valores, cita });
   }
   return [...salida.values()];
@@ -108,18 +125,19 @@ function valoresDe(crudos: unknown, campos: CampoDocumento[]): ValorLeido[] {
 /**
  * Acepta la respuesta cruda de la IA contra los campos que el formulario
  * ofreció: claves desconocidas, opciones que no existen y valores vacíos se
- * quedan fuera. Lo que no se pudo leer no se inventa.
+ * quedan fuera. Lo que no se pudo leer no se inventa. Con `fuente` (todo
+ * llegó como texto) cada cita tiene que aparecer en ese texto.
  */
-export function aceptarDocumentos(cruda: any, campos: CampoDocumento[], camposRuta: CampoDocumento[]): LecturaDocumentos {
+export function aceptarDocumentos(cruda: any, campos: CampoDocumento[], camposRuta: CampoDocumento[], fuente?: string): LecturaDocumentos {
   const rutas = camposRuta.length
     ? (Array.isArray(cruda?.rutas) ? (cruda.rutas as any[]) : [])
         .slice(0, MAX_RUTAS_DOCUMENTOS)
-        .map((r) => ({ campos: valoresDe(r?.campos, camposRuta) }))
+        .map((r) => ({ campos: valoresDe(r?.campos, camposRuta, fuente) }))
         .filter((r) => r.campos.length > 0)
     : [];
   return {
     resumen: texto(cruda?.resumen, 300),
-    campos: campos.length ? valoresDe(cruda?.campos, campos) : [],
+    campos: campos.length ? valoresDe(cruda?.campos, campos, fuente) : [],
     rutas,
     dudas: (Array.isArray(cruda?.dudas) ? cruda.dudas : []).map((d: unknown) => texto(d, 240)).filter(Boolean).slice(0, 8),
   };

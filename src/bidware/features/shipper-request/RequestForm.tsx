@@ -582,7 +582,7 @@ function SpotRequest(props: FormProps) {
  * template imports as before, without AI; anything else (an email, any other
  * Excel, a PDF) is read by the AI and the shipper confirms each lane.
  */
-function ReadLanes({ token, draft, lang, copy, country, update }: FormProps) {
+function ReadLanes({ token, draft, lang, copy, update }: FormProps) {
   const [notice, setNotice] = useState<string | null>(null);
   const fields = laneFields(draft.kind, lang);
   const filledKeys = () => new Set(filledLanes(draft).map((lane) => lane.key));
@@ -596,7 +596,7 @@ function ReadLanes({ token, draft, lang, copy, country, update }: FormProps) {
         camposRuta={fields}
         resumenRuta={(read) => laneSummary(draft.kind, read, lang)}
         onRutas={(read) => {
-          update((d) => addReadLanes(d, read, country, new Set(filledLanes(d).map((lane) => lane.key))));
+          update((d) => addReadLanes(d, read, new Set(filledLanes(d).map((lane) => lane.key))));
           setNotice(copy.readLanes(read.length));
         }}
         probarSinIA={async (file) => {

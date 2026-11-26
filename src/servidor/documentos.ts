@@ -107,7 +107,7 @@ export async function leerDocumentos(body: any, validar: ValidarLiga, leer: Leer
   const hoy = /^\d{4}-\d{2}-\d{2}$/.test(String(body?.hoy)) ? String(body.hoy) : new Date().toISOString().slice(0, 10);
   try {
     const cruda = await leer({ origen, idioma, hoy, texto: pegado, adjuntos, campos, camposRuta });
-    return { status: 200, body: { lectura: aceptarDocumentos(cruda, campos, camposRuta) } };
+    return { status: 200, body: { lectura: aceptarDocumentos(cruda, campos, camposRuta, adjuntos.length ? undefined : pegado) } };
   } catch {
     return err(502, "IA_FALLO", "No pudimos leer estos documentos. Intenta con otro archivo o llena los datos a mano.", "We couldn't read these documents. Try another file or fill in the details by hand.", idioma);
   }

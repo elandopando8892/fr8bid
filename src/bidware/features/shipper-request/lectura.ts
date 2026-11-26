@@ -48,13 +48,14 @@ const number = (text: string) => {
   return n === undefined ? "" : String(n);
 };
 
-/** A lane from what the shipper confirmed. Country comes from the text, else from the link. */
-export function laneFrom(kind: RequestKind, read: ValorLeido[], country: string): LaneDraft {
+/**
+ * A lane from what the shipper confirmed. The country comes only from the
+ * document: a city alone («Laredo») keeps it blank for the shipper to pick,
+ * rather than borrowing the link's country.
+ */
+export function laneFrom(kind: RequestKind, read: ValorLeido[]): LaneDraft {
   const get = (key: string) => read.find((v) => v.clave === key)?.valores[0] ?? "";
-  const place = (text: string) => {
-    const p = placeFromText(text);
-    return p && !p.country ? { ...p, country } : p;
-  };
+  const place = (text: string) => placeFromText(text);
   const lane = emptyLane(kind);
   const date = get("pickup_date");
   const hazmat = get("hazmat");
@@ -80,9 +81,11 @@ export function laneFrom(kind: RequestKind, read: ValorLeido[], country: string)
 
 /** One line per lane in «Revisa lo que leímos»: route first, then every value the lane will take. */
 export function laneSummary(kind: RequestKind, read: ValorLeido[], lang: Lang): { titulo: string; datos: string[]; faltan: string[] } {
-  const lane = laneFrom(kind, read, "");
-  const from = placeText(lane.origin) || "—";
-  const to = placeText(lane.destination) || "—";
+  const lane = laneFrom(kind, read);
+  // The country each place will take, so the shipper sees it before adding the lane.
+  const where = (p: LaneDraft["origin"]) => (placeText(p) ? `${placeText(p)}${p?.country ? ` (${p.country})` : ""}` : "—");
+  const from = where(lane.origin);
+  const to = where(lane.destination);
   const es = lang === "es";
   const datos = [
     lane.equipment ? catalogLabel(EQUIPMENT_TYPES, lane.equipment, lang) : "",
@@ -106,13 +109,14 @@ export function laneSummary(kind: RequestKind, read: ValorLeido[], lang: Lang): 
     !lane.origin ? (es ? "Falta origen" : "Origin missing") : "",
     !lane.destination ? (es ? "Falta destino" : "Destination missing") : "",
     !read.some((v) => v.clave === "loads") ? (es ? "Falta volumen" : "Volume missing") : "",
+    (lane.origin && !lane.origin.country) || (lane.destination && !lane.destination.country) ? (es ? "Falta país" : "Country missing") : "",
   ].filter(Boolean);
   return { titulo: `${from} → ${to}`, datos, faltan };
 }
 
 /** The read lanes join the request; blank lanes give way, as with the Excel template. */
-export function addReadLanes(draft: RequestDraft, read: ValorLeido[][], country: string, filledKeys: Set<string>): RequestDraft {
-  const lanes = read.map((r) => laneFrom(draft.kind, r, country));
+export function addReadLanes(draft: RequestDraft, read: ValorLeido[][], filledKeys: Set<string>): RequestDraft {
+  const lanes = read.map((r) => laneFrom(draft.kind, r));
   if (!lanes.length) return draft;
   return { ...draft, lanes: [...draft.lanes.filter((lane) => filledKeys.has(lane.key)), ...lanes] };
 }
