@@ -9,7 +9,7 @@ import { translator } from "./language";
 export const quoteCopy = {
   // Cabecera y pestañas
   "bar.note": { es: "Acceso privado de carrier", en: "Private carrier access" },
-  "bar.person": { es: "Hablar con una persona", en: "Talk to a person" },
+  "bar.person": { es: "Escríbenos", en: "Contact us" },
   "bar.personShort": { es: "Escríbenos", en: "Contact us" },
   "page.onlyRate": { es: "solo necesitas tu tarifa all-in", en: "all you need is your all-in rate" },
   "tab.bidsCount": { es: "Cotizar rutas · {0}/{1}", en: "Quote lanes · {0}/{1}" },
