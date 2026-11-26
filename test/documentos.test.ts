@@ -79,6 +79,8 @@ describe("lo que se acepta de la IA", () => {
     expect(citaRespalda("Querétaro", "de Monterrey a Laredo")).toBe(false);
     expect(citaRespalda("5", "5 cargas por semana")).toBe(true);
     expect(citaRespalda("9", "5 cargas por semana")).toBe(false);
+    expect(citaRespalda("5", "15 cargas por semana")).toBe(false);
+    expect(citaRespalda("40000", "peso de 40,000 lbs")).toBe(true);
   });
 
   it("una opción que no existe no se inventa", () => {

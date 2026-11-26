@@ -110,7 +110,11 @@ export function citaEnTexto(cita: string, fuente: string): boolean {
 export function citaRespalda(valor: string, cita: string): boolean {
   if (/^\d{4}-\d{2}-\d{2}$/.test(valor)) return true;
   // Un número (cargas, peso) tiene que estar escrito en la cita.
-  if (/^[\d.,\s]+$/.test(valor)) return compacto(valor) !== "" && compacto(cita).includes(compacto(valor));
+  // Se compara número contra número completo: «5» no pasa con «15 cargas».
+  if (/^[\d.,\s]+$/.test(valor)) {
+    const buscado = valor.replace(/\D/g, "");
+    return buscado !== "" && (cita.match(/\d[\d.,]*\d|\d/g) ?? []).some((n) => n.replace(/\D/g, "") === buscado);
+  }
   const piezas = plano(valor).split(" ").filter((p) => p.length >= 3);
   if (!piezas.length) return true;
   const enCita = compacto(cita);
