@@ -124,10 +124,23 @@ export function validarConRateware(base: string, anon: string): ValidarLiga {
       signal: AbortSignal.timeout(15000)
     });
     if (!r.ok) return false;
-    const datos: any = await r.json().catch(() => null);
-    if (!datos || typeof datos !== "object") return false;
-    // Una liga vencida o revocada puede responder 200 con su estado.
-    const estado = String(datos?.request?.status ?? "").toLowerCase();
-    return !["expired", "revoked", "cancelled", "canceled"].includes(estado);
+    return ligaActiva(origen, await r.json().catch(() => null));
   };
+}
+
+const INACTIVA = ["expired", "revoked", "cancelled", "canceled", "inactive"];
+
+/**
+ * Un 200 no basta: la respuesta debe traer lo que esa página abre (perfil o
+ * solicitud) y una liga que no esté vencida, revocada ni caducada.
+ */
+export function ligaActiva(origen: OrigenDocumentos, datos: any, ahora = Date.now()): boolean {
+  if (!datos || typeof datos !== "object" || datos.error || datos.ok === false) return false;
+  const esObjeto = (x: unknown) => Boolean(x) && typeof x === "object" && !Array.isArray(x);
+  const liga = origen === "solicitud" ? datos.link : datos.request;
+  const abre = origen === "perfil_carrier" ? datos.vendor : origen === "perfil_shipper" ? datos.shipper : datos.project;
+  if (!esObjeto(liga) || !esObjeto(abre) || typeof liga.id !== "string" || !liga.id) return false;
+  if (INACTIVA.includes(String(liga.status ?? "").toLowerCase())) return false;
+  const vence = liga.expires_at ? Date.parse(String(liga.expires_at)) : NaN;
+  return Number.isNaN(vence) || vence > ahora;
 }

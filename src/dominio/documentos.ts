@@ -97,8 +97,10 @@ function valoresDe(crudos: unknown, campos: CampoDocumento[]): ValorLeido[] {
       campo.tipo === "texto"
         ? brutos.slice(0, 1)
         : [...new Set(brutos.map((b) => opcionDe(campo, b)).filter((x): x is string => Boolean(x)))].slice(0, campo.tipo === "opcion" ? 1 : 40);
-    if (!valores.length) continue;
-    salida.set(campo.clave, { clave: campo.clave, valores, cita: texto(v?.cita, 240) });
+    // Sin la cita literal de donde sale, no es un dato leído sino uno supuesto.
+    const cita = texto(v?.cita, 240);
+    if (!valores.length || !cita) continue;
+    salida.set(campo.clave, { clave: campo.clave, valores, cita });
   }
   return [...salida.values()];
 }

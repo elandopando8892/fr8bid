@@ -78,7 +78,7 @@ export function laneFrom(kind: RequestKind, read: ValorLeido[], country: string)
   };
 }
 
-/** One line per lane in «Revisa lo que leímos»: route first, then what came with it. */
+/** One line per lane in «Revisa lo que leímos»: route first, then every value the lane will take. */
 export function laneSummary(kind: RequestKind, read: ValorLeido[], lang: Lang): { titulo: string; datos: string[]; faltan: string[] } {
   const lane = laneFrom(kind, read, "");
   const from = placeText(lane.origin) || "—";
@@ -93,7 +93,14 @@ export function laneSummary(kind: RequestKind, read: ValorLeido[], lang: Lang): 
       : "",
     lane.commodity,
     lane.weight ? `${Number(lane.weight).toLocaleString(es ? "es-MX" : "en-US")} ${lane.weight_unit}` : "",
+    lane.truck ? catalogLabel(TRUCK_TYPES, lane.truck, lang) : "",
+    lane.packaging ? catalogLabel(PACKAGING_TYPES, lane.packaging, lang) : "",
+    read.some((v) => v.clave === "hazmat") ? (lane.hazmat ? "Hazmat" : es ? "Sin hazmat" : "No hazmat") : "",
+    lane.service ? catalogLabel(SHIPPER_SERVICE_TYPES, lane.service, lang) : "",
+    lane.border_crossing ? `${es ? "Cruce" : "Crossing"}: ${catalogLabel(BORDER_CROSSINGS, lane.border_crossing, lang)}` : "",
     lane.pickup_date,
+    lane.annual_volume ? `${lane.annual_volume} ${es ? "cargas/año" : "loads/yr"}` : "",
+    lane.notes ? `${es ? "Notas" : "Notes"}: ${lane.notes}` : "",
   ].filter(Boolean);
   const faltan = [
     !lane.origin ? (es ? "Falta origen" : "Origin missing") : "",

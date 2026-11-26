@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { aceptarDocumentos, camposValidos, mismoValor, opcionDe, type CampoDocumento } from "../src/dominio/documentos";
-import { dentroDelLimite, leerDocumentos, MAX_LECTURAS_POR_HORA, type ConsultaDocumentos, type LeerDocumentos, type ValidarLiga } from "../src/servidor/documentos";
+import { dentroDelLimite, leerDocumentos, ligaActiva, MAX_LECTURAS_POR_HORA, type ConsultaDocumentos, type LeerDocumentos, type ValidarLiga } from "../src/servidor/documentos";
 import { documentFields as camposCarrier, fieldByKey } from "../src/bidware/features/carrier-profile/profile.schema";
 import { addReadLanes, laneFields, laneFrom, laneSummary } from "../src/bidware/features/shipper-request/lectura";
 import { emptyDraft } from "../src/bidware/features/shipper-request/request.model";
@@ -28,7 +28,7 @@ describe("lo que se acepta de la IA", () => {
         campos: [
           { clave: "identity.rfc", valores: ["TNO 010101 AB1"], cita: "csf.pdf: RFC TNO010101AB1" },
           { clave: "general.company_type", valores: ["persona moral"], cita: "Régimen: Persona Moral" },
-          { clave: "carrier_profile.certifications", valores: ["ctpat", "ISO 27001", "OEA"], cita: "" },
+          { clave: "carrier_profile.certifications", valores: ["ctpat", "ISO 27001", "OEA"], cita: "Certificaciones: CTPAT, OEA" },
           { clave: "payments.clabe_number", valores: ["0123"], cita: "inventado" },
           { clave: "general.company_type", valores: ["Persona Fisica"], cita: "repetido" }
         ],
@@ -41,15 +41,20 @@ describe("lo que se acepta de la IA", () => {
     expect(l.campos).toEqual([
       { clave: "identity.rfc", valores: ["TNO 010101 AB1"], cita: "csf.pdf: RFC TNO010101AB1" },
       { clave: "general.company_type", valores: ["Persona Moral"], cita: "Régimen: Persona Moral" },
-      { clave: "carrier_profile.certifications", valores: ["CTPAT", "OEA"], cita: "" }
+      { clave: "carrier_profile.certifications", valores: ["CTPAT", "OEA"], cita: "Certificaciones: CTPAT, OEA" }
     ]);
     expect(l.rutas).toEqual([]);
     expect(l.dudas).toEqual(["La constancia es de 2023"]);
   });
 
+  it("un valor sin cita no se presenta como leído", () => {
+    const l = aceptarDocumentos({ campos: [{ clave: "identity.rfc", valores: ["XAXX010101000"], cita: " " }] }, campos, []);
+    expect(l.campos).toEqual([]);
+  });
+
   it("una opción que no existe no se inventa", () => {
     expect(opcionDe(campos[1], "Sociedad Anónima")).toBeNull();
-    const l = aceptarDocumentos({ campos: [{ clave: "general.company_type", valores: ["S.A. de C.V."], cita: "" }] }, campos, []);
+    const l = aceptarDocumentos({ campos: [{ clave: "general.company_type", valores: ["S.A. de C.V."], cita: "Régimen: S.A. de C.V." }] }, campos, []);
     expect(l.campos).toEqual([]);
   });
 
@@ -72,7 +77,7 @@ describe("POST /api/documentos", () => {
     let visto: ConsultaDocumentos | null = null;
     const r = await leerDocumentos(base(), valida, async (c) => {
       visto = c;
-      return { resumen: "ok", campos: [{ clave: "identity.rfc", valores: ["ABC010101XYZ"], cita: "" }], rutas: [], dudas: [] };
+      return { resumen: "ok", campos: [{ clave: "identity.rfc", valores: ["ABC010101XYZ"], cita: "csf.pdf: RFC ABC010101XYZ" }], rutas: [], dudas: [] };
     });
     expect(r.status).toBe(200);
     expect((r.body as any).lectura.campos).toHaveLength(1);
@@ -121,6 +126,22 @@ describe("POST /api/documentos", () => {
     expect(r.status).toBe(502);
   });
 
+  it("un 200 sin la liga activa no abre la lectura", () => {
+    const ahora = Date.parse("2026-11-26T12:00:00Z");
+    const carrier = { request: { id: "r1", status: "sent", expires_at: "2026-12-31T00:00:00Z" }, vendor: { id: "v1" } };
+    expect(ligaActiva("perfil_carrier", carrier, ahora)).toBe(true);
+    expect(ligaActiva("perfil_carrier", { error: "invalid token" }, ahora)).toBe(false);
+    expect(ligaActiva("perfil_carrier", { ok: true }, ahora)).toBe(false);
+    expect(ligaActiva("perfil_carrier", { ...carrier, request: { ...carrier.request, status: "revoked" } }, ahora)).toBe(false);
+    expect(ligaActiva("perfil_carrier", { ...carrier, request: { ...carrier.request, expires_at: "2026-11-01T00:00:00Z" } }, ahora)).toBe(false);
+    expect(ligaActiva("perfil_shipper", { request: { id: "r2", status: "sent", expires_at: null }, shipper: { id: "s1" } }, ahora)).toBe(true);
+    expect(ligaActiva("perfil_shipper", carrier, ahora)).toBe(false);
+    const solicitud = { project: { id: "p1" }, link: { id: "l1", status: "active", expires_at: null } };
+    expect(ligaActiva("solicitud", solicitud, ahora)).toBe(true);
+    expect(ligaActiva("solicitud", { ...solicitud, link: { ...solicitud.link, status: "expired" } }, ahora)).toBe(false);
+    expect(ligaActiva("solicitud", { project: { id: "p1" } }, ahora)).toBe(false);
+  });
+
   it("frena una liga que lee de más", () => {
     const ahora = 1_000_000;
     for (let i = 0; i < MAX_LECTURAS_POR_HORA; i += 1) expect(dentroDelLimite("tok-frenado", ahora + i)).toBe(true);
@@ -138,10 +159,10 @@ describe("POST /api/documentos", () => {
         rutas: [
           {
             campos: [
-              { clave: "origin", valores: ["Monterrey, NL, MX"], cita: "" },
-              { clave: "destination", valores: ["Laredo, TX, US"], cita: "" },
-              { clave: "equipment", valores: ["dry van"], cita: "" },
-              { clave: "loads", valores: ["5"], cita: "" }
+              { clave: "origin", valores: ["Monterrey, NL, MX"], cita: "Monterrey a Laredo, 5 por semana, caja seca" },
+              { clave: "destination", valores: ["Laredo, TX, US"], cita: "Monterrey a Laredo, 5 por semana, caja seca" },
+              { clave: "equipment", valores: ["dry van"], cita: "Monterrey a Laredo, 5 por semana, caja seca" },
+              { clave: "loads", valores: ["5"], cita: "Monterrey a Laredo, 5 por semana, caja seca" }
             ]
           },
           { campos: [] }
@@ -185,6 +206,20 @@ describe("la solicitud arma rutas con lo leído", () => {
     expect(lane.loads).toBe("5");
     expect(lane.weight).toBe("40000");
     expect(lane.hazmat).toBe(false);
+  });
+
+  it("el resumen enseña cada valor que tomará la ruta", () => {
+    const mas = [
+      ...leida,
+      { clave: "service", valores: ["FTL"], cita: "x" },
+      { clave: "border_crossing", valores: ["Laredo"], cita: "x" },
+      { clave: "notes", valores: ["Cita previa"], cita: "x" }
+    ];
+    const { datos } = laneSummary("rfq", mas, "es");
+    expect(datos).toContain("Sin hazmat");
+    expect(datos.some((d) => d.includes("Cita previa"))).toBe(true);
+    expect(datos.some((d) => d.startsWith("Cruce"))).toBe(true);
+    expect(datos.length).toBeGreaterThanOrEqual(7);
   });
 
   it("dice lo que falta en el resumen", () => {
