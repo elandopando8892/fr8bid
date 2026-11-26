@@ -15,7 +15,9 @@ import {
   type ProfileResponse,
   type SupportTicket,
 } from "./carrierProfile.service";
-import { ALL_STEPS, COMPANY_STEP, OPTION_LABEL, type FieldSpec, type Lang, type StepSpec } from "./profile.schema";
+import { ALL_STEPS, COMPANY_STEP, OPTION_LABEL, documentFields, fieldByKey, type FieldSpec, type Lang, type StepSpec } from "./profile.schema";
+import { LectorDocumentos } from "../lectura-documentos/LectorDocumentos";
+import type { ValorLeido } from "../../../dominio/documentos";
 import { Spinner, ErrorBanner, InfoBanner, Pill } from "@/components/ui";
 import { BotonAyudas } from "../../../ui/BotonAyudas";
 
@@ -187,6 +189,21 @@ export function CarrierProfilePage() {
     }
   }
 
+  /** Lo que la persona confirmó de sus documentos entra como si lo hubiera tecleado. */
+  function useRead(values: ValorLeido[]) {
+    const steps = new Set<string>();
+    let n = 0;
+    for (const v of values) {
+      const found = fieldByKey(v.clave);
+      if (!found) continue;
+      const value = found.field.type === "checks" ? v.valores : v.valores[0] ?? "";
+      setField(found.step.key, found.field, value);
+      steps.add(found.step.key);
+      n += 1;
+    }
+    if (n) setNotice(t.filled(n, steps.size));
+  }
+
   async function save(): Promise<boolean> {
     if (!submit || !dirty || Object.keys(fieldErrors).length || saving) return false;
     setSaving(true);
@@ -291,6 +308,20 @@ export function CarrierProfilePage() {
         </aside>
 
         <div style={{ display: "grid", gap: 14, alignContent: "start" }}>
+          {stepIndex === 0 && (
+            <LectorDocumentos
+              origen="perfil_carrier"
+              token={token}
+              lang={lang}
+              campos={documentFields(lang)}
+              actual={(key) => {
+                const found = fieldByKey(key);
+                return found ? fieldValue(draft, found.step.key, found.field) : undefined;
+              }}
+              mostrar={(_key, value) => optionLabel(value, lang)}
+              onUsar={useRead}
+            />
+          )}
           <StepCard
             step={step}
             lang={lang}

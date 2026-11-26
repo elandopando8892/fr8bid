@@ -4,6 +4,8 @@ import { catalogLabel, EQUIPMENT_TYPES, TRUCK_TYPES } from "./catalog";
 import { downloadTemplate, importLanes } from "./excel";
 import { CatalogSelect, Field, LaneForm, WeightInput } from "./LaneFields";
 import { PlaceField } from "./PlaceField";
+import { addLanes, addReadLanes, laneFields, laneSummary } from "./lectura";
+import { LectorDocumentos } from "../lectura-documentos/LectorDocumentos";
 import type { Copy } from "./request.copy";
 import {
   answerKey,
@@ -219,9 +221,6 @@ function Lanes({ token, draft, lang, copy, country, showProblems, update }: Form
   const editors = laneEditors(update, draft.kind);
   // One lane open at a time, the design's way; the first one to start.
   const [openKey, setOpenKey] = useState<string | null>(draft.lanes[0]?.key ?? null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
   const filled = filledLanes(draft);
   const filledKeys = new Set(filled.map((lane) => lane.key));
   const complete = filled.filter((lane) => laneProblems(lane).length === 0).length;
@@ -239,28 +238,6 @@ function Lanes({ token, draft, lang, copy, country, showProblems, update }: Form
     setOpenKey(copied.key);
   }
 
-  async function onFile(file: File) {
-    setBusy(true);
-    setNotice(null);
-    try {
-      const { lanes: imported, sheet } = await importLanes(file);
-      if (!imported.length) {
-        setNotice(copy.importEmpty);
-        return;
-      }
-      // The blank lanes give way to the imported ones.
-      update((d) => {
-        const kept = new Set(filledLanes(d).map((lane) => lane.key));
-        return { ...d, lanes: [...d.lanes.filter((lane) => kept.has(lane.key)), ...imported] };
-      });
-      setNotice(copy.imported(imported.length, sheet));
-    } catch (error) {
-      setNotice((error as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <>
       <div className="sr-h">
@@ -270,22 +247,7 @@ function Lanes({ token, draft, lang, copy, country, showProblems, update }: Form
         <button type="button" className="sr-link" onClick={() => void downloadTemplate(lang)}>
           ↓ {copy.template}
         </button>
-        <button type="button" className="sr-link" disabled={busy} onClick={() => fileInput.current?.click()}>
-          {busy ? copy.importing : `↑ ${copy.import}`}
-        </button>
-        <input
-          ref={fileInput}
-          type="file"
-          accept=".xlsx,.xls,.csv"
-          hidden
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (file) void onFile(file);
-          }}
-        />
       </div>
-      {notice && <InfoBanner>{notice}</InfoBanner>}
       {draft.lanes.map((lane, index) => {
         const sent = withDefaults(draft, lane);
         const problems = filledKeys.has(lane.key) ? laneProblems(sent) : [];
@@ -613,6 +575,42 @@ function SpotRequest(props: FormProps) {
   );
 }
 
+// ------------------------------------------------------------- reading (prioridad 8)
+
+/**
+ * «Pega tu correo o suelta tu archivo tal como lo tienes»: an Excel in our
+ * template imports as before, without AI; anything else (an email, any other
+ * Excel, a PDF) is read by the AI and the shipper confirms each lane.
+ */
+function ReadLanes({ token, draft, lang, copy, update }: FormProps) {
+  const [notice, setNotice] = useState<string | null>(null);
+  const fields = laneFields(draft.kind, lang);
+  return (
+    <>
+      <LectorDocumentos
+        origen="solicitud"
+        token={token}
+        lang={lang}
+        campos={[]}
+        camposRuta={fields}
+        resumenRuta={(read) => laneSummary(draft.kind, read, lang)}
+        onRutas={(read) => {
+          update((d) => addReadLanes(d, read));
+          setNotice(copy.readLanes(read.length));
+        }}
+        probarSinIA={async (file) => {
+          const { lanes: imported, sheet } = await importLanes(file);
+          if (!imported.length) return false;
+          update((d) => addLanes(d, imported));
+          setNotice(copy.imported(imported.length, sheet));
+          return true;
+        }}
+      />
+      {notice && <InfoBanner>{notice}</InfoBanner>}
+    </>
+  );
+}
+
 // ------------------------------------------------------------- the page
 
 /**
@@ -627,6 +625,7 @@ export function RequestForm(props: FormProps) {
   const short = draft.kind === "spot" && draft.lanes.length === 1;
   return (
     <div className="sr-form">
+      <ReadLanes {...props} />
       {short ? (
         <SpotRequest {...props} />
       ) : (

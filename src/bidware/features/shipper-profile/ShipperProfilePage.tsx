@@ -11,6 +11,8 @@ import {
   type Section,
 } from "./shipperProfile.service";
 import { BotonAyudas } from "../../../ui/BotonAyudas";
+import { LectorDocumentos } from "../lectura-documentos/LectorDocumentos";
+import type { CampoDocumento, ValorLeido } from "../../../dominio/documentos";
 
 /**
  * A shipper's own profile, from the private link the team creates on the
@@ -40,6 +42,30 @@ const STEPS: { key: StepKey; label: Text; sections: Section[] }[] = [
   { key: "contacts", label: COPY.contacts, sections: [] },
   { key: "locations", label: COPY.locations, sections: [] },
 ];
+
+/**
+ * What a document can fill (prioridad 8): the company columns as
+ * `shipper.<key>` and each profile section as `<section>.<key>`. Contacts and
+ * sites stay by hand: they are lists the shipper curates.
+ */
+export function documentFields(lang: Lang): CampoDocumento[] {
+  const field = (clave: string, label: string, options?: Option[]): CampoDocumento => ({
+    clave,
+    etiqueta: label,
+    tipo: options ? "opcion" : "texto",
+    ...(options ? { opciones: options.map((o) => o.value) } : {}),
+  });
+  return [
+    ...SHIPPER_FIELDS.map((f) => field(`shipper.${f.key}`, f.label[lang].replace(/\s*\*$/, ""), f.options)),
+    ...SECTIONS.flatMap((section) => section.fields.map((f) => field(`${section.key}.${f.key}`, `${section.title[lang]} · ${f.label[lang]}`, f.options))),
+  ];
+}
+
+function optionText(key: string, value: string, lang: Lang): string {
+  const [group, name] = key.split(".");
+  const options = group === "shipper" ? SHIPPER_FIELDS.find((f) => f.key === name)?.options : SECTIONS.find((s) => s.key === group)?.fields.find((f) => f.key === name)?.options;
+  return options?.find((o) => o.value === value)?.label[lang] ?? value;
+}
 
 function initialLang(param: string | null): Lang {
   if (param === "en" || param === "es") return param;
@@ -158,6 +184,26 @@ export function ShipperProfilePage() {
       return false;
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Lo que la persona confirmó de sus documentos entra como si lo hubiera tecleado. */
+  function useRead(values: ValorLeido[]) {
+    let n = 0;
+    for (const v of values) {
+      const [group, name] = v.clave.split(".");
+      const value = v.valores[0] ?? "";
+      if (group === "shipper" && SHIPPER_FIELDS.some((f) => f.key === name)) {
+        setShipper((s) => ({ ...s, [name]: value }));
+        n += 1;
+      } else if (SECTIONS.some((s) => s.key === group && s.fields.some((f) => f.key === name))) {
+        setSections((s) => ({ ...s, [group as Section]: { ...s[group as Section], [name]: value } }));
+        n += 1;
+      }
+    }
+    if (n) {
+      setError(null);
+      setNotice(n === 1 ? c(COPY.filledOne) : c(COPY.filledMany).replace("{n}", String(n)));
     }
   }
 
@@ -324,6 +370,20 @@ export function ShipperProfilePage() {
         </aside>
 
         <div style={{ display: "grid", gap: 14, alignContent: "start" }}>
+          {step.key === "company" && (
+            <LectorDocumentos
+              origen="perfil_shipper"
+              token={token}
+              lang={lang}
+              campos={documentFields(lang)}
+              actual={(key) => {
+                const [group, name] = key.split(".");
+                return group === "shipper" ? shipper[name] : sections[group as Section]?.[name];
+              }}
+              mostrar={(key, value) => optionText(key, value, lang)}
+              onUsar={useRead}
+            />
+          )}
           {step.key === "company" &&
             card(
               c(COPY.company),
