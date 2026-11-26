@@ -42,6 +42,8 @@ export const COPY = {
     status: { open: "Abierto", in_progress: "En proceso", resolved: "Resuelto", archived: "Archivado" } as Record<string, string>,
     leave: "Tienes cambios sin guardar.",
     choose: "Selecciona…",
+    filled: (n: number, steps: number) =>
+      `Llenamos ${n} ${n === 1 ? "dato" : "datos"}${steps > 1 ? ` en ${steps} pasos` : ""}. Revísalos y guarda.`,
   },
   en: {
     spanishLanguage: "Spanish",
@@ -86,6 +88,8 @@ export const COPY = {
     status: { open: "Open", in_progress: "In progress", resolved: "Resolved", archived: "Archived" } as Record<string, string>,
     leave: "You have unsaved changes.",
     choose: "Select…",
+    filled: (n: number, steps: number) =>
+      `We filled in ${n} ${n === 1 ? "detail" : "details"}${steps > 1 ? ` across ${steps} steps` : ""}. Review and save.`,
   },
 };
 

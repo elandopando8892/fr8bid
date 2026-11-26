@@ -316,3 +316,31 @@ export const ALL_STEPS: StepSpec[] = [COMPANY_STEP, ...PROFILE_STEPS];
 
 /** Option values are stored as-is; only these few get a friendlier label. */
 export { OPTION_LABEL } from "@/i18n/carrier-profile";
+
+/**
+ * The fields a document can fill (prioridad 8): every question except the
+ * carrier's own notes and the channel they prefer, which no document says.
+ * The key is `step.field`, the same one the form uses.
+ */
+const NOT_FROM_DOCUMENTS = new Set(["company.preferred_channel", "general.carrier_notes"]);
+
+export function documentFields(lang: Lang) {
+  return ALL_STEPS.flatMap((step) =>
+    step.fields
+      .filter((f) => !NOT_FROM_DOCUMENTS.has(`${step.key}.${f.key}`))
+      .map((f) => ({
+        clave: `${step.key}.${f.key}`,
+        etiqueta: `${step.label[lang]} · ${f.label[lang]}`,
+        tipo: f.type === "checks" ? ("lista" as const) : f.type === "select" ? ("opcion" as const) : ("texto" as const),
+        ...(f.options ? { opciones: f.options } : {}),
+      })),
+  );
+}
+
+/** `step.field` → the step and its field spec. */
+export function fieldByKey(key: string): { step: StepSpec; field: FieldSpec } | null {
+  const [stepKey, fieldKey] = key.split(".");
+  const step = ALL_STEPS.find((s) => s.key === stepKey);
+  const field = step?.fields.find((f) => f.key === fieldKey);
+  return step && field ? { step, field } : null;
+}

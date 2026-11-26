@@ -9425,3 +9425,255 @@ button:not(:disabled):active,
     opacity: 1;
   }
 }
+
+/* ---------- Perfiles y solicitud que leen documentos (prioridad 8, 26-nov) ---------- */
+.lector {
+  display: grid;
+  gap: 12px;
+  border: 1.5px solid var(--orange);
+}
+.lector-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.lector-head h2 {
+  font-size: 16px;
+  margin: 0 0 4px;
+}
+.lector-head p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.lector-icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 18px;
+  background: var(--orange-light);
+  color: var(--accent);
+  flex: 0 0 36px;
+}
+.lector-zona {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  border: 1.5px dashed var(--line-strong, #c9c9c2);
+  border-radius: var(--radius);
+  transition: background var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out);
+}
+.lector-zona.encima {
+  background: var(--orange-light);
+  border-color: var(--orange);
+}
+.lector-subir {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 14px;
+  padding: 0 16px;
+}
+.lector-soltar {
+  font-size: 13px;
+  color: var(--muted);
+}
+.lector-archivos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.lector-archivos li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 12px;
+  border-radius: 999px;
+  background: var(--subtle);
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  max-width: 100%;
+}
+.lector-archivos li .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lector-quitar {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--muted);
+  border-radius: 16px;
+}
+.lector-pegar textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+.lector-abrir-pegar {
+  justify-self: start;
+  min-height: 44px;
+  font-size: 13px;
+}
+.lector-error {
+  margin: 0;
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 500;
+}
+.lector-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+}
+.lector-acciones button {
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: 14px;
+}
+.lector-privacidad {
+  flex: 1 1 220px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.lector-resultado {
+  display: grid;
+  gap: 10px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .lector-resultado {
+    animation: lector-entra var(--dur-3) var(--ease-out);
+  }
+}
+@keyframes lector-entra {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.lector-resultado h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.lector-resumen,
+.lector-vacio,
+.lector-nota {
+  margin: 0;
+  font-size: 13px;
+  color: var(--grey);
+}
+.lector-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+.lector-lista li {
+  display: grid;
+  gap: 2px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.lector-lista li:first-child {
+  border-top: 0;
+}
+.lector-lista li:not(.on) .lector-valor {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.lector-lista label {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 2px 10px;
+  align-items: start;
+  cursor: pointer;
+  min-height: 44px;
+}
+.lector-lista label input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  grid-row: span 2;
+}
+.lector-rutas label {
+  grid-template-columns: 20px 22px minmax(0, 1fr);
+}
+.lector-rutas label input {
+  grid-row: auto;
+}
+.lector-campo {
+  font-size: 12px;
+  color: var(--muted);
+}
+.lector-valor {
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.lector-num {
+  font-weight: 700;
+  color: var(--muted);
+}
+.lector-antes,
+.lector-cita {
+  padding-left: 30px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.lector-antes {
+  color: var(--amber);
+}
+.lector-datos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: 62px;
+}
+.lector-dato {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--subtle);
+  font-size: 12.5px;
+}
+.lector-dudas {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--amber-light);
+  color: var(--amber);
+  font-size: 13px;
+}
+.lector-dudas ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+@media (max-width: 640px) {
+  .lector-acciones button {
+    flex: 1 1 auto;
+  }
+  .lector-datos {
+    padding-left: 30px;
+  }
+}
+.lector input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+.lector-dato.lector-falta {
+  background: var(--amber-light);
+  color: var(--amber);
+  font-weight: 600;
+}

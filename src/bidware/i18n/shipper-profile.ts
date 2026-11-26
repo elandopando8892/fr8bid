@@ -52,6 +52,8 @@ export const COPY = {
   stepOperation: t("Operación", "Operation"),
   stepBilling: t("Facturación", "Billing"),
   appointment: t("Requiere cita", "Appointment required"),
+  filledOne: t("Llenamos 1 dato. Revísalo y guarda.", "We filled in 1 detail. Review and save."),
+  filledMany: t("Llenamos {n} datos. Revísalos paso por paso y guarda.", "We filled in {n} details. Review them step by step and save."),
 };
 
 /** A field with few possible answers is a list (decisión de Jose, 6-nov); the value saved is the option's value. */

@@ -64,6 +64,7 @@ export const COPY = {
     imported: (n: number, sheet: string | null) =>
       `Importamos ${pluralize(`${n} ruta(s)`)}${sheet ? ` de la hoja «${sheet}»` : ""}. Revisa las marcadas.`,
     importEmpty: "No encontramos rutas en el archivo. Usa la plantilla Excel.",
+    readLanes: (n: number) => `Agregamos ${pluralize(`${n} ruta(s)`)}. Revisa las marcadas y completa lo que falte.`,
     templateMark: "Obligatorio",
     edit: "Editar",
     duplicate: "Duplicar",
@@ -268,6 +269,7 @@ export const COPY = {
     importing: "Importing…",
     imported: (n: number, sheet: string | null) => `Imported ${pluralize(`${n} lane(s)`)}${sheet ? ` from the "${sheet}" sheet` : ""}. Check the flagged ones.`,
     importEmpty: "No lanes found in the file. Use the Excel template.",
+    readLanes: (n: number) => `We added ${pluralize(`${n} lane(s)`)}. Check the flagged ones and fill in what's missing.`,
     templateMark: "Required",
     edit: "Edit",
     duplicate: "Duplicate",

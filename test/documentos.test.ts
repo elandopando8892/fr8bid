@@ -1,0 +1,204 @@
+// Perfiles y solicitud que leen documentos (prioridad 8, 26-nov-2026). La IA
+// propone desde la liga privada; aquí se prueba lo que Fr8Bid acepta y cuándo
+// se niega a leer.
+
+import { describe, expect, it } from "vitest";
+import { aceptarDocumentos, camposValidos, mismoValor, opcionDe, type CampoDocumento } from "../src/dominio/documentos";
+import { dentroDelLimite, leerDocumentos, MAX_LECTURAS_POR_HORA, type ConsultaDocumentos, type LeerDocumentos, type ValidarLiga } from "../src/servidor/documentos";
+import { documentFields as camposCarrier, fieldByKey } from "../src/bidware/features/carrier-profile/profile.schema";
+import { addReadLanes, laneFields, laneFrom, laneSummary } from "../src/bidware/features/shipper-request/lectura";
+import { emptyDraft } from "../src/bidware/features/shipper-request/request.model";
+
+const campos: CampoDocumento[] = [
+  { clave: "identity.rfc", etiqueta: "RFC", tipo: "texto" },
+  { clave: "general.company_type", etiqueta: "Tipo de empresa", tipo: "opcion", opciones: ["Persona Fisica", "Persona Moral"] },
+  { clave: "carrier_profile.certifications", etiqueta: "Certificaciones", tipo: "lista", opciones: ["CTPAT", "OEA", "SmartWay"] }
+];
+
+const pdf = { nombre: "csf.pdf", tipo: "application/pdf", base64: "JVBERi0xLjQK" };
+const base = (extra: Record<string, unknown> = {}) => ({ origen: "perfil_carrier", token: "tok-123", idioma: "es", adjuntos: [pdf], campos, ...extra });
+const valida: ValidarLiga = async () => true;
+const leeIgual = (cruda: unknown): LeerDocumentos => async () => cruda;
+
+describe("lo que se acepta de la IA", () => {
+  it("solo claves del formulario y opciones que existen", () => {
+    const l = aceptarDocumentos(
+      {
+        resumen: "Constancia de Transportes del Norte",
+        campos: [
+          { clave: "identity.rfc", valores: ["TNO 010101 AB1"], cita: "csf.pdf: RFC TNO010101AB1" },
+          { clave: "general.company_type", valores: ["persona moral"], cita: "Régimen: Persona Moral" },
+          { clave: "carrier_profile.certifications", valores: ["ctpat", "ISO 27001", "OEA"], cita: "" },
+          { clave: "payments.clabe_number", valores: ["0123"], cita: "inventado" },
+          { clave: "general.company_type", valores: ["Persona Fisica"], cita: "repetido" }
+        ],
+        rutas: [{ campos: [] }],
+        dudas: ["La constancia es de 2023", ""]
+      },
+      campos,
+      []
+    );
+    expect(l.campos).toEqual([
+      { clave: "identity.rfc", valores: ["TNO 010101 AB1"], cita: "csf.pdf: RFC TNO010101AB1" },
+      { clave: "general.company_type", valores: ["Persona Moral"], cita: "Régimen: Persona Moral" },
+      { clave: "carrier_profile.certifications", valores: ["CTPAT", "OEA"], cita: "" }
+    ]);
+    expect(l.rutas).toEqual([]);
+    expect(l.dudas).toEqual(["La constancia es de 2023"]);
+  });
+
+  it("una opción que no existe no se inventa", () => {
+    expect(opcionDe(campos[1], "Sociedad Anónima")).toBeNull();
+    const l = aceptarDocumentos({ campos: [{ clave: "general.company_type", valores: ["S.A. de C.V."], cita: "" }] }, campos, []);
+    expect(l.campos).toEqual([]);
+  });
+
+  it("compara sin mayúsculas, acentos ni orden", () => {
+    expect(mismoValor("Persona Moral", ["persona moral"])).toBe(true);
+    expect(mismoValor(["OEA", "CTPAT"], ["CTPAT", "OEA"])).toBe(true);
+    expect(mismoValor("", ["X"])).toBe(false);
+  });
+
+  it("rechaza campos mal formados que lleguen del navegador", () => {
+    expect(camposValidos([{ clave: "../x", etiqueta: "x", tipo: "texto" }])).toBeNull();
+    expect(camposValidos([{ clave: "a.b", etiqueta: "x", tipo: "opcion" }])).toBeNull();
+    expect(camposValidos([{ clave: "a.b", etiqueta: "x", tipo: "texto" }, { clave: "a.b", etiqueta: "y", tipo: "texto" }])).toBeNull();
+    expect(camposValidos(campos)).toHaveLength(3);
+  });
+});
+
+describe("POST /api/documentos", () => {
+  it("lee con una liga válida y devuelve solo lo aceptado", async () => {
+    let visto: ConsultaDocumentos | null = null;
+    const r = await leerDocumentos(base(), valida, async (c) => {
+      visto = c;
+      return { resumen: "ok", campos: [{ clave: "identity.rfc", valores: ["ABC010101XYZ"], cita: "" }], rutas: [], dudas: [] };
+    });
+    expect(r.status).toBe(200);
+    expect((r.body as any).lectura.campos).toHaveLength(1);
+    expect(visto!.adjuntos[0].nombre).toBe("csf.pdf");
+    expect(visto!.camposRuta).toEqual([]);
+  });
+
+  it("sin liga activa no llama a la IA", async () => {
+    let llamada = false;
+    const r = await leerDocumentos(base({ token: "tok-viejo" }), async () => false, async () => {
+      llamada = true;
+      return {};
+    });
+    expect(r.status).toBe(401);
+    expect(llamada).toBe(false);
+  });
+
+  it("valida archivos, texto y campos antes de gastar", async () => {
+    const nunca: LeerDocumentos = async () => {
+      throw new Error("no debía llamarse");
+    };
+    expect((await leerDocumentos(base({ origen: "otro" }), valida, nunca)).status).toBe(400);
+    expect((await leerDocumentos(base({ adjuntos: [{ ...pdf, tipo: "application/zip" }] }), valida, nunca)).status).toBe(400);
+    expect((await leerDocumentos(base({ adjuntos: [], texto: "" }), valida, nunca)).status).toBe(400);
+    expect((await leerDocumentos(base({ texto: "x".repeat(30_001) }), valida, nunca)).status).toBe(400);
+    // Un perfil no pide rutas y una solicitud sí.
+    expect((await leerDocumentos(base({ origen: "solicitud" }), valida, nunca)).status).toBe(400);
+    expect((await leerDocumentos(base({ camposRuta: laneFields("rfq", "es") }), valida, nunca)).status).toBe(400);
+  });
+
+  it("habla el idioma de la persona", async () => {
+    const r = await leerDocumentos(base({ idioma: "en", token: "tok-en" }), async () => false, null);
+    expect((r.body as any).error).toMatch(/link/);
+  });
+
+  it("sin clave de IA lo dice en palabras de la persona", async () => {
+    const r = await leerDocumentos(base({ token: "tok-sin-ia" }), valida, null);
+    expect(r.status).toBe(503);
+    expect((r.body as any).error).toMatch(/a mano/);
+  });
+
+  it("un fallo de la IA no deja la página rota", async () => {
+    const r = await leerDocumentos(base({ token: "tok-falla" }), valida, async () => {
+      throw new Error("x");
+    });
+    expect(r.status).toBe(502);
+  });
+
+  it("frena una liga que lee de más", () => {
+    const ahora = 1_000_000;
+    for (let i = 0; i < MAX_LECTURAS_POR_HORA; i += 1) expect(dentroDelLimite("tok-frenado", ahora + i)).toBe(true);
+    expect(dentroDelLimite("tok-frenado", ahora + 100)).toBe(false);
+    expect(dentroDelLimite("tok-frenado", ahora + 3_600_001)).toBe(true);
+  });
+
+  it("la solicitud devuelve rutas", async () => {
+    const r = await leerDocumentos(
+      { origen: "solicitud", token: "tok-sol", idioma: "es", texto: "Monterrey a Laredo, 5 por semana, caja seca", campos: [], camposRuta: laneFields("rfq", "es") },
+      valida,
+      leeIgual({
+        resumen: "",
+        campos: [],
+        rutas: [
+          {
+            campos: [
+              { clave: "origin", valores: ["Monterrey, NL, MX"], cita: "" },
+              { clave: "destination", valores: ["Laredo, TX, US"], cita: "" },
+              { clave: "equipment", valores: ["dry van"], cita: "" },
+              { clave: "loads", valores: ["5"], cita: "" }
+            ]
+          },
+          { campos: [] }
+        ],
+        dudas: []
+      })
+    );
+    expect(r.status).toBe(200);
+    expect((r.body as any).lectura.rutas).toHaveLength(1);
+  });
+});
+
+describe("el perfil del carrier ofrece sus campos", () => {
+  it("con las mismas claves que guarda el formulario", () => {
+    const lista = camposCarrier("es");
+    expect(camposValidos(lista)).not.toBeNull();
+    expect(lista.find((c) => c.clave === "identity.rfc")?.tipo).toBe("texto");
+    expect(lista.find((c) => c.clave === "insurance_infrastructure.equipment_types")?.tipo).toBe("lista");
+    // Las notas propias del carrier y su canal no salen de un documento.
+    expect(lista.some((c) => c.clave === "general.carrier_notes" || c.clave === "company.preferred_channel")).toBe(false);
+    expect(fieldByKey("identity.usdot_number")?.field.key).toBe("usdot_number");
+  });
+});
+
+describe("la solicitud arma rutas con lo leído", () => {
+  const leida = [
+    { clave: "origin", valores: ["Monterrey, NL, MX"], cita: "" },
+    { clave: "destination", valores: ["Laredo, TX"], cita: "" },
+    { clave: "equipment", valores: ["Dry Van"], cita: "" },
+    { clave: "loads", valores: ["5"], cita: "" },
+    { clave: "weight", valores: ["40,000"], cita: "" },
+    { clave: "hazmat", valores: ["No"], cita: "" }
+  ];
+
+  it("traduce cada campo al formulario", () => {
+    const lane = laneFrom("rfq", leida, "MX");
+    expect(lane.origin?.city).toBe("Monterrey");
+    expect(lane.origin?.country).toBe("MX");
+    expect(lane.destination?.country).toBe("US");
+    expect(lane.equipment).toBe("Dry Van");
+    expect(lane.loads).toBe("5");
+    expect(lane.weight).toBe("40000");
+    expect(lane.hazmat).toBe(false);
+  });
+
+  it("dice lo que falta en el resumen", () => {
+    const sin = leida.filter((v) => v.clave !== "loads");
+    expect(laneSummary("rfq", sin, "es").faltan).toEqual(["Falta volumen"]);
+    expect(laneSummary("rfq", leida, "es")).toMatchObject({ titulo: expect.stringContaining("→") });
+  });
+
+  it("las rutas en blanco ceden su lugar y las llenas se quedan", () => {
+    const draft = emptyDraft("rfq", { name: "", company: "", country: "MX" } as any);
+    const lleno = addReadLanes(draft, [leida, leida], "MX", new Set());
+    expect(lleno.lanes).toHaveLength(2);
+    const conservada = addReadLanes(lleno, [leida], "MX", new Set([lleno.lanes[0].key]));
+    expect(conservada.lanes).toHaveLength(2);
+    expect(conservada.lanes[0].key).toBe(lleno.lanes[0].key);
+  });
+});

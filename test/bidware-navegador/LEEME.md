@@ -31,6 +31,11 @@ prueba como si fuera la función de Supabase. `FR8BID_TRAZA=1` muestra las llama
   los N» y «También en» otras etapas; Listas agrupadas por familia, sin la nota de bitácora repetida, en escritorio y
   teléfono. `FR8BID_FOTOS=<carpeta>` guarda las capturas.
 
+- `perfiles-leen-documentos.browser.cjs` (26-nov): perfil del carrier, perfil del shipper y solicitud con «Sube tus
+  documentos»: lo leído se revisa, un dato guardado distinto empieza sin marcar, lo confirmado se guarda con el botón de
+  siempre y la solicitud agrega las rutas leídas. `/api/documentos` se responde en la prueba (sin IA). Con
+  `FR8BID_ANTES=1` solo toma las capturas de cada página al abrir, para correrla contra `main`.
+
 Córrelas antes de abrir un PR que toque `src/bidware/features/bid-room/`:
 `test/bidware-navegador/correr.sh test/bidware-navegador/cotizacion-rapida*.browser.cjs`.
 
