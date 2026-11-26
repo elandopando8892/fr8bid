@@ -75,6 +75,11 @@ describe("lo que se acepta de la IA", () => {
     expect(otro.campos).toEqual([]);
     expect(citaRespalda("40,000", "Peso 40000 lbs")).toBe(true);
     expect(citaRespalda("2026-12-01", "carga el 1 de diciembre")).toBe(true);
+    expect(citaRespalda("2026-12-01", "carga 2026-11-01")).toBe(false);
+    expect(citaRespalda("2026-12-01", "pickup 12/01/2026")).toBe(true);
+    expect(citaRespalda("5", "Ruta 5", "loads")).toBe(false);
+    expect(citaRespalda("5", "5 cargas por semana", "loads")).toBe(true);
+    expect(citaRespalda("40000", "40,000 lbs", "weight")).toBe(true);
     expect(citaRespalda("Laredo, TX, US", "de Monterrey a Laredo")).toBe(true);
     expect(citaRespalda("Querétaro", "de Monterrey a Laredo")).toBe(false);
     expect(citaRespalda("5", "5 cargas por semana")).toBe(true);
