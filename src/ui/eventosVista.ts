@@ -130,7 +130,7 @@ export function botonFila(e: ResumenEvento): string {
     case "Adjudicar y entregar":
       return "Adjudicar";
     case ACCION_SIN_OFERTAS:
-      return "Cerrar sin adjudicar";
+      return "Archivar";
     case "Avisar a los carriers":
       return "Revisar";
     default:

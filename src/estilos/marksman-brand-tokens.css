@@ -23,19 +23,31 @@
 
   /* Working surfaces */
   --accent: #c54714;
+
+  /* Botón principal: el naranja oscuro pasa contraste con texto blanco (4.9:1);
+     el Electric Orange queda para marca, bordes y acentos (26-nov). */
+  --accent-hover: #a83c10;
+  /* Movimiento (26-nov): 120 ms al tocar, 200 ms al cambiar, 320 ms al entrar o salir. */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-spring: cubic-bezier(.34, 1.4, .64, 1);
   --orange-light: #fff0e9;
   --canvas: #f4f4f2;
   --panel: #fff;
   --subtle: #f8f8f6;
   --line: #e5e5e0;
   --muted: #73746d;
-  --muted2: #999a94;
+  --muted2: #76776f; /* 4.5:1 sobre blanco (antes #999a94, 2.8:1) */
 
   /* Semantic roles. Never the only carrier of meaning: pair with text or icon. */
   --green: #287258;
   --green-light: #edf5ef;
   --blue: #4c6387;
   --blue-light: #eff3f8;
+  --amber: #8a5a00;
+  --amber-light: #fbf1dc;
   --red: #a74343;
   --red-light: #faeeee;
 

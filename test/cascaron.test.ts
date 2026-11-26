@@ -78,7 +78,7 @@ describe("fila de Eventos: etapa, qué pasa y un botón", () => {
     expect(quePasa(ev({ estado: "adjudicado" }), f)).toBe("Adjudicado. Confirma la entrega a Rateware y los avisos.");
     expect(botonFila(ev({ estado: "cerrado", ofertas: 2 }))).toBe("Adjudicar");
     // Sin ofertas no hay a quién adjudicar: el botón dice lo mismo que la página del evento.
-    expect(botonFila(ev({ estado: "cerrado" }))).toBe("Cerrar sin adjudicar");
+    expect(botonFila(ev({ estado: "cerrado" }))).toBe("Archivar");
     expect(botonFila(ev({ estado: "borrador" }))).toBe("Invitar");
     expect(botonFila(ev({ estado: "adjudicado" }))).toBe("Revisar");
   });

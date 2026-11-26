@@ -61,14 +61,15 @@ export function Pill({ tone = "", children }: { tone?: Tone; children: ReactNode
 const STATUS_TONE: Record<string, Tone> = {
   draft: "amber",
   borrador: "amber",
-  open: "green",
-  live: "green",
+  // Mismos significados que Fr8Bid (26-nov): abierto informa, adjudicado es listo.
+  open: "blue",
+  live: "blue",
   operate: "green",
   active: "green",
   launch: "blue",
   closed: "",
   cerrado: "",
-  awarded: "indigo",
+  awarded: "green",
   archived: "",
   expired: "red",
 };

@@ -379,14 +379,14 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
   // Nada por enviar y carriers sin revisión: lo que sigue es revisarlos, no
   // «Enviar las invitaciones» (recorrido 22-nov, Spot Palos Garza).
   if (actual?.clave === "invitacion" && porInvitar === 0 && sinRevisar > 0) siguiente.accion = `Revisar ${cuenta(sinRevisar, "contacto")}`;
-  // Cerrado sin ninguna oferta no hay a quién adjudicar: lo que sigue es
-  // cerrarlo sin adjudicar, igual que dicen Hoy y Eventos.
+  // Cerrado sin ninguna oferta no hay a quién adjudicar ni nada que entregar:
+  // lo que sigue es archivarlo, igual que dicen Hoy y Eventos.
   if (actual?.clave === "adjudicar" && respondieron.length === 0) siguiente.accion = ACCION_SIN_OFERTAS;
   return { pasos, actual, siguiente, entregaConfirmada: confirmada };
 }
 
 // Mismo texto en Hoy, Eventos y la página del evento.
-export const ACCION_SIN_OFERTAS = "Cerrar sin adjudicar";
+export const ACCION_SIN_OFERTAS = "Archivar el evento";
 
 function siguientePaso(actual: Paso | null, rol: Rol): Recorrido["siguiente"] {
   if (!actual) return { accion: "Recorrido completo", quien: "Nadie", teToca: false };

@@ -1317,7 +1317,7 @@ describe("un solo «qué sigue»", () => {
     expect(r.siguiente.accion).not.toBe("Enviar las invitaciones");
   });
 
-  it("cerrado sin ofertas: la página dice «Cerrar sin adjudicar», igual que la fila", async () => {
+  it("cerrado sin ofertas: la página dice «Archivar el evento», igual que la fila", async () => {
     const { adm, id } = await dosRutasInvitadas();
     await adm.cerrarAOfertas(id);
     const d = await adm.detalle(id);

@@ -109,6 +109,9 @@ export function QuoteLanes({
   const position = picked ? lanes.findIndex((l) => l.rfx_lane_id === picked.rfx_lane_id) + 1 : 0;
   const next = picked && picked.bid_rate == null ? nextPending(lanes, picked, answered) : null;
   const others = lanes.filter((l) => l.bid_rate == null && canQuote(l) && !answered.has(l.rfx_lane_id) && l.rfx_lane_id !== picked?.rfx_lane_id).length;
+  // Un solo botón naranja en la tabla: el de la siguiente ruta por cotizar; las
+  // demás dicen lo mismo en gris para no competir (26-nov).
+  const siguienteId = lanes.find((l) => !answered.has(l.rfx_lane_id) && actionOf(l)?.primary)?.rfx_lane_id;
 
   // The sheet takes the focus to its title, closes with Escape, and the list behind it does not scroll.
   useEffect(() => {
@@ -241,7 +244,7 @@ export function QuoteLanes({
                       {action ? (
                         <button
                           type="button"
-                          className={action.primary ? "primary" : undefined}
+                          className={action.primary && lane.rfx_lane_id === siguienteId ? "primary" : undefined}
                           onClick={(e) => {
                             e.stopPropagation();
                             pick(lane);

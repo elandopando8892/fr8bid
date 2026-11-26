@@ -69,7 +69,7 @@ const detalleRutas = (e: ResumenEvento) => {
 
 function porQue(e: ResumenEvento): string {
   const s = siguiente(e).accion;
-  if (s === ACCION_SIN_OFERTAS) return "Cerró sin ofertas. Ciérralo sin adjudicar para sacarlo de tu lista.";
+  if (s === ACCION_SIN_OFERTAS) return "Cerró sin ofertas: no hay nada que adjudicar ni entregar. Archívalo para sacarlo de tu lista.";
   if (s === "Adjudicar y entregar") return `Cerrado a ofertas con ${plural(e.ofertas, "oferta")}. Elige primario y respaldo por ruta y entrégalo a Rateware.`;
   if (s === "Cerrar a ofertas") return `Ya llegaron todas las ofertas (${e.ofertas} de ${e.participaciones} invitaciones por ruta). Puedes cerrar antes del plazo.`;
   if (s === "Avisar a los carriers") return "Entregado a Rateware. Falta aprobar los avisos a los carriers.";
