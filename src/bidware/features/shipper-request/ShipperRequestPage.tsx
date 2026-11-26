@@ -139,7 +139,7 @@ export function ShipperRequestPage() {
   const [search] = useSearchParams();
   const token = (search.get("token") || params.token || "").trim();
   // Read once per link: the shipper's own switch rewrites `lang` in the address.
-  const [prefs] = useState(() => linkPrefs(search));
+  const [prefs] = useState(() => linkPrefs(search, typeof window !== "undefined" ? window.location.hostname : null));
   return <ShipperRequestContent key={token} token={token} prefs={prefs} />;
 }
 

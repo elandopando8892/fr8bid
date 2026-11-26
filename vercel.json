@@ -19,6 +19,11 @@
     },
     {
       "source": "/((?!api/).*)",
+      "has": [{ "type": "host", "value": "solicitud.xbfreight.com" }],
+      "destination": "/xbf.html"
+    },
+    {
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]

@@ -31,6 +31,13 @@ export interface LinkPrefs {
   country: Country;
 }
 
+/**
+ * XBF's own domain for the shipper's link (solicitud.xbfreight.com, decisión de
+ * Jose 26-nov): there the page is always XBF, whatever the link says, so an XBF
+ * prospect never lands on MARKSMAN.
+ */
+export const esDominioXbf = (host: string | null | undefined) => /(^|\.)xbfreight\.com$/i.test(String(host ?? "").trim());
+
 const pick = <T extends string>(value: string | null, allowed: readonly T[]): T | null => {
   const text = String(value ?? "").trim().toLowerCase();
   return (allowed.find((entry) => entry.toLowerCase() === text) as T | undefined) ?? null;
@@ -41,10 +48,10 @@ const pick = <T extends string>(value: string | null, allowed: readonly T[]): T 
  * ignored. With no country, an English link starts in the US (that is who
  * Fr8Growth writes to in English) and every other link in Mexico.
  */
-export function linkPrefs(search: string | URLSearchParams): LinkPrefs {
+export function linkPrefs(search: string | URLSearchParams, host?: string | null): LinkPrefs {
   const params = typeof search === "string" ? new URLSearchParams(search) : search;
   const lang = pick(params.get("lang"), ["es", "en"] as const);
-  const brand = BRANDS[pick(params.get("brand"), ["marksman", "xbf"] as const) ?? "marksman"];
+  const brand = esDominioXbf(host) ? BRANDS.xbf : BRANDS[pick(params.get("brand"), ["marksman", "xbf"] as const) ?? "marksman"];
   const country = pick(params.get("country"), ["MX", "US", "CA"] as const) ?? (lang === "en" ? "US" : "MX");
   return { lang, brand, country };
 }

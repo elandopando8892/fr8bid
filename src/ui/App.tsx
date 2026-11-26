@@ -3,6 +3,7 @@ import { AuthProvider } from "@/auth/AuthContext";
 import { ConfirmHost } from "@/components/confirm";
 import { AIntegraciones, AMesa, Bw, P } from "./bidware";
 import { ConsentimientoOAuth, esDominioDeAcceso } from "./ConsentimientoOAuth";
+import { esDominioXbf } from "@/features/shipper-request/link";
 import { Eventos } from "./Eventos";
 import { Respuestas } from "./Respuestas";
 import { Hoy } from "./Hoy";
@@ -44,6 +45,15 @@ function Rutas() {
         <Route path="/callback" element={publica(<P.Callback />)} />
         <Route path="/oauth/consent" element={publica(<ConsentimientoOAuth />)} />
         <Route path="*" element={publica(<SoloAcceso />)} />
+      </Routes>
+    );
+  // Dominio de XBF (solicitud.xbfreight.com): solo la solicitud del shipper, siempre con marca XBF.
+  // Cualquier otra ruta abre la misma página, que sin liga dice «Falta la liga».
+  if (esDominioXbf(window.location.hostname))
+    return (
+      <Routes>
+        <Route path="/rfi/:token" element={publica(<P.SolicitudShipper />)} />
+        <Route path="*" element={publica(<P.SolicitudShipper />)} />
       </Routes>
     );
   return (
