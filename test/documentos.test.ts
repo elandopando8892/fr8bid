@@ -3,7 +3,7 @@
 // se niega a leer.
 
 import { describe, expect, it } from "vitest";
-import { aceptarDocumentos, camposValidos, citaEnTexto, mismoValor, opcionDe, type CampoDocumento } from "../src/dominio/documentos";
+import { aceptarDocumentos, camposValidos, citaEnTexto, citaRespalda, mismoValor, opcionDe, type CampoDocumento } from "../src/dominio/documentos";
 import { dentroDelLimite, leerDocumentos, ligaActiva, MAX_LECTURAS_POR_HORA, type ConsultaDocumentos, type LeerDocumentos, type ValidarLiga } from "../src/servidor/documentos";
 import { documentFields as camposCarrier, fieldByKey } from "../src/bidware/features/carrier-profile/profile.schema";
 import { addReadLanes, laneFields, laneFrom, laneSummary } from "../src/bidware/features/shipper-request/lectura";
@@ -70,6 +70,13 @@ describe("lo que se acepta de la IA", () => {
       fuente
     );
     expect(l.campos.map((c) => c.clave)).toEqual(["identity.rfc"]);
+    // La cita existe, pero no respalda el valor: no entra.
+    const otro = aceptarDocumentos({ campos: [{ clave: "identity.rfc", valores: ["XAXX010101000"], cita: "RFC: TNO-010101-AB1" }] }, campos, [], fuente);
+    expect(otro.campos).toEqual([]);
+    expect(citaRespalda("40,000", "Peso 40000 lbs")).toBe(true);
+    expect(citaRespalda("2026-12-01", "carga el 1 de diciembre")).toBe(true);
+    expect(citaRespalda("Laredo, TX, US", "de Monterrey a Laredo")).toBe(true);
+    expect(citaRespalda("Querétaro", "de Monterrey a Laredo")).toBe(false);
   });
 
   it("una opción que no existe no se inventa", () => {
@@ -245,6 +252,12 @@ describe("la solicitud arma rutas con lo leído", () => {
     expect(datos.some((d) => d.includes("Cita previa"))).toBe(true);
     expect(datos.some((d) => d.startsWith("Cruce"))).toBe(true);
     expect(datos.length).toBeGreaterThanOrEqual(7);
+  });
+
+  it("sin volumen en el documento, la ruta spot no se queda con un «1» supuesto", () => {
+    const sin = leida.filter((v) => v.clave !== "loads");
+    expect(laneFrom("spot", sin).loads).toBe("");
+    expect(laneFrom("spot", leida).loads).toBe("5");
   });
 
   it("dice lo que falta en el resumen", () => {

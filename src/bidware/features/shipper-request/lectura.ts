@@ -65,7 +65,8 @@ export function laneFrom(kind: RequestKind, read: ValorLeido[]): LaneDraft {
     destination: place(get("destination")),
     equipment: get("equipment"),
     truck: get("truck"),
-    loads: number(get("loads")) || lane.loads,
+    // Without a volume in the document the lane waits for the shipper's number, not a default «1».
+    loads: number(get("loads")),
     commodity: get("commodity"),
     weight: number(get("weight")),
     weight_unit: get("weight_unit") === "kg" ? "kg" : "lb",

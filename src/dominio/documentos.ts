@@ -102,6 +102,19 @@ export function citaEnTexto(cita: string, fuente: string): boolean {
   });
 }
 
+/**
+ * ¿La cita respalda el valor? Al menos una pieza con sustancia del valor
+ * (palabra o número de 3+ caracteres) aparece en la cita. Las fechas se
+ * normalizan (AAAA-MM-DD) y se dejan pasar; un valor sin piezas así también.
+ */
+export function citaRespalda(valor: string, cita: string): boolean {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(valor)) return true;
+  const piezas = plano(valor).split(" ").filter((p) => p.length >= 3);
+  if (!piezas.length) return true;
+  const enCita = compacto(cita);
+  return piezas.some((p) => enCita.includes(p)) || enCita.includes(compacto(valor));
+}
+
 function valoresDe(crudos: unknown, campos: CampoDocumento[], fuente?: string): ValorLeido[] {
   const porClave = new Map(campos.map((c) => [c.clave, c]));
   const salida = new Map<string, ValorLeido>();
@@ -116,7 +129,7 @@ function valoresDe(crudos: unknown, campos: CampoDocumento[], fuente?: string): 
     // Sin la cita literal de donde sale, no es un dato leído sino uno supuesto.
     const cita = texto(v?.cita, 240);
     if (!valores.length || !cita) continue;
-    if (fuente !== undefined && !citaEnTexto(cita, fuente)) continue;
+    if (fuente !== undefined && (!citaEnTexto(cita, fuente) || (campo.tipo === "texto" && !citaRespalda(valores[0], cita)))) continue;
     salida.set(campo.clave, { clave: campo.clave, valores, cita });
   }
   return [...salida.values()];

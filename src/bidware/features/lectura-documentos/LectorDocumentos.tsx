@@ -322,6 +322,10 @@ export function LectorDocumentos(props: LectorProps) {
                         ))}
                       </span>
                     )}
+                    {/* De dónde sale cada valor: la misma cita que en los datos de la empresa. */}
+                    {[...new Set(r.campos.map((c) => c.cita).filter(Boolean))].map((cita) => (
+                      <span key={cita} className="lector-cita">«{cita}»</span>
+                    ))}
                   </li>
                 );
               })}
