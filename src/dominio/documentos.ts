@@ -111,7 +111,8 @@ function aNumero(texto: string): number | null {
 }
 
 const CONTEXTO: Record<string, RegExp> = {
-  loads: /carga|load|viaje|trip|camion|truck|embarque|shipment|semana|week|semanal|weekly/,
+  // La cifra tiene que contar cargas: «5 semanas» es una duración, no un volumen.
+  loads: /carga|load|viaje|trip|camion|truck|embarque|shipment|envio|unidades/,
   weight: /\b(lb|lbs|kg|kgs|libra|kilo|ton|tons|tonelada|peso|weight)/,
   annual_volume: /ano|anual|year|annual/,
 };
@@ -125,15 +126,15 @@ function fechaEnCita(ano: number, mes: number, dia: number, cita: string): boole
   if (iso.length) return iso.some(([a, m, d]) => a === ano && m === mes && d === dia);
   const c = plano(cita);
   const nums = (c.match(/\d+/g) ?? []).map(Number);
-  // «15/12/25»: el año de dos dígitos se ve antes de quitar las barras.
-  const cortos = (cita.match(/\/(\d{2})\b(?!\/)/g) ?? []).map((x) => Number(x.slice(1)));
+  // «15/12/25»: el año va en la tercera posición; se lee antes de quitar las barras.
+  const cortos = [...cita.matchAll(/\b\d{1,2}[/.-]\d{1,2}[/.-](\d{2})\b/g)].map((m) => Number(m[1]));
   if (!nums.includes(dia)) return false;
   const conNombre = new RegExp(`\\b(${MESES[mes - 1]})`).test(c);
   const conNumero = nums.filter((n) => n === mes).length > (mes === dia ? 1 : 0);
   if (!conNombre && !conNumero) return false;
   // «12/01/2026» puede ser 12 de enero o 1 de diciembre: sin el nombre del mes, no se adivina.
   if (!conNombre && dia !== mes && dia <= 12 && mes <= 12) return false;
-  const anos = [...nums.filter((n) => n >= 1000), ...cortos.filter((n) => n !== mes && n !== dia)];
+  const anos = [...nums.filter((n) => n >= 1000), ...cortos];
   return !anos.length || anos.some((n) => n === ano || n === ano % 100);
 }
 

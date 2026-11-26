@@ -68,12 +68,19 @@ export function laneFrom(kind: RequestKind, read: ValorLeido[]): LaneDraft {
       : /\b(lb|lbs|libra|libras|pound|pounds)\b/.test(weightCite)
         ? "lb"
         : "";
-  const readUnit = get("weight_unit") === "kg" || get("weight_unit") === "lb" ? (get("weight_unit") as "kg" | "lb") : "";
+  // La opción leída cuenta solo si su propia cita dice esa unidad.
+  const unitCite = plain(read.find((v) => v.clave === "weight_unit")?.cita ?? "");
+  const readUnit =
+    get("weight_unit") === "kg" && /\b(kg|kgs|kilo|kilos|kilogramo|kilogramos)\b/.test(unitCite)
+      ? "kg"
+      : get("weight_unit") === "lb" && /\b(lb|lbs|libra|libras|pound|pounds)\b/.test(unitCite)
+        ? "lb"
+        : "";
   const unit: "kg" | "lb" | "" = citeUnit === "ton" || (readUnit && citeUnit && readUnit !== citeUnit) ? "" : readUnit || citeUnit;
   const hazmat = get("hazmat");
   // En una solicitud de contrato el volumen es por semana: sin «semana» en su cita, no se supone.
   const loadsCite = plain(read.find((v) => v.clave === "loads")?.cita ?? "");
-  const weekly = kind === "spot" || /\b(semana|semanal|semanales|week|weekly|wk|sem)\b/.test(loadsCite);
+  const weekly = kind === "spot" || /\b(por|a la|cada|per|a|each|every) (semana|week)\b|\bsemanal(es)?\b|\bweekly\b|\b(sem|wk)\b/.test(loadsCite);
   return {
     ...lane,
     origin: place(get("origin")),

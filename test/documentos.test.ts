@@ -84,6 +84,8 @@ describe("lo que se acepta de la IA", () => {
     expect(citaRespalda("2026-12-01", "pickup 1 dic 2026")).toBe(true);
     expect(citaRespalda("2026-12-15", "pickup 15/12/25")).toBe(false);
     expect(citaRespalda("2026-12-15", "pickup 15/12/26")).toBe(true);
+    expect(citaRespalda("2026-12-15", "pickup 15/12/12")).toBe(false);
+    expect(citaRespalda("5", "5 semanas", "loads")).toBe(false);
     // Un volumen al mes no es «por semana».
     expect(citaRespalda("20", "20 cargas al mes", "loads")).toBe(false);
     expect(citaRespalda("20", "20 cargas por semana", "loads")).toBe(true);
@@ -274,6 +276,9 @@ describe("la solicitud arma rutas con lo leído", () => {
     // Toneladas no se convierten, y una unidad que contradice la cita tampoco entra.
     expect(laneFrom("rfq", [{ clave: "weight", valores: ["20"], cita: "20 toneladas" }]).weight).toBe("");
     expect(laneFrom("rfq", [{ clave: "weight", valores: ["40000"], cita: "40,000 kg" }, { clave: "weight_unit", valores: ["lb"], cita: "lb" }]).weight).toBe("");
+    // La opción «kg» con una cita que dice «lb» no da unidad al peso.
+    expect(laneFrom("rfq", [{ clave: "weight", valores: ["40000"], cita: "peso 40000" }, { clave: "weight_unit", valores: ["kg"], cita: "en lb" }]).weight).toBe("");
+    expect(laneFrom("rfq", [{ clave: "loads", valores: ["5"], cita: "durante 5 semanas" }]).loads).toBe("");
     // En contrato el volumen es semanal: «20 cargas» sin «semana» no se supone.
     expect(laneFrom("rfq", [{ clave: "loads", valores: ["20"], cita: "20 cargas" }]).loads).toBe("");
     expect(laneSummary("rfq", [{ clave: "loads", valores: ["20"], cita: "20 cargas" }], "es").faltan).toContain("Falta el volumen por semana");

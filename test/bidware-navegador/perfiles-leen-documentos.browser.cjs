@@ -40,7 +40,7 @@ const leidoShipper = {
 };
 const ruta = (o, d, n) => ({ campos: [
   { clave: 'origin', valores: [o], cita: 'correo pegado' }, { clave: 'destination', valores: [d], cita: 'correo pegado' },
-  { clave: 'equipment', valores: ['Dry Van'], cita: 'correo pegado' }, ...(n ? [{ clave: 'loads', valores: [n], cita: `${n} por semana` }] : []),
+  { clave: 'equipment', valores: ['Dry Van'], cita: 'correo pegado' }, ...(n ? [{ clave: 'loads', valores: [n], cita: `${n} cargas por semana` }] : []),
   { clave: 'commodity', valores: ['Vidrio'], cita: 'correo pegado' }, { clave: 'weight', valores: ['40000'], cita: '40,000 lb' },
 ] });
 const leidoSolicitud = { resumen: 'Tres rutas semanales desde enero.', campos: [], rutas: [ruta('Monterrey, NL, MX', 'Laredo, TX, US', '5'), ruta('Saltillo, COAH, MX', 'Dallas, TX, US', '3'), ruta('Querétaro, QRO, MX', 'Laredo, TX, US', '')], dudas: ['La tercera ruta no dice cuántas cargas por semana.'] };
