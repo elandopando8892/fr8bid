@@ -76,7 +76,15 @@ describe("lo que se acepta de la IA", () => {
     expect(citaRespalda("40,000", "Peso 40000 lbs")).toBe(true);
     expect(citaRespalda("2026-12-01", "carga el 1 de diciembre")).toBe(true);
     expect(citaRespalda("2026-12-01", "carga 2026-11-01")).toBe(false);
-    expect(citaRespalda("2026-12-01", "pickup 12/01/2026")).toBe(true);
+    // «12/01/2026» puede ser 12 de enero o 1 de diciembre: no se adivina.
+    expect(citaRespalda("2026-12-01", "pickup 12/01/2026")).toBe(false);
+    expect(citaRespalda("2026-01-12", "pickup 12/01/2026")).toBe(false);
+    expect(citaRespalda("2026-12-01", "pickup 2026-12-01")).toBe(true);
+    expect(citaRespalda("2026-12-15", "pickup 15/12/2026")).toBe(true);
+    expect(citaRespalda("2026-12-01", "pickup 1 dic 2026")).toBe(true);
+    // Un volumen al mes no es «por semana».
+    expect(citaRespalda("20", "20 cargas al mes", "loads")).toBe(false);
+    expect(citaRespalda("20", "20 cargas por semana", "loads")).toBe(true);
     expect(citaRespalda("5", "Ruta 5", "loads")).toBe(false);
     expect(citaRespalda("5", "5 cargas por semana", "loads")).toBe(true);
     expect(citaRespalda("40000", "40,000 lbs", "weight")).toBe(true);
@@ -238,7 +246,7 @@ describe("la solicitud arma rutas con lo leído", () => {
     { clave: "destination", valores: ["Laredo, TX"], cita: "" },
     { clave: "equipment", valores: ["Dry Van"], cita: "" },
     { clave: "loads", valores: ["5"], cita: "" },
-    { clave: "weight", valores: ["40,000"], cita: "" },
+    { clave: "weight", valores: ["40,000"], cita: "40,000 lbs" },
     { clave: "hazmat", valores: ["No"], cita: "" }
   ];
 
@@ -255,6 +263,12 @@ describe("la solicitud arma rutas con lo leído", () => {
     expect(lane.equipment).toBe("Dry Van");
     expect(lane.loads).toBe("5");
     expect(lane.weight).toBe("40000");
+    expect(lane.weight_unit).toBe("lb");
+    // Sin unidad en la lectura ni en la cita, el peso no entra (40,000 kg no puede quedar en lb).
+    const sinUnidad = laneFrom("rfq", [{ clave: "weight", valores: ["40,000"], cita: "peso 40,000" }]);
+    expect(sinUnidad.weight).toBe("");
+    expect(laneSummary("rfq", [{ clave: "weight", valores: ["40,000"], cita: "peso 40,000" }], "es").faltan).toContain("Falta la unidad del peso (kg o lb)");
+    expect(laneFrom("rfq", [{ clave: "weight", valores: ["40,000"], cita: "40,000 kg" }]).weight_unit).toBe("kg");
     expect(lane.hazmat).toBe(false);
   });
 

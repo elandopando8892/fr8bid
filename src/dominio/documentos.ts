@@ -111,7 +111,7 @@ function aNumero(texto: string): number | null {
 }
 
 const CONTEXTO: Record<string, RegExp> = {
-  loads: /carga|load|viaje|trip|camion|truck|embarque|shipment|semana|week|semanal|weekly|mes|month|diari|daily/,
+  loads: /carga|load|viaje|trip|camion|truck|embarque|shipment|semana|week|semanal|weekly/,
   weight: /\b(lb|lbs|kg|kgs|libra|kilo|ton|tons|tonelada|peso|weight)/,
   annual_volume: /ano|anual|year|annual/,
 };
@@ -120,12 +120,17 @@ const MESES = ["ene|jan", "feb", "mar", "abr|apr", "may", "jun", "jul", "ago|aug
 
 /** La fecha propuesta está en la cita: el día, el mes (número o nombre) y, si viene, el año. */
 function fechaEnCita(ano: number, mes: number, dia: number, cita: string): boolean {
+  // AAAA-MM-DD no tiene ambigüedad.
+  const iso = (cita.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g) ?? []).map((f) => f.split("-").map(Number));
+  if (iso.length) return iso.some(([a, m, d]) => a === ano && m === mes && d === dia);
   const c = plano(cita);
   const nums = (c.match(/\d+/g) ?? []).map(Number);
   if (!nums.includes(dia)) return false;
   const conNombre = new RegExp(`\\b(${MESES[mes - 1]})`).test(c);
   const conNumero = nums.filter((n) => n === mes).length > (mes === dia ? 1 : 0);
   if (!conNombre && !conNumero) return false;
+  // «12/01/2026» puede ser 12 de enero o 1 de diciembre: sin el nombre del mes, no se adivina.
+  if (!conNombre && dia !== mes && dia <= 12 && mes <= 12) return false;
   const anos = nums.filter((n) => n >= 1000 || (n >= 24 && n <= 99 && c.includes(`/${n}`)));
   return !anos.length || anos.some((n) => n === ano || n === ano % 100);
 }
@@ -143,8 +148,11 @@ export function citaRespalda(valor: string, cita: string, clave = ""): boolean {
   const fecha = valor.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (fecha) return fechaEnCita(Number(fecha[1]), Number(fecha[2]), Number(fecha[3]), cita);
   // Una cifra sola necesita decir qué cuenta: «Ruta 5» no es un volumen.
-  const contexto = CONTEXTO[clave.split(".").pop() ?? ""];
+  const campo = clave.split(".").pop() ?? "";
+  const contexto = CONTEXTO[campo];
   if (contexto && !contexto.test(plano(cita))) return false;
+  // Un volumen al mes, al día o al año no es «por semana»: se queda para notas.
+  if (campo === "loads" && /\b(mes|mensual|month|monthly|dia|diario|diarias|daily|ano|anual|year|annual)\b/.test(plano(cita))) return false;
   // El «archivo.txt:» del inicio no cuenta como cifra de la cita.
   const sinArchivo = cita.replace(/^[^:\n]{1,120}\.[a-z0-9]{2,5}:\s*/i, "");
   if (/\d/.test(valor)) {

@@ -8,6 +8,7 @@ import {
   TRUCK_TYPES,
   type CatalogOption,
 } from "./catalog";
+import { plain } from "./places";
 import { emptyLane, parseAmount, placeFromText, placeText, type Lang, type LaneDraft, type RequestDraft, type RequestKind } from "./request.model";
 
 /**
@@ -58,6 +59,15 @@ export function laneFrom(kind: RequestKind, read: ValorLeido[]): LaneDraft {
   const place = (text: string) => placeFromText(text);
   const lane = emptyLane(kind);
   const date = get("pickup_date");
+  const weightCite = plain(read.find((v) => v.clave === "weight")?.cita ?? "");
+  const unit: "kg" | "lb" | "" =
+    get("weight_unit") === "kg" || get("weight_unit") === "lb"
+      ? (get("weight_unit") as "kg" | "lb")
+      : /\b(kg|kgs|kilo|kilos|kilogramos?|ton|tons|toneladas?)\b/.test(weightCite)
+        ? "kg"
+        : /\b(lb|lbs|libras?|pounds?)\b/.test(weightCite)
+          ? "lb"
+          : "";
   const hazmat = get("hazmat");
   return {
     ...lane,
@@ -68,8 +78,9 @@ export function laneFrom(kind: RequestKind, read: ValorLeido[]): LaneDraft {
     // Without a volume in the document the lane waits for the shipper's number, not a default «1».
     loads: number(get("loads")),
     commodity: get("commodity"),
-    weight: number(get("weight")),
-    weight_unit: get("weight_unit") === "kg" ? "kg" : "lb",
+    // Sin unidad leída ni dicha en la cita del peso, el peso no entra: 40,000 kg no puede quedar como lb.
+    weight: unit ? number(get("weight")) : "",
+    weight_unit: unit || "lb",
     packaging: get("packaging"),
     hazmat: hazmat === "Yes",
     service: get("service") || lane.service,
@@ -111,6 +122,7 @@ export function laneSummary(kind: RequestKind, read: ValorLeido[], lang: Lang): 
     !lane.destination ? (es ? "Falta destino" : "Destination missing") : "",
     !read.some((v) => v.clave === "loads") ? (es ? "Falta volumen" : "Volume missing") : "",
     (lane.origin && !lane.origin.country) || (lane.destination && !lane.destination.country) ? (es ? "Falta país" : "Country missing") : "",
+    read.some((v) => v.clave === "weight") && !lane.weight ? (es ? "Falta la unidad del peso (kg o lb)" : "Weight unit missing (kg or lb)") : "",
   ].filter(Boolean);
   return { titulo: `${from} → ${to}`, datos, faltan };
 }
