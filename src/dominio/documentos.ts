@@ -121,7 +121,9 @@ export function citaRespalda(valor: string, cita: string): boolean {
   // Se compara número contra número completo: «5» no pasa con «15 cargas».
   if (/^[\d.,\s]+$/.test(valor)) {
     const buscado = aNumero(valor);
-    return buscado !== null && (cita.match(/\d[\d.,]*\d|\d/g) ?? []).some((n) => aNumero(n) === buscado);
+    // Con varios números en la cita no se sabe cuál es: mejor dejarlo vacío y que la persona lo escriba.
+    const numeros = (cita.match(/\d[\d.,]*\d|\d/g) ?? []).map(aNumero);
+    return buscado !== null && numeros.length === 1 && numeros[0] === buscado;
   }
   const piezas = plano(valor).split(" ").filter((p) => p.length >= 3);
   if (!piezas.length) return true;

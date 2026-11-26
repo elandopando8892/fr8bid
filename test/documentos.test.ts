@@ -84,6 +84,8 @@ describe("lo que se acepta de la IA", () => {
     expect(citaRespalda("1.5", "15 cargas")).toBe(false);
     expect(citaRespalda("15", "1.5 cargas")).toBe(false);
     expect(citaRespalda("1,5", "1.5 cargas")).toBe(true);
+    // Cita con varios números: ambigua, el valor no entra.
+    expect(citaRespalda("5", "Ruta 5: 15 cargas por semana")).toBe(false);
   });
 
   it("una opción que no existe no se inventa", () => {

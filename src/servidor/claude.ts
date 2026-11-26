@@ -159,7 +159,7 @@ Cómo decidir:
 - tipo "opcion": un solo valor, escrito exactamente como una de las opciones. Si ninguna corresponde, no lo incluyas.
 - tipo "lista": todas las opciones que el documento respalde, escritas exactamente como en las opciones.
 - Datos de una persona (nombre, correo, teléfono) solo si el documento los presenta como contacto de la empresa.
-- cita: el renglón breve y literal de donde sale el valor; si sale de un archivo, empieza con su nombre.
+- cita: el renglón breve y literal de donde sale el valor; si sale de un archivo, empieza con su nombre. Para un número (cargas, peso, volumen), cita solo el fragmento que trae ese número y ningún otro.
 - En una solicitud de rutas, cada ruta es un origen y un destino distintos (o el mismo par con otro equipo). Escribe origen y destino como «Ciudad, Estado, País» (MX, US o CA) cuando se pueda saber. Un dato que el correo da para todas las rutas (equipo, mercancía, peso) va en cada ruta. No sumes, no conviertas unidades ni monedas.
 - dudas: lo que la persona debería verificar (un dato borroso, dos valores distintos para el mismo campo, un documento vencido), en frases cortas y en el idioma que te indico. Vacío si todo está claro.
 - resumen: una frase en ese idioma con lo que leíste.`;
