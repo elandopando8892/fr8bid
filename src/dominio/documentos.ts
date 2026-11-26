@@ -110,22 +110,25 @@ function aNumero(texto: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+const numerosDe = (texto: string) => (texto.match(/\d[\d.,]*\d|\d/g) ?? []).map(aNumero).sort((a, b) => (a ?? 0) - (b ?? 0));
+
 /**
- * ¿La cita respalda el valor? Al menos una pieza con sustancia del valor
- * (palabra o número de 3+ caracteres) aparece en la cita. Las fechas se
- * normalizan (AAAA-MM-DD) y se dejan pasar; un valor sin piezas así también.
+ * ¿La cita respalda el valor? Las cifras del valor (cargas, peso, RFC,
+ * dirección) son exactamente las de la cita, sin números de más: «5» o
+ * «5 cargas» no pasan con «15 cargas» ni con «Ruta 5: 15 cargas». Además, al
+ * menos una palabra con sustancia del valor aparece en la cita. Las fechas
+ * (AAAA-MM-DD) se dejan pasar.
  */
 export function citaRespalda(valor: string, cita: string): boolean {
   if (/^\d{4}-\d{2}-\d{2}$/.test(valor)) return true;
-  // Un número (cargas, peso) tiene que estar escrito en la cita.
-  // Se compara número contra número completo: «5» no pasa con «15 cargas».
-  if (/^[\d.,\s]+$/.test(valor)) {
-    const buscado = aNumero(valor);
-    // Con varios números en la cita no se sabe cuál es: mejor dejarlo vacío y que la persona lo escriba.
-    const numeros = (cita.match(/\d[\d.,]*\d|\d/g) ?? []).map(aNumero);
-    return buscado !== null && numeros.length === 1 && numeros[0] === buscado;
+  // El «archivo.txt:» del inicio no cuenta como cifra de la cita.
+  const sinArchivo = cita.replace(/^[^:\n]{1,120}\.[a-z0-9]{2,5}:\s*/i, "");
+  if (/\d/.test(valor)) {
+    const delValor = numerosDe(valor);
+    const deLaCita = numerosDe(sinArchivo);
+    if (delValor.some((n) => n === null) || delValor.length !== deLaCita.length || delValor.some((n, i) => n !== deLaCita[i])) return false;
   }
-  const piezas = plano(valor).split(" ").filter((p) => p.length >= 3);
+  const piezas = plano(valor.replace(/\d[\d.,]*/g, " ")).split(" ").filter((p) => p.length >= 3);
   if (!piezas.length) return true;
   const enCita = compacto(cita);
   return piezas.some((p) => enCita.includes(p)) || enCita.includes(compacto(valor));

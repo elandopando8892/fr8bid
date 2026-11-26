@@ -86,6 +86,10 @@ describe("lo que se acepta de la IA", () => {
     expect(citaRespalda("1,5", "1.5 cargas")).toBe(true);
     // Cita con varios números: ambigua, el valor no entra.
     expect(citaRespalda("5", "Ruta 5: 15 cargas por semana")).toBe(false);
+    expect(citaRespalda("5 cargas", "15 cargas")).toBe(false);
+    expect(citaRespalda("5 cargas", "Ruta 5: 15 cargas")).toBe(false);
+    expect(citaRespalda("TNO 010101 AB1", "correo.txt: RFC TNO010101AB1")).toBe(true);
+    expect(citaRespalda("Av. Constitución 100, Monterrey, NL 64000", "Domicilio: Av. Constitución 100, Monterrey, NL 64000")).toBe(true);
   });
 
   it("una opción que no existe no se inventa", () => {
