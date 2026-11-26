@@ -82,6 +82,8 @@ describe("lo que se acepta de la IA", () => {
     expect(citaRespalda("2026-12-01", "pickup 2026-12-01")).toBe(true);
     expect(citaRespalda("2026-12-15", "pickup 15/12/2026")).toBe(true);
     expect(citaRespalda("2026-12-01", "pickup 1 dic 2026")).toBe(true);
+    expect(citaRespalda("2026-12-15", "pickup 15/12/25")).toBe(false);
+    expect(citaRespalda("2026-12-15", "pickup 15/12/26")).toBe(true);
     // Un volumen al mes no es «por semana».
     expect(citaRespalda("20", "20 cargas al mes", "loads")).toBe(false);
     expect(citaRespalda("20", "20 cargas por semana", "loads")).toBe(true);
@@ -245,7 +247,7 @@ describe("la solicitud arma rutas con lo leído", () => {
     { clave: "origin", valores: ["Monterrey, NL, MX"], cita: "" },
     { clave: "destination", valores: ["Laredo, TX"], cita: "" },
     { clave: "equipment", valores: ["Dry Van"], cita: "" },
-    { clave: "loads", valores: ["5"], cita: "" },
+    { clave: "loads", valores: ["5"], cita: "5 cargas por semana" },
     { clave: "weight", valores: ["40,000"], cita: "40,000 lbs" },
     { clave: "hazmat", valores: ["No"], cita: "" }
   ];
@@ -269,6 +271,12 @@ describe("la solicitud arma rutas con lo leído", () => {
     expect(sinUnidad.weight).toBe("");
     expect(laneSummary("rfq", [{ clave: "weight", valores: ["40,000"], cita: "peso 40,000" }], "es").faltan).toContain("Falta la unidad del peso (kg o lb)");
     expect(laneFrom("rfq", [{ clave: "weight", valores: ["40,000"], cita: "40,000 kg" }]).weight_unit).toBe("kg");
+    // Toneladas no se convierten, y una unidad que contradice la cita tampoco entra.
+    expect(laneFrom("rfq", [{ clave: "weight", valores: ["20"], cita: "20 toneladas" }]).weight).toBe("");
+    expect(laneFrom("rfq", [{ clave: "weight", valores: ["40000"], cita: "40,000 kg" }, { clave: "weight_unit", valores: ["lb"], cita: "lb" }]).weight).toBe("");
+    // En contrato el volumen es semanal: «20 cargas» sin «semana» no se supone.
+    expect(laneFrom("rfq", [{ clave: "loads", valores: ["20"], cita: "20 cargas" }]).loads).toBe("");
+    expect(laneSummary("rfq", [{ clave: "loads", valores: ["20"], cita: "20 cargas" }], "es").faltan).toContain("Falta el volumen por semana");
     expect(lane.hazmat).toBe(false);
   });
 

@@ -60,15 +60,20 @@ export function laneFrom(kind: RequestKind, read: ValorLeido[]): LaneDraft {
   const lane = emptyLane(kind);
   const date = get("pickup_date");
   const weightCite = plain(read.find((v) => v.clave === "weight")?.cita ?? "");
-  const unit: "kg" | "lb" | "" =
-    get("weight_unit") === "kg" || get("weight_unit") === "lb"
-      ? (get("weight_unit") as "kg" | "lb")
-      : /\b(kg|kgs|kilo|kilos|kilogramos?|ton|tons|toneladas?)\b/.test(weightCite)
-        ? "kg"
-        : /\b(lb|lbs|libras?|pounds?)\b/.test(weightCite)
-          ? "lb"
-          : "";
+  // La unidad sale de lo leído o de la cita; toneladas o unidades que se contradicen dejan el peso para el shipper.
+  const citeUnit: "kg" | "lb" | "ton" | "" = /\b(ton|tons|tonelada|toneladas|tonne|tonnes)\b/.test(weightCite)
+    ? "ton"
+    : /\b(kg|kgs|kilo|kilos|kilogramo|kilogramos)\b/.test(weightCite)
+      ? "kg"
+      : /\b(lb|lbs|libra|libras|pound|pounds)\b/.test(weightCite)
+        ? "lb"
+        : "";
+  const readUnit = get("weight_unit") === "kg" || get("weight_unit") === "lb" ? (get("weight_unit") as "kg" | "lb") : "";
+  const unit: "kg" | "lb" | "" = citeUnit === "ton" || (readUnit && citeUnit && readUnit !== citeUnit) ? "" : readUnit || citeUnit;
   const hazmat = get("hazmat");
+  // En una solicitud de contrato el volumen es por semana: sin «semana» en su cita, no se supone.
+  const loadsCite = plain(read.find((v) => v.clave === "loads")?.cita ?? "");
+  const weekly = kind === "spot" || /\b(semana|semanal|semanales|week|weekly|wk|sem)\b/.test(loadsCite);
   return {
     ...lane,
     origin: place(get("origin")),
@@ -76,7 +81,7 @@ export function laneFrom(kind: RequestKind, read: ValorLeido[]): LaneDraft {
     equipment: get("equipment"),
     truck: get("truck"),
     // Without a volume in the document the lane waits for the shipper's number, not a default «1».
-    loads: number(get("loads")),
+    loads: weekly ? number(get("loads")) : "",
     commodity: get("commodity"),
     // Sin unidad leída ni dicha en la cita del peso, el peso no entra: 40,000 kg no puede quedar como lb.
     weight: unit ? number(get("weight")) : "",
@@ -120,7 +125,7 @@ export function laneSummary(kind: RequestKind, read: ValorLeido[], lang: Lang): 
   const faltan = [
     !lane.origin ? (es ? "Falta origen" : "Origin missing") : "",
     !lane.destination ? (es ? "Falta destino" : "Destination missing") : "",
-    !read.some((v) => v.clave === "loads") ? (es ? "Falta volumen" : "Volume missing") : "",
+    !lane.loads ? (read.some((v) => v.clave === "loads") ? (es ? "Falta el volumen por semana" : "Weekly volume missing") : es ? "Falta volumen" : "Volume missing") : "",
     (lane.origin && !lane.origin.country) || (lane.destination && !lane.destination.country) ? (es ? "Falta país" : "Country missing") : "",
     read.some((v) => v.clave === "weight") && !lane.weight ? (es ? "Falta la unidad del peso (kg o lb)" : "Weight unit missing (kg or lb)") : "",
   ].filter(Boolean);

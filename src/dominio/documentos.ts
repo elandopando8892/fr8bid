@@ -125,13 +125,15 @@ function fechaEnCita(ano: number, mes: number, dia: number, cita: string): boole
   if (iso.length) return iso.some(([a, m, d]) => a === ano && m === mes && d === dia);
   const c = plano(cita);
   const nums = (c.match(/\d+/g) ?? []).map(Number);
+  // «15/12/25»: el año de dos dígitos se ve antes de quitar las barras.
+  const cortos = (cita.match(/\/(\d{2})\b(?!\/)/g) ?? []).map((x) => Number(x.slice(1)));
   if (!nums.includes(dia)) return false;
   const conNombre = new RegExp(`\\b(${MESES[mes - 1]})`).test(c);
   const conNumero = nums.filter((n) => n === mes).length > (mes === dia ? 1 : 0);
   if (!conNombre && !conNumero) return false;
   // «12/01/2026» puede ser 12 de enero o 1 de diciembre: sin el nombre del mes, no se adivina.
   if (!conNombre && dia !== mes && dia <= 12 && mes <= 12) return false;
-  const anos = nums.filter((n) => n >= 1000 || (n >= 24 && n <= 99 && c.includes(`/${n}`)));
+  const anos = [...nums.filter((n) => n >= 1000), ...cortos.filter((n) => n !== mes && n !== dia)];
   return !anos.length || anos.some((n) => n === ano || n === ano % 100);
 }
 
