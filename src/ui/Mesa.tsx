@@ -19,12 +19,13 @@ import {
   versionVigente,
   type Candado,
   type ClavePaso,
-  type Contexto
+  type Contexto,
+  ACCION_SIN_OFERTAS
 } from "../dominio/recorrido";
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
 import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
 import { cambiosComerciales, describirModelo, modeloCorto, modeloDeCaptura, MODELOS, nombreModelo, porcentajeModelo, tarifaVenta, textoModelosAceptados } from "../dominio/modelo";
-import { bloqueoCerrarSinAdjudicar, bloqueoDesierta, bloqueoReabrirRuta, bloqueoReRevision, bloqueoRespondio, bloqueoRevision, candidatasCaptura, marcablesRespondio, rutasSinDecidir, sinActividad } from "../dominio/acciones-mesa";
+import { SIN_OFERTAS, bloqueoCerrarSinAdjudicar, bloqueoDesierta, bloqueoReabrirRuta, bloqueoReRevision, bloqueoRespondio, bloqueoRevision, candidatasCaptura, marcablesRespondio, rutasSinDecidir, sinActividad } from "../dominio/acciones-mesa";
 import { eventoSinAvisos } from "../dominio/protegidos.js";
 import { candidatosRecordatorio, claveIntento, esperaRespuesta, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
@@ -148,6 +149,7 @@ export function Mesa({ id }: { id: string }) {
   const audiencia = audienciaInvitacion(d);
   const sumarCarriers = d.evento.estado === "abierto" && (rutasSinProfundidad(d).length > 0 || audiencia.aptas.length + audiencia.omitidas.length > 0);
   const verInvitacion = actual === "carriers" || (actual === "ofertas" && sumarCarriers);
+  const sinOfertasPorArchivar = actual === "ofertas" && r.siguiente.accion === ACCION_SIN_OFERTAS && ctx.rol === "admin";
 
   const accion = async <T,>(f: () => Promise<T>, ok?: string | ((r: T) => string)) => {
     setAvisoMsg(null);
@@ -238,6 +240,9 @@ export function Mesa({ id }: { id: string }) {
           {/* Lo que se decide primero, arriba (recorrido 22-nov): en Ofertas, las
               ofertas y las respuestas por revisar; luego el seguimiento y, si
               faltan carriers, la invitación y los contactos al final. */}
+          {/* Cerrado sin ofertas: lo que sigue es archivar, y el botón queda aquí
+              arriba, donde lo dice «Te toca» (26-nov). */}
+          {sinOfertasPorArchivar && <AccionesEvento d={d} accion={accion} />}
           {actual === "evento" && <PanelEvento {...p} />}
           {actual === "ofertas" && <PanelComparar {...p} />}
           {actual === "ofertas" && d.evento.estado === "abierto" && <PanelSeguimiento d={d} ctx={ctx} accion={accion} />}
@@ -247,7 +252,7 @@ export function Mesa({ id }: { id: string }) {
           {actual === "entrega" && <PanelEntrega {...p} />}
           {actual === "aviso" && <PanelAviso {...p} />}
           {actual === "aviso" && <PanelPropuesta d={d} ctx={ctx} accion={accion} />}
-          {s.modo === "rateware" && (actual === "evento" || d.evento.estado === "archivado") && ctx.rol === "admin" && <AccionesEvento d={d} accion={accion} />}
+          {s.modo === "rateware" && (actual === "evento" || d.evento.estado === "archivado") && ctx.rol === "admin" && !sinOfertasPorArchivar && <AccionesEvento d={d} accion={accion} />}
           {s.modo === "rateware" && <MasDelEvento id={id} borrador={d.evento.estado === "borrador"} />}
           <ReportarFr8Desk eventoId={id} asuntoInicial={`${d.evento.folio} · ${d.evento.nombre}`} />
         </div>
@@ -2089,6 +2094,8 @@ function CerrarSinAdjudicar({ d, accion }: { d: Detalle; accion: Props["accion"]
   const bloqueo = bloqueoCerrarSinAdjudicar(d);
   const rutas = rutasSinDecidir(d);
   if (bloqueo === "Todas las rutas ya están decididas.") return null;
+  // Sin ofertas, el Administrador ya tiene «Archivar» arriba: no se repite aquí.
+  if (bloqueo === SIN_OFERTAS && s.rol === "admin") return null;
   return (
     <div className="tarjeta">
       <div className="fila">

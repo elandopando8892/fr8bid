@@ -48,7 +48,7 @@ const lanes=['Albany','Fort Worth','Houston','Trenton','Ridgeway','Windsor'].map
   await sheet.getByLabel('Tarifa all-in *').fill('3590');
   assert.equal(served,before,'la recarga sigue en camino mientras se escribe');
   const enviada=page.getByRole('row').filter({hasText:'Fort Worth'});
-  assert.ok((await enviada.innerText()).includes('ENVIADA'),'la ruta enviada se ve enviada antes de la recarga');
+  assert.ok((await enviada.innerText()).includes('Enviada'),'la ruta enviada se ve enviada antes de la recarga');
   assert.equal(await enviada.getByRole('button').count(),0,'y no se puede volver a abrir mientras tanto');
   await page.waitForFunction(()=>true);for(let i=0;i<50&&served===before;i++)await page.waitForTimeout(100);
   assert.ok(served>before,'la recarga llegó');await page.waitForTimeout(400);

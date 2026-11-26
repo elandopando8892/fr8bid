@@ -117,7 +117,7 @@ export function sinActividad(d: Pick<Detalle, "rutas">): boolean {
 // el evento cerrado a ofertas, como adjudicar; la ruta no debe tener primario ni
 // respaldo (Rateware lo exige: lane_has_award) y no debe estar ya desierta.
 // Rateware no entrega un evento sin ninguna oferta: declarar desiertas sus rutas lo dejaría atorado.
-const SIN_OFERTAS = "Sin ninguna oferta no hay nada que entregar a Rateware: archiva el evento.";
+export const SIN_OFERTAS = "Sin ninguna oferta no hay nada que entregar a Rateware: archiva el evento.";
 const conOfertas = (d: Pick<Detalle, "rutas">) => d.rutas.some((r) => r.participaciones.some((p) => p.versiones.length));
 
 export function bloqueoDesierta(d: Detalle, ruta: Ruta): string | null {

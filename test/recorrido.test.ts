@@ -7,7 +7,9 @@ import { huellaOferta } from "../src/dominio/huella";
 import { proyeccionLoads } from "../src/dominio/loads";
 import { operacionAdjudicacion, operacionEntrega, UUID_RATEWARE } from "../src/dominio/operacion";
 import { EVENTOS_PROTEGIDOS } from "../src/dominio/protegidos";
+import { siguiente as siguienteFila } from "../src/ui/eventosVista";
 import {
+  ACCION_SIN_OFERTAS,
   avisoDe,
   candadosAdjudicacion,
   candadosAviso,
@@ -1282,5 +1284,47 @@ describe("archivar y restaurar (simulado)", () => {
     expect(despues.objetivo).toBe(1234);
     expect(despues.origen).toBe(ruta.origen);
     expect(despues.cruda?.target_rate).toBe(1234);
+  });
+});
+
+// 26-nov: Hoy, Eventos y la página del evento dicen el mismo «qué sigue».
+describe("un solo «qué sigue»", () => {
+  async function dosRutasInvitadas() {
+    const { sim: s, carriers } = crearSimulado();
+    relojDeTicks(s);
+    const op = new MesaApi(transporteSimulado(s, () => "operador"), () => s.hoy());
+    const adm = new MesaApi(transporteSimulado(s, () => "admin"), () => s.hoy());
+    const { row: event } = await op.crearEvento({ name: "PRUEBA CONTROLADA · dos rutas", customer: "Shipper de Prueba", due_date: "2026-10-31" });
+    const { rows: lanes } = await op.importarRutas(event.id, [
+      { origin_city: "Monterrey", destination_city: "Dallas", equipment: "Dry Van" },
+      { origin_city: "Saltillo", destination_city: "Laredo", equipment: "Dry Van" }
+    ]);
+    for (const l of lanes) await op.preseleccionar(l.id, [carriers.A.id, carriers.B.id]);
+    await op.publicar(event.id);
+    s.revisar(event.id, carriers.A.id);
+    s.revisar(event.id, carriers.B.id);
+    await op.prepararInvitaciones(event.id, [carriers.A.id, carriers.B.id]);
+    let d = await adm.detalle(event.id);
+    await adm.enviarAvisos(event.id, d.avisos);
+    return { adm, id: event.id as string };
+  }
+
+  it("un carrier invitado en una ruta ya no queda «por invitar» en las demás", async () => {
+    const { adm, id } = await dosRutasInvitadas();
+    const d = await adm.detalle(id);
+    const r = recorrido(d, ctx());
+    expect(r.pasos[3]).toMatchObject({ clave: "invitacion", estado: "hecho" });
+    expect(r.siguiente.accion).not.toBe("Enviar las invitaciones");
+  });
+
+  it("cerrado sin ofertas: la página dice «Archivar el evento», igual que la fila", async () => {
+    const { adm, id } = await dosRutasInvitadas();
+    await adm.cerrarAOfertas(id);
+    const d = await adm.detalle(id);
+    const r = recorrido(d, ctx());
+    expect(r.actual?.clave).toBe("adjudicar");
+    expect(r.siguiente.accion).toBe(ACCION_SIN_OFERTAS);
+    const fila = { id, folio: "F", nombre: "x", shipper: "y", estado: "cerrado" as const, plazo: "2026-10-31", prueba: false, rutas: [], ofertas: 0, participaciones: 4 };
+    expect(siguienteFila(fila).accion).toBe(r.siguiente.accion);
   });
 });

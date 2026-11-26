@@ -33,13 +33,13 @@ const lanes=['Albany','Fort Worth','Houston'].map((d,i)=>({rfx_lane_id:uid(i+10)
  try{
   await page.goto(origin+'/bid/fx-2',{waitUntil:'networkidle',timeout:30000});
   await panel.getByText('Ruta 2 de 3').waitFor();
-  // «No participo» con recarga lenta: la fila dice NO PARTICIPO, no ENVIADA.
+  // «No participo» con recarga lenta: la fila dice «No participo», no «Enviada».
   slow=true;let before=served;
   await panel.getByRole('button',{name:'No participo en esta ruta'}).click();
   await page.getByRole('dialog').getByRole('button').last().click();
   await panel.getByText('Ruta 3 de 3').waitFor();
   assert.equal(served,before,'la recarga sigue en camino');
-  assert.ok((await row('Fort Worth').innerText()).includes('NO PARTICIPO'),'la ruta rechazada se ve como no participo');
+  assert.ok((await row('Fort Worth').innerText()).includes('No participo'),'la ruta rechazada se ve como no participo');
   for(let i=0;i<50&&served===before;i++)await page.waitForTimeout(100);
   await page.waitForTimeout(300);
   // Última ruta pendiente con recarga lenta: el panel no deja enviarla otra vez.
@@ -62,11 +62,11 @@ const lanes=['Albany','Fort Worth','Houston'].map((d,i)=>({rfx_lane_id:uid(i+10)
   failReload=true;
   await panel.getByRole('button',{name:'Enviar oferta',exact:true}).click();
   await page.getByRole('alert').filter({hasText:'no pudimos actualizar tus rutas'}).waitFor();
-  assert.ok((await row('Albany').innerText()).includes('ENVIADA'));
+  assert.ok((await row('Albany').innerText()).includes('Enviada'));
   await page.getByRole('button',{name:'Volver a cargar'}).click();
   await page.waitForLoadState('networkidle');
   await page.getByRole('alert').filter({hasText:'no pudimos actualizar tus rutas'}).waitFor({state:'detached'});
-  assert.ok((await row('Albany').innerText()).includes('COTIZADA'),'tras reintentar manda el servidor');
+  assert.ok((await row('Albany').innerText()).includes('Cotizada'),'tras reintentar manda el servidor');
   assert.deepEqual(errors,[]);
   console.log('ok cotizacion-rapida-escritorio: última ruta sin doble envío, no participo y recarga fallida con reintento');
  }finally{await browser.close();}
