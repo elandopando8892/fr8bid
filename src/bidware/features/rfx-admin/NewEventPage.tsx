@@ -351,7 +351,7 @@ export function NewEventPage() {
   }
 
   if (id && detail.loading && !detail.data) return <Spinner label={tr("text502")} />;
-  if (id && detail.error) return <ErrorBanner message={detail.error} />;
+  if (id && detail.error) return <ErrorBanner message={detail.error} onRetry={detail.reload} />;
   if (id && event && !["draft", "open"].includes(text(event.status))) {
     return (
       <main className="main">

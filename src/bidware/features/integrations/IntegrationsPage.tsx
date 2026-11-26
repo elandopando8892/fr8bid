@@ -229,8 +229,8 @@ export function IntegrationsPage() {
         <div className="ig-page">
           {notice && <InfoBanner>{notice}</InfoBanner>}
           {failure && <ErrorBanner message={failure} />}
-          {gmail.error && <ErrorBanner message={gmail.error} />}
-          {wa.error && <ErrorBanner message={wa.error} />}
+          {gmail.error && <ErrorBanner message={gmail.error} onRetry={gmail.reload} />}
+          {wa.error && <ErrorBanner message={wa.error} onRetry={wa.reload} />}
 
           {loading && <Spinner label={tr("text037")} />}
 
@@ -355,7 +355,7 @@ export function IntegrationsPage() {
                       : tr("text071")}
                   </p>
                   {groups.loading && <Spinner label={tr("text072")} />}
-                  {groups.error && <ErrorBanner message={groups.error} />}
+                  {groups.error && <ErrorBanner message={groups.error} onRetry={groups.reload} />}
                   {!groups.loading && !groups.error && (
                     <div className="ig-list">
                       {groupRows.length ? (
@@ -465,7 +465,7 @@ export function IntegrationsPage() {
                     <Pill tone={HEALTH_TONE[c.state]}>{stateLabel()[c.state]}</Pill>
                     <Detalles k="chat" />
                   </div>
-                  {chat.error && <ErrorBanner message={chat.error} />}
+                  {chat.error && <ErrorBanner message={chat.error} onRetry={chat.reload} />}
                   {c.state !== "ok" && <p className="ig-alert">{c.detail}</p>}
                   <div className="ig-facts">
                     <Fact label={tr("text102")} value={chat.data?.account ?? "—"} />

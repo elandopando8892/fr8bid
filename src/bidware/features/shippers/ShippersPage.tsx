@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { useAsync } from "@/components/useAsync";
-import { Empty, ErrorBanner, Pill, Spinner, TopBar, dateShort } from "@/components/ui";
+import { ClearFilters, Empty, ErrorBanner, Pill, Spinner, TopBar, dateShort } from "@/components/ui";
 import { NEED_REASON } from "@/lib/roles";
 import { crmSummary } from "./crm.service";
 import { NewShipperDialog } from "./NewShipperDialog";
@@ -183,6 +183,7 @@ export function ShippersPage() {
             <Empty
               title={query ? `Ningún shipper coincide con «${query}»` : "No hay shippers en esta vista"}
               hint={canWork ? "Si es un cliente nuevo, dalo de alta con «Nuevo shipper»." : undefined}
+              action={query ? <ClearFilters onClick={() => { setSearch(""); setQuery(""); }} /> : undefined}
             />
           ) : (
             <div className="card" style={{ padding: 0 }}>

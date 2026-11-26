@@ -347,10 +347,10 @@ function CarrierFitContent() {
           <Link to="/templates">{tr("text024")}</Link>
         </div>
 
-        {templates.error && <ErrorBanner message={templates.error} />}
-        {events.error && <ErrorBanner message={events.error} />}
+        {templates.error && <ErrorBanner message={templates.error} onRetry={templates.reload} />}
+        {events.error && <ErrorBanner message={events.error} onRetry={events.reload} />}
         {templateError && <ErrorBanner message={templateError} />}
-        {detail.error && <ErrorBanner message={detail.error} />}
+        {detail.error && <ErrorBanner message={detail.error} onRetry={detail.reload} />}
         {restricted && <InfoBanner>
           <b style={{ display: "block", marginBottom: 6 }}>{reeferText("title")}</b>
           {reeferText("scope")}

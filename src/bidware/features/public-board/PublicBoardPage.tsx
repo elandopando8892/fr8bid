@@ -2,7 +2,7 @@ import { words, tr, movementLabel } from "@/i18n/public-board";
 import { useAuth } from "@/auth/AuthContext";
 import { useTeamBoardLanguage, useLang, getLang } from "@/i18n/language";
 import { useEffect, useMemo, useState } from "react";
-import { ErrorBanner, Empty, InfoBanner, Spinner } from "@/components/ui";
+import { ClearFilters, ErrorBanner, Empty, InfoBanner, Spinner } from "@/components/ui";
 import { useBoard, type Movement } from "./useBoard";
 import { EventCards, Pipeline, Sheet, ago, clock, type Actions } from "./BoardViews";
 import { BoardSide } from "./BoardSide";
@@ -322,7 +322,7 @@ export function PublicBoardPage() {
           </div>
         </div>
 
-        {board.error && <ErrorBanner message={board.error} />}
+        {board.error && <ErrorBanner message={board.error} onRetry={board.reload} />}
 
         {/* The spreadsheet is the power view: it takes the whole width. */}
         <div className={`pb-layout${view === "sheet" ? " wide" : ""}`}>
@@ -341,6 +341,7 @@ export function PublicBoardPage() {
               <Empty
                 title={query || chips.size ? tr("text130") : tr("text131")}
                 hint={query || chips.size ? tr("text132") : undefined}
+                action={query || chips.size ? <ClearFilters onClick={() => { setQuery(""); setChips(new Set()); }} /> : undefined}
               />
             )}
           </div>

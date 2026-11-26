@@ -33,7 +33,7 @@ import { fetchRfxDetail } from "@/features/rfx-admin/rfx.service";
 import { useAsync } from "@/components/useAsync";
 import { newOperationId } from "@/lib/operation-id";
 import { planSendBatches, runSendBatches, waitBetweenBatches, type BatchProgress } from "./send-batches";
-import { Spinner, ErrorBanner, InfoBanner, Empty, Pill } from "@/components/ui";
+import { ClearFilters, Spinner, ErrorBanner, InfoBanner, Empty, Pill } from "@/components/ui";
 import { LaunchHeader, LaunchTabs } from "./LaunchShell";
 import { listContactReviews } from "./review.service";
 import { BulkEmailReview } from "./BulkEmailReview";
@@ -679,6 +679,7 @@ function DeliveryQueueContent() {
           <Empty
             title={state || search ? tr("text130") : tr("text131")}
             hint={state || search ? tr("text132") : tr("text133")}
+            action={state || search ? <ClearFilters onClick={() => filter(() => { setState(null); setSearch(""); setSearchText(""); })} /> : undefined}
           />
         )}
 

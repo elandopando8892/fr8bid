@@ -233,7 +233,7 @@ function RateReviewContent() {
       <main className="main">
         <div style={{ display: "grid", gap: 14 }}>
           <RateTabs active="review" />
-          {pending.error && <ErrorBanner message={pending.error} />}
+          {pending.error && <ErrorBanner message={pending.error} onRetry={pending.reload} />}
           {catalog.error && <ErrorBanner message={tr("text041", catalog.error)} />}
           {notice && <InfoBanner>{notice}</InfoBanner>}
           {error && <ErrorBanner message={error} />}

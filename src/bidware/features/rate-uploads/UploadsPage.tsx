@@ -280,7 +280,7 @@ export function UploadsPage() {
           </div>
 
           {list.loading && !list.data && <Spinner label={tr("text037")} />}
-          {list.error && <ErrorBanner message={list.error} />}
+          {list.error && <ErrorBanner message={list.error} onRetry={list.reload} />}
           {list.error?.includes(SIMULATED_MESSAGE) && <Empty title={tr("text055")} hint={tr("text057")} />}
           {list.data && (
             <div className="row" style={{ flexWrap: "wrap" }}>

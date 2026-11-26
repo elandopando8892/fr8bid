@@ -376,11 +376,11 @@ function MessageContent() {
           enabled={!loading && busy === null && !detail.error && !campaigns.error && !reviews.error && !segments.error && !templates.error} />}
         {preparation && <DraftPreparationResult result={preparation} eventId={id} templateName={preparedTemplateName} />}
         {notice && <div role="status" aria-live="polite"><InfoBanner>{notice}</InfoBanner></div>}
-        {detail.error && <ErrorBanner message={detail.error} />}
-        {templates.error && <ErrorBanner message={templates.error} />}
-        {campaigns.error && <ErrorBanner message={campaigns.error} />}
-        {reviews.error && <ErrorBanner message={reviews.error} />}
-        {segments.error && <ErrorBanner message={segments.error} />}
+        {detail.error && <ErrorBanner message={detail.error} onRetry={detail.reload} />}
+        {templates.error && <ErrorBanner message={templates.error} onRetry={templates.reload} />}
+        {campaigns.error && <ErrorBanner message={campaigns.error} onRetry={campaigns.reload} />}
+        {reviews.error && <ErrorBanner message={reviews.error} onRetry={reviews.reload} />}
+        {segments.error && <ErrorBanner message={segments.error} onRetry={segments.reload} />}
         {draftAudience.unresolved && <ErrorBanner message={generationText("selectionUnavailable")} />}
 
         <div className="msg-audience">

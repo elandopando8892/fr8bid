@@ -20,14 +20,28 @@ export function Spinner({ label }: { label?: string }) {
   );
 }
 
-export function ErrorBanner({ message }: { message: string }) {
-  useLang();
+/**
+ * Un error dice qué pasó y ofrece la salida (prioridad 9): «Reintentar» cuando
+ * la lectura se puede repetir, u otra acción de quien lo muestra.
+ */
+export function ErrorBanner({ message, onRetry, action }: { message: string; onRetry?: () => void; action?: ReactNode }) {
+  const lang = useLang();
   // En modo simulado el aviso ya va arriba de la pantalla: no se repite en rojo.
   if (message.includes(SIMULATED_MESSAGE)) return null;
   return (
-    <div className="banner error">
+    <div className="banner error" role="alert">
       <b>Error</b>
       <span>{message}</span>
+      {(onRetry || action) && (
+        <span className="banner-accion">
+          {action}
+          {onRetry && (
+            <button type="button" onClick={onRetry}>
+              {lang === "en" ? "Try again" : "Reintentar"}
+            </button>
+          )}
+        </span>
+      )}
     </div>
   );
 }
@@ -53,6 +67,16 @@ export function Empty({ title, hint, action }: { title: string; hint?: string; a
       {hint && <p className="ayuda" style={{ margin: "6px 0 0" }}>{hint}</p>}
       {action && <div style={{ marginTop: 12 }}>{action}</div>}
     </div>
+  );
+}
+
+/** Salida de un vacío por filtro (prioridad 9): un toque vuelve a la lista completa. */
+export function ClearFilters({ onClick }: { onClick: () => void }) {
+  const lang = useLang();
+  return (
+    <button type="button" onClick={onClick}>
+      {lang === "en" ? "Clear filters" : "Quitar filtros"}
+    </button>
   );
 }
 

@@ -514,6 +514,18 @@ textarea {
   border: 1px solid var(--red);
   color: var(--red);
 }
+/* Prioridad 9: la salida de un error va en la misma línea, a la derecha. */
+.banner .banner-accion {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 8px;
+  align-self: center;
+  flex-shrink: 0;
+}
+.banner .banner-accion button,
+.banner .banner-accion .btn {
+  min-height: 36px;
+}
 .center-screen {
   min-height: 100vh;
   display: grid;
@@ -8703,8 +8715,8 @@ table.data.intake-table {
 }
 table.data.intake-table th:nth-child(2) { width: 96px; }
 table.data.intake-table th:nth-child(3) { width: 56px; }
-table.data.intake-table th:nth-child(4) { width: 100px; }
-table.data.intake-table th:nth-child(5) { width: 122px; }
+table.data.intake-table th:nth-child(4) { width: 132px; }
+table.data.intake-table th:nth-child(5) { width: 140px; }
 table.data.intake-table th:nth-child(6) { width: 176px; }
 table.data.intake-table td:not(:first-child) {
   white-space: nowrap;
@@ -8731,6 +8743,25 @@ table.data.intake-table td {
 }
 .intake-muted {
   color: var(--muted);
+}
+/* Prioridad 9: la liga sin respuesta se marca y su siguiente paso va primero. */
+.intake-wait {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: normal;
+}
+.intake-late {
+  color: var(--amber, #b45309);
+  font-weight: 600;
+}
+/* «Recordarle» arriba; copiar y abrir la liga, debajo. */
+table.data.intake-table td.intake-act {
+  white-space: normal;
+}
+.intake-remind {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 2px;
 }
 .intake-rowmsg {
   margin-top: 6px;
@@ -9676,4 +9707,55 @@ button:not(:disabled):active,
   background: var(--amber-light);
   color: var(--amber);
   font-weight: 600;
+}
+/* Prioridad 9: en el teléfono, cada solicitud es una tarjeta y su siguiente paso queda a la vista. */
+.main.intake {
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (max-width: 720px) {
+  .intake-cols {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .intake-form {
+    width: auto;
+  }
+  table.data.intake-table,
+  table.data.intake-table tbody,
+  table.data.intake-table tr,
+  table.data.intake-table td {
+    display: block;
+    width: auto;
+  }
+  table.data.intake-table thead {
+    display: none;
+  }
+  table.data.intake-table tr {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  table.data.intake-table td,
+  table.data.intake-table td:not(:first-child) {
+    border: none;
+    padding: 2px 16px;
+    white-space: normal;
+  }
+  /* Tipo y rutas no deciden nada en el teléfono. */
+  table.data.intake-table td:nth-child(2),
+  table.data.intake-table td:nth-child(3) {
+    display: none;
+  }
+  table.data.intake-table td.intake-act {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    padding-top: 8px;
+  }
+  table.data.intake-table td.intake-act .ne-link {
+    min-height: 44px;
+  }
+  .intake-remind {
+    display: inline;
+    margin: 0;
+  }
 }
