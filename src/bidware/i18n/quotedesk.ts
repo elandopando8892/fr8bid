@@ -616,6 +616,22 @@ export const copy = {
     "es": "Cotizada",
     "en": "Quoted"
   },
+  "bidRoomDraft": {
+    "es": "Evento sin publicar",
+    "en": "Event not published"
+  },
+  "bidRoomClosed": {
+    "es": "Bid Room cerrado",
+    "en": "Bid Room closed"
+  },
+  "bidRoomAwarded": {
+    "es": "Adjudicado en Bid Room",
+    "en": "Awarded in Bid Room"
+  },
+  "bidRoomArchived": {
+    "es": "Evento archivado",
+    "en": "Event archived"
+  },
   "text154": {
     "es": "En Bid Room",
     "en": "In Bid Room"

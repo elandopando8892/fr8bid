@@ -1,4 +1,6 @@
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useParams } from "react-router-dom";
+import { useEffect } from "react";
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { getLang } from "@/i18n/language";
 import { AuthProvider } from "@/auth/AuthContext";
 import { ConfirmHost } from "@/components/confirm";
 import { AIntegraciones, AMesa, Bw, P } from "./bidware";
@@ -9,8 +11,9 @@ import { Respuestas } from "./Respuestas";
 import { Hoy } from "./Hoy";
 import { LigaCarrier } from "./LigaCarrier";
 import { Mesa } from "./Mesa";
-import { Marco, NavegadorGlobal } from "./comun";
+import { Liga, Marco, NavegadorGlobal } from "./comun";
 import { ProveedorSesion, useSesion } from "./sesion";
+import { ALIAS, tituloDe } from "./titulos";
 
 export function App() {
   return (
@@ -111,9 +114,8 @@ function Rutas() {
         <Route path="/shippers" element={modulo(<P.Shippers />)} />
         <Route path="/shippers/:id" element={modulo(<P.Shipper />)} />
         <Route path="/integraciones" element={modulo(<P.Integraciones />)} />
+        <Route path="*" element={<NoExiste />} />
       </Route>
-
-      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
@@ -138,6 +140,10 @@ function MesaDelEvento() {
 
 function Equipo() {
   const s = useSesion();
+  const { pathname } = useLocation();
+  useEffect(() => {
+    document.title = tituloDe(pathname, getLang());
+  }, [pathname]);
   if (s.modo === "rateware" && s.listo && !s.correo) return <Entrar />;
   return (
     <Marco>
@@ -151,7 +157,7 @@ function Entrar() {
   return (
     <main className="contenido solo">
       <div className="tarjeta entrar">
-        <h1>Bid Room</h1>
+        <h1>Fr8Bid</h1>
         {s.error ? (
           <div className="estado estado-error">{s.error}</div>
         ) : (
@@ -169,5 +175,20 @@ function Entrar() {
         )}
       </div>
     </main>
+  );
+}
+
+// Una dirección que no existe ya no abre Hoy sin avisar: los nombres que el
+// equipo escribe a mano llevan a su sección y lo demás dice qué pasó.
+function NoExiste() {
+  const { pathname, search } = useLocation();
+  const destino = ALIAS[pathname.replace(/\/+$/, "").toLowerCase()];
+  if (destino) return <Navigate to={`${destino}${search}`} replace />;
+  return (
+    <section className="pagina">
+      <div className="estado estado-permiso" role="alert">
+        No existe la página {pathname}. <Liga a="/">Volver a Hoy</Liga>
+      </div>
+    </section>
   );
 }

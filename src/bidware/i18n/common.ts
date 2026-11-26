@@ -189,6 +189,10 @@ export const copy = {
   "text047": {
     "es": "No se pudo contactar al servidor. Revisa tu conexión y vuelve a intentar: reintentar es seguro.",
     "en": "Could not reach the server. Check your connection and try again: retrying is safe."
+  },
+  "text048": {
+    "es": "Rateware no respondió bien (código {0}). Vuelve a intentar; si sigue, avísanos.",
+    "en": "Rateware did not answer properly (code {0}). Try again; if it keeps happening, let us know."
   }
 };
 

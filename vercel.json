@@ -18,12 +18,12 @@
       "destination": "/api/mcp-metadata"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|assets/).*)",
       "has": [{ "type": "host", "value": "solicitud.xbfreight.com" }],
       "destination": "/xbf.html"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|assets/).*)",
       "destination": "/index.html"
     }
   ]

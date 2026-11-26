@@ -37,7 +37,7 @@ export const BOTON_BANDEJA: Record<RespuestaBandeja["tipo"], string> = {
   rechazo: "Revisar y marcar",
   pregunta: "Ver la pregunta",
   otro: "Revisar",
-  fallo: "Leer a mano"
+  fallo: "Leer ahora con IA"
 };
 
 const texto = (x: unknown) => (typeof x === "string" ? x.trim() : "");
@@ -92,3 +92,11 @@ export function aBandeja(cuerpo: any): { respuestas: RespuestaBandeja[]; hayMas:
 
 // Liga a la página del evento con esa respuesta abierta para revisarla.
 export const ligaRespuesta = (r: Pick<RespuestaBandeja, "eventoId" | "correoId">) => `/eventos/${r.eventoId}?respuesta=${encodeURIComponent(r.correoId)}`;
+
+// Respuestas que Gmail no dejó leer en los últimos días (cuota): la conexión puede decir «Conectado»
+// y aun así haber dejado correos sin leer (recorrido 26-nov). Integraciones lo avisa.
+export const DIAS_FALLOS_GMAIL = 7;
+export function fallosGmailRecientes(respuestas: RespuestaBandeja[], ahora = Date.now(), dias = DIAS_FALLOS_GMAIL): RespuestaBandeja[] {
+  const desde = ahora - dias * 86_400_000;
+  return respuestas.filter((r) => r.tipo === "fallo" && /^Gmail limitó/.test(r.fallo ?? "") && Date.parse(r.en) >= desde);
+}

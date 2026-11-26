@@ -92,6 +92,14 @@ export const copy = {
     "es": "Desconocido",
     "en": "Unknown"
   },
+  "gmailQuotaRecent": {
+    "es": "Conectado, pero en los últimos {1} días Gmail limitó la lectura de {0} respuesta(s) de carriers y no se leyeron solas.",
+    "en": "Connected, but in the last {1} days Gmail limited the reading of {0} carrier reply(ies) and they were not read automatically."
+  },
+  "gmailQuotaOpen": {
+    "es": "Léelas en Respuestas",
+    "en": "Read them in Replies"
+  },
   "text023": {
     "es": "Conectado",
     "en": "Connected"

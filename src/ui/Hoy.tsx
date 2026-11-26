@@ -11,6 +11,7 @@ import { useBandeja } from "./Respuestas";
 import { useAsync } from "../bidware/components/useAsync";
 import { awaitsTeam, listShipperProjects } from "../bidware/features/shipper-intake/intake.service";
 import { listPendingRates } from "../bidware/features/rate-review/rateReview.service";
+import { pendingSummary } from "../bidware/features/rate-review/readiness";
 
 /**
  * Lo que el Panel mostraba y Hoy no tenía (decisión de Jose, 5-nov): solo lo que
@@ -23,18 +24,23 @@ function Indicadores() {
   const solicitudes = proyectos.data?.filter(awaitsTeam).length ?? 0;
   // Cuentan todas las que esperan revisión (la lista llega hasta 1,000 filas,
   // el total viene aparte); ninguna se oculta por su nombre.
+  // Solo lo que el equipo puede hacer hoy (recorrido 26-nov): las que esperan adjudicación no cuentan.
+  // «Por revisar», no «listas»: si se aprueban lo decide la pantalla de tarifas (catálogo y valores normalizados).
   const lectura = tarifasPendientes.data;
-  const tarifas = lectura ? Math.max(lectura.total, lectura.rows.length) : 0;
-  // «Por revisar», no «listas»: si se aprueban lo decide la pantalla de
-  // tarifas (catálogo y valores normalizados), no este aviso.
-  if (!solicitudes && !tarifas) return null;
+  const resumen = pendingSummary(lectura?.rows ?? []);
+  const masDeLasQueCaben = Boolean(lectura && lectura.total > lectura.rows.length);
+  const tarifas = resumen.review;
+  if (!solicitudes && !tarifas && !resumen.fix) return null;
   return (
     <div className="atajos-chips indicadores">
       {solicitudes > 0 && (
         <Liga a="/intake" className="chip-liga acento"><I.Bandeja size={15} />{plural(solicitudes, "solicitud nueva", "solicitudes nuevas")}</Liga>
       )}
       {tarifas > 0 && (
-        <Liga a="/tarifas" className="chip-liga acento"><I.Etiqueta size={15} />{plural(tarifas, "tarifa")} por revisar</Liga>
+        <Liga a="/tarifas" className="chip-liga acento"><I.Etiqueta size={15} />{masDeLasQueCaben ? "Más de " : ""}{plural(tarifas, "tarifa")} por revisar</Liga>
+      )}
+      {resumen.fix > 0 && (
+        <Liga a="/tarifas" className="chip-liga"><I.Etiqueta size={15} />{plural(resumen.fix, "tarifa")} por corregir o archivar</Liga>
       )}
     </div>
   );
@@ -42,13 +48,22 @@ function Indicadores() {
 
 // Bandeja de respuestas (prioridad 6): cuántas contestaciones de carriers, ya leídas por la IA,
 // esperan a alguien del equipo. Solo si hay alguna.
+// Lo que la IA ya leyó se cuenta aparte de lo que no pudo leer: así el número dice cuánto se resuelve con un clic.
 function RespuestasPorAtender() {
   const { carga } = useBandeja();
-  const n = carga.tipo === "ok" ? carga.datos.respuestas.length + carga.datos.incompletas : 0;
-  if (carga.tipo !== "ok" || !n) return null;
+  if (carga.tipo !== "ok") return null;
+  const { respuestas, hayMas } = carga.datos;
+  const leidas = respuestas.filter((r) => r.tipo !== "fallo").length;
+  const sinLeer = respuestas.length - leidas;
+  if (!leidas && !sinLeer) return null;
   return (
     <div className="atajos-chips indicadores">
-      <Liga a="/respuestas" className="chip-liga acento"><I.Sobre size={15} />{carga.datos.hayMas ? "Más de " : ""}{plural(n, "respuesta")} de carriers por atender</Liga>
+      {leidas > 0 && (
+        <Liga a="/respuestas" className="chip-liga acento"><I.Sobre size={15} />{hayMas ? "Más de " : ""}{plural(leidas, "respuesta")} de carriers por atender</Liga>
+      )}
+      {sinLeer > 0 && (
+        <Liga a="/respuestas" className="chip-liga"><I.Sobre size={15} />{plural(sinLeer, "correo")} que la IA no pudo leer</Liga>
+      )}
     </div>
   );
 }

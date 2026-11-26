@@ -8,7 +8,7 @@ export const copy = {
     "en": "All"
   },
   "text002": {
-    "es": "Activos",
+    "es": "Activas",
     "en": "Active"
   },
   "text003": {
@@ -16,7 +16,7 @@ export const copy = {
     "en": "Drafts"
   },
   "text004": {
-    "es": "Archivados",
+    "es": "Archivadas",
     "en": "Archived"
   },
   "text005": {

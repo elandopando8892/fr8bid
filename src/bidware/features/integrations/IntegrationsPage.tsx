@@ -43,6 +43,8 @@ import {
 import { useAsync } from "@/components/useAsync";
 import { TopBar, Spinner, ErrorBanner, InfoBanner, Pill, dateShort } from "@/components/ui";
 import { GmailConnectionCheck } from "./GmailConnectionCheck";
+import { useBandeja } from "../../../ui/Respuestas";
+import { DIAS_FALLOS_GMAIL, fallosGmailRecientes } from "../../../dominio/bandeja";
 
 /** "CONECTADO" when the channel works; the health words otherwise. */
 const stateLabel = (): Record<ChannelHealth, string> => ({ ...HEALTH_LABEL, get ok() { return tr("text023"); } });
@@ -114,6 +116,7 @@ export function IntegrationsPage() {
     </button>
   );
   const gmail = useAsync(() => listGmailConnections(), []);
+  const { carga: bandeja } = useBandeja();
   const wa = useAsync(() => getWhatsappStatus(), []);
   const templates = useAsync(() => listWhatsappTemplates(), []);
   const groups = useAsync(() => listGroupCarriers(), []);
@@ -199,7 +202,10 @@ export function IntegrationsPage() {
 
   const mailbox = gmail.data?.rows?.[0];
   const conn = wa.data;
-  const g = gmailHealth(mailbox);
+  const conexion = gmailHealth(mailbox);
+  // «Conectado» no basta: si Gmail limitó lecturas de respuestas esta semana, se dice aquí.
+  const sinLeer = bandeja.tipo === "ok" ? fallosGmailRecientes(bandeja.datos.respuestas).length : 0;
+  const g = conexion.state === "ok" && sinLeer > 0 ? { state: "attention" as const, detail: tr("gmailQuotaRecent", sinLeer, DIAS_FALLOS_GMAIL) } : conexion;
   const chatRow = chat.data?.row;
   const c = googleChatHealth(chatRow);
   const w = whatsappHealth(conn);
@@ -404,7 +410,12 @@ export function IntegrationsPage() {
                     <Pill tone={HEALTH_TONE[g.state]}>{stateLabel()[g.state]}</Pill>
                     <Detalles k="gmail" />
                   </div>
-                  {g.state !== "ok" && <p className="ig-alert">{g.detail}</p>}
+                  {g.state !== "ok" && (
+                    <p className="ig-alert">
+                      {g.detail}
+                      {sinLeer > 0 && conexion.state === "ok" && <> <Link to="/respuestas">{tr("gmailQuotaOpen")}</Link></>}
+                    </p>
+                  )}
                   <div className="ig-facts two">
                     <Fact label={tr("text081")} value={mailbox?.mailbox_email ?? gmail.data?.allowed_sender ?? "—"} />
                     <Fact label={tr("senderIdentity")} value={mailbox?.sender_name || tr("senderNotConfigured")} />

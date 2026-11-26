@@ -557,7 +557,8 @@ button.pill:hover { filter: brightness(0.96); }
 .barra-etapas i.hecha { background: var(--accent); }
 .barra-etapas i.actual { background: #f6b79c; }
 .fila-evento-pasa { font-size: 14px; }
-.fila-evento-accion { display: flex; justify-content: flex-end; }
+.fila-evento-accion { display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
+.fila-evento-accion .btn-texto { white-space: nowrap; }
 .fila-evento-accion a { min-height: 40px; width: 100%; justify-content: center; display: inline-flex; align-items: center; }
 .fila-evento-accion .btn-primario { background: var(--accent); }
 @media (max-width: 1100px) {

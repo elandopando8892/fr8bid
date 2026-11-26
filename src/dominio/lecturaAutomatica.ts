@@ -43,9 +43,9 @@ export const FALLO_GENERICO = "La IA no pudo leer este correo.";
 export function textoFallo(error: unknown): string {
   const t = typeof error === "string" ? error.trim() : "";
   if (!t) return FALLO_GENERICO;
-  if (/quota|rate ?limit|too many requests|\b429\b/i.test(t)) return "Gmail limitó las lecturas en ese momento. Léelo a mano o espera la siguiente revisión.";
+  if (/quota|rate ?limit|too many requests|\b429\b/i.test(t)) return "Gmail limitó las lecturas en ese momento y no se reintenta solo. Léelo ahora con IA o descártalo.";
   if (/not ?found|\b404\b/i.test(t)) return "El correo ya no está en Gmail. Revísalo a mano o descártalo.";
-  if (/timeout|timed out|deadline/i.test(t)) return "La lectura tardó demasiado. Se reintenta en la siguiente revisión.";
+  if (/timeout|timed out|deadline/i.test(t)) return "La lectura tardó demasiado y no se reintenta sola. Léelo ahora con IA o descártalo.";
   return t;
 }
 
