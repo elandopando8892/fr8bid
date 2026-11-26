@@ -204,7 +204,7 @@ describe("paso de los módulos (/api/funcion)", () => {
     for (const modo of ["no", "borradores"] as const) {
       const r = paso("rfx-bid-api", body, modo);
       expect(r?.status).toBe(423);
-      expect(explainRequestError(r!.body.error, "es")).toMatch(/no podemos registrar tu aceptación/);
+      expect(explainRequestError(r!.body.error, "es")).toMatch(/no podemos registrar su aceptación/);
       expect(explainRequestError(r!.body.error, "en")).toMatch(/can't record your acceptance/);
     }
     expect(paso("rfx-bid-api", { action: "get_customer_rfi", token: "t" }, "no")).toBeNull();

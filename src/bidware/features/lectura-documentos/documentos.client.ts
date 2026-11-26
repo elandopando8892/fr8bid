@@ -53,7 +53,7 @@ export async function prepararArchivo(archivo: File, lang: Lang): Promise<Elegid
   throw new Error(
     lang === "en"
       ? `«${archivo.name}» can't be read. Use PDF, a photo (PNG, JPG), Excel or CSV.`
-      : `«${archivo.name}» no se puede leer. Usa PDF, una foto (PNG, JPG), Excel o CSV.`,
+      : `«${archivo.name}» no se puede leer. Leemos PDF, fotos (PNG, JPG), Excel o CSV.`,
   );
 }
 
@@ -61,11 +61,11 @@ export async function prepararArchivo(archivo: File, lang: Lang): Promise<Elegid
 export function problemaDeTamano(elegidos: Elegido[], pegado: string, lang: Lang): string | null {
   const adjuntos = elegidos.filter((e) => e.adjunto);
   if (adjuntos.length > MAX_ADJUNTOS_DOCUMENTOS)
-    return lang === "en" ? `Upload up to ${MAX_ADJUNTOS_DOCUMENTOS} PDFs or photos at a time.` : `Sube hasta ${MAX_ADJUNTOS_DOCUMENTOS} PDF o fotos a la vez.`;
+    return lang === "en" ? `Upload up to ${MAX_ADJUNTOS_DOCUMENTOS} PDFs or photos at a time.` : `Máximo ${MAX_ADJUNTOS_DOCUMENTOS} PDF o fotos a la vez.`;
   if (adjuntos.reduce((n, e) => n + bytesBase64(e.adjunto!.base64), 0) > MAX_BYTES_DOCUMENTOS)
-    return lang === "en" ? "The files add up to more than 3 MB. Upload fewer pages or a lighter photo." : "Los archivos pasan de 3 MB entre todos. Sube menos páginas o una foto más ligera.";
+    return lang === "en" ? "The files add up to more than 3 MB. Upload fewer pages or a lighter photo." : "Los archivos pasan de 3 MB entre todos: con menos páginas o una foto más ligera sí entran.";
   if (textoTotal(elegidos, pegado).length > MAX_TEXTO_DOCUMENTOS)
-    return lang === "en" ? "The text is too long. Paste or upload only the part that matters." : "El texto es demasiado largo. Pega o sube solo la parte que importa.";
+    return lang === "en" ? "The text is too long. Paste or upload only the part that matters." : "El texto es demasiado largo: basta con la parte que importa.";
   return null;
 }
 
@@ -101,7 +101,7 @@ export async function leerDocumentos(p: PedidoLectura): Promise<LecturaDocumento
       }),
     });
   } catch {
-    throw new Error(p.idioma === "en" ? "No connection. Check your internet and try again." : "Sin conexión. Revisa tu internet y vuelve a intentar.");
+    throw new Error(p.idioma === "en" ? "No connection. Check your internet and try again." : "Sin conexión a internet. Se puede volver a intentar en cuanto regrese.");
   }
   const datos = await r.json().catch(() => null);
   if (!r.ok || !datos?.lectura) {

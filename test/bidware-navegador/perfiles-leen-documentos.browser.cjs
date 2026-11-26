@@ -131,7 +131,7 @@ const leidoSolicitud = { resumen: 'Tres rutas semanales desde enero.', campos: [
     await lector.locator('input[type=file]').setInputFiles([pdf('w9.pdf')]);
     await lector.getByRole('button', { name: 'Leer', exact: true }).click();
     await lector.getByRole('button', { name: 'Usar estos 3 datos' }).click();
-    await page.getByText('Llenamos 3 datos. Revísalos paso por paso y guarda.').waitFor();
+    await page.getByText('Llenamos 3 datos. Revíselos paso por paso y guarde.').waitFor();
     assert.equal(await page.getByRole('textbox', { name: /^Razón social/ }).inputValue(), 'Vidrio Industrial de México S.A. de C.V.');
     await telefono('shipper-despues-telefono.png');
   }

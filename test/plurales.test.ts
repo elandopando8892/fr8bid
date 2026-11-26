@@ -55,6 +55,6 @@ describe("los datos interpolados no se pluralizan", async () => {
   const { COPY } = await import("../src/bidware/features/shipper-request/request.copy");
   it("el nombre de la hoja queda igual", () => {
     const es = (COPY as unknown as { es: { imported: (n: number, s: string | null) => string } }).es;
-    expect(es.imported(1, "1 ruta(s)")).toBe("Importamos 1 ruta de la hoja «1 ruta(s)». Revisa las marcadas.");
+    expect(es.imported(1, "1 ruta(s)")).toBe("Importamos 1 ruta de la hoja «1 ruta(s)». Revise las marcadas.");
   });
 });

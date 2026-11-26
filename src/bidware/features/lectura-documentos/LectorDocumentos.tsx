@@ -71,6 +71,27 @@ const COPY = {
   },
 };
 
+/** El shipper lee de usted (perfil y solicitud); el perfil del carrier conserva su voz. */
+const ES_USTED: typeof COPY.es = {
+  ...COPY.es,
+  titulo: {
+    ...COPY.es.titulo,
+    perfil_shipper: "Suba sus documentos y llenamos el perfil por usted",
+    solicitud: "Pegue su correo o suelte su archivo tal como lo tiene",
+  },
+  sub: {
+    ...COPY.es.sub,
+    perfil_shipper: "Constancia de situación fiscal, W-9 o su carta de presentación. Solo confirma lo que leímos.",
+    solicitud: "Un correo, un Excel en cualquier formato o un PDF. Armamos las rutas y usted solo confirma.",
+  },
+  soltar: "o suéltelos aquí · PDF, foto, Excel o CSV",
+  revisa: "Revise lo que leímos",
+  nada: "No encontramos datos para este formulario. Pruebe con otro documento o llénelo a mano.",
+  yaCoinciden: (n: number) => (n === 1 ? "1 dato ya coincidía con su perfil." : `${n} datos ya coincidían con su perfil.`),
+  revisar: "Revise antes de usar",
+  privacidad: "Leemos sus archivos para llenar este formulario y no los guardamos.",
+};
+
 export interface LectorProps {
   origen: OrigenDocumentos;
   token: string;
@@ -91,7 +112,7 @@ export interface LectorProps {
 
 export function LectorDocumentos(props: LectorProps) {
   const { origen, token, lang, campos, actual, mostrar, onUsar, camposRuta, resumenRuta, onRutas, probarSinIA } = props;
-  const t = COPY[lang];
+  const t = lang === "es" && origen !== "perfil_carrier" ? ES_USTED : COPY[lang];
   const [elegidos, setElegidos] = useState<Elegido[]>([]);
   const [pegado, setPegado] = useState("");
   const [pegarAbierto, setPegarAbierto] = useState(origen === "solicitud");
