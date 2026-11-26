@@ -102,6 +102,14 @@ export function citaEnTexto(cita: string, fuente: string): boolean {
   });
 }
 
+/** «40,000» y «40.000» son miles; «1.5» y «1,5» son decimales: nunca se confunden con «15». */
+function aNumero(texto: string): number | null {
+  const t = texto.replace(/\s/g, "");
+  if (!/^\d[\d.,]*$/.test(t)) return null;
+  const n = /^\d{1,3}([.,]\d{3})+$/.test(t) ? Number(t.replace(/[.,]/g, "")) : Number(t.replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
 /**
  * ¿La cita respalda el valor? Al menos una pieza con sustancia del valor
  * (palabra o número de 3+ caracteres) aparece en la cita. Las fechas se
@@ -112,8 +120,8 @@ export function citaRespalda(valor: string, cita: string): boolean {
   // Un número (cargas, peso) tiene que estar escrito en la cita.
   // Se compara número contra número completo: «5» no pasa con «15 cargas».
   if (/^[\d.,\s]+$/.test(valor)) {
-    const buscado = valor.replace(/\D/g, "");
-    return buscado !== "" && (cita.match(/\d[\d.,]*\d|\d/g) ?? []).some((n) => n.replace(/\D/g, "") === buscado);
+    const buscado = aNumero(valor);
+    return buscado !== null && (cita.match(/\d[\d.,]*\d|\d/g) ?? []).some((n) => aNumero(n) === buscado);
   }
   const piezas = plano(valor).split(" ").filter((p) => p.length >= 3);
   if (!piezas.length) return true;

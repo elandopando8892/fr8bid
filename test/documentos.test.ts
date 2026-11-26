@@ -81,6 +81,9 @@ describe("lo que se acepta de la IA", () => {
     expect(citaRespalda("9", "5 cargas por semana")).toBe(false);
     expect(citaRespalda("5", "15 cargas por semana")).toBe(false);
     expect(citaRespalda("40000", "peso de 40,000 lbs")).toBe(true);
+    expect(citaRespalda("1.5", "15 cargas")).toBe(false);
+    expect(citaRespalda("15", "1.5 cargas")).toBe(false);
+    expect(citaRespalda("1,5", "1.5 cargas")).toBe(true);
   });
 
   it("una opción que no existe no se inventa", () => {
