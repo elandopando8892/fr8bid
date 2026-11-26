@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { aceptarDocumentos, camposValidos, citaEnTexto, citaRespalda, mismoValor, opcionDe, type CampoDocumento } from "../src/dominio/documentos";
 import { dentroDelLimite, leerDocumentos, ligaActiva, MAX_LECTURAS_POR_HORA, type ConsultaDocumentos, type LeerDocumentos, type ValidarLiga } from "../src/servidor/documentos";
 import { documentFields as camposCarrier, fieldByKey } from "../src/bidware/features/carrier-profile/profile.schema";
-import { addReadLanes, laneFields, laneFrom, laneSummary } from "../src/bidware/features/shipper-request/lectura";
+import { addReadLanes, laneFields, laneFrom, laneSummary, untouched } from "../src/bidware/features/shipper-request/lectura";
 import { emptyDraft } from "../src/bidware/features/shipper-request/request.model";
 
 const campos: CampoDocumento[] = [
@@ -77,6 +77,8 @@ describe("lo que se acepta de la IA", () => {
     expect(citaRespalda("2026-12-01", "carga el 1 de diciembre")).toBe(true);
     expect(citaRespalda("Laredo, TX, US", "de Monterrey a Laredo")).toBe(true);
     expect(citaRespalda("Querétaro", "de Monterrey a Laredo")).toBe(false);
+    expect(citaRespalda("5", "5 cargas por semana")).toBe(true);
+    expect(citaRespalda("9", "5 cargas por semana")).toBe(false);
   });
 
   it("una opción que no existe no se inventa", () => {
@@ -254,6 +256,15 @@ describe("la solicitud arma rutas con lo leído", () => {
     expect(datos.length).toBeGreaterThanOrEqual(7);
   });
 
+  it("una ruta con solo la fecha tecleada no cede su lugar", () => {
+    const draft = emptyDraft("spot", { name: "", company: "", country: "MX" } as any);
+    expect(untouched(draft.lanes[0], "spot")).toBe(true);
+    const conFecha = { ...draft, lanes: [{ ...draft.lanes[0], pickup_date: "2026-12-01" }] };
+    expect(untouched(conFecha.lanes[0], "spot")).toBe(false);
+    expect(addReadLanes(conFecha, [leida]).lanes).toHaveLength(2);
+    expect(addReadLanes(draft, [leida]).lanes).toHaveLength(1);
+  });
+
   it("sin volumen en el documento, la ruta spot no se queda con un «1» supuesto", () => {
     const sin = leida.filter((v) => v.clave !== "loads");
     expect(laneFrom("spot", sin).loads).toBe("");
@@ -268,10 +279,10 @@ describe("la solicitud arma rutas con lo leído", () => {
 
   it("las rutas en blanco ceden su lugar y las llenas se quedan", () => {
     const draft = emptyDraft("rfq", { name: "", company: "", country: "MX" } as any);
-    const lleno = addReadLanes(draft, [leida, leida], new Set());
+    const lleno = addReadLanes(draft, [leida, leida]);
     expect(lleno.lanes).toHaveLength(2);
-    const conservada = addReadLanes(lleno, [leida], new Set([lleno.lanes[0].key]));
-    expect(conservada.lanes).toHaveLength(2);
+    const conservada = addReadLanes(lleno, [leida]);
+    expect(conservada.lanes).toHaveLength(3);
     expect(conservada.lanes[0].key).toBe(lleno.lanes[0].key);
   });
 });

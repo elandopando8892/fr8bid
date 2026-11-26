@@ -109,6 +109,8 @@ export function citaEnTexto(cita: string, fuente: string): boolean {
  */
 export function citaRespalda(valor: string, cita: string): boolean {
   if (/^\d{4}-\d{2}-\d{2}$/.test(valor)) return true;
+  // Un número (cargas, peso) tiene que estar escrito en la cita.
+  if (/^[\d.,\s]+$/.test(valor)) return compacto(valor) !== "" && compacto(cita).includes(compacto(valor));
   const piezas = plano(valor).split(" ").filter((p) => p.length >= 3);
   if (!piezas.length) return true;
   const enCita = compacto(cita);

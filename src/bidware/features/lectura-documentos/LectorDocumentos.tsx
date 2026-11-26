@@ -322,9 +322,11 @@ export function LectorDocumentos(props: LectorProps) {
                         ))}
                       </span>
                     )}
-                    {/* De dónde sale cada valor: la misma cita que en los datos de la empresa. */}
-                    {[...new Set(r.campos.map((c) => c.cita).filter(Boolean))].map((cita) => (
-                      <span key={cita} className="lector-cita">«{cita}»</span>
+                    {/* De dónde sale cada valor: cada cita con los campos que respalda. */}
+                    {[...r.campos.reduce((m, c) => m.set(c.cita, [...(m.get(c.cita) ?? []), etiquetas.get(c.clave) ?? c.clave]), new Map<string, string[]>())].map(([cita, de]) => (
+                      <span key={cita} className="lector-cita">
+                        <b>{de.join(", ")}:</b> «{cita}»
+                      </span>
                     ))}
                   </li>
                 );

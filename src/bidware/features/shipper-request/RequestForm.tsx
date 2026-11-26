@@ -4,7 +4,7 @@ import { catalogLabel, EQUIPMENT_TYPES, TRUCK_TYPES } from "./catalog";
 import { downloadTemplate, importLanes } from "./excel";
 import { CatalogSelect, Field, LaneForm, WeightInput } from "./LaneFields";
 import { PlaceField } from "./PlaceField";
-import { addReadLanes, laneFields, laneSummary } from "./lectura";
+import { addLanes, addReadLanes, laneFields, laneSummary } from "./lectura";
 import { LectorDocumentos } from "../lectura-documentos/LectorDocumentos";
 import type { Copy } from "./request.copy";
 import {
@@ -585,7 +585,6 @@ function SpotRequest(props: FormProps) {
 function ReadLanes({ token, draft, lang, copy, update }: FormProps) {
   const [notice, setNotice] = useState<string | null>(null);
   const fields = laneFields(draft.kind, lang);
-  const filledKeys = () => new Set(filledLanes(draft).map((lane) => lane.key));
   return (
     <>
       <LectorDocumentos
@@ -596,14 +595,13 @@ function ReadLanes({ token, draft, lang, copy, update }: FormProps) {
         camposRuta={fields}
         resumenRuta={(read) => laneSummary(draft.kind, read, lang)}
         onRutas={(read) => {
-          update((d) => addReadLanes(d, read, new Set(filledLanes(d).map((lane) => lane.key))));
+          update((d) => addReadLanes(d, read));
           setNotice(copy.readLanes(read.length));
         }}
         probarSinIA={async (file) => {
           const { lanes: imported, sheet } = await importLanes(file);
           if (!imported.length) return false;
-          const kept = filledKeys();
-          update((d) => ({ ...d, lanes: [...d.lanes.filter((lane) => kept.has(lane.key)), ...imported] }));
+          update((d) => addLanes(d, imported));
           setNotice(copy.imported(imported.length, sheet));
           return true;
         }}

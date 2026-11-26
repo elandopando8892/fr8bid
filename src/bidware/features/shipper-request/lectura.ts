@@ -115,9 +115,18 @@ export function laneSummary(kind: RequestKind, read: ValorLeido[], lang: Lang): 
   return { titulo: `${from} → ${to}`, datos, faltan };
 }
 
-/** The read lanes join the request; blank lanes give way, as with the Excel template. */
-export function addReadLanes(draft: RequestDraft, read: ValorLeido[][], filledKeys: Set<string>): RequestDraft {
-  const lanes = read.map((r) => laneFrom(draft.kind, r));
-  if (!lanes.length) return draft;
-  return { ...draft, lanes: [...draft.lanes.filter((lane) => filledKeys.has(lane.key)), ...lanes] };
+/** A lane nobody touched: every field still as a new lane starts. Any typed value (even just a date) keeps it. */
+export function untouched(lane: LaneDraft, kind: RequestKind): boolean {
+  const { key: _key, ...rest } = lane;
+  const { key: _fresh, ...blank } = emptyLane(kind);
+  return JSON.stringify(rest) === JSON.stringify(blank);
 }
+
+/** The read lanes join the request; only untouched lanes give way. */
+export function addLanes(draft: RequestDraft, lanes: LaneDraft[]): RequestDraft {
+  if (!lanes.length) return draft;
+  return { ...draft, lanes: [...draft.lanes.filter((lane) => !untouched(lane, draft.kind)), ...lanes] };
+}
+
+export const addReadLanes = (draft: RequestDraft, read: ValorLeido[][]): RequestDraft =>
+  addLanes(draft, read.map((r) => laneFrom(draft.kind, r)));
