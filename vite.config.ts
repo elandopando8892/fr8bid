@@ -12,5 +12,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: { alias: { "@": fileURLToPath(new URL("./src/bidware", import.meta.url)) } },
   css: { postcss: { plugins: [aislarEstilos(hojaDe)] } },
+  // xbf.html: la misma app con título y vista previa de XBF para solicitud.xbfreight.com (vercel.json).
+  build: { rollupOptions: { input: { main: fileURLToPath(new URL("./index.html", import.meta.url)), xbf: fileURLToPath(new URL("./xbf.html", import.meta.url)) } } },
   test: { environment: "node", include: ["test/**/*.test.ts"] }
 } as any);

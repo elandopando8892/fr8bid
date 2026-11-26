@@ -21,6 +21,13 @@ describe("liga del shipper", () => {
     expect(linkPrefs("?lang=es&country=US").country).toBe("US");
   });
 
+  it("en el dominio de XBF la página siempre es XBF", () => {
+    expect(linkPrefs("?token=abc", "solicitud.xbfreight.com").brand.key).toBe("xbf");
+    expect(linkPrefs("?token=abc&brand=marksman", "solicitud.xbfreight.com").brand.key).toBe("xbf");
+    expect(linkPrefs("?token=abc", "bidware.heymarksman.com").brand.key).toBe("marksman");
+    expect(linkPrefs("?token=abc", "xbfreight.com.ejemplo.test").brand.key).toBe("marksman");
+  });
+
   it("valores desconocidos se ignoran", () => {
     expect(linkPrefs("?lang=fr&brand=acme&country=BR")).toEqual({ lang: null, brand: { key: "marksman", name: "MARKSMAN" }, country: "MX" });
   });
