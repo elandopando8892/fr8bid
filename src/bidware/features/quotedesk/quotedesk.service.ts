@@ -595,3 +595,18 @@ export function getStagingOptions(): Promise<StagingOptions> {
   }
   return optionsCache;
 }
+
+/**
+ * A quote "in Bid Room" says what its event really is (recorrido 26-nov): an
+ * event still in draft isn't in front of any carrier yet. Unknown or missing
+ * events keep the stage's own label.
+ */
+export function bidRoomLabel(eventStatus: string | null | undefined): { label: string; tone: "blue" | "amber" | "green" | "" } {
+  switch (String(eventStatus ?? "").toLowerCase()) {
+    case "draft": return { label: tr("bidRoomDraft"), tone: "amber" };
+    case "closed": return { label: tr("bidRoomClosed"), tone: "blue" };
+    case "awarded": return { label: tr("bidRoomAwarded"), tone: "green" };
+    case "archived": return { label: tr("bidRoomArchived"), tone: "" };
+    default: return { label: STATUS_LABEL.bid_room, tone: "blue" };
+  }
+}

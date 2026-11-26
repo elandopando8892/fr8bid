@@ -6,11 +6,13 @@ import { confirmAsync } from "@/components/confirm";
 import { useAsync } from "@/components/useAsync";
 import { Empty, ErrorBanner, Pill, Spinner, TopBar, dateShort, money } from "@/components/ui";
 import { pct } from "./calc";
+import { listRfxEvents } from "@/features/rfx-admin/rfx.service";
 import { NewQuoteDialog } from "./NewQuoteDialog";
 import { QuotePanel } from "./QuotePanel";
 import {
   STATUS_LABEL,
   STATUS_TONE,
+  bidRoomLabel,
   getQuoteContext,
   getStagingOptions,
   listQuotes,
@@ -63,6 +65,9 @@ export function QuoteDeskPage() {
   // The panel's editor needs rateware's catalogs; load them once for every quote.
   const context = useAsync(getQuoteContext, []);
   const options = useAsync(getStagingOptions, []);
+  // The real state of each linked event: «En Bid Room» while the event is a draft misleads.
+  const events = useAsync(listRfxEvents, []);
+  const eventStatus = useMemo(() => new Map((events.data ?? []).map((e) => [e.id, e.status ?? ""])), [events.data]);
 
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -156,6 +161,7 @@ export function QuoteDeskPage() {
                       const lane = q.first_lane;
                       const extra = q.summary.lane_count > 1 ? ` (+${q.summary.lane_count - 1})` : "";
                       const priced = q.summary.priced_lane_count > 0;
+                      const enBidRoom = q.status === "bid_room" ? bidRoomLabel(q.rfx_event_id ? eventStatus.get(q.rfx_event_id) : null) : null;
                       return (
                         <tr
                           key={q.id}
@@ -188,16 +194,16 @@ export function QuoteDeskPage() {
                           </td>
                           <td className="num mono">{priced ? money(q.summary.base_cost_total, q.currency) : "—"}</td>
                           <td className="num mono">
-                            {q.status === "bid_room" && !priced
-                              ? tr("text324")
+                            {enBidRoom && !priced
+                              ? enBidRoom.label.toLowerCase()
                               : priced
                                 ? money(q.summary.all_in_total, q.currency)
                                 : "—"}
                           </td>
                           <td className="num mono qd-good">{priced ? pct(q.summary.margin_pct) : "—"}</td>
                           <td>
-                            <Pill tone={STATUS_TONE[q.status as QuoteStatus]}>
-                              {STATUS_LABEL[q.status as QuoteStatus].toUpperCase()}
+                            <Pill tone={enBidRoom?.tone ?? STATUS_TONE[q.status as QuoteStatus]}>
+                              {(enBidRoom?.label ?? STATUS_LABEL[q.status as QuoteStatus]).toUpperCase()}
                             </Pill>
                           </td>
                         </tr>

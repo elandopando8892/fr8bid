@@ -97,6 +97,18 @@ export const copy = {
     "es": "Carga sin evento",
     "en": "Upload without event"
   },
+  "awaitingAward": {
+    "es": "Esperan adjudicación",
+    "en": "Waiting on award"
+  },
+  "awaitingAwardHelp": {
+    "es": "Se aprueban cuando el evento se adjudique.",
+    "en": "They can be approved once the event is awarded."
+  },
+  "openEvent": {
+    "es": "Abrir el evento",
+    "en": "Open the event"
+  },
   "text023": {
     "es": "Evento que ya no está en el Bid Room",
     "en": "Event no longer in Bid Room"

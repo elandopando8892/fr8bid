@@ -111,7 +111,16 @@ export async function shipperLink(projectId: string): Promise<{ link: string | n
 // opens a project for every event, and those don't belong in this queue.
 const INTAKE_STATUSES = new Set(["rfi_sent", "rfi_in_progress", "rfi_submitted", "demand_review"]);
 export const isIntake = (project: RfxProject) =>
-  INTAKE_STATUSES.has(project.status) || Boolean(project.rfi_status && project.rfi_status !== "not started");
+  project.status !== "archived" &&
+  (INTAKE_STATUSES.has(project.status) || Boolean(project.rfi_status && project.rfi_status !== "not started"));
+
+/**
+ * An old or repeated request leaves the list (recorrido 26-nov). Only an
+ * Administrador archives; the project stays in rateware, archived.
+ */
+export async function archiveShipperProject(id: string): Promise<void> {
+  await callRatewareApi<{ row: RfxProject }>("update_rfx_process_project", { id, patch: { status: "archived" } });
+}
 
 /** The shipper sent its request back. */
 export const responded = (project: RfxProject) => project.rfi_status === "submitted" || project.status === "rfi_submitted";

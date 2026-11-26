@@ -246,11 +246,24 @@ describe("borrador abierto desde la bandeja", () => {
   it("un correo que la IA no pudo leer se descarta, aunque Gmail falle al traer otro", async () => {
     sesion.api.lecturasServidor = vi.fn(async () => [servidor({ gmail_message_id: "msgexcel01", status: "failed", reading: null, error: "Es un Excel" })]);
     await render("msgexcel01");
-    expect(container.textContent).toContain("Es un Excel");
+    // Desde la bandeja se intenta leer otra vez en el momento; si tampoco se puede, se dice qué hacer.
+    expect(sesion.api.traerCorreo).toHaveBeenCalledWith(EV, "msgexcel01");
+    expect(container.textContent).toContain("Tráelo de nuevo, pega el texto o descártalo");
     await clic("Traer este correo");
     expect(sesion.api.traerCorreo).toHaveBeenCalledWith(EV, "msgotro01");
     await clic("Descartar este correo");
     expect(sesion.api.marcarLectura).toHaveBeenCalledWith(EV, "msgexcel01", "dismissed");
+  });
+
+  it("un correo que Gmail no dejó leer se lee ahora al abrirlo desde la bandeja y queda como borrador", async () => {
+    sesion.api.lecturasServidor = vi.fn(async () => [servidor({ gmail_message_id: "msgcuota01", status: "failed", reading: null, error: "Quota exceeded" })]);
+    sesion.api.traerCorreo = vi.fn(async () => ({ texto: "Tarifa 1300 USD ruta 1", adjuntos: [], anexos: [] }));
+    sesion.api.leerRespuesta = vi.fn(async () => ({ tipo: "oferta", resumen: "Cotiza la ruta 1", ofertas: [oferta("r1", 1300)], dudas: [], recortado: false }));
+    await render("msgcuota01");
+    expect(sesion.api.traerCorreo).toHaveBeenCalledWith(EV, "msgcuota01");
+    expect(cargarLecturas(EV).msgcuota01.lectura?.tipo).toBe("oferta");
+    expect(cargarLecturas(EV).msgcuota01.fallo).toBeNull();
+    expect(boton(/Guardar 1 oferta/)).toBeTruthy();
   });
 
   it("sin carriers capturables o con Consulta, la liga explica por qué y no se queda en silencio", async () => {

@@ -267,6 +267,11 @@ export const copy = {
   remindOpened: { es: "El recordatorio quedó listo en Gmail. Revísalo y envíalo.", en: "The reminder is ready in Gmail. Review it and send it." },
   remindCopied: { es: "Copiamos el recordatorio con su liga. Pégalo en WhatsApp o en un correo.", en: "We copied the reminder with their link. Paste it into WhatsApp or an email." },
   remindedOn: { es: "Recordado {0}", en: "Reminded {0}" },
+  startedFilling: { es: "Empezó a llenarla {0}", en: "Started filling it {0}" },
+  archive: { es: "Archivar", en: "Archive" },
+  archiveConfirm: { es: "¿Archivar la solicitud de {0}? Sale de esta lista y su liga deja de ofrecerse aquí. No se avisa al shipper.", en: "Archive the request from {0}? It leaves this list and its link is no longer offered here. The shipper is not notified." },
+  archiveOk: { es: "Archivar", en: "Archive" },
+  archiveHint: { es: "Solo un Administrador archiva solicitudes.", en: "Only an Administrator archives requests." },
   waitingDays: { es: "{0} día(s) sin respuesta", en: "{0} day(s) without a reply" },
   "text267": {
     "es": "Rutas",

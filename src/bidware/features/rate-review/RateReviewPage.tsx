@@ -2,6 +2,7 @@ import { words, tr } from "@/i18n/rate-review";
 import { pluralize } from "@/i18n/language";
 import { useLang, getLang } from "@/i18n/language";
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { confirmAsync } from "@/components/confirm";
 import { useAsync } from "@/components/useAsync";
 import { RateTabs } from "@/components/RateTabs";
@@ -14,7 +15,7 @@ import { buildCatalogIndex, choiceKey, valueLabel, CATALOG_FIELDS, type CatalogI
 import { loadCatalogRows, saveCatalogAlias } from "@/features/rfx-admin/laneSources";
 import { CatalogValueRow } from "@/features/rfx-admin/CatalogValueRow";
 import type { RfxEvent } from "@/types/domain";
-import { blockersOf, isBlocking, ISSUE_LABEL, looksLikeTest, rateOf, reviewIssues, rfxBidOutcome, rfxOutcomeLabel, type StagedRate } from "./readiness";
+import { awaitsAward, blockersOf, isBlocking, ISSUE_LABEL, looksLikeTest, rateOf, reviewIssues, rfxBidOutcome, rfxOutcomeLabel, type StagedRate } from "./readiness";
 import { normalizationPatch, rateValues, unknownValues, valuesSettled } from "./normalize";
 import { archiveRates, listPendingRates, updateRate, updateRates } from "./rateReview.service";
 import { RateEditDialog } from "./RateEditDialog";
@@ -26,6 +27,8 @@ interface Group {
   title: string;
   sub: string;
   test: boolean;
+  /** Fr8Bid event behind the group, to open its page. */
+  eventId: string | null;
   rows: StagedRate[];
 }
 
@@ -43,14 +46,16 @@ function groupRows(rows: StagedRate[], events: Map<string, RfxEvent>): Group[] {
         title: rfxId || tr("text022"),
         sub: event ? [event.name, event.customer].filter(Boolean).join(" · ") : rfxId ? tr("text023") : tr("text024"),
         test: looksLikeTest(row),
+        eventId: event?.id ?? null,
         rows: [],
       };
       groups.set(key, group);
     }
     group.rows.push(row);
   }
-  // Real sources first, then the biggest.
-  return [...groups.values()].sort((a, b) => Number(a.test) - Number(b.test) || b.rows.length - a.rows.length);
+  // Real sources first, then what can be worked now (a group waiting on its award goes last), then the biggest.
+  const waiting = (g: Group) => Number(g.rows.every(awaitsAward));
+  return [...groups.values()].sort((a, b) => Number(a.test) - Number(b.test) || waiting(a) - waiting(b) || b.rows.length - a.rows.length);
 }
 
 /** Runs `task` over `items`, `size` at a time, reporting progress. */
@@ -299,10 +304,18 @@ function RateReviewContent() {
                   <div>
                     <div className="cell-title">
                       {group.title} {group.test && <Pill tone="amber">{tr("text054")}</Pill>}
+                      {group.rows.some(awaitsAward) && <Pill tone="amber">{tr("awaitingAward")}</Pill>}
                     </div>
                     <div className="cell-sub">
-                      {group.sub} · {pluralize(`${group.rows.length}${tr("text055")}`)}{group.rows.filter(approvable).length}{tr("text043")}</div>
+                      {group.sub} · {pluralize(`${group.rows.length}${tr("text055")}`)}{group.rows.filter(approvable).length}{tr("text043")}
+                      {group.rows.some(awaitsAward) && <> · {tr("awaitingAwardHelp")}</>}
+                    </div>
                   </div>
+                  {group.eventId && (
+                    <Link className="btn-texto" style={{ marginLeft: "auto" }} to={`/eventos/${group.eventId}`}>
+                      {tr("openEvent")}
+                    </Link>
+                  )}
                 </div>
                 <div className="rr-table-wrap">
                 <table className="data rr-rates" role="table" aria-label={group.title} style={{ border: "none" }}>

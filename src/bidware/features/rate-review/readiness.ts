@@ -209,3 +209,26 @@ export const isBlocking = (issue: IssueKey) => BLOCKERS.has(issue);
 export function looksLikeTest(row: StagedRate): boolean {
   return /dummy|canary|smoke|shadow|\btest\b|prueba/i.test(String(row.rfx_id ?? ""));
 }
+
+/**
+ * A rate offered in an RFx that hasn't been awarded yet: nobody can approve it
+ * until the event is awarded, so it waits instead of counting as work.
+ */
+export const awaitsAward = (row: StagedRate) => rfxBidOutcome(row) === "submitted";
+
+/**
+ * What Hoy counts (recorrido 26-nov): rates the team can review now (nothing
+ * blocks them), the ones waiting on an award, and the rest, which need a fix
+ * or an archive before they can go anywhere.
+ */
+export function pendingSummary(rows: StagedRate[]): { review: number; awaiting: number; fix: number } {
+  let review = 0;
+  let awaiting = 0;
+  let fix = 0;
+  for (const row of rows) {
+    if (awaitsAward(row)) awaiting++;
+    else if (blockersOf(row).length) fix++;
+    else review++;
+  }
+  return { review, awaiting, fix };
+}

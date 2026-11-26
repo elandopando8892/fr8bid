@@ -8,7 +8,9 @@ import { Empty, ErrorBanner, InfoBanner, Pill, Spinner, TopBar } from "@/compone
 import { ShipperPicker } from "@/components/ShipperPicker";
 import { WebIntakeTray } from "@/features/web-intake/WebIntakeTray";
 import type { ShipperOption } from "@/features/quotedesk/quotedesk.service";
+import { confirmAsync } from "@/components/confirm";
 import {
+  archiveShipperProject,
   awaitsTeam,
   createQuoteFromRequest,
   createShipperProject,
@@ -96,6 +98,7 @@ function ShipperIntakeContent() {
   const allowed = useRef(false);
   const pending = useRef(false);
   const canOperate = roleLoaded && can("operate");
+  const canArchive = roleLoaded && can("admin");
   allowed.current = canOperate;
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const current = () => active.current && allowed.current;
@@ -225,6 +228,24 @@ function ShipperIntakeContent() {
 
   // Lo recordado en este navegador se vuelve a leer al anotar uno nuevo.
   const [, setRecordados] = useState(0);
+
+  /** «Archivar» (Administrador): una liga vieja o repetida sale de la lista; no se avisa al shipper. */
+  async function archive(project: RfxProject) {
+    if (!current() || pending.current) return;
+    if (!(await confirmAsync(tr("archiveConfirm", project.customer_name || project.title), { ok: tr("archiveOk") }))) return;
+    pending.current = true;
+    setRowBusy(project.id);
+    setRowMsg(null);
+    try {
+      await archiveShipperProject(project.id);
+      if (current()) projects.reload();
+    } catch (e) {
+      if (current()) setRowMsg({ id: project.id, text: (e as Error).message });
+    } finally {
+      pending.current = false;
+      if (active.current) setRowBusy(null);
+    }
+  }
 
   /** «Recordarle»: abre el borrador en Gmail con la liga vigente; nada sale sin que la persona lo envíe. */
   async function remind(project: RfxProject) {
@@ -369,9 +390,14 @@ function ShipperIntakeContent() {
                           </td>
                           <td title={typeTitle(project.opportunity_type)}>{typeLabel(project.opportunity_type)}</td>
                           <td className="mono">{project.lane_count || "—"}</td>
-                          <td className={came ? undefined : "intake-muted"} title={came ? undefined : tr("text053")}>
-                            {came ? when(project.updated_at) : tr("text054", when(project.created_at, false).toLowerCase())}
-                            {!came && <Espera project={project} />}
+                          <td className={came ? undefined : "intake-muted"} title={came || stage === "filling" ? undefined : tr("text053")}>
+                            {came
+                              ? when(project.updated_at)
+                              : stage === "filling"
+                                // Ya la está llenando: decir «sin respuesta» contradice la etiqueta.
+                                ? tr("startedFilling", when(project.updated_at).toLowerCase())
+                                : tr("text054", when(project.created_at, false).toLowerCase())}
+                            {stage === "sent" && <Espera project={project} />}
                           </td>
                           <td>
                             <Pill tone={STAGE[stage].tone}>{STAGE[stage].label}</Pill>
@@ -382,13 +408,24 @@ function ShipperIntakeContent() {
                             ) : quote ? (
                               <Link to={`/quotedesk/${quote.id}`}>{tr("text056")}{quote.folio}</Link>
                             ) : stage === "new" ? (
-                              <button
-                                className="ne-link"
-                                disabled={!canOperate || rowBusy !== null}
-                                onClick={() => (spot ? toQuote(project) : toEvent(project))}
-                              >
-                                {spot ? tr("text057") : tr("text058")}
-                              </button>
+                              <>
+                                <button
+                                  className="ne-link"
+                                  disabled={!canOperate || rowBusy !== null}
+                                  onClick={() => (spot ? toQuote(project) : toEvent(project))}
+                                >
+                                  {spot ? tr("text057") : tr("text058")}
+                                </button>
+                                {/* Una solicitud repetida (el mismo shipper dos veces) se archiva en vez de convertirse. */}
+                                <button
+                                  className="ne-link"
+                                  disabled={!canArchive || rowBusy !== null}
+                                  title={canArchive ? undefined : tr("archiveHint")}
+                                  onClick={() => archive(project)}
+                                >
+                                  {tr("archive")}
+                                </button>
+                              </>
                             ) : (
                               // Once answered, a new link would only reopen the request as "Liga enviada".
                               <>
@@ -404,6 +441,14 @@ function ShipperIntakeContent() {
                                   {tr("text059")}</button>
                                 <button className="ne-link" disabled={!canOperate || rowBusy !== null} onClick={() => withLink(project, true)}>
                                   {tr("text038")}</button>
+                                <button
+                                  className="ne-link"
+                                  disabled={!canArchive || rowBusy !== null}
+                                  title={canArchive ? undefined : tr("archiveHint")}
+                                  onClick={() => archive(project)}
+                                >
+                                  {tr("archive")}
+                                </button>
                               </>
                             )}
                           </td>

@@ -48,8 +48,24 @@ export function useBandeja(activo = true) {
 const CLASE_TIPO: Record<RespuestaBandeja["tipo"], string> = { oferta: "pill ok", rechazo: "pill", pregunta: "pill info", otro: "pill", fallo: "pill warn" };
 
 export function Respuestas() {
-  const { rol } = useSesion();
+  const { rol, api } = useSesion();
   const { carga, leer } = useBandeja();
+  // Correos que la IA no pudo leer y que el equipo decide no atender: salen de Respuestas para todos.
+  const [quitando, setQuitando] = useState<string | null>(null);
+  const [falloQuitar, setFalloQuitar] = useState<string | null>(null);
+  const descartar = async (r: RespuestaBandeja) => {
+    const clave = `${r.eventoId}:${r.correoId}`;
+    setQuitando(clave);
+    setFalloQuitar(null);
+    try {
+      await api.marcarLectura(r.eventoId, r.correoId, "dismissed");
+      await leer();
+    } catch {
+      setFalloQuitar(`No se pudo descartar la respuesta de ${r.carrier}. Vuelve a intentarlo.`);
+    } finally {
+      setQuitando(null);
+    }
+  };
   const datos = carga.tipo === "ok" ? carga.datos : null;
   const respuestas = datos?.respuestas ?? [];
   const ofertas = respuestas.filter((r) => r.tipo === "oferta").length;
@@ -69,6 +85,7 @@ export function Respuestas() {
       </header>
       {carga.tipo === "ok" && <Desactualizado leidoEn={carga.leidoEn} actualizar={leer} />}
       <EstadoVista carga={carga} reintentar={leer} />
+      {falloQuitar && <div className="estado estado-error" role="alert">{falloQuitar}</div>}
       {datos && datos.incompletas > 0 && (
         <div className="estado estado-error" role="alert">
           {plural(datos.incompletas, "respuesta llegó incompleta", "respuestas llegaron incompletas")} de Rateware y no se muestra{datos.incompletas === 1 ? "" : "n"}. Ábrelas desde la página de su evento.
@@ -95,6 +112,11 @@ export function Respuestas() {
                 {(r.fallo ?? r.resumen) && <p className="sin-margen">{r.fallo ?? r.resumen}</p>}
               </div>
               <div className="fila-evento-accion">
+                {r.tipo === "fallo" && !consulta && (
+                  <button className="btn-texto" disabled={quitando !== null} onClick={() => void descartar(r)}>
+                    {quitando === `${r.eventoId}:${r.correoId}` ? "Descartando…" : "Descartar"}
+                  </button>
+                )}
                 <Liga a={ligaRespuesta(r)} className={r.tipo === "oferta" && !consulta ? "btn-primario" : "btn-secundario"}>
                   {consulta ? "Ver" : BOTON_BANDEJA[r.tipo]} <I.Flecha size={14} />
                 </Liga>

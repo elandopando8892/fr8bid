@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { ErrorApi } from "../cliente/api";
 import type { AdjuntoLectura, AnexoTexto, CanalLectura, CorreoTraido, Lectura, TipoAdjunto } from "../dominio/lectura";
 import { bytesBase64, MAX_ADJUNTOS_LECTURA, MAX_BYTES_ADJUNTOS, MAX_TEXTO_LECTURA, TIPOS_ADJUNTO } from "../dominio/lectura";
-import { cargarLecturas, combinarLecturas, correosPendientes, guardarLecturas, lecturasPorRevisar, textoFallo, type LecturaGuardada } from "../dominio/lecturaAutomatica";
+import { cargarLecturas, combinarLecturas, correosPendientes, FALLO_GENERICO, guardarLecturas, lecturasPorRevisar, textoFallo, type LecturaGuardada } from "../dominio/lecturaAutomatica";
 import type { Desenlace } from "../dominio/bandeja";
 import type { CorreoRespuesta, Detalle, Participacion, Ruta } from "../dominio/tipos";
 import { Confirmar, dinero, plural } from "./comun";
@@ -241,17 +241,38 @@ export function LecturaIA({ d, accion, advertenciaReal, abrir = null, alAbrir }:
     else if (!carriers.has(g.carrierId))
       setNota({ texto: `${g.carrier} ya no admite captura en este evento (tiene primario, declinó o no está invitado). Puedes quitar su respuesta de la bandeja.`, quitar: g });
     else if (g.lectura) revisar(g);
-    else {
-      setCarrierId(g.carrierId);
-      setRevisando(g);
-      setError(`${textoFallo(g.fallo)} Tráelo de nuevo o pega el texto.`);
-      setAbierto(true);
-    }
+    // La IA no pudo leerlo antes (Gmail limitó, tardó): desde la bandeja se lee ahora, sin esperar a otra revisión.
+    else void leerAhora(g);
     alAbrir?.();
     // Que se vea sin buscarlo: la etapa de Ofertas es larga.
     requestAnimationFrame(() => document.getElementById("lectura-ia")?.scrollIntoView?.({ block: "start", behavior: "smooth" }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abrir, conServidor]);
+
+  const leerAhora = async (g: LecturaGuardada) => {
+    setCarrierId(g.carrierId);
+    setRevisando(g);
+    setLeyendoAuto(g.carrier);
+    const base = { correoId: g.correoId, carrierId: g.carrierId, carrier: g.carrier, en: g.en, leidoEn: new Date().toISOString(), revisado: false };
+    let registro: LecturaGuardada;
+    try {
+      const t = await s.api.traerCorreo(d.evento.id, g.correoId);
+      const l = await s.api.leerRespuesta({ texto: t.texto, canal: "email", carrier: g.carrier, adjuntos: t.adjuntos, anexos: t.anexos, rutas: rutasLectura(d) });
+      registro = { ...(cargarLecturas(d.evento.id)[g.correoId] ?? {}), ...base, lectura: l, fallo: null };
+    } catch (e) {
+      registro = { ...(cargarLecturas(d.evento.id)[g.correoId] ?? {}), ...base, lectura: null, fallo: e instanceof ErrorApi ? e.message : FALLO_GENERICO };
+    }
+    const todas = { ...cargarLecturas(d.evento.id), [g.correoId]: registro };
+    guardarLecturas(d.evento.id, todas);
+    setLeidas(todas);
+    setLeyendoAuto(null);
+    if (registro.lectura) revisar(registro);
+    else {
+      setRevisando(registro);
+      setError(`${textoFallo(registro.fallo)} Tráelo de nuevo, pega el texto o descártalo.`);
+      setAbierto(true);
+    }
+  };
 
   const quitarDeBandeja = async (g: LecturaGuardada) => {
     const previa = cargarLecturas(d.evento.id);
