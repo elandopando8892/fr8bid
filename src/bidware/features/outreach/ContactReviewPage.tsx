@@ -235,9 +235,9 @@ export function ContactReviewPage() {
         )}
         {notice && <InfoBanner>{notice}</InfoBanner>}
         {failure && <ErrorBanner message={failure} />}
-        {detail.error && <ErrorBanner message={detail.error} />}
-        {vendors.error && <ErrorBanner message={vendors.error} />}
-        {reviews.error && <ErrorBanner message={reviews.error} />}
+        {detail.error && <ErrorBanner message={detail.error} onRetry={detail.reload} />}
+        {vendors.error && <ErrorBanner message={vendors.error} onRetry={vendors.reload} />}
+        {reviews.error && <ErrorBanner message={reviews.error} onRetry={reviews.reload} />}
 
         <div className="rev-col">
           <div className="tpl-filters">

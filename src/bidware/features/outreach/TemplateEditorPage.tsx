@@ -157,7 +157,7 @@ export function TemplateEditorPage() {
         <div style={{ display: "grid", gap: 14 }}>
           {notice && <InfoBanner>{notice}</InfoBanner>}
           {list.loading && !list.data && <Spinner label={tr("text229")} />}
-          {list.error && <ErrorBanner message={list.error} />}
+          {list.error && <ErrorBanner message={list.error} onRetry={list.reload} />}
           {!isNew && list.data && !template && (
             <ErrorBanner message={tr("text273")} />
           )}

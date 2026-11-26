@@ -195,7 +195,7 @@ export function QuoteDetailPage() {
   if (detail.error && !data) {
     return (
       <main className="main">
-        <ErrorBanner message={detail.error} />
+        <ErrorBanner message={detail.error} onRetry={detail.reload} />
         <Link to="/quotedesk" className="btn">
           ← QuoteDesk
         </Link>

@@ -205,7 +205,7 @@ export function RateBasePage() {
               }
             />
           )}
-          {page.error && <ErrorBanner message={page.error} />}
+          {page.error && <ErrorBanner message={page.error} onRetry={page.reload} />}
           {page.error?.includes(SIMULATED_MESSAGE) && <Empty title={tr("text055")} hint={tr("text056")} />}
           {!page.loading && !page.error && (rows.length ? (
             <>

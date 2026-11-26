@@ -267,7 +267,7 @@ export function HygienePage() {
 
             {all.error && (
               <div className="hyg-pad">
-                <ErrorBanner message={all.error} />
+                <ErrorBanner message={all.error} onRetry={all.reload} />
               </div>
             )}
             {all.loading ? (

@@ -119,8 +119,21 @@ export function Eventos() {
         </div>
       )}
       {carga.tipo === "ok" && <Desactualizado leidoEn={carga.leidoEn} actualizar={leer} />}
-      <EstadoVista carga={carga} reintentar={leer} vacio={carga.tipo === "ok" && !eventos.length ? "Aún no hay eventos en tu organización." : undefined} />
-      {carga.tipo === "ok" && eventos.length > 0 && !visibles.length && <div className="estado vacio">{q ? `Nada coincide con «${busca.trim()}».` : vacio[filtro]}</div>}
+      <EstadoVista
+        carga={carga}
+        reintentar={leer}
+        vacio={carga.tipo === "ok" && !eventos.length ? "Aún no hay eventos en tu organización." : undefined}
+      />
+      {carga.tipo === "ok" && eventos.length > 0 && !visibles.length && (
+        <div className="estado vacio">
+          {q ? `Nada coincide con «${busca.trim()}».` : vacio[filtro]}{" "}
+          {q ? (
+            <button className="btn-texto" onClick={() => setBusca("")}>Borrar búsqueda</button>
+          ) : filtro !== "todos" ? (
+            <button className="btn-texto" onClick={() => setFiltro("todos")}>Ver todos</button>
+          ) : null}
+        </div>
+      )}
       {carga.tipo === "ok" && visibles.length > 0 && (
         <div className="tarjeta lista-eventos">
           {visibles.map((e) => {

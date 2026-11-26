@@ -324,7 +324,8 @@ export function aCarga<T>(e: unknown): Carga<T> {
 }
 
 // Los cuatro estados de vista nunca se confunden: un error no se lee como cero.
-export function EstadoVista({ carga, reintentar, vacio }: { carga: Carga<unknown>; reintentar: () => void; vacio?: string }) {
+// Prioridad 9: ningún estado sin salida. El vacío puede traer su acción; sin permiso o sin encontrar, vuelve a Hoy o a Eventos.
+export function EstadoVista({ carga, reintentar, vacio, accion }: { carga: Carga<unknown>; reintentar: () => void; vacio?: string; accion?: ReactNode }) {
   if (carga.tipo === "cargando")
     return (
       <div className="cargando" role="status" aria-live="polite">
@@ -341,11 +342,20 @@ export function EstadoVista({ carga, reintentar, vacio }: { carga: Carga<unknown
   if (carga.tipo === "sin_permiso")
     return (
       <div className="estado estado-permiso" role="alert">
-        <b>Sin permiso.</b> {carga.mensaje}
+        <b>Sin permiso.</b> {carga.mensaje} <Liga a="/">Volver a Hoy</Liga>
       </div>
     );
-  if (carga.tipo === "no_encontrado") return <div className="estado estado-permiso">No encontrado en tu organización.</div>;
-  return vacio ? <div className="estado">{vacio}</div> : null;
+  if (carga.tipo === "no_encontrado")
+    return (
+      <div className="estado estado-permiso">
+        No encontrado en tu organización. <Liga a="/eventos">Ir a Eventos</Liga>
+      </div>
+    );
+  return vacio ? (
+    <div className="estado">
+      {vacio} {accion}
+    </div>
+  ) : null;
 }
 
 export function Desactualizado({ leidoEn, actualizar }: { leidoEn: number; actualizar: () => void }) {

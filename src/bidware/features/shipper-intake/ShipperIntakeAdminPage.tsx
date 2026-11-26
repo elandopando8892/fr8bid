@@ -22,6 +22,7 @@ import {
   type RfxProject,
   type RfxProjectType,
 } from "./intake.service";
+import { anotarRecordatorio, borradorGmail, diasDesde, recordadoEl, textoRecordatorio } from "./recordatorio";
 
 const isSpot = (project: RfxProject) => String(project.opportunity_type || "spot") === "spot";
 const promoted = (project: RfxProject) => Boolean(project.bid_room_event_id || projectQuote(project));
@@ -222,6 +223,52 @@ function ShipperIntakeContent() {
     }
   }
 
+  // Lo recordado en este navegador se vuelve a leer al anotar uno nuevo.
+  const [, setRecordados] = useState(0);
+
+  /** «Recordarle»: abre el borrador en Gmail con la liga vigente; nada sale sin que la persona lo envíe. */
+  async function remind(project: RfxProject) {
+    if (!current() || pending.current) return;
+    pending.current = true;
+    const conCorreo = Boolean(borradorGmail({ contacto: null, correo: project.customer_contact_email, liga: "x" }));
+    // Abierta antes del await: Safari bloquea ventanas abiertas después.
+    const tab = conCorreo ? window.open("", "_blank") : null;
+    setRowBusy(project.id);
+    setRowMsg(null);
+    try {
+      const { link, message } = await shipperLink(project.id);
+      if (!current()) { tab?.close(); return; }
+      if (!link) {
+        tab?.close();
+        setRowMsg({ id: project.id, text: message || tr("text016") });
+        return;
+      }
+      const datos = { contacto: project.customer_contact_name, correo: project.customer_contact_email, liga: link };
+      const gmail = borradorGmail(datos);
+      if (gmail) {
+        if (tab) {
+          tab.opener = null;
+          tab.location.href = gmail;
+        } else {
+          window.open(gmail, "_blank", "noopener");
+        }
+        setRowMsg({ id: project.id, text: tr("remindOpened") });
+      } else {
+        const { cuerpo } = textoRecordatorio(datos);
+        await navigator.clipboard?.writeText(cuerpo).catch(() => undefined);
+        setRowMsg({ id: project.id, text: tr("remindCopied"), link });
+      }
+      anotarRecordatorio(project.id);
+      setRecordados((n) => n + 1);
+    } catch (e) {
+      tab?.close();
+      if (current()) setRowMsg({ id: project.id, text: (e as Error).message });
+    } finally {
+      pending.current = false;
+      if (active.current) setRowBusy(null);
+    }
+  }
+
   async function toQuote(project: RfxProject) {
     if (!current() || pending.current) return;
     pending.current = true;
@@ -277,7 +324,7 @@ function ShipperIntakeContent() {
               </button>
             </header>
             {projects.loading && <Spinner label={tr("text046")} />}
-            {projects.error && <ErrorBanner message={projects.error} />}
+            {projects.error && <ErrorBanner message={projects.error} onRetry={projects.reload} />}
             {!projects.loading &&
               !projects.error &&
               (rows.length ? (
@@ -324,6 +371,7 @@ function ShipperIntakeContent() {
                           <td className="mono">{project.lane_count || "—"}</td>
                           <td className={came ? undefined : "intake-muted"} title={came ? undefined : tr("text053")}>
                             {came ? when(project.updated_at) : tr("text054", when(project.created_at, false).toLowerCase())}
+                            {!came && <Espera project={project} />}
                           </td>
                           <td>
                             <Pill tone={STAGE[stage].tone}>{STAGE[stage].label}</Pill>
@@ -344,6 +392,14 @@ function ShipperIntakeContent() {
                             ) : (
                               // Once answered, a new link would only reopen the request as "Liga enviada".
                               <>
+                                <button
+                                  className="ne-link intake-remind"
+                                  disabled={!canOperate || rowBusy !== null}
+                                  title={project.customer_contact_email ? tr("remindHint") : tr("remindHintNoEmail")}
+                                  onClick={() => remind(project)}
+                                >
+                                  {tr("remind")}
+                                </button>
                                 <button className="ne-link" disabled={!canOperate || rowBusy !== null} onClick={() => withLink(project, false)}>
                                   {tr("text059")}</button>
                                 <button className="ne-link" disabled={!canOperate || rowBusy !== null} onClick={() => withLink(project, true)}>
@@ -462,4 +518,16 @@ function ShipperIntakeContent() {
       </main>
     </>
   );
+}
+
+/**
+ * Cuánto lleva la liga sin respuesta y si ya se le recordó (prioridad 9):
+ * a partir de 3 días se marca, para que nada se quede en «Liga enviada».
+ */
+function Espera({ project }: { project: RfxProject }) {
+  const dias = diasDesde(project.updated_at || project.created_at);
+  const recordado = recordadoEl(project.id);
+  if (recordado) return <div className="intake-wait">{tr("remindedOn", when(recordado).toLowerCase())}</div>;
+  if (dias === null || dias < 1) return null;
+  return <div className={dias >= 3 ? "intake-wait intake-late" : "intake-wait"}>{tr("waitingDays", String(dias))}</div>;
 }

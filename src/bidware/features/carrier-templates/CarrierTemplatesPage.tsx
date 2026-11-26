@@ -18,7 +18,7 @@ import { vendorLabel } from "@/features/carrier-crm/crm.service";
 import { useAsync } from "@/components/useAsync";
 import { useAuth } from "@/auth/AuthContext";
 import { NEED_REASON } from "@/lib/roles";
-import { Spinner, ErrorBanner, InfoBanner, Empty, dateShort } from "@/components/ui";
+import { ClearFilters, Spinner, ErrorBanner, InfoBanner, Empty, dateShort } from "@/components/ui";
 import type { CarrierListTemplate } from "@/types/domain";
 import { agruparPorFamilia, esBitacora, OTRAS, partesNombre } from "./familias";
 
@@ -274,6 +274,7 @@ function CarrierTemplatesContent() {
               <Empty
                 title={all.length ? tr("text027") : tr("text028")}
                 hint={all.length ? tr("text029") : tr("text030")}
+                action={all.length ? <ClearFilters onClick={() => { setFilter("active"); setSearch(""); }} /> : undefined}
               />
             )}
 

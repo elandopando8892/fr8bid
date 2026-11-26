@@ -52,7 +52,7 @@ export function ActivityTab({ shipperId }: { shipperId: string }) {
       </div>
       {activity.error && (
         <div style={{ padding: 16 }}>
-          <ErrorBanner message={activity.error} />
+          <ErrorBanner message={activity.error} onRetry={activity.reload} />
         </div>
       )}
       {activity.loading && !activity.data ? (

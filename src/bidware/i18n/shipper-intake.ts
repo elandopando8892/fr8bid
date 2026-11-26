@@ -261,6 +261,13 @@ export const copy = {
     "es": "Genera la primera liga con el botón de arriba.",
     "en": "Generate the first link with the button above."
   },
+  remind: { es: "Recordarle", en: "Remind" },
+  remindHint: { es: "Abre en Gmail un recordatorio con su liga; lo revisas y lo envías tú.", en: "Opens a reminder with their link in Gmail; you review and send it." },
+  remindHintNoEmail: { es: "Sin correo del contacto: copia el recordatorio para mandarlo por WhatsApp.", en: "No contact email: copies the reminder to send by WhatsApp." },
+  remindOpened: { es: "El recordatorio quedó listo en Gmail. Revísalo y envíalo.", en: "The reminder is ready in Gmail. Review it and send it." },
+  remindCopied: { es: "Copiamos el recordatorio con su liga. Pégalo en WhatsApp o en un correo.", en: "We copied the reminder with their link. Paste it into WhatsApp or an email." },
+  remindedOn: { es: "Recordado {0}", en: "Reminded {0}" },
+  waitingDays: { es: "{0} día(s) sin respuesta", en: "{0} day(s) without a reply" },
   "text267": {
     "es": "Rutas",
     "en": "Lanes"

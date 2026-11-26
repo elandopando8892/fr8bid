@@ -119,7 +119,7 @@ export function QuotePanel({
   }
 
   if (detail.loading && (!data || data.quote.id !== quoteId)) return <Spinner label={tr("text233")} />;
-  if (detail.error && !data) return <ErrorBanner message={detail.error} />;
+  if (detail.error && !data) return <ErrorBanner message={detail.error} onRetry={detail.reload} />;
   if (!data || !quote || quote.id !== quoteId) return null;
 
   const lane = lanes.find((l) => l.id === selected) ?? null;

@@ -109,7 +109,7 @@ export function WebIntakeTray({ onPromoted }: { onPromoted?: () => void }) {
       <p className="web-intake-hint">{tr("hint")}</p>
       {!canOperate && roleLoaded && <InfoBanner>{tr("readOnly")}</InfoBanner>}
       {intake.loading && <Spinner label={tr("loading")} />}
-      {intake.error && !hidden && <ErrorBanner message={intake.error} />}
+      {intake.error && !hidden && <ErrorBanner message={intake.error} onRetry={intake.reload} />}
       {!intake.loading && !intake.error && (rows.length ? (
         <table className="data web-intake-table">
           <thead>

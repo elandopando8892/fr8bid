@@ -83,7 +83,7 @@ export function IntelligenceView() {
         </button>
       </div>
       {data.data?.truncated && <InfoBanner>Se muestran las primeras 1,000 cuentas; usa la búsqueda para acotar.</InfoBanner>}
-      {data.error && <ErrorBanner message={data.error} />}
+      {data.error && <ErrorBanner message={data.error} onRetry={data.reload} />}
       {data.loading && !data.data ? (
         <Spinner label="Calculando…" />
       ) : !rows.length ? (

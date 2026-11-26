@@ -24,7 +24,7 @@ import { ProfileLinkDialog } from "./ProfileLinkDialog";
 import { useAsync } from "@/components/useAsync";
 import { useAuth } from "@/auth/AuthContext";
 import { NEED_REASON } from "@/lib/roles";
-import { Spinner, ErrorBanner, InfoBanner, Empty, Pill } from "@/components/ui";
+import { ClearFilters, Spinner, ErrorBanner, InfoBanner, Empty, Pill } from "@/components/ui";
 import type { Vendor } from "@/types/domain";
 import { LegalNameUnder } from "./LegalName";
 import { coincide, enOtrasEtapas } from "./busqueda";
@@ -425,6 +425,7 @@ export function CarrierCrmPage() {
             <Empty
               title={tr("text095", STAGE_LABEL[column])}
               hint={search ? tr("text096") : tr("text097")}
+              action={search ? <ClearFilters onClick={() => setSearch("")} /> : undefined}
             />
           )}
 

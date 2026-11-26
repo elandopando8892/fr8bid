@@ -117,7 +117,7 @@ export function AwardNoticesPage() {
             {tr("text014")}</span>
         </div>
 
-        {detail.error && <ErrorBanner message={detail.error} />}
+        {detail.error && <ErrorBanner message={detail.error} onRetry={detail.reload} />}
         {error && <ErrorBanner message={error} />}
         {!decides && (
           <InfoBanner title={tr("text015")}>{tr("text016")}</InfoBanner>
