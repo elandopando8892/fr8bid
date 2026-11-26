@@ -4,12 +4,18 @@ import { useState, type ReactNode } from "react";
 import * as I from "../../ui/Iconos";
 import { SIMULATED_MESSAGE } from "@/lib/api-client";
 
+// Cargando (26-nov): la forma de lo que viene en vez de un giro solo, para
+// que la pantalla no brinque cuando llegan los datos.
 export function Spinner({ label }: { label?: string }) {
   useLang();
   return (
-    <div style={{ display: "grid", placeItems: "center", gap: 12, padding: 40 }}>
-      <div className="spinner" />
-      {label && <span style={{ color: "var(--muted)" }}>{label}</span>}
+    <div className="bw-esqueleto" role="status" aria-live="polite">
+      {label && <span className="bw-esqueleto-texto">{label}</span>}
+      <span className="bw-esqueleto-filas" aria-hidden>
+        <i />
+        <i />
+        <i />
+      </span>
     </div>
   );
 }

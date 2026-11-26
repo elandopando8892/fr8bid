@@ -38,7 +38,7 @@ import { NOMBRE_FAMILIA, type HistorialSegmento } from "../dominio/segmento";
 import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
 import type { Aviso, Detalle, EntregaLocal, ModeloComercial, Participacion, Recibo, Ruta } from "../dominio/tipos";
 import { EditorCondiciones, ListaCondiciones, MatrizCondiciones } from "./condiciones";
-import { aCarga, Confirmar, Desactualizado, dinero, EstadoVista, fecha, Liga, plural, Prueba, type Carga } from "./comun";
+import { aCarga, avisar, Confirmar, Desactualizado, dinero, EstadoVista, fecha, Liga, plural, Prueba, type Carga } from "./comun";
 import { useSesion } from "./sesion";
 import { ReportarFr8Desk } from "./fr8desk";
 import { pluralize } from "../bidware/i18n/language";
@@ -155,7 +155,7 @@ export function Mesa({ id }: { id: string }) {
     setAvisoMsg(null);
     try {
       const r = await f();
-      if (ok) setAvisoMsg({ tipo: "ok", texto: typeof ok === "function" ? ok(r) : ok });
+      if (ok) avisar(typeof ok === "function" ? ok(r) : ok);
     } catch (e) {
       // Sin nombres de variables ni claves internas en pantalla.
       const extra = e instanceof ErrorApi && e.code === "ESCRITURA_NO_AUTORIZADA" ? " Fr8Bid no tiene activadas las escrituras en Rateware." : e instanceof ErrorApi && e.code === "SOLO_BORRADORES" ? " Por ahora Fr8Bid solo puede dejar borradores en Rateware." : "";
@@ -2417,6 +2417,7 @@ function PanelEntrega({ d, ctx, accion, entrega, setEntrega, recibo, setRecibo }
             {recibo.conservadosAprobados > 0 && <> · {plural(recibo.conservadosAprobados, "conservada como aprobada", "conservadas como aprobadas")}</>}
           </p>
         )}
+        {r.entregaConfirmada && <TresPasos aviso={r.pasos.find((x) => x.clave === "aviso")?.estado === "hecho"} />}
         {r.entregaConfirmada && !recibo && <p>Rateware ya tiene esta entrega (evento entregado y primarios con cierre registrado).</p>}
         {r.entregaConfirmada && <p className="nota">La tarifa queda en Revisión de Rateware. Fr8Bid no la aprueba (I6).</p>}
         {entrega.error && entrega.estado !== "confirmada" && <div className="estado estado-error">{entrega.error}</div>}
@@ -2657,6 +2658,29 @@ function TarjetaAviso({ d, a, titulo, tipo, abierto = false, general = false, ct
           onConfirmar={() => accion(() => s.api.enviarAvisos(d.evento.id, [a]), "Aviso aceptado por Gmail.")}
         />
       )}
+    </div>
+  );
+}
+
+// El momento de adjudicar (26-nov): tres pasos reales con su palomita y el
+// sello del recibo, para que se vea que Rateware sí lo tiene.
+function TresPasos({ aviso }: { aviso: boolean }) {
+  const pasos = [
+    { texto: "Adjudicación registrada", hecho: true },
+    { texto: "Recibo de Rateware", hecho: true },
+    { texto: aviso ? "Aviso al carrier" : "Aviso en borrador: sigue", hecho: aviso }
+  ];
+  return (
+    <div className="tres-pasos">
+      <ol>
+        {pasos.map((x, i) => (
+          <li key={x.texto} className={x.hecho ? "hecho" : "sigue"} style={{ animationDelay: `${i * 160}ms` }}>
+            <span className="tres-pasos-marca" aria-hidden>{x.hecho ? <I.Check size={14} /> : i + 1}</span>
+            {x.texto}
+          </li>
+        ))}
+      </ol>
+      <span className="sello-recibo" aria-label="Recibo de Rateware confirmado">RECIBO OK</span>
     </div>
   );
 }

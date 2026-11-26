@@ -502,7 +502,10 @@ button.pill:hover { filter: brightness(0.96); }
 .buscar-global .buscar-texto { flex: 1; }
 .buscar-global kbd { font-family: var(--mono); font-size: 11px; border: 1px solid #ffffff33; border-radius: 5px; padding: 0 6px; color: var(--muted2); }
 .lateral nav a { min-height: 38px; font-size: 14px; }
-.secciones { display: flex; gap: 4px; flex-wrap: wrap; margin: 0 0 16px; border-bottom: 1px solid var(--line); }
+.secciones { display: flex; gap: 4px; flex-wrap: wrap; margin: 0 0 16px; border-bottom: 1px solid var(--line); position: relative; }
+.secciones.con-raya a.activa { border-bottom-color: transparent; }
+.secciones-raya { position: absolute; left: 0; bottom: 0; height: 2px; border-radius: 2px; background: var(--accent); transition: transform var(--dur-3) var(--ease-out), width var(--dur-3) var(--ease-out); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .secciones-raya { transition: none; } }
 .secciones a { display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--muted); font-weight: 600; font-size: 14px; }
 .secciones a:hover { color: var(--ink); text-decoration: none; }
 .secciones a.activa { color: var(--ink); border-bottom-color: var(--accent); }
@@ -610,4 +613,59 @@ button.pill:hover { filter: brightness(0.96); }
   :where(button, a.btn-primario, a.btn-secundario, .pestana, .atajo, .btn-chico, .fila-evento, .tarjeta) { transition: none; }
   :where(button, a.btn-primario, a.btn-secundario, .pestana, .atajo, .btn-chico):active { transform: none; }
   .contenido > * { animation: none; }
+}
+
+/* Avisos flotantes (26-nov): abajo al centro, sobre la barra inferior del teléfono. */
+.avisos-flotantes { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 80; display: grid; gap: 8px; width: min(440px, calc(100% - 32px)); pointer-events: none; }
+.aviso-flotante { pointer-events: auto; display: flex; align-items: center; gap: 10px; background: var(--ink); color: #fff; border-radius: 12px; padding: 11px 10px 11px 14px; box-shadow: 0 8px 28px #1e1e1e33; font-size: 14px; animation: aviso-sube var(--dur-3) var(--ease-spring); }
+.aviso-flotante svg { color: #7fd1ab; flex: none; }
+.aviso-flotante span { flex: 1; min-width: 0; }
+.aviso-flotante .btn-texto { color: #ffffffb0; font-size: 18px; line-height: 1; padding: 2px 8px; }
+@keyframes aviso-sube { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: none; } }
+@media (max-width: 860px) { .avisos-flotantes { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); } }
+@media (prefers-reduced-motion: reduce) { .aviso-flotante { animation: none; } }
+
+/* Continuidad (26-nov): la barra de etapas se llena de izquierda a derecha al
+   aparecer, y las filas de eventos y respuestas responden al pasar el mouse. */
+.barra-etapas i.hecha, .barra-etapas i.actual { transform-origin: left center; animation: etapa-llena 420ms var(--ease-out) both; }
+.barra-etapas i:nth-child(2) { animation-delay: 60ms; }
+.barra-etapas i:nth-child(3) { animation-delay: 120ms; }
+.barra-etapas i:nth-child(4) { animation-delay: 180ms; }
+.barra-etapas i:nth-child(5) { animation-delay: 240ms; }
+@keyframes etapa-llena { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@media (hover: hover) {
+  .fila-evento:hover { background: var(--subtle); box-shadow: inset 3px 0 0 var(--accent); }
+}
+.fila-evento { transition: background-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out); }
+@media (prefers-reduced-motion: reduce) { .barra-etapas i.hecha, .barra-etapas i.actual { animation: none; } }
+
+/* Paquete G (26-nov): adjudicación registrada, recibo y aviso, con sello. */
+.tres-pasos { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 10px 0 6px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--subtle); }
+.tres-pasos ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.tres-pasos li { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.tres-pasos li.sigue { color: var(--muted); }
+.tres-pasos-marca { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 12px; font-weight: 600; border: 1.5px solid var(--line); background: var(--panel); }
+.tres-pasos li.hecho .tres-pasos-marca { background: var(--green, #2f7d4f); border-color: transparent; color: #fff; }
+.sello-recibo { font-family: var(--mono); font-weight: 700; font-size: 13px; letter-spacing: .08em; color: var(--green, #2f7d4f); border: 2px solid currentColor; border-radius: 6px; padding: 6px 10px; transform: rotate(-4deg); }
+@media (prefers-reduced-motion: no-preference) {
+  .tres-pasos li { animation: paso-entra var(--dur-3) var(--ease-out) both; }
+  .tres-pasos li.hecho .tres-pasos-marca { animation: marca-pop var(--dur-3) var(--ease-spring) both; animation-delay: inherit; }
+  .sello-recibo { animation: sello-cae var(--dur-3) var(--ease-spring) 480ms both; }
+}
+@keyframes paso-entra { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes marca-pop { from { transform: scale(.4); } to { transform: scale(1); } }
+@keyframes sello-cae { from { opacity: 0; transform: rotate(-4deg) scale(1.6); } to { opacity: 1; transform: rotate(-4deg) scale(1); } }
+
+/* Paquete H (26-nov): Respuestas con el botón en una línea y Hoy a dos columnas. */
+.lista-respuestas .fila-evento { grid-template-columns: minmax(0, 1fr) auto; }
+.lista-respuestas .fila-evento-accion a { width: auto; white-space: nowrap; padding: 0 16px; }
+@media (min-width: 1180px) {
+  .hoy-columna { max-width: 1240px; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; }
+  .hoy-columna > .siguiente-paso, .hoy-columna > .atajos-chips { grid-column: 1 / -1; }
+}
+
+/* Paquete F (26-nov): en el teléfono el riel avisa que hay más pasos a los lados. */
+@media (max-width: 860px) {
+  .riel { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 28px), transparent); scroll-snap-type: x proximity; }
+  .riel li { scroll-snap-align: center; }
 }

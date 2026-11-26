@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ErrorApi } from "../cliente/api";
 import { USUARIOS_SIMULADOS, useSesion } from "./sesion";
@@ -99,15 +99,27 @@ function Menu({ ruta, teToca }: { ruta: string; teToca: number }) {
 // Pestañas de la entrada activa (Carriers: directorio, listas, a quién invitar y plantillas).
 export function Secciones({ ruta }: { ruta: string }) {
   const m = moduloDe(ruta);
-  if (!m?.secciones || (m.pestanasEn && !m.pestanasEn(ruta))) return null;
-  const actual = seccionActiva(m, ruta);
+  const nav = useRef<HTMLElement>(null);
+  const [raya, setRaya] = useState<{ left: number; width: number } | null>(null);
+  const visible = Boolean(m?.secciones && !(m.pestanasEn && !m.pestanasEn(ruta)));
+  const actual = visible && m ? seccionActiva(m, ruta) : null;
+  // La raya naranja se desliza a la pestaña nueva (26-nov) y, en el teléfono,
+  // la pestaña activa queda a la vista aunque la fila se desborde.
+  useLayoutEffect(() => {
+    const a = nav.current?.querySelector<HTMLElement>("a.activa");
+    if (!a) return setRaya(null);
+    setRaya({ left: a.offsetLeft, width: a.offsetWidth });
+    a.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [ruta, actual]);
+  if (!visible || !m?.secciones) return null;
   return (
-    <nav className="secciones" aria-label={`Secciones de ${m.etiqueta}`}>
+    <nav className={`secciones${raya ? " con-raya" : ""}`} aria-label={`Secciones de ${m.etiqueta}`} ref={nav}>
       {m.secciones.map((s) => (
         <Liga key={s.a} a={s.a} className={s === actual ? "activa" : ""} aria-current={s === actual ? "page" : undefined}>
           {s.etiqueta}
         </Liga>
       ))}
+      {raya && <span className="secciones-raya" aria-hidden style={{ transform: `translateX(${raya.left}px)`, width: raya.width }} />}
     </nav>
   );
 }
@@ -161,6 +173,48 @@ function BarraInferior({ ruta, teToca, onBuscar }: { ruta: string; teToca: numbe
         </button>
       </nav>
     </>
+  );
+}
+
+// Avisos flotantes (26-nov): la confirmación de una acción sale abajo y a la
+// vista aunque la tarjeta que la pidió haya quedado fuera de pantalla. Los
+// errores siguen en su lugar, porque hay que leerlos y actuar.
+type AvisoFlotante = { id: number; texto: string };
+const oyentesAvisos = new Set<(a: AvisoFlotante) => void>();
+let siguienteAviso = 0;
+export function avisar(texto: string) {
+  const a = { id: ++siguienteAviso, texto };
+  oyentesAvisos.forEach((f) => f(a));
+}
+
+export function AvisosFlotantes() {
+  const [avisos, setAvisos] = useState<AvisoFlotante[]>([]);
+  useEffect(() => {
+    const tiempos = new Set<ReturnType<typeof setTimeout>>();
+    const recibir = (a: AvisoFlotante) => {
+      setAvisos((v) => [...v.slice(-2), a]);
+      const t = setTimeout(() => {
+        setAvisos((v) => v.filter((x) => x.id !== a.id));
+        tiempos.delete(t);
+      }, 4500);
+      tiempos.add(t);
+    };
+    oyentesAvisos.add(recibir);
+    return () => {
+      oyentesAvisos.delete(recibir);
+      tiempos.forEach(clearTimeout);
+    };
+  }, []);
+  return (
+    <div className="avisos-flotantes" role="status" aria-live="polite">
+      {avisos.map((a) => (
+        <div key={a.id} className="aviso-flotante">
+          <I.Check size={16} />
+          <span>{a.texto}</span>
+          <button className="btn-texto" aria-label="Cerrar aviso" onClick={() => setAvisos((v) => v.filter((x) => x.id !== a.id))}>×</button>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -230,6 +284,7 @@ export function Marco({ children }: { children: ReactNode }) {
       </main>
       <BarraInferior ruta={ruta} teToca={teToca} onBuscar={abrirBusqueda} />
       <Buscador abierto={buscando} cerrar={() => setBuscando(false)} ir={irA} />
+      <AvisosFlotantes />
     </div>
     </ContextoEventos.Provider>
   );

@@ -106,6 +106,15 @@ export function QuoteLanes({
   };
   // On a phone the quote opens as a sheet over the list, one lane at a time.
   const sheet = !isWide && Boolean(picked);
+  const arrastre = useRef<{ y0: number; dy: number } | null>(null);
+  const soltar = () => {
+    const a = arrastre.current;
+    arrastre.current = null;
+    if (!panel.current) return;
+    panel.current.classList.remove("arrastrando");
+    panel.current.style.transform = "";
+    if (a && a.dy > 80) close();
+  };
   const position = picked ? lanes.findIndex((l) => l.rfx_lane_id === picked.rfx_lane_id) + 1 : 0;
   const next = picked && picked.bid_rate == null ? nextPending(lanes, picked, answered) : null;
   const others = lanes.filter((l) => l.bid_rate == null && canQuote(l) && !answered.has(l.rfx_lane_id) && l.rfx_lane_id !== picked?.rfx_lane_id).length;
@@ -277,7 +286,24 @@ export function QuoteLanes({
           aria-label={sheet && picked ? `${String(picked.origin ?? "")} → ${String(picked.destination ?? "")}` : undefined}
         >
           {sheet && (
-            <div className="croom-hoja-barra">
+            <div
+              className="croom-hoja-barra"
+              // Arrastrar la asa hacia abajo cierra la hoja, como en el teléfono (26-nov).
+              onPointerDown={(e) => {
+                if ((e.target as HTMLElement).closest("button") || sending) return;
+                arrastre.current = { y0: e.clientY, dy: 0 };
+                (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+                panel.current?.classList.add("arrastrando");
+              }}
+              onPointerMove={(e) => {
+                const a = arrastre.current;
+                if (!a || !panel.current) return;
+                a.dy = Math.max(0, e.clientY - a.y0);
+                panel.current.style.transform = `translateY(${a.dy}px)`;
+              }}
+              onPointerUp={soltar}
+              onPointerCancel={soltar}
+            >
               <span className="croom-hoja-asa" aria-hidden />
               <button type="button" className="btn-texto-croom" onClick={close} disabled={sending}>
                 {q("panel.close")}

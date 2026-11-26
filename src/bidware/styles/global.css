@@ -9351,3 +9351,77 @@ button:not(:disabled):active,
     transform: none;
   }
 }
+
+/* Cargando con forma (26-nov): tres filas que brillan en lugar del giro. */
+.bw-esqueleto {
+  display: grid;
+  gap: 10px;
+  padding: 24px 0;
+  max-width: 960px;
+}
+.bw-esqueleto-texto {
+  color: var(--muted);
+  font-size: 13px;
+}
+.bw-esqueleto-filas {
+  display: grid;
+  gap: 8px;
+}
+.bw-esqueleto-filas i {
+  display: block;
+  height: 44px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--cloud), var(--subtle), var(--cloud));
+  background-size: 200% 100%;
+  animation: bw-brillo 1.4s ease-in-out infinite;
+}
+.bw-esqueleto-filas i:nth-child(2) {
+  width: 86%;
+}
+.bw-esqueleto-filas i:nth-child(3) {
+  width: 64%;
+}
+@keyframes bw-brillo {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bw-esqueleto-filas i {
+    animation: none;
+  }
+}
+
+/* Hoja del teléfono (26-nov): el velo entra suave, la asa se arrastra para
+   cerrar y la hoja vuelve a su lugar si no se arrastró lo suficiente. */
+.croom-hoja-barra {
+  cursor: grab;
+  touch-action: none;
+  min-height: 36px;
+}
+.croom-panel-slot.croom-hoja {
+  transition: transform var(--dur-3) var(--ease-out);
+}
+.croom-panel-slot.croom-hoja.arrastrando {
+  transition: none;
+}
+.croom-hoja-asa {
+  width: 44px;
+  height: 5px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .croom-hoja-fondo {
+    animation: croom-velo var(--dur-3) var(--ease-out);
+  }
+}
+@keyframes croom-velo {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
