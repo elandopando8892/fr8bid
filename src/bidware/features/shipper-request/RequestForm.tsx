@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ErrorBanner, InfoBanner } from "@/components/ui";
 import { catalogLabel, EQUIPMENT_TYPES, TRUCK_TYPES } from "./catalog";
 import { downloadTemplate, importLanes } from "./excel";
+import type { BrandKey } from "./link";
 import { CatalogSelect, Field, LaneForm, WeightInput } from "./LaneFields";
 import { PlaceField } from "./PlaceField";
 import { addLanes, addReadLanes, laneFields, laneSummary } from "./lectura";
@@ -47,6 +48,8 @@ export interface FormProps {
   copy: Copy;
   /** The country new places start in: the link's, else Mexico. */
   country: string;
+  /** The link's brand: names the Excel template the shipper downloads. */
+  brand?: BrandKey;
   showProblems: boolean;
   update: (recipe: (draft: RequestDraft) => RequestDraft) => void;
   onSubmit: () => void;
@@ -217,7 +220,7 @@ function laneEditors(update: FormProps["update"], kind: RequestDraft["kind"]) {
   };
 }
 
-function Lanes({ token, draft, lang, copy, country, showProblems, update }: FormProps) {
+function Lanes({ token, draft, lang, copy, country, brand, showProblems, update }: FormProps) {
   const editors = laneEditors(update, draft.kind);
   // One lane open at a time, the design's way; the first one to start.
   const [openKey, setOpenKey] = useState<string | null>(draft.lanes[0]?.key ?? null);
@@ -244,7 +247,7 @@ function Lanes({ token, draft, lang, copy, country, showProblems, update }: Form
         <h2>{copy.lanesTitle}</h2>
         <span className="spacer" />
         {filled.length > 0 && <span className="sr-count">{copy.lanesComplete(complete, filled.length)}</span>}
-        <button type="button" className="sr-link" onClick={() => void downloadTemplate(lang)}>
+        <button type="button" className="sr-link" onClick={() => void downloadTemplate(lang, brand)}>
           ↓ {copy.template}
         </button>
       </div>

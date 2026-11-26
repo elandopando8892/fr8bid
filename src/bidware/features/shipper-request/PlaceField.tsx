@@ -137,7 +137,7 @@ export function PlaceField({
             ? [value?.market, value?.state_name, value?.country].filter(Boolean).join(" · ")
             : query.trim()
               ? es
-                ? "Elige una sugerencia si aparece; si no, déjalo así."
+                ? "Elija una sugerencia si aparece; si no, déjelo así."
                 : "Pick a suggestion if one appears; otherwise leave it as typed."
               : " "}
         </span>

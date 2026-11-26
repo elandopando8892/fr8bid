@@ -47,42 +47,42 @@ function explainIn(message: string, lang: Lang) {
   const text = message.toLowerCase();
   if (/expired/.test(text)) {
     return lang === "es"
-      ? "Esta liga ya venció. Pide una nueva a tu contacto en MARKSMAN."
+      ? "Esta liga ya venció. Pida una nueva a su contacto en MARKSMAN."
       : "This link has expired. Ask your MARKSMAN contact for a new one.";
   }
   if (/not active|no rows|0 rows|json object requested|single json object|pgrst116/.test(text)) {
     return lang === "es"
-      ? "Esta liga no está activa. Pide una nueva a tu contacto en MARKSMAN."
+      ? "Esta liga no está activa. Pida una nueva a su contacto en MARKSMAN."
       : "This link isn't active. Ask your MARKSMAN contact for a new one.";
   }
   if (/proposal was updated|newer proposal|rfx_proposal_replaced/.test(text)) {
     return lang === "es"
-      ? "La propuesta se actualizó. Vuelve a cargar la página para ver la vigente."
+      ? "La propuesta se actualizó. Vuelva a cargar la página para ver la vigente."
       : "The proposal was updated. Reload the page to see the current one.";
   }
   if (/past its validity/.test(text)) {
     return lang === "es"
-      ? "Esta propuesta ya venció. Pide una actualización a tu contacto en MARKSMAN."
+      ? "Esta propuesta ya venció. Pida una actualización a su contacto en MARKSMAN."
       : "This proposal has expired. Ask your MARKSMAN contact for an update.";
   }
   // Fr8Bid with real writes locked (FR8BID_ESCRITURAS_REALES not «si»): the acceptance is not recorded.
   if (/aprobación del propietario|solo borradores/.test(text)) {
     return lang === "es"
-      ? "Por ahora no podemos registrar tu aceptación en línea. Avísale a tu contacto en MARKSMAN qué rutas aceptas."
+      ? "Por ahora no podemos registrar su aceptación en línea. Avísele a su contacto en MARKSMAN qué rutas acepta."
       : "We can't record your acceptance online right now. Tell your MARKSMAN contact which lanes you accept.";
   }
   if (/already been submitted/.test(text)) {
     return lang === "es"
-      ? "Esta solicitud ya se envió. Si necesitas cambiarla, avísale a tu contacto en MARKSMAN."
+      ? "Esta solicitud ya se envió. Si necesita cambiarla, avísele a su contacto en MARKSMAN."
       : "This request was already sent. To change it, let your MARKSMAN contact know.";
   }
   if (/failed to fetch|network/.test(text)) {
-    return lang === "es" ? "Sin conexión. Revisa tu internet y vuelve a intentar." : "No connection. Check your internet and try again.";
+    return lang === "es" ? "Sin conexión. Revise su internet y vuelva a intentar." : "No connection. Check your internet and try again.";
   }
   // Database or server wording means nothing to a shipper; keep it for us.
   console.error("Shipper request error:", message);
   return lang === "es"
-    ? "Algo falló de nuestro lado. Vuelve a intentar en un momento; no cierres esta página."
+    ? "Algo falló de nuestro lado. Vuelva a intentar en un momento; no cierre esta página."
     : "Something failed on our side. Try again in a moment; keep this page open.";
 }
 

@@ -1,3 +1,4 @@
+import type { BrandKey } from "./link";
 import {
   BORDER_CROSSINGS,
   CONFIG_TYPES,
@@ -142,7 +143,8 @@ const CATALOG_SHEET: { es: string; en: string; list: CatalogOption[] }[] = [
  * The route matrix in the template's layout (stars, headers, hints), a
  * Catalog sheet with the template's values and a short guide.
  */
-export async function downloadTemplate(lang: Lang) {
+/** The file is named after the brand of the link that offers it: an XBF shipper never downloads a MARKSMAN file. */
+export async function downloadTemplate(lang: Lang, brand: BrandKey = "marksman") {
   const XLSX = await import("xlsx");
   const stars = COLUMNS.map((column) => (column.required ? "*" : ""));
   const headers = COLUMNS.map((column) => column[lang]);
@@ -162,9 +164,9 @@ export async function downloadTemplate(lang: Lang) {
       ? [
           ["Una ruta por renglón en la hoja «Rutas», a partir del renglón 4."],
           ["Las columnas con * son obligatorias."],
-          ["En las columnas (Dropdown) usa un valor de la hoja «Catálogo»; también aceptamos su nombre en español."],
+          ["En las columnas (Dropdown) use un valor de la hoja «Catálogo»; también aceptamos su nombre en español."],
           ["Ubicación: «Ciudad, Estado» (p. ej. Monterrey, NL o Laredo, TX)."],
-          ["También puedes subir el formato RFI que te enviamos, tal cual."],
+          ["También puede subir el formato RFI que le enviamos, tal cual."],
         ]
       : [
           ["One lane per row on the \"Lanes\" sheet, from row 4 on."],
@@ -180,7 +182,7 @@ export async function downloadTemplate(lang: Lang) {
   XLSX.utils.book_append_sheet(book, lanes, lang === "es" ? "Rutas" : "Lanes");
   XLSX.utils.book_append_sheet(book, catalog, lang === "es" ? "Catálogo" : "Catalog");
   XLSX.utils.book_append_sheet(book, guide, lang === "es" ? "Instrucciones" : "Instructions");
-  XLSX.writeFile(book, lang === "es" ? "plantilla-rfi-marksman.xlsx" : "marksman-rfi-template.xlsx");
+  XLSX.writeFile(book, lang === "es" ? `plantilla-rfi-${brand}.xlsx` : `${brand}-rfi-template.xlsx`);
 }
 
 // ------------------------------------------------------------- import

@@ -288,7 +288,7 @@ function ShipperRequestContent({ token, prefs }: { token: string; prefs: LinkPre
   const project = response.project;
   const customer = project.customer_name || draft.contact.company || "";
   const due = project.due_date ? `${copy.due}: ${dateShort(project.due_date, lang)}` : "";
-  const formProps = { token, draft, type: project.opportunity_type, lang, copy, country: prefs.country, showProblems, update, onSubmit: submit, sending, error };
+  const formProps = { token, draft, type: project.opportunity_type, lang, copy, country: prefs.country, brand: prefs.brand.key, showProblems, update, onSubmit: submit, sending, error };
 
   return (
     <Shell

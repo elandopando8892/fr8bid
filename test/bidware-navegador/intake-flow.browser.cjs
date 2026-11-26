@@ -63,7 +63,7 @@ async function run(browser,lang,scenario,mobile=false){
     if(['happy','submit-response-lost','expired','inactive','token-change'].includes(scenario)){
       await page.goto(origin+'/rfi/A',{waitUntil:'networkidle',timeout:30000});await page.getByRole('button',{name:lang.toUpperCase(),exact:true}).click();
       if(['expired','inactive'].includes(scenario)){
-        await page.getByText(scenario==='expired'?text('Esta liga ya venció. Pide una nueva a tu contacto en MARKSMAN.','This link has expired. Ask your MARKSMAN contact for a new one.'):text('Esta liga no está activa. Pide una nueva a tu contacto en MARKSMAN.','This link isn\'t active. Ask your MARKSMAN contact for a new one.'),{exact:true}).waitFor();assert.equal(calls.filter(c=>/^save_|^submit_/.test(c.action)).length,0);
+        await page.getByText(scenario==='expired'?text('Esta liga ya venció. Pida una nueva a su contacto en MARKSMAN.','This link has expired. Ask your MARKSMAN contact for a new one.'):text('Esta liga no está activa. Pida una nueva a su contacto en MARKSMAN.','This link isn\'t active. Ask your MARKSMAN contact for a new one.'),{exact:true}).waitFor();assert.equal(calls.filter(c=>/^save_|^submit_/.test(c.action)).length,0);
       }else if(scenario==='token-change'){
         holdToken={started:deferred(),gate:deferred()};await page.evaluate(()=>{history.pushState({},'','/rfi/B');dispatchEvent(new PopStateEvent('popstate'));});await holdToken.started.promise;
         assert.equal(await page.locator('.sr-basics input').count(),0,'Old request form must disappear while the new link loads');holdToken.gate.resolve();await page.locator('.sr-basics input').first().waitFor();assert.equal(await page.locator('.sr-basics input').first().inputValue(),'Cargo B');
@@ -72,9 +72,9 @@ async function run(browser,lang,scenario,mobile=false){
         await page.reload({waitUntil:'networkidle'});assert.equal(await page.locator('.sr-basics input').first().inputValue(),'Updated controlled cargo');
         await page.getByRole('button',{name:text('Enviar solicitud','Send request'),exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:text('Enviar','Send'),exact:true}).click();
         if(scenario==='submit-response-lost'){
-          await page.getByText(text('Algo falló de nuestro lado. Vuelve a intentar en un momento; no cierres esta página.','Something failed on our side. Try again in a moment; keep this page open.'),{exact:true}).waitFor();
+          await page.getByText(text('Algo falló de nuestro lado. Vuelva a intentar en un momento; no cierre esta página.','Something failed on our side. Try again in a moment; keep this page open.'),{exact:true}).waitFor();
           await page.getByRole('button',{name:text('Enviar solicitud','Send request'),exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:text('Enviar','Send'),exact:true}).click();await page.getByRole('button',{name:text('Enviar solicitud','Send request'),exact:true}).waitFor({state:'hidden'});
-        }else await page.getByRole('heading',{name:text('Recibimos tu solicitud','We got your request'),exact:true}).waitFor();
+        }else await page.getByRole('heading',{name:text('Recibimos su solicitud','We got your request'),exact:true}).waitFor();
         await page.reload({waitUntil:'networkidle'});assert.equal(await page.getByRole('button',{name:text('Enviar solicitud','Send request'),exact:true}).count(),0);
         await openIntake();await createButton().click();await page.waitForURL('**/quotedesk/'+uid(3));await page.getByRole('heading',{name:'Q-9001 · Fixture Shipper',exact:true}).waitFor();await page.reload({waitUntil:'networkidle'});await page.getByRole('heading',{name:'Q-9001 · Fixture Shipper',exact:true}).waitFor();assert.equal(lanes.length,1);assert.match(lanes[0].notes,/Updated controlled cargo/);assert.equal(calls.filter(c=>c.action==='convert_spot_request_to_quote').length,1);assert.equal(calls.filter(c=>c.action==='submit_customer_rfi').length,1);
       }
