@@ -5,9 +5,10 @@ import { Component, lazy, Suspense, type ComponentType, type ReactNode } from "r
 import { Navigate, useLocation, useParams } from "react-router-dom";
 import "@/styles/global.css";
 import { MODO } from "./sesion";
+import { cargarPantalla, esVersionVieja } from "./recargaVersion";
 
 function pantalla<K extends string>(cargar: () => Promise<Record<K, ComponentType>>, nombre: K) {
-  return lazy(() => cargar().then((m) => ({ default: m[nombre] })));
+  return lazy(() => cargarPantalla(cargar).then((m) => ({ default: m[nombre] })));
 }
 
 export const P = {
@@ -80,6 +81,18 @@ class AtrapaError extends Component<{ children: ReactNode }, { error: Error | nu
   }
   render() {
     if (!this.state.error) return this.props.children;
+    // Una versión vieja no se arregla volviendo a pintar: hay que traer la nueva.
+    if (esVersionVieja(this.state.error)) {
+      return (
+        <div className="bw-fallo" role="alert">
+          <h2>Fr8Bid se actualizó</h2>
+          <p>Esta pestaña tiene la versión anterior. Recarga para abrir esta sección con la nueva; nada se perdió.</p>
+          <button type="button" onClick={() => window.location.reload()}>
+            Recargar
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="bw-fallo" role="alert">
         <h2>Esta pantalla tuvo un error</h2>

@@ -104,7 +104,7 @@ export function QuoteDeskPage() {
   return (
     <>
       <TopBar
-        title="QuoteDesk"
+        title={getLang() === "es" ? "Cotizaciones" : "Quotes"}
         actions={
           <button className="primary" onClick={() => setCreating(true)}>
             {tr("text138")}</button>

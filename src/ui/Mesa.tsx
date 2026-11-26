@@ -46,9 +46,10 @@ import { folioCorto, nombreEvento, shipperAparte } from "./eventosVista";
 import { LecturaIA } from "./LecturaIA";
 import { Bw } from "./bidware";
 import { PanelPropuesta } from "./PropuestaShipper";
+import { cargarPantalla } from "./recargaVersion";
 
 // Corregir una ruta y ver la preselección de carriers: módulos de Bidware, cargados al usarse.
-const Preseleccion = lazy(() => import("../bidware/features/rfx-admin/CarrierPreselection").then((m) => ({ default: m.CarrierPreselection })));
+const Preseleccion = lazy(() => cargarPantalla(() => import("../bidware/features/rfx-admin/CarrierPreselection")).then((m) => ({ default: m.CarrierPreselection })));
 
 // Fecha corta sin hora, para columnas angostas.
 const dia = (iso: string | null | undefined) =>

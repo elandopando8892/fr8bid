@@ -74,7 +74,7 @@ function apiErrorMessage(data: any, text: string, status: number): string {
     parts.join(" | ") ||
     stringifyApiError(data) ||
     stringifyApiError(text) ||
-    `Fr8Bid API request failed (${status})`
+    tr("text048", String(status))
   );
 }
 

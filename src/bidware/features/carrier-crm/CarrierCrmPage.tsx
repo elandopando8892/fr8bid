@@ -275,7 +275,7 @@ export function CarrierCrmPage() {
       <main className={conFicha ? "crm-main" : "crm-main sin-lado"}>
         <div className="crm-col">
           {notice && <InfoBanner>{notice}</InfoBanner>}
-          {error && <ErrorBanner message={error} />}
+          {error && <ErrorBanner message={error} onRetry={reloadAll} />}
           {/* The report degrades gracefully and says so; swallowing that would
               hide that some counts were computed on partial metrics. */}
           {funnel.data?.warnings?.length ? (
@@ -421,7 +421,7 @@ export function CarrierCrmPage() {
                 </nav>
               )}
             </>
-          ) : (
+          ) : error ? null : (
             <Empty
               title={tr("text095", STAGE_LABEL[column])}
               hint={search ? tr("text096") : tr("text097")}

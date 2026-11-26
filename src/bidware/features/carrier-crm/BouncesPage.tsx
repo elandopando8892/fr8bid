@@ -133,7 +133,7 @@ export function BouncesPage() {
             />
           )}
           {loading && <Spinner label={tr("text017")} />}
-          {error && <ErrorBanner message={error} />}
+          {error && <ErrorBanner message={error} onRetry={reload} />}
           {!loading && !error && (rows.length ? (
             <div className="data-table-scroll" role="region" tabIndex={0} aria-label={tr("text008")}>
             <table className="data">
