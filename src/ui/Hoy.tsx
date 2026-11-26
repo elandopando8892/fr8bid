@@ -1,6 +1,6 @@
 // Inicio del equipo, como «Hoy» de Fr8Growth: un siguiente paso grande, lo
 // demás que te espera y lo que está en manos de los carriers.
-import { hoyMexico } from "../dominio/recorrido";
+import { ACCION_SIN_OFERTAS, hoyMexico } from "../dominio/recorrido";
 import type { ResumenEvento } from "../dominio/tipos";
 import { Desactualizado, EstadoVista, fecha, ir, Liga, plural, Prueba } from "./comun";
 import { useEventosCompartidos } from "./Eventos";
@@ -69,6 +69,7 @@ const detalleRutas = (e: ResumenEvento) => {
 
 function porQue(e: ResumenEvento): string {
   const s = siguiente(e).accion;
+  if (s === ACCION_SIN_OFERTAS) return "Cerró sin ofertas. Ciérralo sin adjudicar para sacarlo de tu lista.";
   if (s === "Adjudicar y entregar") return `Cerrado a ofertas con ${plural(e.ofertas, "oferta")}. Elige primario y respaldo por ruta y entrégalo a Rateware.`;
   if (s === "Cerrar a ofertas") return `Ya llegaron todas las ofertas (${e.ofertas} de ${e.participaciones} invitaciones por ruta). Puedes cerrar antes del plazo.`;
   if (s === "Avisar a los carriers") return "Entregado a Rateware. Falta aprobar los avisos a los carriers.";

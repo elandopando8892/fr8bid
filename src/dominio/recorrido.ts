@@ -284,11 +284,18 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
   // una invitación por carrier, aunque tenga ocho rutas.
   const carriers = (ps: { carrierId: string }[]) => new Set(ps.map((p) => p.carrierId)).size;
   const { aptas, omitidas } = audienciaInvitacion(detalle);
-  const porInvitar = detalle.revisiones ? carriers(aptas) : carriers(preseleccionadas);
-  const invitadas = carriers(todas.filter((p) => p.estado !== "preseleccionada"));
-  const invitacionHecha = invitadas > 0 && porInvitar === 0 && evento.estado !== "borrador";
-  const sinRevisar = detalle.revisiones ? carriers(omitidas.map((o) => o.p)) : 0;
-  const sinRevision = detalle.revisiones && omitidas.length ? ` · ${carriers(omitidas.map((o) => o.p))} sin revisión (no se invitan)` : "";
+  // Una invitación por carrier cubre todas sus rutas: un carrier ya invitado
+  // en una ruta no queda «por invitar» en las demás (26-nov: la página decía
+  // «Enviar las invitaciones» con las seis ya enviadas).
+  const yaInvitados = new Set(todas.filter((p) => p.estado !== "preseleccionada").map((p) => p.carrierId));
+  const sinInvitar = (ps: Participacion[]) => ps.filter((p) => !yaInvitados.has(p.carrierId));
+  const porInvitar = detalle.revisiones ? carriers(sinInvitar(aptas)) : carriers(sinInvitar(preseleccionadas));
+  const invitadas = yaInvitados.size;
+  // Cerrado a ofertas ya no se invita: el paso queda atrás aunque falte alguien.
+  const invitacionHecha = invitadas > 0 && evento.estado !== "borrador" && (porInvitar === 0 || cerradoOMas);
+  const omitidasSinInvitar = sinInvitar(omitidas.map((o) => o.p));
+  const sinRevisar = detalle.revisiones ? carriers(omitidasSinInvitar) : 0;
+  const sinRevision = detalle.revisiones && omitidasSinInvitar.length ? ` · ${carriers(omitidasSinInvitar)} sin revisión (no se invitan)` : "";
   pasos.push(
     paso(
       "invitacion",
@@ -372,8 +379,14 @@ export function recorrido(detalle: Detalle, ctx: Contexto): Recorrido {
   // Nada por enviar y carriers sin revisión: lo que sigue es revisarlos, no
   // «Enviar las invitaciones» (recorrido 22-nov, Spot Palos Garza).
   if (actual?.clave === "invitacion" && porInvitar === 0 && sinRevisar > 0) siguiente.accion = `Revisar ${cuenta(sinRevisar, "contacto")}`;
+  // Cerrado sin ninguna oferta no hay a quién adjudicar: lo que sigue es
+  // cerrarlo sin adjudicar, igual que dicen Hoy y Eventos.
+  if (actual?.clave === "adjudicar" && respondieron.length === 0) siguiente.accion = ACCION_SIN_OFERTAS;
   return { pasos, actual, siguiente, entregaConfirmada: confirmada };
 }
+
+// Mismo texto en Hoy, Eventos y la página del evento.
+export const ACCION_SIN_OFERTAS = "Cerrar sin adjudicar";
 
 function siguientePaso(actual: Paso | null, rol: Rol): Recorrido["siguiente"] {
   if (!actual) return { accion: "Recorrido completo", quien: "Nadie", teToca: false };

@@ -1,5 +1,6 @@
 // Cómo se presenta un evento en las listas (Hoy y Eventos): qué sigue, a quién
 // le toca, en qué grupo cae y cómo se nombra sin repetir ocho rutas.
+import { ACCION_SIN_OFERTAS } from "../dominio/recorrido";
 import type { EstadoEvento, ResumenEvento } from "../dominio/tipos";
 
 export type Siguiente = { accion: string; quien: "Administrador" | "Carriers" | "—" };
@@ -13,7 +14,8 @@ export function siguiente(e: ResumenEvento): Siguiente {
     case "abierto":
       return e.participaciones > 0 && e.ofertas >= e.participaciones ? { accion: "Cerrar a ofertas", quien: "Administrador" } : { accion: "Esperar ofertas", quien: "Carriers" };
     case "cerrado":
-      return { accion: "Adjudicar y entregar", quien: "Administrador" };
+      // Sin ofertas no hay a quién adjudicar (la página del evento dice lo mismo).
+      return e.ofertas > 0 ? { accion: "Adjudicar y entregar", quien: "Administrador" } : { accion: ACCION_SIN_OFERTAS, quien: "Administrador" };
     case "adjudicado":
       return { accion: "Avisar a los carriers", quien: "Administrador" };
     default:
@@ -36,7 +38,7 @@ export const borradorVencido = (e: ResumenEvento, hoy: string) => e.estado === "
 // cada grupo, el plazo más cercano; al adjudicar, el que cerró más reciente
 // (sus ofertas siguen vigentes; uno cerrado hace meses no tapa al de esta
 // semana, recorrido como Administrador 24-nov-2026).
-const PRIORIDAD: Record<string, number> = { "Adjudicar y entregar": 0, "Cerrar a ofertas": 1, "Avisar a los carriers": 2, "Publicar e invitar": 3 };
+const PRIORIDAD: Record<string, number> = { "Adjudicar y entregar": 0, "Cerrar a ofertas": 1, [ACCION_SIN_OFERTAS]: 1.5, "Avisar a los carriers": 2, "Publicar e invitar": 3 };
 export function porUrgencia(a: ResumenEvento, b: ResumenEvento) {
   const pa = PRIORIDAD[siguiente(a).accion] ?? 9;
   const pb = PRIORIDAD[siguiente(b).accion] ?? 9;
@@ -127,6 +129,8 @@ export function botonFila(e: ResumenEvento): string {
       return "Ver ofertas";
     case "Adjudicar y entregar":
       return "Adjudicar";
+    case ACCION_SIN_OFERTAS:
+      return "Cerrar sin adjudicar";
     case "Avisar a los carriers":
       return "Revisar";
     default:
