@@ -64,7 +64,8 @@ describe("lecturas compatibles con Rateware", () => {
     expect(avisoDe(d, "p2", "adjudicacion")?.id).toBe("m1");
     expect(avisoDe(d, "ajena", "adjudicacion")).toBeNull();
     expect(api.prepararEntrega(d).estado).toBe("preparada");
-    expect(calls).toEqual(["list_rfx_events", "list_rfx_detail", "list_outreach_messages", "list_rfx_segment_confirmations", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews", "list_rfx_carrier_replies"]);
+    // Gmail (lo más lento) arranca primero para que la página no lo espere de último.
+    expect(calls).toEqual(["list_rfx_events", "list_rfx_carrier_replies", "list_rfx_detail", "list_outreach_messages", "list_rfx_segment_confirmations", "list_rfx_lane_conditions", "list_rfx_invitation_wave_reviews"]);
     const reloaded = await api.detalle(event.id);
     expect(reloaded.avisos).toEqual(d.avisos);
     expect(JSON.stringify(reloaded)).not.toContain("synthetic-secret");

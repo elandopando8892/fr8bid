@@ -78,7 +78,7 @@ export function bloqueoIntentos(d: Detalle): string | null {
   if (bloqueoEvento(d)) return bloqueoEvento(d);
   if (eventoSinAvisos(d.evento)) return `${MOTIVO_SIN_AVISOS}.`;
   if (d.evento.estado !== "abierto") return "Solo con el evento abierto a ofertas.";
-  if (d.respuestas == null) return "No se pudo saber quién ya respondió; intenta más tarde.";
+  if (d.respuestas == null) return d.leyendoGmail ? "Revisando en Gmail quién ya respondió…" : "No se pudo saber quién ya respondió; intenta más tarde.";
   return null;
 }
 

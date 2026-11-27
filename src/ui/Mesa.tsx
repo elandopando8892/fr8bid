@@ -24,7 +24,7 @@ import {
 } from "../dominio/recorrido";
 import { audienciaInvitacion, estadoRevision, MOTIVO_OMISION, resumenOmisiones } from "../dominio/revision";
 import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
-import { cambiosComerciales, describirModelo, modeloCorto, modeloDeCaptura, MODELOS, nombreModelo, porcentajeModelo, tarifaVenta, textoModelosAceptados } from "../dominio/modelo";
+import { cambiosComerciales, describirModelo, modeloDeCaptura, MODELOS, nombreModelo, porcentajeModelo, tarifaVenta, textoModelosAceptados } from "../dominio/modelo";
 import { SIN_OFERTAS, bloqueoCerrarSinAdjudicar, bloqueoDesierta, bloqueoReabrirRuta, bloqueoReRevision, bloqueoRespondio, bloqueoRevision, candidatasCaptura, marcablesRespondio, rutasSinDecidir, sinActividad } from "../dominio/acciones-mesa";
 import { eventoSinAvisos } from "../dominio/protegidos.js";
 import { candidatosRecordatorio, claveIntento, esperaRespuesta, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
@@ -36,7 +36,7 @@ import { ContactosDeMesa, contextoDeContactos } from "./ContactosDeMesa";
 import * as I from "./Iconos";
 import { NOMBRE_FAMILIA, type HistorialSegmento } from "../dominio/segmento";
 import { planearTandas, TAMANO_TANDA } from "../dominio/tandas";
-import type { Aviso, Detalle, EntregaLocal, ModeloComercial, Participacion, Recibo, Ruta } from "../dominio/tipos";
+import type { Aviso, Detalle, EntregaLocal, ModeloComercial, OfertaVersion, Participacion, Recibo, Ruta } from "../dominio/tipos";
 import { EditorCondiciones, ListaCondiciones, MatrizCondiciones } from "./condiciones";
 import { aCarga, avisar, Confirmar, Desactualizado, dinero, EstadoVista, fecha, Liga, plural, Prueba, type Carga } from "./comun";
 import { useSesion } from "./sesion";
@@ -88,6 +88,8 @@ export function Mesa({ id }: { id: string }) {
   const contexto = JSON.stringify([s.identidad, s.modo, s.rol, s.correo, s.usuarioSimulado]);
   const origen = useMemo(() => ({ api: s.api, id, recibo, listo: s.listo, contexto }), [s.api, id, recibo, s.listo, contexto]);
   const dueno = useRef<typeof origen | null>(null);
+  const hayDatos = useRef(false);
+  hayDatos.current = carga.tipo === "ok";
 
   // No pintar el detalle ni conservar estado local de otra fuente, evento o sesión.
   useLayoutEffect(() => {
@@ -110,7 +112,10 @@ export function Mesa({ id }: { id: string }) {
     const lectura = ++secuencia.current;
     const vigente = () => secuencia.current === lectura && dueno.current === origen;
     try {
-      const datos = await origen.api.detalle(origen.id, origen.recibo);
+      // Primera apertura: se pinta en cuanto llega lo de Rateware y Gmail se completa después.
+      // Al releer tras una acción ya hay algo en pantalla y se espera la lectura completa.
+      const primera = !hayDatos.current;
+      const datos = await origen.api.detalle(origen.id, origen.recibo, primera ? (previo) => { if (vigente()) setCarga((c) => (c.tipo === "ok" ? c : { tipo: "ok", datos: previo, leidoEn: Date.now() })); } : undefined);
       if (vigente()) setCarga({ tipo: "ok", datos, leidoEn: Date.now() });
     } catch (e) {
       if (vigente()) setCarga(aCarga(e));
@@ -1161,7 +1166,10 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
         {conteo("declino") > 0 && <li><I.Salir size={14} />{conteo("declino")} declinaron</li>}
         {conteo("rebote") > 0 && <li className="err"><I.Alerta size={14} />{conteo("rebote")} rebotaron</li>}
       </ul>
-      {d.respuestas === null && (
+      {d.respuestas === null && d.leyendoGmail && (
+        <p className="tenue fila-icono" role="status"><I.Reloj size={14} />Revisando en Gmail quién ya contestó…</p>
+      )}
+      {d.respuestas === null && !d.leyendoGmail && (
         <p className="aviso-caja">
           {d.gmailOcupado
             ? "Gmail pidió una pausa por tantas consultas seguidas: las respuestas de los carriers no se cuentan arriba y Fr8Bid no prepara intentos. Recarga en un minuto."
@@ -1603,8 +1611,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
         </div>
       )}
       <LecturaIA d={d} accion={accion} advertenciaReal={ADVERTENCIA_REAL(s, d)} abrir={respuesta} alAbrir={quitarRespuesta} />
-      {hayOfertas && <ResumenOfertas d={d} ctx={ctx} onVerRuta={verRuta} />}
-      {d.evento.estado === "cerrado" && ctx.rol === "admin" && <AdjudicarEnLote d={d} ctx={ctx} accion={accion} />}
+      {hayOfertas && <ResumenOfertas d={d} ctx={ctx} accion={accion} onVerRuta={verRuta} />}
       {d.evento.estado === "cerrado" && ctx.rol === "admin" && <CerrarSinAdjudicar d={d} accion={accion} />}
       {varias && <SelectorRutas d={d} vista={rutaVista?.id ?? null} onVista={(id) => setVista(id)} />}
       {/* Las demás rutas siguen montadas y solo se ocultan: lo que escribiste (motivo, pregunta) no se pierde al cambiar de ruta. */}
@@ -1640,7 +1647,7 @@ function PanelComparar({ d, ctx, accion }: Props) {
                       {conCapacidad && <th>Cap./sem</th>}
                       {conTransito && <th>Tránsito</th>}
                       <th>Vigencia</th>
-                      <th>{ruta.condiciones.length ? "Condiciones" : "Rubros"}</th>
+                      <th>{ruta.condiciones.length ? "Condiciones" : "Términos"}</th>
                       <th aria-label="Preguntar" />
                     </tr>
                   </thead>
@@ -1783,9 +1790,24 @@ function porCarrier(ofertas: OfertaSinModelo[]): string {
 }
 
 // Arriba de las rutas: una fila por ruta (salta a su tarjeta), el Excel del
-// evento completo y lo que hay que ver antes de adjudicar, una sola vez.
-function ResumenOfertas({ d, ctx, onVerRuta }: { d: Detalle; ctx: Contexto; onVerRuta: (numero: number) => void }) {
+// evento completo y lo que hay que ver antes de adjudicar, una sola vez. Con el
+// evento cerrado, la misma tabla propone la mejor oferta de cada ruta y se
+// adjudica en lote con un solo motivo (recorrido 26-nov: antes eran dos tablas).
+function ResumenOfertas({ d, ctx, accion, onVerRuta }: { d: Detalle; ctx: Contexto; accion: Props["accion"]; onVerRuta: (numero: number) => void }) {
+  const s = useSesion();
+  const m = useMotivo();
+  const [fueraDelLote, setFueraDelLote] = useState<Set<string>>(new Set());
   const filas = resumenPorRuta(d, ctx.hoy);
+  const propuesta = d.evento.estado === "cerrado" && ctx.rol === "admin" ? propuestaPrimarios(d, ctx) : [];
+  const enLote = propuesta.length >= 2 && propuesta.some((x) => x.p);
+  const propuestaDe = new Map(propuesta.map((x) => [x.ruta.id, x]));
+  const lote = enLote ? propuesta.filter((x) => x.p && !fueraDelLote.has(x.ruta.id)) : [];
+  const alternar = (id: string) => setFueraDelLote((f) => {
+    const n = new Set(f);
+    if (n.has(id)) n.delete(id);
+    else n.add(id);
+    return n;
+  });
   const mixtos = modelosMixtos(d);
   const sinElegir = sinModelo(d);
   const fuera = fueraDeAceptados(d);
@@ -1810,11 +1832,14 @@ function ResumenOfertas({ d, ctx, onVerRuta }: { d: Detalle; ctx: Contexto; onVe
         <div className="tabla-envoltura">
           <table className="tabla tabla-tarjetas">
             <thead>
-              <tr><th>Ruta</th><th>Ofertas</th><th>Más baja</th><th>Contra objetivo</th><th>Primario</th></tr>
+              <tr>{enLote && <th aria-label="Incluir"></th>}<th>Ruta</th><th>Ofertas</th><th>Más baja</th><th>Contra objetivo</th><th>{enLote ? "Se adjudica a" : "Primario"}</th></tr>
             </thead>
             <tbody>
-              {filas.map((x) => (
+              {filas.map((x) => {
+                const prop = propuestaDe.get(x.ruta.id);
+                return (
                 <tr key={x.ruta.id}>
+                  {enLote && <td>{prop?.p && <input type="checkbox" aria-label={`Incluir la ruta ${x.ruta.numero}`} checked={!fueraDelLote.has(x.ruta.id)} onChange={() => alternar(x.ruta.id)} />}</td>}
                   <td data-etiqueta="Ruta"><a href={`#ruta-${x.ruta.numero}`} onClick={(e) => { e.preventDefault(); onVerRuta(x.ruta.numero); }}>{x.ruta.numero} · {x.ruta.origen} → {x.ruta.destino}</a></td>
                   <td data-etiqueta="Ofertas">{x.ofertas || <span className="tenue">0</span>}{x.otraMoneda > 0 && <span className="tenue" title="No se comparan contra las demás ni contra el objetivo"> · {x.otraMoneda} en otra moneda</span>}</td>
                   <td data-etiqueta="Más baja">
@@ -1823,9 +1848,18 @@ function ResumenOfertas({ d, ctx, onVerRuta }: { d: Detalle; ctx: Contexto; onVe
                   <td data-etiqueta="Contra objetivo" className={x.porArriba ? "alerta" : ""}>
                     {x.contraObjetivo === null ? "—" : `${x.porArriba ? "+" : x.contraObjetivo < 0 ? "−" : "±"}${Math.abs(x.contraObjetivo)} %`}
                   </td>
-                  <td data-etiqueta="Primario">{x.primario ?? <span className="tenue">—</span>}</td>
+                  <td data-etiqueta={enLote ? "Se adjudica a" : "Primario"}>
+                    {x.primario
+                      ? <>{x.primario} <span className="tenue">· ya adjudicada</span></>
+                      : prop?.p
+                        ? (fueraDelLote.has(x.ruta.id) ? <span className="tenue">La decides en su ruta</span> : prop.p.id === x.masBaja?.p.id ? <span className="tenue">La más baja</span> : <b>{prop.p.carrier}</b>)
+                        : prop
+                          ? <span className="tenue">En su ruta: {prop.motivo}</span>
+                          : <span className="tenue">—</span>}
+                  </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1869,93 +1903,54 @@ function ResumenOfertas({ d, ctx, onVerRuta }: { d: Detalle; ctx: Contexto; onVe
           )}
         </div>
       )}
+      {enLote && (
+        <div className="pie-adjudicar">
+          <p className="tenue ayuda">Se propone la más barata de cada ruta que pasa todos sus candados. Desmarca las que quieras decidir en su ruta.</p>
+          <Motivo opciones={MOTIVOS_LOTE} m={m} etiqueta="Motivo para todas" placeholder="Ej.: mejor all-in de cada ruta con candados en orden" />
+          <Confirmar
+            etiqueta={`Adjudicar ${plural(lote.length, "ruta")} como primario`}
+            deshabilitado={!lote.length || !m.motivo}
+            advertencia={<>Se adjudican {lote.map((x) => `ruta ${x.ruta.numero} a ${x.p!.carrier}`).join(", ")}. No se envía nada al carrier; el aviso se desbloquea con el recibo de Rateware. {ADVERTENCIA_REAL(s, d)}</>}
+            onConfirmar={() =>
+              accion(async () => {
+                let hechas = 0;
+                for (const x of lote) {
+                  const v = versionVigente(x.p!)!;
+                  try {
+                    await s.api.adjudicar({
+                      eventId: d.evento.id,
+                      participacionId: x.p!.id,
+                      rol: "primario",
+                      motivo: m.motivo,
+                      operationId: operacionAdjudicacion(d.evento.id, x.p!.id, "primario", v.huella),
+                      confirmaSinVigencia: false
+                    });
+                  } catch (e) {
+                    throw new Error(`${hechas} de ${lote.length} rutas adjudicadas. Se detuvo en la ruta ${x.ruta.numero}: ${e instanceof Error ? e.message : String(e)}`);
+                  }
+                  hechas += 1;
+                }
+                return hechas;
+              }, (n) => `${plural(n, "ruta adjudicada", "rutas adjudicadas")} como primario.`)
+            }
+          />
+        </div>
+      )}
       {varias && ctx.rol !== "admin" && d.evento.estado === "cerrado" && <p className="tenue">Solo el Administrador adjudica.</p>}
     </div>
   );
 }
 
-// Varias rutas sin primario: la mejor oferta de cada una (la más barata que
-// pasa sus candados) se adjudica con un solo motivo y una confirmación. Cada
-// ruta se puede quitar del lote y adjudicarse a mano abajo.
-function AdjudicarEnLote({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accion: Props["accion"] }) {
-  const s = useSesion();
-  const m = useMotivo();
-  const motivo = m.motivo;
-  const [fuera, setFuera] = useState<Set<string>>(new Set());
-  const propuesta = propuestaPrimarios(d, ctx);
-  const elegibles = propuesta.filter((x) => x.p);
-  if (propuesta.length < 2 || !elegibles.length) return null;
-  const lote = elegibles.filter((x) => !fuera.has(x.ruta.id));
-  const alternar = (id: string) => setFuera((f) => {
-    const n = new Set(f);
-    if (n.has(id)) n.delete(id);
-    else n.add(id);
-    return n;
-  });
-  return (
-    <div className="tarjeta">
-      <h2>Adjudicar la mejor oferta de cada ruta</h2>
-      <p className="tenue ayuda">La más barata de cada ruta que pasa todos sus candados. Quita las que quieras decidir a mano abajo.</p>
-      <div className="tabla-envoltura">
-        <table className="tabla tabla-tarjetas">
-          <thead>
-            <tr><th aria-label="Incluir"></th><th>Ruta</th><th>Carrier</th><th>All-in</th><th>Contra objetivo</th></tr>
-          </thead>
-          <tbody>
-            {propuesta.map((x) => {
-              const v = x.p ? versionVigente(x.p) : null;
-              const dif = v && x.ruta.objetivo ? v.tarifaAllIn - x.ruta.objetivo : null;
-              return (
-                <tr key={x.ruta.id}>
-                  <td>{x.p && <input type="checkbox" aria-label={`Incluir la ruta ${x.ruta.numero}`} checked={!fuera.has(x.ruta.id)} onChange={() => alternar(x.ruta.id)} />}</td>
-                  <td data-etiqueta="Ruta">{x.ruta.numero} · {x.ruta.origen} → {x.ruta.destino}</td>
-                  <td data-etiqueta="Carrier">{x.p ? <b>{x.p.carrier}</b> : <span className="tenue">A mano: {x.motivo}</span>}</td>
-                  <td data-etiqueta="All-in" className="mono">{v ? dinero(v.tarifaAllIn, v.moneda) : "—"}</td>
-                  <td data-etiqueta="Contra objetivo" className={dif !== null && dif > 0 ? "alerta" : ""}>
-                    {dif === null ? "—" : dif === 0 ? "igual" : `${dif > 0 ? "+" : "−"}${dinero(Math.abs(dif), v!.moneda)}`}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <Motivo opciones={MOTIVOS_LOTE} m={m} etiqueta="Motivo para todas" placeholder="Ej.: mejor all-in de cada ruta con candados en orden" />
-      <Confirmar
-        etiqueta={`Adjudicar ${plural(lote.length, "ruta")} como primario`}
-        deshabilitado={!lote.length || !motivo}
-        advertencia={<>Se adjudican {lote.map((x) => `ruta ${x.ruta.numero} a ${x.p!.carrier}`).join(", ")}. No se envía nada al carrier; el aviso se desbloquea con el recibo de Rateware. {ADVERTENCIA_REAL(s, d)}</>}
-        onConfirmar={() =>
-          accion(async () => {
-            let hechas = 0;
-            for (const x of lote) {
-              const v = versionVigente(x.p!)!;
-              try {
-                await s.api.adjudicar({
-                  eventId: d.evento.id,
-                  participacionId: x.p!.id,
-                  rol: "primario",
-                  motivo,
-                  operationId: operacionAdjudicacion(d.evento.id, x.p!.id, "primario", v.huella),
-                  confirmaSinVigencia: false
-                });
-              } catch (e) {
-                throw new Error(`${hechas} de ${lote.length} rutas adjudicadas. Se detuvo en la ruta ${x.ruta.numero}: ${e instanceof Error ? e.message : String(e)}`);
-              }
-              hechas += 1;
-            }
-            return hechas;
-          }, (n) => `${plural(n, "ruta adjudicada", "rutas adjudicadas")} como primario.`)
-        }
-      />
-    </div>
-  );
+// «Cost plus · 3 %»; sin porcentaje del carrier no se dice «sin indicar» y el del evento se dice en palabras.
+function modeloEnFila(v: OfertaVersion): string {
+  const valor = porcentajeModelo(v).valor;
+  return [nombreModelo(v.modeloComercial), valor !== null ? `${valor} %` : null, v.modeloDelEvento ? "el que pide el evento" : null].filter(Boolean).join(" · ");
 }
 
 function ResumenCondiciones({ ruta, p }: { ruta: Ruta; p: Participacion }) {
   const r = revisarCondiciones(ruta, p);
-  if (r.bloquean.length) return <span className="error-texto" title={r.bloquean.join(", ")}>Bloquea {r.bloquean.length}</span>;
-  return <span title={r.marcadas.join(", ")}>{r.cumplidas}/{r.total}{r.marcadas.length ? ` · ${r.marcadas.length} con nota` : ""}</span>;
+  if (r.bloquean.length) return <span className="error-texto" title={r.bloquean.join(", ")}>No cumple {r.bloquean.length}</span>;
+  return <span title={r.marcadas.join(", ")}>Cumple {r.cumplidas} de {r.total}{r.marcadas.length ? ` · ${r.marcadas.length} con nota` : ""}</span>;
 }
 
 // Motivos de un clic: un chip basta; el detalle es opcional.
@@ -2011,8 +2006,8 @@ function FilaOferta({ p, ruta, mejor = false, totalRubros, conCapacidad = true, 
           : <span className="pill warn" title="Es la más baja, pero está por arriba del objetivo de la ruta">más baja</span>)}
         {p.rol && <span className="pill ok-pill">{p.rol}</span>}
         <div className="acciones-fila">
-          <button className="btn-texto" onClick={(e) => { e.stopPropagation(); onHistorial(); }} title="Historial de versiones">
-            v{v.numero}{anterior ? ` · antes ${anterior.tarifaAllIn.toLocaleString("es-MX")}` : ""}
+          <button className="btn-texto" onClick={(e) => { e.stopPropagation(); onHistorial(); }} title={`Versión ${v.numero} de la oferta`}>
+            {anterior ? `Cambió: antes ${dinero(anterior.tarifaAllIn, anterior.moneda)}` : "Historial"}
           </button>
         </div>
       </td>
@@ -2020,18 +2015,18 @@ function FilaOferta({ p, ruta, mejor = false, totalRubros, conCapacidad = true, 
         <span className="cifra">{dinero(v.tarifaAllIn, v.moneda)}</span>
         {contraObjetivo !== null && <span className={`delta ${enObjetivo ? "bajo" : "sobre"}`} title="Contra el objetivo de la ruta">{!enObjetivo ? "+" : contraObjetivo < 0 ? "−" : "±"}{Math.abs(contraObjetivo)} %</span>}
         {v.modeloComercial
-          ? <div className="tenue" title={describirModelo(v)}>{modeloCorto(v)}{v.modeloDelEvento && " · del evento"}{modeloFuera && <span className="alerta" title="El evento ya no acepta este modelo comercial"> · fuera del evento</span>}</div>
-          : <div><button className="pill warn" title="El carrier no eligió modelo comercial: defínelo en el historial de la oferta" onClick={(e) => { e.stopPropagation(); onHistorial(); }}>Sin elegir</button></div>}
+          ? <div className="tenue" title={describirModelo(v)}>{modeloEnFila(v)}{modeloFuera && <span className="alerta" title="El evento ya no acepta este modelo comercial"> · el evento ya no lo acepta</span>}</div>
+          : <div><button className="pill warn" title="El carrier no eligió modelo comercial: defínelo en el historial de la oferta" onClick={(e) => { e.stopPropagation(); onHistorial(); }}>Falta el modelo</button></div>}
       </td>
       <td data-etiqueta="Venta">
         {venta
-          ? <><span className="cifra">{dinero(venta.venta, v.moneda)}</span>{venta.porDefecto && <div className="tenue">% por defecto</div>}</>
+          ? <><span className="cifra">{dinero(venta.venta, v.moneda)}</span>{venta.porDefecto && <div className="tenue">{venta.pct} % estándar</div>}</>
           : <span className="tenue" title="Sin modelo comercial no hay tarifa de venta: defínelo antes de adjudicar">Por definir</span>}
       </td>
       {conCapacidad && <td data-etiqueta="Cap./sem">{v.capacidadSemanal ?? "—"}</td>}
       {conTransito && <td data-etiqueta="Tránsito">{v.transitoDias !== null ? `${v.transitoDias} d` : "—"}</td>}
       <td data-etiqueta="Vigencia">{v.vigenteHasta ? fecha(v.vigenteHasta) : <span className="alerta">Sin vigencia</span>}</td>
-      <td data-etiqueta={ruta.condiciones.length ? "Condiciones" : "Rubros"}>{ruta.condiciones.length ? <ResumenCondiciones ruta={ruta} p={p} /> : negativa ? <span className="error-texto">No puedo</span> : totalRubros ? `${deAcuerdo}/${totalRubros}` : "—"}</td>
+      <td data-etiqueta={ruta.condiciones.length ? "Condiciones" : "Términos"}>{ruta.condiciones.length ? <ResumenCondiciones ruta={ruta} p={p} /> : negativa ? <span className="error-texto">Rechaza alguno</span> : totalRubros ? `Acepta ${deAcuerdo} de ${totalRubros}` : "—"}</td>
       <td className="celda-accion">
         {onPreguntar && (
           <button className="btn-icono" aria-expanded={preguntando} aria-label={`Preguntar a ${p.carrier}`} title={`Preguntar a ${p.carrier}`} onClick={(e) => { e.stopPropagation(); onPreguntar(); }}><I.Chat size={16} /></button>
