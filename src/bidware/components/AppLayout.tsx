@@ -20,7 +20,6 @@ export const NAV: { group: string; items: { to: string; label: string; end?: boo
       { to: "/crm", label: "Carrier CRM" },
       { to: "/templates", label: "Carrier templates" },
       { to: "/plantillas", get label() { return tr("text004"); } },
-      { to: "/carrier-fit", label: "Carrier Fit" },
     ],
   },
   { get group() { return tr("text005"); }, items: [{ to: "/board", get label() { return tr("text006"); } }] },

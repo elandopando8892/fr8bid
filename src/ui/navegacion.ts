@@ -30,7 +30,6 @@ const COTIZACIONES: Seccion[] = [
 const CARRIERS: Seccion[] = [
   { etiqueta: "Directorio", a: "/crm" },
   { etiqueta: "Listas", a: "/templates" },
-  { etiqueta: "A quién invitar", a: "/carrier-fit" },
   { etiqueta: "Plantillas de correo", a: "/plantillas" }
 ];
 const SHIPPERS: Seccion[] = [
@@ -53,7 +52,9 @@ export const MENU: { grupo: string; plegado?: boolean; modulos: Modulo[] }[] = [
       { etiqueta: "Hoy", a: "/", icono: I.Casa, activo: (r) => r === "/", palabras: "inicio pendientes" },
       { etiqueta: "Eventos", a: "/eventos", icono: I.Martillo, secciones: EVENTOS, activo: deSecciones(EVENTOS), pestanasEn: (r) => r === "/eventos" || bajo("/respuestas")(r), palabras: "rfx licitaciones concursos respuestas bandeja" },
       { etiqueta: "Cotizaciones", a: "/quotedesk", icono: I.Calculadora, secciones: COTIZACIONES, activo: deSecciones(COTIZACIONES), palabras: "quotedesk spot intake" },
-      { etiqueta: "Carriers", a: "/crm", icono: I.Camion, secciones: CARRIERS, activo: deSecciones(CARRIERS), palabras: "crm transportistas carrier fit" },
+      { etiqueta: "Carriers", a: "/crm", icono: I.Camion, secciones: CARRIERS,
+        // «A quién invitar» ya no es pestaña (recorrido 26-nov, P6): se llega desde la página del evento o desde una lista.
+        activo: (r) => deSecciones(CARRIERS)(r) || bajo("/carrier-fit")(r), palabras: "crm transportistas" },
       { etiqueta: "Shippers y tarifas", a: "/shippers", icono: I.Edificio, secciones: SHIPPERS, activo: deSecciones(SHIPPERS), palabras: "clientes tarifario" }
     ]
   },

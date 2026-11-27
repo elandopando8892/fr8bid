@@ -18,7 +18,6 @@ const ACTIONS: Entry[] = [
   { get label() { return tr("text014"); }, to: "/quotedesk?new=1", kind: "Acción", get words() { return tr("text015"); } },
   { get label() { return tr("text016"); }, to: "/intake", kind: "Acción", get words() { return tr("text017"); } },
   { get label() { return tr("text018"); }, to: "/templates/new", kind: "Acción", get words() { return tr("text019"); } },
-  { get label() { return tr("text020"); }, to: "/carrier-fit", kind: "Acción", get words() { return tr("text021"); } },
   { get label() { return tr("text022"); }, to: "/tarifas", kind: "Acción", get words() { return tr("text023"); } },
   { get label() { return tr("text024"); }, to: "/archivos", kind: "Acción", get words() { return tr("text025"); } },
   { get label() { return tr("text026"); }, to: "/crm/higiene", kind: "Acción", get words() { return tr("text027"); } },
