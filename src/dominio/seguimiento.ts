@@ -223,6 +223,24 @@ export function siguienteIntento(d: Detalle, s: SeguimientoCarrier, ahora: Date,
   return { ...paso, antesDelCierre: null, tocaEn, vencido: Date.parse(tocaEn) <= ahora.getTime(), enCola: s.borradorEnCola };
 }
 
+// Carriers a los que aún se les puede mandar un intento preparado: quien sigue sin
+// responder y, dentro de la ventana antes del cierre, quien respondió sin tarifa.
+// Sin la revisión de respuestas (Gmail aún leyendo o falló) no se sabe quién ya
+// contestó: conjunto vacío, nadie recibe otro intento. undefined (Rateware sin la
+// lectura de respuestas) sigue como antes, igual que intentosPorPreparar.
+export function carriersPorEscribir(d: Detalle, hoy: string, ahora: Date): Set<string> {
+  if (d.respuestas === null) return new Set();
+  return new Set(
+    seguimiento(d, hoy)
+      .filter((x) => {
+        if (esperaRespuesta(x.estado)) return true;
+        const paso = x.estado === "respondio" ? siguienteIntento(d, x, ahora) : null;
+        return Boolean(paso?.antesDelCierre && paso.vencido);
+      })
+      .map((x) => x.carrierId)
+  );
+}
+
 // Intentos por correo que ya tocan y no tienen borrador en la Cola: lo que
 // «Preparar intento» deja como borrador en Rateware. Incluye el recordatorio
 // antes del cierre a quien respondió sin tarifa (paso.antesDelCierre).

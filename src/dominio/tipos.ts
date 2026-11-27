@@ -210,6 +210,9 @@ export interface Detalle {
   respuestas?: Record<string, RespuestaCarrier> | null;
   // true cuando respuestas es null porque Gmail pidió una pausa (cuota por minuto).
   gmailOcupado?: boolean;
+  // true en la primera pintura de la página del evento: lo demás ya llegó y Gmail
+  // (lo más lento) todavía se está consultando; respuestas es null mientras tanto.
+  leyendoGmail?: boolean;
 }
 
 export interface RespuestaCarrier {

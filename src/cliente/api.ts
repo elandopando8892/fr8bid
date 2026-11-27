@@ -314,18 +314,27 @@ export class MesaApi {
     return mapear.resumenes(await this.rw({ action: "list_rfx_events" }), this.hoy());
   }
 
-  async detalle(eventId: string, recibo: Recibo | null = null): Promise<Detalle> {
-    const [crudo, mensajes, rubros, condiciones, revisiones, revision] = await Promise.all([
+  // Gmail es lo más lento de la página del evento (2–4 s, recorrido 26-nov-2026). Con
+  // alPrimero, en cuanto llega lo demás se pinta sin respuestas (leyendoGmail) y luego
+  // se completa; sin respuestas no se preparan intentos, igual que cuando Gmail falla.
+  async detalle(eventId: string, recibo: Recibo | null = null, alPrimero?: (d: Detalle) => void): Promise<Detalle> {
+    const revisionEnCurso = this.respuestasDe(eventId);
+    let gmailListo = false;
+    void revisionEnCurso.then(() => { gmailListo = true; });
+    const [crudo, mensajes, rubros, condiciones, revisiones] = await Promise.all([
       this.rw({ action: "list_rfx_detail", event_id: eventId }),
       this.rw({ action: "list_outreach_messages", rfx_event_id: eventId, channel: "email" }),
       this.rw({ action: "list_rfx_segment_confirmations", event_id: eventId }),
       this.condicionesDe(eventId),
-      this.revisionesDe(eventId),
-      this.respuestasDe(eventId)
+      this.revisionesDe(eventId)
     ]);
     if (mensajes.has_more === true) throw new ErrorApi(409, "LECTURA_INCOMPLETA", "Hay más avisos de los que devuelve esta lectura. Consulta la cola de Rateware antes de continuar.");
-    const { respuestas, aperturas, gmailOcupado } = revision;
-    const d = mapear.detalle(crudo, mapear.filasListado(mensajes, "messages"), null, { hoy: this.hoy(), rubros: rubros.rows || [], condiciones, revisiones, respuestas, aperturas });
+    const armar = (revision: { respuestas: Record<string, unknown>[] | null | undefined; aperturas: Record<string, unknown>[] }) =>
+      mapear.detalle(crudo, mapear.filasListado(mensajes, "messages"), null, { hoy: this.hoy(), rubros: rubros.rows || [], condiciones, revisiones, respuestas: revision.respuestas, aperturas: revision.aperturas });
+    // Si Gmail ya contestó mientras llegaba lo demás, no hace falta la pintura previa.
+    if (alPrimero && !gmailListo) alPrimero({ ...armar({ respuestas: null, aperturas: [] }), recibo, leyendoGmail: true });
+    const { respuestas, aperturas, gmailOcupado } = await revisionEnCurso;
+    const d = armar({ respuestas, aperturas });
     return { ...d, recibo, ...(gmailOcupado ? { gmailOcupado } : {}) };
   }
 
