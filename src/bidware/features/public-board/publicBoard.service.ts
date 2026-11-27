@@ -99,13 +99,12 @@ const conRuta = (row: BoardRow) => Boolean(String(row.lane?.origin ?? "").trim()
 
 /**
  * What the board shows (recorrido del 26-nov, P5): no events whose deadline
- * passed, and no event without a single lane with origin and destination
- * (a spot still being captured reads «FR8-ec3e… · — → —»). Movements still
+ * passed, and no lane without origin and destination (a spot still being
+ * captured read «FR8-ec3e… · — → —»); an event with none left is gone. Movements still
  * come from every row, so «Cerró» is announced when a lane closes.
  */
 export function enTablero(rows: BoardRow[]): BoardRow[] {
-  const conAlgunaRuta = new Set(rows.filter(conRuta).map((r) => String(r.event_id || r.event?.id)));
-  return rows.filter((r) => r.board_status !== "expired" && conAlgunaRuta.has(String(r.event_id || r.event?.id)));
+  return rows.filter((r) => r.board_status !== "expired" && conRuta(r));
 }
 
 /** An internal folio («FR8-<uuid>») is not a name: the board says what it is instead. */

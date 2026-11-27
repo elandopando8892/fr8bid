@@ -131,7 +131,15 @@ export function PublicBoardPage() {
 
   const liveRows = visibles.filter((r) => r.board_status === "live" || r.board_status === "closing");
   const weekly = weeklyLoads(liveRows);
-  const summary = board.summary;
+  // Los contadores salen de lo que el tablero enseña, no del resumen del servidor (que cuenta lo oculto).
+  const summary = useMemo(
+    () => ({
+      live: visibles.filter((r) => r.board_status === "live").length,
+      closing: visibles.filter((r) => r.board_status === "closing").length,
+      total_quotes: visibles.reduce((n, r) => n + (r.quote_count ?? 0), 0),
+    }),
+    [visibles],
+  );
   const seconds = board.checkedAt ? Math.max(0, Math.round((now - board.checkedAt.getTime()) / 1000)) : null;
 
   // The ticker: what moved, plus the live events closing within three days.
@@ -150,7 +158,8 @@ export function PublicBoardPage() {
     return [...moved, ...closing];
     // The clock text is refreshed with the board, not every second: a marquee that re-renders each tick restarts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getLang(), board.movements, visibles]);
+    // La hora entra por horas: una oferta deja de ser reciente sin reiniciar la marquesina cada minuto.
+  }, [getLang(), board.movements, visibles, Math.floor(now / 3_600_000)]);
 
   function toggleWatch(id: string) {
     setWatched((prev) => {

@@ -25,11 +25,11 @@ describe("tablero público", () => {
       fila("a1", "a"),
       fila("b1", "b", { board_status: "expired" }),
       fila("c1", "c", {}, { origin: "", destination: "" }),
-      // Un evento con una ruta completa y otra a medias se queda completo.
-      fila("d1", "d"),
+      // De un evento con una ruta a medias (aunque venga primero) solo queda la completa.
       fila("d2", "d", {}, { destination: "" }),
+      fila("d1", "d"),
     ];
-    expect(enTablero(filas).map((r) => r.id)).toEqual(["a1", "d1", "d2"]);
+    expect(enTablero(filas).map((r) => r.id)).toEqual(["a1", "d1"]);
   });
 
   it("un folio interno no se usa como nombre", () => {

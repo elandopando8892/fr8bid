@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { movement, movementLabel } from "@/i18n/public-board";
-import { loadBoard, type BoardRow, type BoardSummary } from "./publicBoard.service";
+import { enTablero, loadBoard, type BoardRow, type BoardSummary } from "./publicBoard.service";
 
 export type MovementKind = "quote" | "new" | "closing" | "awarded" | "expired";
 
@@ -146,7 +146,7 @@ export function useBoard({
           }
         }
       } else {
-        setMovements(recentQuotes(next));
+        setMovements(recentQuotes(enTablero(next)));
       }
       previous.current = new Map(next.map((r) => [r.id, r]));
       setRows(next);
