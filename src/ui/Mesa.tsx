@@ -1846,7 +1846,9 @@ function ResumenOfertas({ d, ctx, accion, onVerRuta }: { d: Detalle; ctx: Contex
                   <td data-etiqueta={enLote ? "Se adjudica a" : "Primario"}>
                     {x.primario
                       ? <>{x.primario} <span className="tenue">· ya adjudicada</span></>
-                      : prop?.p
+                      : !enLote
+                        ? <span className="tenue">—</span>
+                        : prop?.p
                         ? (fueraDelLote.has(x.ruta.id) ? <span className="tenue">La decides en su ruta</span> : prop.p.id === x.masBaja?.p.id ? <span className="tenue">La más baja</span> : <b>{prop.p.carrier}</b>)
                         : prop
                           ? <span className="tenue">En su ruta: {prop.motivo}</span>
