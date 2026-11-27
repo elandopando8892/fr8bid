@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { movement, movementLabel } from "@/i18n/public-board";
-import { loadBoard, type BoardRow, type BoardSummary } from "./publicBoard.service";
+import { conRuta, enTablero, loadBoard, type BoardRow, type BoardSummary } from "./publicBoard.service";
 
 export type MovementKind = "quote" | "new" | "closing" | "awarded" | "expired";
 
@@ -16,17 +16,21 @@ export interface Movement {
 const route = (row: BoardRow) => `${row.lane?.origin?.split(",")[0] ?? "—"} → ${row.lane?.destination?.split(",")[0] ?? "—"}`;
 
 /** What moved between two reads of the board. Carrier identity never enters. */
-function diff(previous: Map<string, BoardRow>, rows: BoardRow[]): Movement[] {
+export function diff(previous: Map<string, BoardRow>, rows: BoardRow[]): Movement[] {
   const now = new Date().toISOString();
   const out: Movement[] = [];
   for (const row of rows) {
+    // Una ruta sin origen o destino no sale en el tablero: tampoco se anuncia (ni «Cerró · — → —»).
+    if (!conRuta(row)) continue;
     const eventId = row.event_id;
     const before = previous.get(row.id);
-    if (!before) {
-      out.push({ key: `new-${row.id}`, kind: "new", label: `Nueva oportunidad · ${route(row)}`, eventId, at: now });
+    // Nueva para el tablero: no estaba o no se veía (le faltaba origen o destino). Una vencida no es oportunidad.
+    if (!before || !conRuta(before)) {
+      if (row.board_status !== "expired") out.push({ key: `new-${row.id}`, kind: "new", label: `Nueva oportunidad · ${route(row)}`, eventId, at: now });
       continue;
     }
-    if ((row.quote_count ?? 0) > (before.quote_count ?? 0)) {
+    // Una ruta que ya venció no sale en el tablero: su última oferta no se anuncia.
+    if (row.board_status !== "expired" && (row.quote_count ?? 0) > (before.quote_count ?? 0)) {
       out.push({
         key: `quote-${row.id}-${row.quote_count}`,
         kind: "quote",
@@ -146,7 +150,7 @@ export function useBoard({
           }
         }
       } else {
-        setMovements(recentQuotes(next));
+        setMovements(recentQuotes(enTablero(next)));
       }
       previous.current = new Map(next.map((r) => [r.id, r]));
       setRows(next);

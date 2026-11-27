@@ -24,7 +24,9 @@ import { MyRanking } from "./MyRanking";
 import { useAsync } from "@/components/useAsync";
 import { Spinner, ErrorBanner, Empty, InfoBanner, Pill, dateShort } from "@/components/ui";
 import { BotonAyudas } from "../../../ui/BotonAyudas";
-import { setLang, useLang, type Lang } from "@/i18n/language";
+import { getLang, setLang, useLang, type Lang } from "@/i18n/language";
+import { PedirLigaNueva } from "@/components/PedirLiga";
+import { esErrorDeLiga } from "@/lib/pedirLiga";
 import { q } from "@/i18n/bid-room-quote";
 import { o } from "@/i18n/bid-room-overview";
 
@@ -178,6 +180,7 @@ function BidRoomContent({ token }: { token: string }) {
           <p className="croom-side-text" style={{ marginTop: 12 }}>
             {q("page.oldLink")}
           </p>
+          {(!error || esErrorDeLiga(error)) && <PedirLigaNueva pagina="bidroom" lang={getLang()} />}
         </main>
       </div>
     );

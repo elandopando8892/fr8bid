@@ -94,6 +94,31 @@ export interface BoardEvent {
   last_quote_at: string | null;
 }
 
+/** A lane the carrier can read: it says where it starts and where it ends. */
+// El proxy pone «—» cuando falta el dato (src/servidor/paso.ts): eso tampoco es una ruta.
+const lugar = (text: string | undefined) => { const t = String(text ?? "").trim(); return t && t !== "—" && t !== "-" ? t : ""; };
+export const conRuta = (row: BoardRow) => Boolean(lugar(row.lane?.origin) && lugar(row.lane?.destination));
+
+/**
+ * What the board shows (recorrido del 26-nov, P5): no events whose deadline
+ * passed, and no lane without origin and destination (a spot still being
+ * captured read «FR8-ec3e… · — → —»); an event with none left is gone. Movements still
+ * come from every row, so «Cerró» is announced when a lane closes.
+ */
+export function enTablero(rows: BoardRow[]): BoardRow[] {
+  return rows.filter((r) => r.board_status !== "expired" && conRuta(r));
+}
+
+/** An internal folio («FR8-<uuid>») is not a name: the board says what it is instead. */
+const folioInterno = (text: string | undefined) => /^FR8-[0-9a-f]{8}-[0-9a-f]{4}-/i.test(String(text ?? "").trim());
+export function nombreEnTablero(row: BoardRow): string {
+  const name = String(row.event?.name || "").trim();
+  if (name && !folioInterno(name)) return name;
+  const rfx = String(row.event?.rfx_id || "").trim();
+  if (rfx && !folioInterno(rfx)) return rfx;
+  return row.event?.event_type === "spot" ? "Spot" : "Oportunidad";
+}
+
 const STATUS_ORDER: Record<BoardStatus, number> = { live: 0, closing: 1, awarded: 2, expired: 3 };
 
 /** Events in board order: live first, then closing, awarded, expired; most recent activity first. */
@@ -106,7 +131,7 @@ export function groupByEvent(rows: BoardRow[]): BoardEvent[] {
       ({
         id,
         rfx_id: row.event?.rfx_id,
-        name: row.event?.name || row.event?.rfx_id || "Oportunidad",
+        name: nombreEnTablero(row),
         event_type: row.event?.event_type,
         due_date: row.event?.due_date,
         status: row.board_status,

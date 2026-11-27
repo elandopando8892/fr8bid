@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useParams, useSearchParams } from "react-router-dom";
 import { confirmAsync } from "@/components/confirm";
 import { ErrorBanner, Spinner } from "@/components/ui";
+import { PedirLigaNueva } from "@/components/PedirLiga";
+import { esErrorDeLiga } from "@/lib/pedirLiga";
 import { copyFor, initialLang, rememberLang, type Copy } from "./request.copy";
 import { keepLangInAddress, linkPrefs, type LinkPrefs } from "./link";
 import {
@@ -266,7 +268,7 @@ function ShipperRequestContent({ token, prefs }: { token: string; prefs: LinkPre
   if (!token) {
     return (
       <Shell lang={lang} setLang={setLang} brand={brand} title={copy.missingTitle} sub={copy.missingBody}>
-        <span />
+        <PedirLigaNueva pagina="solicitud" lang={lang} marca={prefs.brand.key} />
       </Shell>
     );
   }
@@ -274,6 +276,7 @@ function ShipperRequestContent({ token, prefs }: { token: string; prefs: LinkPre
     return (
       <Shell lang={lang} setLang={setLang} brand={brand} title={copy.loadError}>
         <ErrorBanner message={explainRequestError(loadError, lang, brand)} />
+        {esErrorDeLiga(loadError) && <PedirLigaNueva pagina="solicitud" lang={lang} marca={prefs.brand.key} />}
       </Shell>
     );
   }
