@@ -18,12 +18,14 @@ describe("pedir una liga nueva", () => {
     expect(en.cuerpo).toMatch(/^Hi, my carrier profile link no longer works/);
   });
 
-  it("sin contacto confirmado para la marca no ofrece nada", () => {
-    expect(pedirLiga("solicitud", "es", "xbf")).toBeNull();
+  it("XBF escribe a su propio contacto", () => {
+    expect(partes(pedirLiga("solicitud", "es", "xbf")!.correo).para).toBe("jgonzalez@xbfreight.com");
   });
 
-  it("sin número del equipo no hay WhatsApp", () => {
-    expect(pedirLiga("solicitud", "es")!.whatsapp).toBeNull();
+  it("WhatsApp del equipo con la primera línea del mensaje", () => {
+    const w = new URL(pedirLiga("solicitud", "es")!.whatsapp!);
+    expect(w.origin + w.pathname).toBe("https://wa.me/19564393771");
+    expect(w.searchParams.get("text")).toBe("Hola, mi liga de solicitud de cotización ya no funciona. ¿Me pueden enviar una nueva?");
   });
 
   it("solo se ofrece cuando el rechazo es de la liga", () => {

@@ -26,7 +26,8 @@ describe("cascarón de cinco entradas", () => {
       ["/intake", "Cotizaciones", "Solicitudes de shippers"],
       ["/crm/rebotes", "Carriers", "Directorio"],
       ["/templates/new", "Carriers", "Listas"],
-      ["/carrier-fit", "Carriers", "A quién invitar"],
+      // Sin pestaña propia: se llega desde la página del evento o una lista.
+      ["/carrier-fit", "Carriers", undefined],
       ["/plantillas/3", "Carriers", "Plantillas de correo"],
       ["/shippers/7", "Shippers y tarifas", "Shippers"],
       ["/tarifario", "Shippers y tarifas", "Tarifas"],
@@ -50,7 +51,7 @@ describe("búsqueda global", () => {
   });
   it("encuentra secciones por su nombre nuevo y por el viejo", () => {
     expect(buscar("cotizacion", entradas)[0]?.a).toBe("/quotedesk");
-    expect(buscar("carrier fit", entradas).map((r) => r.a)).toContain("/carrier-fit");
+    expect(buscar("carrier fit", entradas).map((r) => r.a)).not.toContain("/carrier-fit");
     expect(buscar("rebotados", entradas)[0]?.a).toBe("/crm/rebotes");
   });
   it("sin texto no busca y sin coincidencias no inventa", () => {

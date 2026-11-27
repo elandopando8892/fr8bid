@@ -17,8 +17,9 @@ interface Contacto {
 
 /** Solo marcas con un contacto confirmado; sin él la página queda con su texto de siempre. */
 export const CONTACTO_LIGAS: Record<MarcaLiga, Contacto | null> = {
-  marksman: { correo: "sales@heymarksman.com", whatsapp: null },
-  xbf: null,
+  // WhatsApp del equipo y correo de XBF: Jose, 27-nov.
+  marksman: { correo: "sales@heymarksman.com", whatsapp: "19564393771" },
+  xbf: { correo: "jgonzalez@xbfreight.com", whatsapp: "19564393771" },
 };
 
 const PAGINA: Record<PaginaLiga, { asunto: string; es: string; en: string }> = {
