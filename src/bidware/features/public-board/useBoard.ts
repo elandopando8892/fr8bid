@@ -29,7 +29,8 @@ export function diff(previous: Map<string, BoardRow>, rows: BoardRow[]): Movemen
       if (row.board_status !== "expired") out.push({ key: `new-${row.id}`, kind: "new", label: `Nueva oportunidad · ${route(row)}`, eventId, at: now });
       continue;
     }
-    if ((row.quote_count ?? 0) > (before.quote_count ?? 0)) {
+    // Una ruta que ya venció no sale en el tablero: su última oferta no se anuncia.
+    if (row.board_status !== "expired" && (row.quote_count ?? 0) > (before.quote_count ?? 0)) {
       out.push({
         key: `quote-${row.id}-${row.quote_count}`,
         kind: "quote",

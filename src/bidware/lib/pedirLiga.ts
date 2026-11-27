@@ -49,4 +49,4 @@ export function pedirLiga(pagina: PaginaLiga, lang: "es" | "en", marca: MarcaLig
 
 /** El rechazo es de la liga (no existe, venció, se revocó), no de la red: ahí sí se ofrece pedir otra. */
 export const esErrorDeLiga = (message: string | null | undefined) =>
-  /not found|expired|revoked|deactivat|not active|no longer|invalid|no rows|0 rows|json object requested|pgrst116|venci|no es válid|no está activa|ya no/i.test(String(message ?? ""));
+  /not found|expired|revoked|deactivat|not active|no longer|invalid|no rows|0 rows|json object requested|single json object|pgrst116|venci|no es válid|no está activa|ya no/i.test(String(message ?? ""));

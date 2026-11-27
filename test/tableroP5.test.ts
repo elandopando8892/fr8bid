@@ -56,5 +56,8 @@ describe("movimientos del tablero", () => {
       fila("w1", "w"),
     ];
     expect(diff(antes, ahora).map((m) => m.key)).toEqual(["new-x1", "new-w1"]);
+    // Vence y recibe una oferta en la misma lectura: solo «Cerró», sin «Nueva oferta».
+    const previa = new Map([["v1", fila("v1", "v", { quote_count: 1 })]]);
+    expect(diff(previa, [fila("v1", "v", { board_status: "expired", quote_count: 2 })]).map((m) => m.kind)).toEqual(["expired"]);
   });
 });

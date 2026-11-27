@@ -30,6 +30,8 @@ describe("pedir una liga nueva", () => {
     expect(esErrorDeLiga("Invitation link is invalid or expired")).toBe(true);
     expect(esErrorDeLiga("This profile link was deactivated.")).toBe(true);
     expect(esErrorDeLiga("Esta liga no está activa. Pida una nueva a su contacto en MARKSMAN.")).toBe(true);
+    expect(esErrorDeLiga("JSON object requested, multiple (or no) rows returned")).toBe(true);
+    expect(esErrorDeLiga("Cannot coerce the result to a single JSON object")).toBe(true);
     expect(esErrorDeLiga("Failed to fetch")).toBe(false);
     expect(esErrorDeLiga("Fr8Bid API request failed (500)")).toBe(false);
   });
