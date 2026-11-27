@@ -1948,7 +1948,12 @@ function modeloEnFila(v: OfertaVersion): string {
 
 function ResumenCondiciones({ ruta, p }: { ruta: Ruta; p: Participacion }) {
   const r = revisarCondiciones(ruta, p);
-  if (r.bloquean.length) return <span className="error-texto" title={r.bloquean.join(", ")}>No cumple {r.bloquean.length}</span>;
+  if (r.bloquean.length) {
+    // «No cumple» solo si el carrier dijo que no en la revisión vigente; sin respuesta o con una revisión anterior, falta confirmar.
+    const rechaza = ruta.condiciones.filter((c) => c.obligatoria && p.condiciones[c.clave]?.estado === "no_puedo" && (p.condiciones[c.clave]?.revision ?? -1) >= c.revision).length;
+    const faltan = r.bloquean.length - rechaza;
+    return <span className="error-texto" title={r.bloquean.join(", ")}>{[rechaza ? `No cumple ${rechaza}` : null, faltan ? `Falta confirmar ${faltan}` : null].filter(Boolean).join(" · ")}</span>;
+  }
   return <span title={r.marcadas.join(", ")}>Cumple {r.cumplidas} de {r.total}{r.marcadas.length ? ` · ${r.marcadas.length} con nota` : ""}</span>;
 }
 
