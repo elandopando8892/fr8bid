@@ -94,6 +94,30 @@ export interface BoardEvent {
   last_quote_at: string | null;
 }
 
+/** A lane the carrier can read: it says where it starts and where it ends. */
+const conRuta = (row: BoardRow) => Boolean(String(row.lane?.origin ?? "").trim() && String(row.lane?.destination ?? "").trim());
+
+/**
+ * What the board shows (recorrido del 26-nov, P5): no events whose deadline
+ * passed, and no event without a single lane with origin and destination
+ * (a spot still being captured reads «FR8-ec3e… · — → —»). Movements still
+ * come from every row, so «Cerró» is announced when a lane closes.
+ */
+export function enTablero(rows: BoardRow[]): BoardRow[] {
+  const conAlgunaRuta = new Set(rows.filter(conRuta).map((r) => String(r.event_id || r.event?.id)));
+  return rows.filter((r) => r.board_status !== "expired" && conAlgunaRuta.has(String(r.event_id || r.event?.id)));
+}
+
+/** An internal folio («FR8-<uuid>») is not a name: the board says what it is instead. */
+const folioInterno = (text: string | undefined) => /^FR8-[0-9a-f]{8}-[0-9a-f]{4}-/i.test(String(text ?? "").trim());
+export function nombreEnTablero(row: BoardRow): string {
+  const name = String(row.event?.name || "").trim();
+  if (name && !folioInterno(name)) return name;
+  const rfx = String(row.event?.rfx_id || "").trim();
+  if (rfx && !folioInterno(rfx)) return rfx;
+  return row.event?.event_type === "spot" ? "Spot" : "Oportunidad";
+}
+
 const STATUS_ORDER: Record<BoardStatus, number> = { live: 0, closing: 1, awarded: 2, expired: 3 };
 
 /** Events in board order: live first, then closing, awarded, expired; most recent activity first. */
@@ -106,7 +130,7 @@ export function groupByEvent(rows: BoardRow[]): BoardEvent[] {
       ({
         id,
         rfx_id: row.event?.rfx_id,
-        name: row.event?.name || row.event?.rfx_id || "Oportunidad",
+        name: nombreEnTablero(row),
         event_type: row.event?.event_type,
         due_date: row.event?.due_date,
         status: row.board_status,

@@ -2,6 +2,8 @@ import { COPY, SHIPPER_FIELDS, SECTIONS, CONTACT_FIELDS, LOCATION_FIELDS, type L
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ErrorBanner, InfoBanner, Spinner } from "@/components/ui";
+import { PedirLigaNueva } from "@/components/PedirLiga";
+import { esErrorDeLiga } from "@/lib/pedirLiga";
 import {
   getShipperProfile,
   submitShipperProfile,
@@ -251,10 +253,10 @@ export function ShipperProfilePage() {
     </>
   );
 
-  if (!token) return shell(<InfoBanner>{c(COPY.missing)}</InfoBanner>);
+  if (!token) return shell(<><InfoBanner>{c(COPY.missing)}</InfoBanner><PedirLigaNueva pagina="perfil_shipper" lang={lang} /></>);
   if (loading) return shell(<Spinner label={c(COPY.loading)} />);
-  if (gone) return shell(<ErrorBanner message={c(COPY.gone)} />);
-  if (!original) return shell(<ErrorBanner message={error ?? c(COPY.gone)} />);
+  if (gone) return shell(<><ErrorBanner message={c(COPY.gone)} /><PedirLigaNueva pagina="perfil_shipper" lang={lang} /></>);
+  if (!original) return shell(<><ErrorBanner message={error ?? c(COPY.gone)} />{(!error || esErrorDeLiga(error)) && <PedirLigaNueva pagina="perfil_shipper" lang={lang} />}</>);
 
   const expires = original.request.expires_at
     ? new Date(original.request.expires_at).toLocaleDateString(lang === "es" ? "es-MX" : "en-US", { day: "2-digit", month: "short", year: "numeric" })

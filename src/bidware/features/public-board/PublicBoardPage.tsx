@@ -7,7 +7,7 @@ import { useBoard, type Movement } from "./useBoard";
 import { EventCards, Pipeline, Sheet, ago, clock, type Actions } from "./BoardViews";
 import { BoardSide } from "./BoardSide";
 import { FindInvitationsDialog, RequestAccessDialog, readAccess, type Access } from "./AccessDialogs";
-import { equipmentOf, groupByEvent, loads, matches, weeklyLoads, type BoardEvent } from "./publicBoard.service";
+import { enTablero, equipmentOf, groupByEvent, loads, matches, weeklyLoads, type BoardEvent } from "./publicBoard.service";
 import { BotonAyudas } from "../../../ui/BotonAyudas";
 
 /**
@@ -26,6 +26,9 @@ const VIEWS: { key: View; label: string }[] = [
   { key: "pipeline", get label() { return tr("text136"); } },
   { key: "sheet", get label() { return tr("text137"); } },
 ];
+
+/** Una oferta de hace más de una semana ya no es «movimiento». */
+const RECIENTE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Per-browser preferences; a private window just starts from the defaults. */
 function pref<T extends string>(key: string, fallback: T, allowed: readonly T[]): T {
@@ -102,21 +105,23 @@ export function PublicBoardPage() {
     return () => window.removeEventListener("pointerdown", arm);
   }, [sound, armSound]);
 
+  // Lo que el tablero enseña: sin eventos vencidos ni eventos sin ninguna ruta (recorrido 26-nov, P5).
+  const visibles = useMemo(() => enTablero(board.rows), [board.rows]);
   const equipment: Chip[] = useMemo(
-    () => [...new Set(board.rows.map(equipmentOf).filter(Boolean))].sort().map((e) => ({ key: e, label: e })),
-    [board.rows],
+    () => [...new Set(visibles.map(equipmentOf).filter(Boolean))].sort().map((e) => ({ key: e, label: e })),
+    [visibles],
   );
 
   const rows = useMemo(() => {
     const picked = [...chips].filter((c) => c !== QUIET && c !== FOLLOWED);
-    return board.rows.filter(
+    return visibles.filter(
       (r) =>
         matches(r, query) &&
         (!picked.length || picked.includes(equipmentOf(r))) &&
         (!chips.has(QUIET) || (r.quote_count != null && r.quote_count <= 2 && r.is_bid_available)) &&
         (!chips.has(FOLLOWED) || watched.has(r.event_id)),
     );
-  }, [board.rows, query, chips, watched]);
+  }, [visibles, query, chips, watched]);
 
   // Followed events go first; within each group the board's own order.
   const events = useMemo(() => {
@@ -124,7 +129,7 @@ export function PublicBoardPage() {
     return [...all.filter((e) => watched.has(e.id)), ...all.filter((e) => !watched.has(e.id))];
   }, [rows, watched]);
 
-  const liveRows = board.rows.filter((r) => r.board_status === "live" || r.board_status === "closing");
+  const liveRows = visibles.filter((r) => r.board_status === "live" || r.board_status === "closing");
   const weekly = weeklyLoads(liveRows);
   const summary = board.summary;
   const seconds = board.checkedAt ? Math.max(0, Math.round((now - board.checkedAt.getTime()) / 1000)) : null;
@@ -136,11 +141,16 @@ export function PublicBoardPage() {
       .filter(({ t }) => t.urgency === "hot" || t.urgency === "warm")
       .slice(0, 4)
       .map(({ e, t }) => ({ key: `due-${e.id}`, tone: "amber", text: `⏱ ${t.text} · ${e.name}` }));
-    const moved = board.movements.map((m) => ({ key: m.key, tone: MOVEMENT_TONE[m.kind], text: `${movementLabel(m.label)} · ${ago(m.at)}` }));
+    // Sin ofertas viejas como si fueran noticia ni movimientos de eventos que el tablero no enseña; «Cerró» sí se anuncia.
+    const enVista = new Set(visibles.map((r) => r.event_id));
+    const moved = board.movements
+      .filter((m) => m.kind === "expired" || enVista.has(m.eventId))
+      .filter((m) => !m.key.startsWith("last-") || now - Date.parse(m.at) <= RECIENTE_MS)
+      .map((m) => ({ key: m.key, tone: MOVEMENT_TONE[m.kind], text: `${movementLabel(m.label)} · ${ago(m.at)}` }));
     return [...moved, ...closing];
     // The clock text is refreshed with the board, not every second: a marquee that re-renders each tick restarts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getLang(), board.movements, board.rows]);
+  }, [getLang(), board.movements, visibles]);
 
   function toggleWatch(id: string) {
     setWatched((prev) => {
@@ -346,8 +356,8 @@ export function PublicBoardPage() {
             )}
           </div>
           <BoardSide
-            rows={board.rows}
-            events={groupByEvent(board.rows)}
+            rows={visibles}
+            events={groupByEvent(visibles)}
             access={access}
             notify={notify}
             onFind={() => setFinding(true)}

@@ -19,6 +19,8 @@ import { ALL_STEPS, COMPANY_STEP, OPTION_LABEL, documentFields, fieldByKey, type
 import { LectorDocumentos } from "../lectura-documentos/LectorDocumentos";
 import type { ValorLeido } from "../../../dominio/documentos";
 import { Spinner, ErrorBanner, InfoBanner, Pill } from "@/components/ui";
+import { PedirLigaNueva } from "@/components/PedirLiga";
+import { esErrorDeLiga } from "@/lib/pedirLiga";
 import { BotonAyudas } from "../../../ui/BotonAyudas";
 
 /**
@@ -141,7 +143,9 @@ export function CarrierProfilePage() {
 
   if (!token) {
     return (
-      <Shell lang={lang} setLang={setLang} title={t.missingTokenTitle} sub={t.missingToken} />
+      <Shell lang={lang} setLang={setLang} title={t.missingTokenTitle} sub={t.missingToken}>
+        <PedirLigaNueva pagina="perfil_carrier" lang={lang} />
+      </Shell>
     );
   }
   if (loading) {
@@ -155,6 +159,7 @@ export function CarrierProfilePage() {
     return (
       <Shell lang={lang} setLang={setLang} title={COPY[lang].eyebrow}>
         <ErrorBanner message={explainProfileError(loadError || "", lang)} />
+        {(!loadError || esErrorDeLiga(loadError)) && <PedirLigaNueva pagina="perfil_carrier" lang={lang} />}
       </Shell>
     );
   }

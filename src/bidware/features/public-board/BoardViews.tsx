@@ -251,7 +251,8 @@ export function EventCards({ events, actions }: { events: BoardEvent[]; actions:
 /** Pipeline: the same events in one column per stage. */
 export function Pipeline({ events, actions }: { events: BoardEvent[]; actions: Actions }) {
   useLang();
-  const columns: BoardStatus[] = ["live", "closing", "awarded", "expired"];
+  // Los vencidos ya no salen en el tablero (recorrido 26-nov, P5).
+  const columns: BoardStatus[] = ["live", "closing", "awarded"];
   return (
     <div className="pb-pipeline">
       {columns.map((key) => {
