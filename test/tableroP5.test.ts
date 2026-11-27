@@ -25,6 +25,8 @@ describe("tablero público", () => {
       fila("a1", "a"),
       fila("b1", "b", { board_status: "expired" }),
       fila("c1", "c", {}, { origin: "", destination: "" }),
+      // Así llega del proxy cuando falta el dato.
+      fila("e1", "e", {}, { origin: "—", destination: "—" }),
       // De un evento con una ruta a medias (aunque venga primero) solo queda la completa.
       fila("d2", "d", {}, { destination: "" }),
       fila("d1", "d"),

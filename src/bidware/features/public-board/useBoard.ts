@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { movement, movementLabel } from "@/i18n/public-board";
-import { enTablero, loadBoard, type BoardRow, type BoardSummary } from "./publicBoard.service";
+import { conRuta, enTablero, loadBoard, type BoardRow, type BoardSummary } from "./publicBoard.service";
 
 export type MovementKind = "quote" | "new" | "closing" | "awarded" | "expired";
 
@@ -20,6 +20,8 @@ function diff(previous: Map<string, BoardRow>, rows: BoardRow[]): Movement[] {
   const now = new Date().toISOString();
   const out: Movement[] = [];
   for (const row of rows) {
+    // Una ruta sin origen o destino no sale en el tablero: tampoco se anuncia (ni «Cerró · — → —»).
+    if (!conRuta(row)) continue;
     const eventId = row.event_id;
     const before = previous.get(row.id);
     if (!before) {

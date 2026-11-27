@@ -95,7 +95,9 @@ export interface BoardEvent {
 }
 
 /** A lane the carrier can read: it says where it starts and where it ends. */
-const conRuta = (row: BoardRow) => Boolean(String(row.lane?.origin ?? "").trim() && String(row.lane?.destination ?? "").trim());
+// El proxy pone «—» cuando falta el dato (src/servidor/paso.ts): eso tampoco es una ruta.
+const lugar = (text: string | undefined) => { const t = String(text ?? "").trim(); return t && t !== "—" && t !== "-" ? t : ""; };
+export const conRuta = (row: BoardRow) => Boolean(lugar(row.lane?.origin) && lugar(row.lane?.destination));
 
 /**
  * What the board shows (recorrido del 26-nov, P5): no events whose deadline
