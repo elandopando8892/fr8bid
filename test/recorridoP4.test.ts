@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { MesaApi } from "../src/cliente/api";
 import { manejar, type Respuesta } from "../src/servidor/proxy";
 import { bloqueoIntentos } from "../src/dominio/acciones-mesa";
+import { carriersPorEscribir } from "../src/dominio/seguimiento";
 import type { Detalle } from "../src/dominio/tipos";
 
 const event = { id: "evento-p4", name: "PRUEBA P4", rfx_id: "RFQ-P4", status: "open", due_date: "2026-12-20", bid_count: 0, invitation_count: 1 };
@@ -62,5 +63,18 @@ describe("página del evento sin esperar a Gmail", () => {
     expect(d.leyendoGmail).toBeUndefined();
     expect(d.respuestas).toBeNull();
     expect(bloqueoIntentos(d)).toBe("No se pudo saber quién ya respondió; intenta más tarde.");
+  });
+
+  it("con un carrier pendiente, no se le manda un intento preparado hasta saber si ya contestó", async () => {
+    let soltar!: (r: Respuesta) => void;
+    const api = fixture(new Promise<Respuesta>((r) => { soltar = r; }));
+    let previa: Detalle | null = null;
+    const completa = api.detalle(event.id, null, (d) => { previa = d; soltar(respuestaGmail); });
+    const d = await completa;
+    expect(previa).not.toBeNull();
+    // Primera pintura: Gmail no ha contestado, nadie queda como «por escribir».
+    expect(carriersPorEscribir(previa!, "2026-11-27", new Date("2026-11-27T12:00:00Z")).size).toBe(0);
+    // Con la revisión de Gmail completa, el carrier que no ha respondido sí recibe su intento.
+    expect([...carriersPorEscribir(d, "2026-11-27", new Date("2026-11-27T12:00:00Z"))]).toEqual(["v1"]);
   });
 });

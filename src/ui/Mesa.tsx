@@ -27,7 +27,7 @@ import { hojaComparativo, nombreArchivo } from "../dominio/exportar";
 import { cambiosComerciales, describirModelo, modeloDeCaptura, MODELOS, nombreModelo, porcentajeModelo, tarifaVenta, textoModelosAceptados } from "../dominio/modelo";
 import { SIN_OFERTAS, bloqueoCerrarSinAdjudicar, bloqueoDesierta, bloqueoReabrirRuta, bloqueoReRevision, bloqueoRespondio, bloqueoRevision, candidatasCaptura, marcablesRespondio, rutasSinDecidir, sinActividad } from "../dominio/acciones-mesa";
 import { eventoSinAvisos } from "../dominio/protegidos.js";
-import { candidatosRecordatorio, claveIntento, esperaRespuesta, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
+import { candidatosRecordatorio, carriersPorEscribir, claveIntento, esperaRespuesta, etiquetaSeguimiento, intentosPorPreparar, intentosWhatsapp, preguntaAlCarrier, PROFUNDIDAD_MINIMA, recordatorio, rutasSinProfundidad, seguimiento, siguienteIntento, textoIntento, type EstadoSeguimiento } from "../dominio/seguimiento";
 import { crearXlsx } from "../dominio/xlsx";
 import { dentroDeObjetivo, fueraDeAceptados, masBajaComparable, modelosMixtos, ofertasOrdenadas, rangoRutas, resumenPorRuta, sinModelo, type OfertaSinModelo } from "../dominio/resumenOfertas";
 import type { CarrierFit } from "../dominio/carrierFit";
@@ -1348,15 +1348,10 @@ function IntentosPorEnviar({ d, ctx, accion }: { d: Detalle; ctx: Contexto; acci
   // Si el carrier ya ofertó o declinó, el borrador ya no se manda. Quien respondió
   // sin tarifa solo dentro de la ventana de su recordatorio antes del cierre.
   const ahora = new Date();
-  const vigentes = new Set(
-    seguimiento(d, ctx.hoy)
-      .filter((x) => {
-        if (esperaRespuesta(x.estado)) return true;
-        const paso = x.estado === "respondio" ? siguienteIntento(d, x, ahora) : null;
-        return Boolean(paso?.antesDelCierre && paso.vencido);
-      })
-      .map((x) => x.carrierId)
-  );
+  // Mientras no se sepa quién ya respondió (Gmail aún leyendo o falló) no se envía nada:
+  // un carrier que ya contestó aparecería como pendiente.
+  const sinRespuestas = d.respuestas == null;
+  const vigentes = carriersPorEscribir(d, ctx.hoy, ahora);
   const sigue = (a: Aviso) => vigentes.has(carrierDe(a)?.carrierId ?? "");
   const porEnviar = intentos.filter((a) => revisado(a) && sigue(a));
   const detenidos = intentos.filter((a) => !porEnviar.includes(a));
@@ -1365,7 +1360,7 @@ function IntentosPorEnviar({ d, ctx, accion }: { d: Detalle; ctx: Contexto; acci
     <div className="aviso-caja">
       <p>
         <b>{plural(intentos.length, "intento preparado", "intentos preparados")}</b> sin enviar
-        {detenidos.length > 0 && <> · {detenidos.length} no se envían (el carrier ya ofertó, declinó, respondió sin tarifa fuera de la ventana antes del cierre o no tiene «Revisado» vigente)</>}.
+        {sinRespuestas ? <> · {d.leyendoGmail ? "Revisando en Gmail quién ya respondió; se podrán enviar en un momento" : "No se pudo saber quién ya respondió; no se envían por ahora"}</> : detenidos.length > 0 && <> · {detenidos.length} no se envían (el carrier ya ofertó, declinó, respondió sin tarifa fuera de la ventana antes del cierre o no tiene «Revisado» vigente)</>}.
       </p>
       <button className="btn-texto" onClick={() => setVerTextos(!verTextos)}>{verTextos ? "Ocultar textos" : "Ver los textos exactos"}</button>
       {verTextos &&
