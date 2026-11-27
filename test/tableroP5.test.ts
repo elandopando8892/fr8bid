@@ -44,3 +44,17 @@ describe("tablero público", () => {
     expect(normal.name).toBe("Evento n");
   });
 });
+
+describe("movimientos del tablero", () => {
+  it("anuncia como nueva la ruta que acaba de completarse, no la vencida ni la incompleta", async () => {
+    const { diff } = await import("@/features/public-board/useBoard");
+    const antes = new Map([["x1", fila("x1", "x", {}, { destination: "—" })]]);
+    const ahora = [
+      fila("x1", "x"),
+      fila("y1", "y", { board_status: "expired" }),
+      fila("z1", "z", {}, { origin: "—" }),
+      fila("w1", "w"),
+    ];
+    expect(diff(antes, ahora).map((m) => m.key)).toEqual(["new-x1", "new-w1"]);
+  });
+});

@@ -16,7 +16,7 @@ export interface Movement {
 const route = (row: BoardRow) => `${row.lane?.origin?.split(",")[0] ?? "—"} → ${row.lane?.destination?.split(",")[0] ?? "—"}`;
 
 /** What moved between two reads of the board. Carrier identity never enters. */
-function diff(previous: Map<string, BoardRow>, rows: BoardRow[]): Movement[] {
+export function diff(previous: Map<string, BoardRow>, rows: BoardRow[]): Movement[] {
   const now = new Date().toISOString();
   const out: Movement[] = [];
   for (const row of rows) {
@@ -24,8 +24,9 @@ function diff(previous: Map<string, BoardRow>, rows: BoardRow[]): Movement[] {
     if (!conRuta(row)) continue;
     const eventId = row.event_id;
     const before = previous.get(row.id);
-    if (!before) {
-      out.push({ key: `new-${row.id}`, kind: "new", label: `Nueva oportunidad · ${route(row)}`, eventId, at: now });
+    // Nueva para el tablero: no estaba o no se veía (le faltaba origen o destino). Una vencida no es oportunidad.
+    if (!before || !conRuta(before)) {
+      if (row.board_status !== "expired") out.push({ key: `new-${row.id}`, kind: "new", label: `Nueva oportunidad · ${route(row)}`, eventId, at: now });
       continue;
     }
     if ((row.quote_count ?? 0) > (before.quote_count ?? 0)) {
