@@ -50,8 +50,15 @@ describe("página del evento sin esperar a Gmail", () => {
   });
 
   it("sin la función de primera pintura, espera la lectura completa como antes", async () => {
-    const api = fixture(Promise.resolve(respuestaGmail));
-    const d = await api.detalle(event.id);
+    let soltar!: (r: Respuesta) => void;
+    const api = fixture(new Promise<Respuesta>((r) => { soltar = r; }));
+    let lista = false;
+    const pendiente = api.detalle(event.id).then((x) => { lista = true; return x; });
+    // Lo de Rateware ya llegó, pero sin la función de primera pintura sigue esperando a Gmail.
+    for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0));
+    expect(lista).toBe(false);
+    soltar(respuestaGmail);
+    const d = await pendiente;
     expect(d.leyendoGmail).toBeUndefined();
     expect(d.respuestas).toEqual({});
   });

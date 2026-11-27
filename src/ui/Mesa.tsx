@@ -1611,7 +1611,8 @@ function PanelComparar({ d, ctx, accion }: Props) {
         </div>
       )}
       <LecturaIA d={d} accion={accion} advertenciaReal={ADVERTENCIA_REAL(s, d)} abrir={respuesta} alAbrir={quitarRespuesta} />
-      {hayOfertas && <ResumenOfertas d={d} ctx={ctx} accion={accion} onVerRuta={verRuta} />}
+      {/* La selección y el motivo del lote empiezan de cero cada vez que el evento cambia de estado (reabrir y volver a cerrar). */}
+      {hayOfertas && <ResumenOfertas key={`${d.evento.id}:${d.evento.estado}`} d={d} ctx={ctx} accion={accion} onVerRuta={verRuta} />}
       {d.evento.estado === "cerrado" && ctx.rol === "admin" && <CerrarSinAdjudicar d={d} accion={accion} />}
       {varias && <SelectorRutas d={d} vista={rutaVista?.id ?? null} onVista={(id) => setVista(id)} />}
       {/* Las demás rutas siguen montadas y solo se ocultan: lo que escribiste (motivo, pregunta) no se pierde al cambiar de ruta. */}
