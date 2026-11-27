@@ -1913,6 +1913,7 @@ function ResumenOfertas({ d, ctx, accion, onVerRuta }: { d: Detalle; ctx: Contex
           <Confirmar
             etiqueta={`Adjudicar ${plural(lote.length, "ruta")} como primario`}
             deshabilitado={!lote.length || !m.motivo}
+            firma={JSON.stringify([m.motivo, lote.map((x) => [x.ruta.id, x.p!.id, versionVigente(x.p!)?.huella ?? null])])}
             advertencia={<>Se adjudican {lote.map((x) => { const v = versionVigente(x.p!)!; return `ruta ${x.ruta.numero} a ${x.p!.carrier} por ${dinero(v.tarifaAllIn, v.moneda)} (versión ${v.numero})`; }).join(", ")}. No se envía nada al carrier; el aviso se desbloquea con el recibo de Rateware. {ADVERTENCIA_REAL(s, d)}</>}
             onConfirmar={() =>
               accion(async () => {
