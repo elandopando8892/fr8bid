@@ -88,8 +88,8 @@ export function Mesa({ id }: { id: string }) {
   const contexto = JSON.stringify([s.identidad, s.modo, s.rol, s.correo, s.usuarioSimulado]);
   const origen = useMemo(() => ({ api: s.api, id, recibo, listo: s.listo, contexto }), [s.api, id, recibo, s.listo, contexto]);
   const dueno = useRef<typeof origen | null>(null);
-  const hayDatos = useRef(false);
-  hayDatos.current = carga.tipo === "ok";
+  // Origen (evento, sesión, recibo) que ya se leyó completo: la primera lectura de cada uno pinta sin esperar a Gmail.
+  const leidoDe = useRef<typeof origen | null>(null);
 
   // No pintar el detalle ni conservar estado local de otra fuente, evento o sesión.
   useLayoutEffect(() => {
@@ -114,9 +114,12 @@ export function Mesa({ id }: { id: string }) {
     try {
       // Primera apertura: se pinta en cuanto llega lo de Rateware y Gmail se completa después.
       // Al releer tras una acción ya hay algo en pantalla y se espera la lectura completa.
-      const primera = !hayDatos.current;
+      const primera = leidoDe.current !== origen;
       const datos = await origen.api.detalle(origen.id, origen.recibo, primera ? (previo) => { if (vigente()) setCarga((c) => (c.tipo === "ok" ? c : { tipo: "ok", datos: previo, leidoEn: Date.now() })); } : undefined);
-      if (vigente()) setCarga({ tipo: "ok", datos, leidoEn: Date.now() });
+      if (vigente()) {
+        leidoDe.current = origen;
+        setCarga({ tipo: "ok", datos, leidoEn: Date.now() });
+      }
     } catch (e) {
       if (vigente()) setCarga(aCarga(e));
     }
