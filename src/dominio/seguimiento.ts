@@ -226,9 +226,10 @@ export function siguienteIntento(d: Detalle, s: SeguimientoCarrier, ahora: Date,
 // Carriers a los que aún se les puede mandar un intento preparado: quien sigue sin
 // responder y, dentro de la ventana antes del cierre, quien respondió sin tarifa.
 // Sin la revisión de respuestas (Gmail aún leyendo o falló) no se sabe quién ya
-// contestó: conjunto vacío, nadie recibe otro intento.
+// contestó: conjunto vacío, nadie recibe otro intento. undefined (Rateware sin la
+// lectura de respuestas) sigue como antes, igual que intentosPorPreparar.
 export function carriersPorEscribir(d: Detalle, hoy: string, ahora: Date): Set<string> {
-  if (d.respuestas == null) return new Set();
+  if (d.respuestas === null) return new Set();
   return new Set(
     seguimiento(d, hoy)
       .filter((x) => {

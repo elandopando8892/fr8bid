@@ -76,5 +76,7 @@ describe("página del evento sin esperar a Gmail", () => {
     expect(carriersPorEscribir(previa!, "2026-11-27", new Date("2026-11-27T12:00:00Z")).size).toBe(0);
     // Con la revisión de Gmail completa, el carrier que no ha respondido sí recibe su intento.
     expect([...carriersPorEscribir(d, "2026-11-27", new Date("2026-11-27T12:00:00Z"))]).toEqual(["v1"]);
+    // Si Rateware no tiene la lectura de respuestas (undefined), sigue como antes.
+    expect([...carriersPorEscribir({ ...d, respuestas: undefined }, "2026-11-27", new Date("2026-11-27T12:00:00Z"))]).toEqual(["v1"]);
   });
 });

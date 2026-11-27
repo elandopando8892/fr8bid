@@ -1167,7 +1167,7 @@ function PanelSeguimiento({ d, ctx, accion }: { d: Detalle; ctx: Contexto; accio
         {conteo("rebote") > 0 && <li className="err"><I.Alerta size={14} />{conteo("rebote")} rebotaron</li>}
       </ul>
       {d.respuestas === null && d.leyendoGmail && (
-        <p className="tenue fila-icono" role="status"><I.Reloj size={14} />Revisando en Gmail quién ya contestó…</p>
+        <p className="tenue fila-icono" role="status"><I.Reloj size={14} />Revisando en Gmail quién ya contestó; estos números pueden cambiar en un momento.</p>
       )}
       {d.respuestas === null && !d.leyendoGmail && (
         <p className="aviso-caja">
@@ -1350,7 +1350,7 @@ function IntentosPorEnviar({ d, ctx, accion }: { d: Detalle; ctx: Contexto; acci
   const ahora = new Date();
   // Mientras no se sepa quién ya respondió (Gmail aún leyendo o falló) no se envía nada:
   // un carrier que ya contestó aparecería como pendiente.
-  const sinRespuestas = d.respuestas == null;
+  const sinRespuestas = d.respuestas === null;
   const vigentes = carriersPorEscribir(d, ctx.hoy, ahora);
   const sigue = (a: Aviso) => vigentes.has(carrierDe(a)?.carrierId ?? "");
   const porEnviar = intentos.filter((a) => revisado(a) && sigue(a));
@@ -1593,7 +1593,9 @@ function PanelComparar({ d, ctx, accion }: Props) {
           <p className="fila-icono">
             <I.Candado size={16} />
             {pendientes
-              ? `${plural(pendientes, "carrier")} sin ofertar todavía. Puedes esperar o cerrar ya para adjudicar.`
+              ? d.respuestas === null && d.leyendoGmail
+                ? "Revisando en Gmail quién ya contestó antes de contar a los que faltan. Puedes esperar o cerrar ya para adjudicar."
+                : `${plural(pendientes, "carrier")} sin ofertar todavía. Puedes esperar o cerrar ya para adjudicar.`
               : "Ya respondieron todos los invitados. Cierra a ofertas para adjudicar."}
           </p>
           <Confirmar
