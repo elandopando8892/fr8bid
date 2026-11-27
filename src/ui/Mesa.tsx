@@ -1912,7 +1912,7 @@ function ResumenOfertas({ d, ctx, accion, onVerRuta }: { d: Detalle; ctx: Contex
           <Confirmar
             etiqueta={`Adjudicar ${plural(lote.length, "ruta")} como primario`}
             deshabilitado={!lote.length || !m.motivo}
-            advertencia={<>Se adjudican {lote.map((x) => `ruta ${x.ruta.numero} a ${x.p!.carrier}`).join(", ")}. No se envía nada al carrier; el aviso se desbloquea con el recibo de Rateware. {ADVERTENCIA_REAL(s, d)}</>}
+            advertencia={<>Se adjudican {lote.map((x) => { const v = versionVigente(x.p!)!; return `ruta ${x.ruta.numero} a ${x.p!.carrier} por ${dinero(v.tarifaAllIn, v.moneda)} (versión ${v.numero})`; }).join(", ")}. No se envía nada al carrier; el aviso se desbloquea con el recibo de Rateware. {ADVERTENCIA_REAL(s, d)}</>}
             onConfirmar={() =>
               accion(async () => {
                 let hechas = 0;
@@ -2014,7 +2014,7 @@ function FilaOferta({ p, ruta, mejor = false, totalRubros, conCapacidad = true, 
         {p.rol && <span className="pill ok-pill">{p.rol}</span>}
         <div className="acciones-fila">
           <button className="btn-texto" onClick={(e) => { e.stopPropagation(); onHistorial(); }} title={`Versión ${v.numero} de la oferta`}>
-            {anterior ? `Cambió: antes ${dinero(anterior.tarifaAllIn, anterior.moneda)}` : "Historial"}
+            {anterior ? `Versión ${v.numero} · antes ${dinero(anterior.tarifaAllIn, anterior.moneda)}` : `Versión ${v.numero} · historial`}
           </button>
         </div>
       </td>
