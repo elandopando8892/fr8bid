@@ -1,6 +1,6 @@
+import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { readFileSync, readdirSync } from "node:fs";
-import { join, sep } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 import {
   PASOS_VERIFICACION,
   entornoVerificacion,
@@ -41,13 +41,9 @@ describe("arnés Claude + Codex", () => {
   it("las pruebas no heredan credenciales ni opciones de inyección del proceso padre", () => {
     expect(entornoVerificacion({ Path: "bin", SystemRoot: "Windows", TEMP: "tmp", OPENAI_API_KEY: "synthetic", CUSTOM_CREDENTIAL: "synthetic", NODE_OPTIONS: "--require injected.cjs", npm_config_registry: "https://invalid" })).toEqual({ Path: "bin", SystemRoot: "Windows", TEMP: "tmp" });
   });
-  it("cada skill de .claude/skills tiene su copia idéntica en .agents/skills (y viceversa)", () => {
-    const listar = (raiz: string): string[] => readdirSync(raiz, { recursive: true, withFileTypes: true })
-      .filter(e => e.isFile()).map(e => join(e.parentPath ?? (e as any).path, e.name).slice(raiz.length + 1).split(sep).join("/")).sort();
-    const claude = listar(".claude/skills");
-    expect(claude).toContain("delegar-a-codex/SKILL.md");
-    expect(listar(".agents/skills")).toEqual(claude);
-    for (const f of claude) expect(readFileSync(`.agents/skills/${f}`, "utf8"), f).toBe(readFileSync(`.claude/skills/${f}`, "utf8"));
+  it(".claude/skills es la copia generada de .agents/skills (scripts/sync-skills.mjs --check)", () => {
+    expect(existsSync(".claude/skills/delegar-a-codex/SKILL.md")).toBe(true);
+    expect(() => execFileSync(process.execPath, ["scripts/sync-skills.mjs", "--check"], { stdio: "pipe" })).not.toThrow();
   });
 
   it("CLAUDE.md importa AGENTS.md", () => {

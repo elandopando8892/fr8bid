@@ -56,3 +56,8 @@ El arnés exige un índice sin marcas `assume-unchanged` o `skip-worktree` para 
 - No tienes red; si algo la necesita, dilo y para.
 - Deja pendientes las pruebas y la instalación de dependencias. El orquestador verifica el código después de revisarlo.
 - Termina con el bloque `RESUMEN`, `ARCHIVOS`, `PRUEBAS`, `PENDIENTE` que te pide el arnés.
+
+
+## Sincronización de skills
+
+Fuente canónica: `.agents/skills/` (la lee Codex). `.claude/skills/` es copia generada para Claude Code con `node scripts/sync-skills.mjs`: no se edita a mano y `node scripts/sync-skills.mjs --check` falla si se desincroniza. Una skill de rol de Codex lleva el marcador `SOLO_CODEX` y no se copia; una versión propia de Claude que deba conservarse lleva `PROPIA_DE_CLAUDE`. Después de cambiar una skill: sincronizar y commitear fuente y copia en el mismo commit.

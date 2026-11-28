@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "skills:sync": "node scripts/sync-skills.mjs",
+    "skills:check": "node scripts/sync-skills.mjs --check",
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "test": "vitest run",
