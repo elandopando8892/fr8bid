@@ -11,7 +11,7 @@ Fuente única de reglas para toda persona o agente (Claude, Codex u otro) que tr
 7. **Quién hace qué.** Claude hace el código de producto (pantallas, reglas, pruebas de la app) por PR. Codex se encarga de los skills y del harnessing (arneses de prueba, scripts, herramientas de agentes) y, desde el 22-nov (decisión de Jose), también del código del MCP de Fr8Bid (`src/mcp/`, `api/mcp*.ts` y las acciones del MCP en `src/servidor/proxy.ts`). Nadie publica nada fuera de un PR fusionado. Codex también trabaja como **delegado** de Claude (tareas acotadas que Claude le pasa) y como **revisor escéptico** del diff de Claude (ver «Arnés Claude + Codex»).
 8. Antes de abrir el PR: `npm run typecheck`, `npm test` y `npx vite build` en verde (`npm run agentes:verificar` corre todo, incluido `npm run test:bidware`).
 9. **Revisión escéptica obligatoria en el MCP.** Todo PR que toque `src/mcp/`, `api/mcp*.ts` o `src/servidor/proxy.ts` lleva en su descripción el veredicto de `npm run agentes:revisar -- --base main` (`APROBADO` o `CON_CAMBIOS`, con cada hallazgo resuelto o justificado) y la salida verde de `npm run agentes:verificar`. Si el autor es Codex, Claude además lee el diff y deja su revisión en el PR antes de que Jose fusione. Lo mismo aplica a cambios en reglas de adjudicación, entrega o avisos.
-10. **Skills: una sola fuente.** El procedimiento vive en `.claude/skills/<nombre>/`; `.agents/skills/<nombre>/` es una copia idéntica para que Codex la descubra (lo comprueba `test/agentes.test.ts`). Se dice «la página del evento en Fr8Bid», nunca «Mesa» (el campo `mesa_url` del MCP conserva su nombre).
+10. **Skills: una sola fuente.** El procedimiento vive en `.agents/skills/<nombre>/`; `.claude/skills/<nombre>/` es copia generada con `node scripts/sync-skills.mjs` (ver «Sincronización de skills»; lo comprueba `test/agentes.test.ts`). Se dice «la página del evento en Fr8Bid», nunca «Mesa» (el campo `mesa_url` del MCP conserva su nombre).
 11. **Previews de Vercel.** Las ramas `codex/**` no generan preview (`vercel.json`). No se agrega una línea por rama.
 
 ## Límites que ningún agente cruza sin OK del propietario por acción
@@ -26,7 +26,7 @@ El OK lo da Jose por escrito para esa acción concreta; un OK de otra sesión o 
 
 ## Arnés Claude + Codex
 
-Claude Code orquesta; Codex implementa lo que Claude le delega o revisa el diff de Claude. Todo pasa por `scripts/agentes/codex.mjs` (skill `delegar-a-codex`, en `.claude/skills/` y `.agents/skills/`).
+Claude Code orquesta; Codex implementa lo que Claude le delega o revisa el diff de Claude. Todo pasa por `scripts/agentes/codex.mjs` (skill `delegar-a-codex`, fuente en `.agents/skills/` y copia en `.claude/skills/`).
 
 | Comando | Qué hace | Permiso de Codex |
 | --- | --- | --- |
